@@ -1,8 +1,334 @@
-/*
- * Main stylesheet for Crossword Construction Helper
- *
- * This file contains the styling for the web interface including
- * layout, typography, forms, and component-specific styles.
- */
+/* Crossword Helper - Main Stylesheet */
+/* Mobile-first responsive design */
 
-/* CSS implementation will be added during UI development */
+:root {
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --secondary-color: #64748b;
+    --success-color: #10b981;
+    --error-color: #ef4444;
+    --warning-color: #f59e0b;
+    --bg-color: #f8fafc;
+    --surface-color: #ffffff;
+    --border-color: #e2e8f0;
+    --text-color: #1e293b;
+    --text-muted: #64748b;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    margin: 0 0 10px 0;
+    font-size: 2rem;
+    color: var(--primary-color);
+}
+
+header p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+/* Main content */
+main {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Tool sections */
+.tool-section {
+    background: var(--surface-color);
+    padding: 24px;
+    margin-bottom: 24px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tool-section h2 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 1.5rem;
+    color: var(--text-color);
+}
+
+.tool-section > p {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+/* Input controls */
+.tool-input {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+input,
+textarea {
+    flex: 1;
+    min-width: 200px;
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Buttons */
+button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #475569;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Results container */
+.results-container {
+    min-height: 50px;
+}
+
+.results-container:empty {
+    display: none;
+}
+
+/* Loading state */
+.loading {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.loading::after {
+    content: '...';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Error message */
+.error {
+    padding: 16px;
+    background: #fee;
+    border-left: 4px solid var(--error-color);
+    border-radius: 4px;
+    color: #c00;
+    margin-bottom: 16px;
+}
+
+/* Success message */
+.success {
+    padding: 16px;
+    background: #efe;
+    border-left: 4px solid var(--success-color);
+    border-radius: 4px;
+    color: #060;
+}
+
+/* Word result card */
+.word-card {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.word-card:hover {
+    background: #f1f5f9;
+}
+
+.word-text {
+    font-weight: 600;
+    font-size: 1.1rem;
+    font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.word-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.score {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.source-badge {
+    padding: 2px 8px;
+    background: #e0e7ff;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #4338ca;
+}
+
+/* Grid display */
+.grid-display {
+    margin: 16px 0;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.grid-info {
+    margin: 12px 0;
+    padding: 12px;
+    background: #f1f5f9;
+    border-radius: 6px;
+}
+
+.grid-info-item {
+    margin: 4px 0;
+}
+
+/* Normalized result */
+.normalized-result {
+    margin: 16px 0;
+}
+
+.normalized-text {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Monaco', 'Courier New', monospace;
+    color: var(--primary-color);
+    margin: 12px 0;
+}
+
+.rule-info {
+    padding: 12px;
+    background: #eff6ff;
+    border-radius: 6px;
+    margin: 12px 0;
+}
+
+.rule-type {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.alternatives {
+    margin-top: 16px;
+}
+
+.alternative-item {
+    padding: 8px;
+    background: #fef3c7;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-family: 'Monaco', 'Courier New', monospace;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+    body {
+        padding: 12px;
+    }
+    
+    .tool-section {
+        padding: 16px;
+    }
+    
+    .tool-input {
+        flex-direction: column;
+    }
+    
+    input, textarea {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    button {
+        width: 100%;
+    }
+}
+
+@media (min-width: 768px) {
+    header h1 {
+        font-size: 2.5rem;
+    }
+}
