@@ -316,9 +316,35 @@ class Grid:
             row: Starting row
             col: Starting column
             direction: 'across' or 'down'
+
+        Raises:
+            ValueError: If word doesn't fit in grid or direction is invalid
         """
         word = word.upper()
 
+        # Validate direction
+        if direction not in ('across', 'down'):
+            raise ValueError(f"Direction must be 'across' or 'down', got '{direction}'")
+
+        # Validate word fits in grid bounds
+        if direction == 'across':
+            end_col = col + len(word) - 1
+            if end_col >= self.size:
+                raise ValueError(
+                    f"Word '{word}' (length {len(word)}) at ({row}, {col}) "
+                    f"extends beyond grid (end col {end_col} >= {self.size})"
+                )
+            self._validate_position(row, col)  # Validate start position
+        else:  # down
+            end_row = row + len(word) - 1
+            if end_row >= self.size:
+                raise ValueError(
+                    f"Word '{word}' (length {len(word)}) at ({row}, {col}) "
+                    f"extends beyond grid (end row {end_row} >= {self.size})"
+                )
+            self._validate_position(row, col)  # Validate start position
+
+        # Place word (now safe)
         for i, letter in enumerate(word):
             if direction == 'across':
                 self.set_letter(row, col + i, letter)
@@ -334,7 +360,33 @@ class Grid:
             col: Starting column
             length: Word length
             direction: 'across' or 'down'
+
+        Raises:
+            ValueError: If removal would extend beyond grid or direction is invalid
         """
+        # Validate direction
+        if direction not in ('across', 'down'):
+            raise ValueError(f"Direction must be 'across' or 'down', got '{direction}'")
+
+        # Validate removal fits in grid bounds
+        if direction == 'across':
+            end_col = col + length - 1
+            if end_col >= self.size:
+                raise ValueError(
+                    f"Remove operation (length {length}) at ({row}, {col}) "
+                    f"extends beyond grid (end col {end_col} >= {self.size})"
+                )
+            self._validate_position(row, col)  # Validate start position
+        else:  # down
+            end_row = row + length - 1
+            if end_row >= self.size:
+                raise ValueError(
+                    f"Remove operation (length {length}) at ({row}, {col}) "
+                    f"extends beyond grid (end row {end_row} >= {self.size})"
+                )
+            self._validate_position(row, col)  # Validate start position
+
+        # Remove word (now safe)
         for i in range(length):
             if direction == 'across':
                 self.cells[row, col + i] = EMPTY_CELL

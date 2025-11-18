@@ -4,11 +4,13 @@ CSP-based autofill engine for crossword grids.
 Uses backtracking with heuristics:
 - MCV (Most Constrained Variable): Fill hardest slots first
 - LCV (Least Constraining Value): Choose words that preserve options
+- AC-3 (Arc Consistency): Maintain domain consistency efficiently
 - Forward Checking: Eliminate impossible candidates early
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass
+from collections import deque
 import time
 from ..core.grid import Grid
 from .word_list import WordList
@@ -61,6 +63,12 @@ class Autofill:
         self.iterations = 0
         self.used_words = set()
 
+        # Domain tracking and constraint graph (initialized on fill())
+        self.domains: Dict[int, Set[str]] = {}  # slot_id -> set of valid words
+        self.constraints: Dict[int, List[Tuple[int, int, int]]] = {}  # slot_id -> [(other_slot, my_pos, other_pos)]
+        self.slot_list: List[Dict] = []  # All slots
+        self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
+
     def fill(self, interactive: bool = False) -> FillResult:
         """
         Fill grid using backtracking CSP.
@@ -91,6 +99,22 @@ class Autofill:
                 iterations=0
             )
 
+        # Initialize constraint graph and domains
+        self._initialize_csp(slots)
+
+        # Apply initial arc consistency
+        if not self._ac3():
+            # Grid is unsolvable
+            return FillResult(
+                success=False,
+                grid=self.grid,
+                time_elapsed=time.time() - self.start_time,
+                slots_filled=0,
+                total_slots=total_slots,
+                problematic_slots=slots,
+                iterations=0
+            )
+
         # Sort slots by constraint (MCV heuristic)
         slots = self._sort_slots_by_constraint(slots)
 
@@ -115,6 +139,165 @@ class Autofill:
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations
         )
+
+    def _initialize_csp(self, slots: List[Dict]) -> None:
+        """
+        Initialize constraint graph and domains for CSP.
+
+        Builds:
+        - Constraint graph mapping slots to their intersecting slots
+        - Initial domains (valid words) for each slot
+
+        Args:
+            slots: All slots to fill
+        """
+        self.slot_list = slots
+        self.slot_id_map = {}
+        self.constraints = {}
+        self.domains = {}
+
+        # Create slot ID mapping
+        for idx, slot in enumerate(slots):
+            key = (slot['row'], slot['col'], slot['direction'])
+            self.slot_id_map[key] = idx
+
+        # Build constraint graph
+        for i, slot1 in enumerate(slots):
+            self.constraints[i] = []
+
+            for j, slot2 in enumerate(slots):
+                if i == j:
+                    continue
+
+                # Check intersection
+                intersection = self._get_intersection(slot1, slot2)
+                if intersection:
+                    pos1, pos2 = intersection
+                    self.constraints[i].append((j, pos1, pos2))
+
+        # Initialize domains
+        for idx, slot in enumerate(slots):
+            pattern = self.grid.get_pattern_for_slot(slot)
+            candidates = self.pattern_matcher.find(
+                pattern,
+                min_score=self.min_score,
+                max_results=1000  # Larger domain initially
+            )
+            self.domains[idx] = {word for word, score in candidates}
+
+    def _get_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+        """
+        Get intersection position between two slots.
+
+        Args:
+            slot1: First slot
+            slot2: Second slot
+
+        Returns:
+            (pos1, pos2) if they intersect, where pos1 is position in slot1
+            and pos2 is position in slot2. None if no intersection.
+        """
+        # Must be different directions
+        if slot1['direction'] == slot2['direction']:
+            return None
+
+        # Determine across and down
+        if slot1['direction'] == 'across':
+            across, down = slot1, slot2
+        else:
+            across, down = slot2, slot1
+
+        # Check intersection
+        across_row = across['row']
+        across_col_start = across['col']
+        across_col_end = across_col_start + across['length']
+
+        down_row_start = down['row']
+        down_row_end = down_row_start + down['length']
+        down_col = down['col']
+
+        # Does down column intersect across range?
+        if across_col_start <= down_col < across_col_end:
+            # Does across row intersect down range?
+            if down_row_start <= across_row < down_row_end:
+                # They intersect!
+                if slot1['direction'] == 'across':
+                    pos1 = down_col - across_col_start
+                    pos2 = across_row - down_row_start
+                else:
+                    pos1 = across_row - down_row_start
+                    pos2 = down_col - across_col_start
+                return (pos1, pos2)
+
+        return None
+
+    def _ac3(self) -> bool:
+        """
+        AC-3 arc consistency algorithm.
+
+        Maintains arc consistency by eliminating values from domains
+        that cannot satisfy constraints.
+
+        Returns:
+            True if consistent, False if any domain becomes empty
+        """
+        # Initialize queue with all arcs
+        queue = deque()
+        for slot_id in self.constraints:
+            for other_id, pos1, pos2 in self.constraints[slot_id]:
+                queue.append((slot_id, other_id, pos1, pos2))
+
+        # Process arcs
+        while queue:
+            slot_id, other_id, pos1, pos2 = queue.popleft()
+
+            if self._revise(slot_id, other_id, pos1, pos2):
+                # Domain was reduced
+                if len(self.domains[slot_id]) == 0:
+                    return False  # Unsolvable
+
+                # Add arcs from neighbors to queue
+                for neighbor_id, my_pos, neighbor_pos in self.constraints[slot_id]:
+                    if neighbor_id != other_id:
+                        queue.append((neighbor_id, slot_id, neighbor_pos, my_pos))
+
+        return True
+
+    def _revise(self, slot_id: int, other_id: int, pos1: int, pos2: int) -> bool:
+        """
+        Revise domain of slot_id based on constraint with other_id.
+
+        Args:
+            slot_id: Slot to revise
+            other_id: Constraining slot
+            pos1: Position in slot_id that must match
+            pos2: Position in other_id that must match
+
+        Returns:
+            True if domain was revised (values removed)
+        """
+        revised = False
+        words_to_remove = []
+
+        for word in self.domains[slot_id]:
+            # Check if this word is compatible with any word in other domain
+            has_compatible = False
+
+            for other_word in self.domains[other_id]:
+                # Check if letters match at intersection
+                if word[pos1] == other_word[pos2]:
+                    has_compatible = True
+                    break
+
+            if not has_compatible:
+                words_to_remove.append(word)
+                revised = True
+
+        # Remove incompatible words
+        for word in words_to_remove:
+            self.domains[slot_id].discard(word)
+
+        return revised
 
     def _backtrack(self, slots: List[Dict], current_index: int) -> bool:
         """
@@ -196,7 +379,7 @@ class Autofill:
         Sort slots by constraint level (MCV heuristic).
 
         Most constrained slots first:
-        1. Fewest candidate words
+        1. Fewest candidate words (from domain)
         2. Most crossing slots already filled
         3. Longest length (for tie-breaking)
 
@@ -207,18 +390,25 @@ class Autofill:
             Sorted list of slots
         """
         def constraint_key(slot):
-            pattern = self.grid.get_pattern_for_slot(slot)
+            # Get domain size
+            key = (slot['row'], slot['col'], slot['direction'])
+            slot_id = self.slot_id_map.get(key)
+
+            if slot_id is not None and slot_id in self.domains:
+                # Use pre-computed domain size
+                domain_size = len(self.domains[slot_id])
+            else:
+                # Fallback to pattern matching
+                pattern = self.grid.get_pattern_for_slot(slot)
+                domain_size = self.pattern_matcher.count_matches(pattern, self.min_score)
 
             # Count empty positions (wildcards)
+            pattern = self.grid.get_pattern_for_slot(slot)
             empty_count = pattern.count('?')
 
-            # Count candidate words
-            candidates = self.pattern_matcher.count_matches(pattern, self.min_score)
-
-            # Prefer slots with more letters already filled (fewer wildcards)
-            # and fewer candidate words
+            # Prefer slots with fewer candidate words and more letters filled
             # Negative length for tie-breaking (prefer longer words)
-            return (candidates, empty_count, -slot['length'])
+            return (domain_size, empty_count, -slot['length'])
 
         return sorted(slots, key=constraint_key)
 
@@ -247,30 +437,48 @@ class Autofill:
         """
         Check if placing word eliminates all options for any crossing slot.
 
+        Uses domain-based checking for efficiency - only validates against
+        pre-computed constraint graph instead of checking all slots.
+
         Args:
             slot: Slot that was just filled
 
         Returns:
             True if placement is safe, False if creates dead end
         """
-        # Get all slots
-        all_slots = self.grid.get_empty_slots()
+        # Get slot ID
+        key = (slot['row'], slot['col'], slot['direction'])
+        slot_id = self.slot_id_map.get(key)
 
-        # Find crossing slots
-        crossing_slots = self._get_crossing_slots(slot, all_slots)
+        if slot_id is None:
+            # Slot not in our tracking, fall back to basic check
+            return True
 
-        # Check each crossing slot
-        for crossing_slot in crossing_slots:
-            pattern = self.grid.get_pattern_for_slot(crossing_slot)
+        # Check each constrained slot
+        for other_id, pos1, pos2 in self.constraints[slot_id]:
+            # Check if any word in the domain is still valid
+            pattern = self.grid.get_pattern_for_slot(self.slot_list[other_id])
 
             # Skip if fully filled
             if '?' not in pattern:
                 continue
 
-            # Check if any words match
-            if not self.pattern_matcher.has_matches(pattern, self.min_score):
-                # Dead end: no words fit crossing slot
-                return False
+            # Check if domain has compatible words
+            has_valid = False
+            for word in self.domains[other_id]:
+                if word in self.used_words:
+                    continue
+                # Quick pattern match
+                matches = all(
+                    pattern[i] == '?' or pattern[i] == word[i]
+                    for i in range(len(pattern))
+                )
+                if matches:
+                    has_valid = True
+                    break
+
+            if not has_valid:
+                return False  # Dead end
 
         return True
 

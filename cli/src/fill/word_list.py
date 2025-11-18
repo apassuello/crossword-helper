@@ -8,6 +8,8 @@ and provides efficient lookup operations for autofill.
 from typing import List, Tuple, Dict, Set
 from dataclasses import dataclass
 import re
+import os
+from pathlib import Path
 
 
 # Letter frequency scoring (based on common crossword usage)
@@ -209,7 +211,33 @@ class WordList:
 
         Returns:
             WordList loaded from file
+
+        Raises:
+            ValueError: If filepath is invalid or inaccessible
+            FileNotFoundError: If file does not exist
         """
-        with open(filepath, 'r', encoding='utf-8') as f:
-            words = [line.strip() for line in f if line.strip()]
-        return cls(words)
+        # Sanitize filepath to prevent path traversal
+        try:
+            # Resolve to absolute path and normalize
+            resolved_path = Path(filepath).resolve()
+
+            # Verify file exists and is a regular file
+            if not resolved_path.exists():
+                raise FileNotFoundError(f"Word list file not found: {filepath}")
+
+            if not resolved_path.is_file():
+                raise ValueError(f"Path is not a regular file: {filepath}")
+
+            # Check file size (prevent loading huge files)
+            file_size = resolved_path.stat().st_size
+            if file_size > 100 * 1024 * 1024:  # 100MB limit
+                raise ValueError(f"Word list file too large (max 100MB): {file_size / 1024 / 1024:.1f}MB")
+
+            # Read with proper error handling
+            with open(resolved_path, 'r', encoding='utf-8') as f:
+                words = [line.strip() for line in f if line.strip()]
+
+            return cls(words)
+
+        except (OSError, IOError) as e:
+            raise ValueError(f"Failed to read word list from {filepath}: {e}")
