@@ -49,7 +49,7 @@ class TestPatternMatcher:
 
     def test_find_wildcard_middle(self, matcher):
         """Test finding words with wildcard in middle."""
-        matches = matcher.find('C?T')
+        matches = matcher.find('C?T', min_score=0)  # Set min_score=0 to get all matches
         # Should match CAT, COT, CUT
         matched_words = {word for word, score in matches}
         assert 'CAT' in matched_words
@@ -72,7 +72,7 @@ class TestPatternMatcher:
 
     def test_find_all_wildcards(self, matcher):
         """Test finding words with all wildcards."""
-        matches = matcher.find('???')
+        matches = matcher.find('???', min_score=0)  # Set min_score=0 to get all matches
         # Should match all 3-letter words
         assert len(matches) >= 9  # At least CAT, COT, CUT, BAT, BOT, BUT, RAT, ROT, RUT
 
@@ -114,7 +114,7 @@ class TestPatternMatcher:
 
     def test_count_matches(self, matcher):
         """Test counting matches without returning them."""
-        count = matcher.count_matches('???')
+        count = matcher.count_matches('???', min_score=0)  # Set min_score=0 to count all
         assert count >= 9  # At least 9 three-letter words
 
     def test_count_matches_with_min_score(self, matcher):
