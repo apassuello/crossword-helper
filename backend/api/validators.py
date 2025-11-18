@@ -74,8 +74,9 @@ def validate_grid_request(data: dict) -> dict:
     if not isinstance(data['size'], int):
         raise ValueError("Field 'size' must be integer")
 
-    if data['size'] not in [11, 15, 21]:
-        raise ValueError("Field 'size' must be 11, 15, or 21")
+    # Phase 3: Allow non-standard sizes (CLI handles validation)
+    if data['size'] < 3 or data['size'] > 50:
+        raise ValueError("Field 'size' must be between 3 and 50")
 
     if 'grid' not in data:
         raise ValueError("Field 'grid' is required")

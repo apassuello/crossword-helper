@@ -251,5 +251,195 @@ def export(grid_file: str, format: str, output: str, title: str):
         sys.exit(1)
 
 
+# Phase 3.1: Commands for web API parity
+
+@cli.command()
+@click.argument('pattern_arg')
+@click.option('--wordlists', '-w', multiple=True,
+              help='Word list files (can specify multiple)')
+@click.option('--max-results', type=int, default=20,
+              help='Maximum number of results to return')
+@click.option('--json-output', is_flag=True, default=False,
+              help='Output JSON format (for API compatibility)')
+def pattern(pattern_arg: str, wordlists: tuple, max_results: int, json_output: bool):
+    """
+    Find words matching a pattern (Phase 3.1).
+
+    Pattern uses ? for wildcards (e.g., "C?T" matches CAT, COT, CUT).
+
+    Examples:
+        crossword pattern "C?T"
+        crossword pattern "?I?E" --wordlists standard.txt --max-results 10
+        crossword pattern "A?PLE" --json-output
+    """
+    from .core.scoring import analyze_letters
+
+    # Load word lists if specified
+    all_words = []
+    sources = []
+
+    if wordlists:
+        for wordlist_file in wordlists:
+            try:
+                word_list = WordList.from_file(wordlist_file)
+                for word in word_list.get_all():
+                    all_words.append((word.text, word.score, Path(wordlist_file).stem))
+                sources.append(Path(wordlist_file).stem)
+            except Exception as e:
+                click.echo(f"Warning: Could not load {wordlist_file}: {e}", err=True)
+
+    # If no wordlists specified, create minimal list
+    if not all_words:
+        default_words = ['CAT', 'DOG', 'BIRD', 'FISH', 'TREE', 'STAR', 'MOON', 'SUN']
+        word_list = WordList(default_words)
+        for word in word_list.get_all():
+            all_words.append((word.text, word.score, 'builtin'))
+        sources = ['builtin']
+
+    # Create pattern matcher
+    full_word_list = WordList([word for word, _, _ in all_words])
+    pattern_matcher = PatternMatcher(full_word_list)
+
+    # Search for pattern
+    matches = pattern_matcher.find(pattern_arg, min_score=0, max_results=max_results)
+
+    # Format results
+    results = []
+    for word, word_score in matches[:max_results]:
+        source = next((src for w, s, src in all_words if w == word), 'unknown')
+
+        results.append({
+            'word': word,
+            'score': word_score,
+            'source': source,
+            'length': len(word),
+            'letter_quality': analyze_letters(word)
+        })
+
+    if json_output:
+        output = {
+            'results': results,
+            'meta': {
+                'pattern': pattern_arg,
+                'total_found': len(matches),
+                'results_returned': min(len(matches), max_results),
+                'sources_searched': sources
+            }
+        }
+        click.echo(json.dumps(output, indent=2))
+    else:
+        click.echo(f"\nPattern: {pattern_arg}")
+        click.echo(f"Found {len(results)} matches:\n")
+        for result in results:
+            click.echo(f"  {result['word']:15} score={result['score']:3} source={result['source']}")
+        if not results:
+            click.echo("  (no matches found)")
+
+
+@cli.command()
+@click.argument('text')
+@click.option('--json-output', is_flag=True, default=False,
+              help='Output JSON format (for API compatibility)')
+def normalize(text: str, json_output: bool):
+    """
+    Normalize crossword entry according to conventions (Phase 3.1).
+
+    Examples:
+        crossword normalize "Tina Fey"
+        crossword normalize "self-aware" --json-output
+    """
+    from .core.conventions import ConventionHelper
+
+    helper = ConventionHelper()
+    normalized, rule_info = helper.normalize(text)
+    alternatives = helper.get_alternatives(text, normalized)
+
+    if json_output:
+        output = {
+            'original': text,
+            'normalized': normalized,
+            'rule': rule_info,
+            'alternatives': alternatives
+        }
+        click.echo(json.dumps(output, indent=2))
+    else:
+        click.echo(f"\nOriginal:    {text}")
+        click.echo(f"Normalized:  {normalized}")
+        click.echo(f"\nRule: {rule_info['description']}")
+        click.echo(f"{rule_info['explanation']}")
+
+        if rule_info.get('examples'):
+            click.echo(f"\nExamples:")
+            for example_in, example_out in rule_info['examples'][:3]:
+                click.echo(f"  {example_in:20} → {example_out}")
+
+        if alternatives:
+            click.echo(f"\nAlternatives:")
+            for alt in alternatives:
+                click.echo(f"  {alt['form']:20} ({alt['note']})")
+
+
+@cli.command()
+@click.argument('grid_file', type=click.Path(exists=True))
+@click.option('--json-output', is_flag=True, default=False,
+              help='Output JSON format (for API compatibility)')
+@click.option('--allow-nonstandard', is_flag=True, default=False,
+              help='Allow non-standard grid sizes (not 11/15/21)')
+def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
+    """
+    Auto-number a crossword grid (Phase 3.1).
+
+    Examples:
+        crossword number grid.json
+        crossword number grid.json --json-output
+        crossword number grid.json --allow-nonstandard  # For 9x9, 13x13, etc.
+    """
+    # Load grid
+    with open(grid_file, 'r') as f:
+        data = json.load(f)
+
+    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+
+    # Auto-number
+    numbering = GridNumbering.auto_number(grid)
+
+    # Get grid info/stats
+    stats = GridValidator.get_grid_stats(grid)
+
+    if json_output:
+        # Convert tuple keys to strings for JSON
+        numbering_serializable = {
+            f"({k[0]},{k[1]})": v
+            for k, v in numbering.items()
+        }
+
+        output = {
+            'numbering': numbering_serializable,
+            'grid_info': {
+                'size': [stats['size'], stats['size']],
+                'black_squares': stats['black_squares'],
+                'black_square_percentage': stats['black_square_percentage'],
+                'white_squares': stats['white_squares'],
+                'word_count': stats['word_count'],
+                'meets_nyt_standards': stats.get('meets_nyt_standards', False)
+            }
+        }
+        click.echo(json.dumps(output, indent=2))
+    else:
+        click.echo(f"\n{'='*60}")
+        click.echo(f"Grid Numbering")
+        click.echo(f"{'='*60}\n")
+
+        click.echo(f"File: {grid_file}")
+        click.echo(f"Size: {stats['size']}×{stats['size']}")
+        click.echo(f"Numbered squares: {len(numbering)}")
+
+        click.echo(f"\nNumbering:")
+        for (row, col), num in sorted(numbering.items(), key=lambda x: x[1]):
+            click.echo(f"  {num:3d}: row {row}, col {col}")
+
+        click.echo(f"\n{'='*60}\n")
+
+
 if __name__ == '__main__':
     cli()

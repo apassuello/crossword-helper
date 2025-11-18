@@ -3,152 +3,132 @@ Flask API routes for crossword helper endpoints.
 
 This module defines HTTP endpoints for pattern matching, grid numbering,
 and convention normalization.
+
+PHASE 3 REFACTORING: Routes now delegate to CLI via CLIAdapter for
+single source of truth architecture.
 """
 
 from flask import Blueprint, request, jsonify
-from backend.core.pattern_matcher import PatternMatcher
-from backend.core.numbering import NumberingValidator
-from backend.core.conventions import ConventionHelper
-from backend.core.scoring import analyze_letters
+from backend.core.cli_adapter import get_adapter
 from backend.api.validators import (
     validate_pattern_request,
     validate_grid_request,
     validate_normalize_request
 )
 from backend.api.errors import handle_error
+from pathlib import Path
+import subprocess
 
 api = Blueprint('api', __name__)
 
-# Initialize services (shared across requests)
-pattern_matcher = PatternMatcher(['personal', 'standard'])
-numbering_validator = NumberingValidator()
-convention_helper = ConventionHelper()
+# Get CLI adapter (single source of truth for crossword operations)
+cli_adapter = get_adapter()
 
 
 @api.route('/health', methods=['GET'])
 def health_check():
-    """GET /api/health - Health check endpoint."""
+    """GET /api/health - Health check endpoint (Phase 3: checks CLI health)."""
+    cli_healthy = cli_adapter.health_check()
+
     return jsonify({
-        'status': 'healthy',
-        'version': '0.1.0',
+        'status': 'healthy' if cli_healthy else 'degraded',
+        'version': '0.2.0',  # Phase 3 integration
+        'architecture': 'cli-backend',
         'components': {
-            'pattern_matcher': 'ok',
-            'numbering_validator': 'ok',
-            'convention_helper': 'ok'
+            'cli_adapter': 'ok' if cli_healthy else 'error',
+            'api_server': 'ok'
         }
-    }), 200
+    }), 200 if cli_healthy else 503
 
 
 @api.route('/pattern', methods=['POST'])
 def pattern_search():
-    """POST /api/pattern - Pattern search endpoint."""
+    """POST /api/pattern - Pattern search endpoint (Phase 3: uses CLI)."""
     try:
         # Validate request
         data = validate_pattern_request(request.json)
 
-        # Delegate to service
-        results = pattern_matcher.search(
+        # Resolve wordlist paths
+        wordlist_paths = []
+        backend_dir = Path(__file__).parent.parent.parent
+        data_dir = backend_dir / 'data' / 'wordlists'
+
+        for wordlist_name in data.get('wordlists', ['personal', 'standard']):
+            # Handle both names like "standard" and full paths
+            if '/' in wordlist_name or '\\' in wordlist_name:
+                wordlist_path = Path(wordlist_name)
+            else:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+
+            if wordlist_path.exists():
+                wordlist_paths.append(str(wordlist_path))
+
+        # Delegate to CLI via adapter
+        result = cli_adapter.pattern(
             pattern=data['pattern'],
+            wordlist_paths=wordlist_paths if wordlist_paths else None,
             max_results=data.get('max_results', 20)
         )
 
-        # Format response
-        return jsonify({
-            'results': [
-                {
-                    'word': word,
-                    'score': score,
-                    'source': source,
-                    'length': len(word),
-                    'letter_quality': analyze_letters(word)
-                }
-                for word, score, source in results
-            ],
-            'meta': {
-                'pattern': data['pattern'],
-                'total_found': len(results),
-                'results_returned': min(len(results), data.get('max_results', 20)),
-                'sources_searched': data.get('wordlists', ['personal', 'standard'])
-            }
-        }), 200
+        # CLI output is already in correct format!
+        return jsonify(result), 200
 
     except ValueError as e:
         return handle_error('INVALID_PATTERN', str(e), 400)
+    except subprocess.TimeoutExpired:
+        return handle_error('TIMEOUT', 'Pattern search timed out', 504)
     except Exception as e:
         return handle_error('INTERNAL_ERROR', str(e), 500)
 
 
 @api.route('/number', methods=['POST'])
 def number_grid():
-    """POST /api/number - Grid numbering validation endpoint."""
+    """POST /api/number - Grid numbering validation endpoint (Phase 3: uses CLI)."""
     try:
         # Validate request
         data = validate_grid_request(request.json)
 
-        # Extract grid
-        grid = data['grid']
+        # Check if grid size is non-standard
+        grid_size = data.get('size', len(data.get('grid', [])))
+        allow_nonstandard = grid_size not in [11, 15, 21]
 
-        # Auto-number the grid
-        numbering = numbering_validator.auto_number(grid)
+        # Delegate to CLI via adapter
+        result = cli_adapter.number(
+            grid_data=data,
+            allow_nonstandard=allow_nonstandard
+        )
 
-        # Convert tuple keys to strings for JSON serialization
-        numbering_serializable = {
-            f"({k[0]},{k[1]})": v
-            for k, v in numbering.items()
-        }
+        # Note: User-provided numbering validation is removed in Phase 3
+        # as the CLI is the single source of truth for auto-numbering.
+        # If validation is needed, it should be added to CLI first.
 
-        # If user provided numbering, validate it
-        validation_results = None
-        if 'numbering' in data:
-            user_numbering = {}
-            for pos_str, num in data['numbering'].items():
-                # Parse "(row,col)" format
-                pos_str = pos_str.strip('()')
-                row, col = map(int, pos_str.split(','))
-                user_numbering[(row, col)] = num
-
-            is_valid, errors = numbering_validator.validate(grid, user_numbering)
-            validation_results = {
-                'is_valid': is_valid,
-                'errors': errors
-            }
-
-        # Analyze grid characteristics
-        grid_info = numbering_validator.analyze_grid(grid)
-
-        return jsonify({
-            'numbering': numbering_serializable,
-            'validation': validation_results,
-            'grid_info': grid_info
-        }), 200
+        # CLI output is already in correct format!
+        return jsonify(result), 200
 
     except ValueError as e:
         return handle_error('INVALID_GRID', str(e), 400)
+    except subprocess.TimeoutExpired:
+        return handle_error('TIMEOUT', 'Grid numbering timed out', 504)
     except Exception as e:
         return handle_error('INTERNAL_ERROR', str(e), 500)
 
 
 @api.route('/normalize', methods=['POST'])
 def normalize_entry():
-    """POST /api/normalize - Convention normalization endpoint."""
+    """POST /api/normalize - Convention normalization endpoint (Phase 3: uses CLI)."""
     try:
         # Validate request
         data = validate_normalize_request(request.json)
 
-        # Normalize text
-        normalized, rule_info = convention_helper.normalize(data['text'])
+        # Delegate to CLI via adapter (with caching for performance)
+        result = cli_adapter.normalize(data['text'])
 
-        # Get alternatives
-        alternatives = convention_helper.get_alternatives(data['text'], normalized)
-
-        return jsonify({
-            'original': data['text'],
-            'normalized': normalized,
-            'rule': rule_info,
-            'alternatives': alternatives
-        }), 200
+        # CLI output is already in correct format!
+        return jsonify(result), 200
 
     except ValueError as e:
         return handle_error('INVALID_TEXT', str(e), 400)
+    except subprocess.TimeoutExpired:
+        return handle_error('TIMEOUT', 'Normalization timed out', 504)
     except Exception as e:
         return handle_error('INTERNAL_ERROR', str(e), 500)
