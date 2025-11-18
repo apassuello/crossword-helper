@@ -275,6 +275,105 @@ class Grid:
                 f"Position ({row}, {col}) out of bounds for {self.size}×{self.size} grid"
             )
 
+    def get_pattern_for_slot(self, slot: Dict) -> str:
+        """
+        Get current pattern for a slot (with filled letters).
+
+        Args:
+            slot: Slot dict with 'row', 'col', 'length', 'direction'
+
+        Returns:
+            Pattern string (e.g., "?I?A" where ? is empty, letters are filled)
+        """
+        pattern = []
+        row, col = slot['row'], slot['col']
+        length = slot['length']
+        direction = slot['direction']
+
+        for i in range(length):
+            if direction == 'across':
+                cell = self.get_cell(row, col + i)
+            else:  # down
+                cell = self.get_cell(row + i, col)
+
+            if cell == '.':
+                pattern.append('?')
+            elif cell == '#':
+                # Shouldn't happen in a valid slot
+                pattern.append('?')
+            else:
+                # Letter
+                pattern.append(cell)
+
+        return ''.join(pattern)
+
+    def place_word(self, word: str, row: int, col: int, direction: str) -> None:
+        """
+        Place word in grid.
+
+        Args:
+            word: Word to place (uppercase letters)
+            row: Starting row
+            col: Starting column
+            direction: 'across' or 'down'
+        """
+        word = word.upper()
+
+        for i, letter in enumerate(word):
+            if direction == 'across':
+                self.set_letter(row, col + i, letter)
+            else:  # down
+                self.set_letter(row + i, col, letter)
+
+    def remove_word(self, row: int, col: int, length: int, direction: str) -> None:
+        """
+        Remove word from grid (set cells to empty).
+
+        Args:
+            row: Starting row
+            col: Starting column
+            length: Word length
+            direction: 'across' or 'down'
+        """
+        for i in range(length):
+            if direction == 'across':
+                self.cells[row, col + i] = EMPTY_CELL
+            else:  # down
+                self.cells[row + i, col] = EMPTY_CELL
+
+        # Invalidate cached numbering
+        self._numbering = None
+
+    def get_empty_slots(self) -> List[Dict]:
+        """
+        Get all word slots that are not completely filled.
+
+        Returns:
+            List of slot dicts that have at least one empty cell
+        """
+        empty_slots = []
+
+        all_slots = self.get_word_slots()
+
+        for slot in all_slots:
+            pattern = self.get_pattern_for_slot(slot)
+            # If pattern contains '?', slot is not completely filled
+            if '?' in pattern:
+                empty_slots.append(slot)
+
+        return empty_slots
+
+    def clone(self) -> 'Grid':
+        """
+        Create deep copy of grid.
+
+        Returns:
+            New Grid instance with same state
+        """
+        new_grid = Grid(self.size)
+        new_grid.cells = self.cells.copy()
+        return new_grid
+
     def __str__(self) -> str:
         """String representation of grid."""
         lines = []
