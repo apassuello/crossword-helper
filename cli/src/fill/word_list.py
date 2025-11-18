@@ -14,8 +14,8 @@ from pathlib import Path
 
 # Letter frequency scoring (based on common crossword usage)
 COMMON_LETTERS = set('EARIOTNS')  # Very common, good for crosswords
-REGULAR_LETTERS = set('DHCLUMPFGYBWKVX')  # Regular usage
-UNCOMMON_LETTERS = set('JQZ')  # Difficult letters
+REGULAR_LETTERS = set('DHCLUMPFGYBWKV')  # Regular usage
+UNCOMMON_LETTERS = set('JQXZ')  # Difficult letters
 
 
 @dataclass

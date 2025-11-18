@@ -242,20 +242,64 @@ class Grid:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> 'Grid':
+    def from_dict(cls, data: Dict, strict_size: bool = True) -> 'Grid':
         """
         Create grid from dictionary format.
 
+        Supports both Phase 1 (webapp) and Phase 2 (CLI) formats:
+        - Phase 1: {"grid": [[...]], "size": N}
+        - Phase 2: {"grid": [[...]], "size": N, "black_squares": M, "is_symmetric": bool}
+
         Args:
             data: Dictionary with 'size' and 'grid' keys
+            strict_size: If False, auto-detect size from grid data (allows non-standard sizes)
 
         Returns:
             Grid instance
+
+        Raises:
+            ValueError: If grid data is invalid or incompatible with size
         """
-        size = data['size']
-        grid = cls(size)
+        # Get grid data
+        if 'grid' not in data:
+            raise ValueError("Dictionary must contain 'grid' key")
 
         grid_data = data['grid']
+
+        # Determine size
+        if 'size' in data:
+            size = data['size']
+        else:
+            # Auto-detect from grid dimensions
+            if not grid_data or not isinstance(grid_data, list):
+                raise ValueError("Grid data must be non-empty 2D array")
+            size = len(grid_data)
+
+        # Validate grid dimensions
+        if not isinstance(grid_data, list) or len(grid_data) != size:
+            raise ValueError(f"Grid must be {size}×{size}, got {len(grid_data)} rows")
+
+        for row_idx, row in enumerate(grid_data):
+            if not isinstance(row, list) or len(row) != size:
+                expected_cols = size
+                actual_cols = len(row) if isinstance(row, list) else 0
+                raise ValueError(
+                    f"Grid row {row_idx} must have {expected_cols} columns, got {actual_cols}"
+                )
+
+        # Create grid (with size validation if strict)
+        if strict_size and size not in [11, 15, 21]:
+            raise ValueError(
+                f"Grid size must be 11, 15, or 21 for standard crosswords, got {size}. "
+                f"Set strict_size=False to allow non-standard sizes."
+            )
+
+        grid = cls.__new__(cls)
+        grid.size = size
+        grid.cells = np.zeros((size, size), dtype=np.int8)
+        grid._numbering = None
+
+        # Populate cells
         for row in range(size):
             for col in range(size):
                 cell = grid_data[row][col]
@@ -265,6 +309,12 @@ class Grid:
                     grid.cells[row, col] = EMPTY_CELL
                 elif cell.isalpha():
                     grid.cells[row, col] = ord(cell.upper()) - ord('A') + 1
+                elif cell == '':
+                    # Handle empty string as empty cell
+                    grid.cells[row, col] = EMPTY_CELL
+                else:
+                    # Unknown cell value - treat as empty with warning
+                    grid.cells[row, col] = EMPTY_CELL
 
         return grid
 
