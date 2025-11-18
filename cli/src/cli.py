@@ -112,14 +112,17 @@ def validate(grid_file: str):
               help='Minimum word quality score (1-100)')
 @click.option('--output', '-o', type=click.Path(),
               help='Output file (defaults to overwriting input)')
-def fill(grid_file: str, wordlists: tuple, timeout: int, min_score: int, output: Optional[str]):
+@click.option('--allow-nonstandard', is_flag=True, default=False,
+              help='Allow non-standard grid sizes (not 11/15/21)')
+def fill(grid_file: str, wordlists: tuple, timeout: int, min_score: int, output: Optional[str],
+         allow_nonstandard: bool):
     """Fill a crossword grid using CSP autofill."""
     # Load grid
     click.echo(f"Loading grid from {grid_file}...")
     with open(grid_file, 'r') as f:
         data = json.load(f)
 
-    grid = Grid.from_dict(data)
+    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
 
     # Load word lists
     click.echo(f"Loading word lists...")

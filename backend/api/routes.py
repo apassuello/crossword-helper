@@ -13,7 +13,8 @@ from backend.core.cli_adapter import get_adapter
 from backend.api.validators import (
     validate_pattern_request,
     validate_grid_request,
-    validate_normalize_request
+    validate_normalize_request,
+    validate_fill_request
 )
 from backend.api.errors import handle_error
 from pathlib import Path
@@ -130,5 +131,55 @@ def normalize_entry():
         return handle_error('INVALID_TEXT', str(e), 400)
     except subprocess.TimeoutExpired:
         return handle_error('TIMEOUT', 'Normalization timed out', 504)
+    except Exception as e:
+        return handle_error('INTERNAL_ERROR', str(e), 500)
+
+
+@api.route('/fill', methods=['POST'])
+def fill_grid():
+    """POST /api/fill - Autofill crossword grid endpoint (Phase 3.3: uses CLI)."""
+    try:
+        # Validate request
+        data = validate_fill_request(request.json)
+
+        # Resolve wordlist paths
+        wordlist_paths = []
+        backend_dir = Path(__file__).parent.parent.parent
+        data_dir = backend_dir / 'data' / 'wordlists'
+
+        for wordlist_name in data.get('wordlists', ['standard']):
+            # Handle both names like "standard" and full paths
+            if '/' in wordlist_name or '\\' in wordlist_name:
+                wordlist_path = Path(wordlist_name)
+            else:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+
+            if wordlist_path.exists():
+                wordlist_paths.append(str(wordlist_path))
+
+        if not wordlist_paths:
+            return handle_error('INVALID_WORDLISTS', 'No valid wordlists found', 400)
+
+        # Prepare grid data
+        grid_data = {
+            'size': data['size'],
+            'grid': data['grid']
+        }
+
+        # Delegate to CLI via adapter
+        result = cli_adapter.fill(
+            grid_data=grid_data,
+            wordlist_paths=wordlist_paths,
+            timeout_seconds=data.get('timeout', 300),
+            min_score=data.get('min_score', 30)
+        )
+
+        # CLI returns filled grid with metadata
+        return jsonify(result), 200
+
+    except ValueError as e:
+        return handle_error('INVALID_REQUEST', str(e), 400)
+    except subprocess.TimeoutExpired:
+        return handle_error('TIMEOUT', 'Grid fill timed out', 504)
     except Exception as e:
         return handle_error('INTERNAL_ERROR', str(e), 500)

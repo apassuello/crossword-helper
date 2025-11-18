@@ -130,3 +130,73 @@ def validate_normalize_request(data: dict) -> dict:
         raise ValueError("Field 'text' must be at most 100 characters")
 
     return data
+
+
+def validate_fill_request(data: dict) -> dict:
+    """
+    Validate autofill request (Phase 3.3).
+
+    Checks:
+    - grid exists and is 2D array
+    - size exists and is valid (3-50)
+    - wordlists is list of strings
+    - timeout is reasonable (10-1800 seconds)
+    - min_score is valid (0-100)
+
+    Args:
+        data: Request data dictionary
+
+    Returns:
+        Validated data dict
+
+    Raises:
+        ValueError: With specific message about validation failure
+    """
+    if not data:
+        raise ValueError("Request body is required")
+
+    # Validate grid (reuse grid validation logic)
+    if 'grid' not in data:
+        raise ValueError("Field 'grid' is required")
+
+    if not isinstance(data['grid'], list):
+        raise ValueError("Field 'grid' must be array")
+
+    for row in data['grid']:
+        if not isinstance(row, list):
+            raise ValueError("Field 'grid' must be 2D array (array of arrays)")
+
+    # Validate size
+    if 'size' not in data:
+        raise ValueError("Field 'size' is required")
+
+    if not isinstance(data['size'], int):
+        raise ValueError("Field 'size' must be integer")
+
+    if data['size'] < 3 or data['size'] > 50:
+        raise ValueError("Field 'size' must be between 3 and 50")
+
+    # Validate wordlists
+    if 'wordlists' in data:
+        if not isinstance(data['wordlists'], list):
+            raise ValueError("Field 'wordlists' must be array")
+        if not all(isinstance(w, str) for w in data['wordlists']):
+            raise ValueError("Field 'wordlists' must contain strings")
+        if len(data['wordlists']) == 0:
+            raise ValueError("Field 'wordlists' must contain at least one word list")
+
+    # Validate timeout
+    if 'timeout' in data:
+        if not isinstance(data['timeout'], int):
+            raise ValueError("Field 'timeout' must be integer")
+        if not 10 <= data['timeout'] <= 1800:
+            raise ValueError("Field 'timeout' must be between 10 and 1800 seconds")
+
+    # Validate min_score
+    if 'min_score' in data:
+        if not isinstance(data['min_score'], int):
+            raise ValueError("Field 'min_score' must be integer")
+        if not 0 <= data['min_score'] <= 100:
+            raise ValueError("Field 'min_score' must be between 0 and 100")
+
+    return data

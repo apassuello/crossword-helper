@@ -216,7 +216,8 @@ class CLIAdapter:
         grid_data: Dict[str, Any],
         wordlist_paths: List[str],
         timeout_seconds: int = 300,
-        min_score: int = 30
+        min_score: int = 30,
+        allow_nonstandard: bool = None
     ) -> Dict[str, Any]:
         """
         Auto-fill a crossword grid using CSP solver.
@@ -226,6 +227,7 @@ class CLIAdapter:
             wordlist_paths: List of paths to word list files
             timeout_seconds: Maximum time to spend filling
             min_score: Minimum word quality score
+            allow_nonstandard: Allow non-standard grid sizes (auto-detected if None)
 
         Returns:
             Dict with filled grid and metadata
@@ -239,6 +241,11 @@ class CLIAdapter:
 
         if not wordlist_paths:
             raise ValueError("At least one wordlist path required")
+
+        # Auto-detect if grid size is non-standard
+        if allow_nonstandard is None:
+            grid_size = grid_data.get('size', len(grid_data.get('grid', [])))
+            allow_nonstandard = grid_size not in [11, 15, 21]
 
         # Write grid to temporary file
         import tempfile
@@ -254,6 +261,9 @@ class CLIAdapter:
             # Build command args
             args = ['fill', grid_path, '--output', output_path,
                    '--timeout', str(timeout_seconds), '--min-score', str(min_score)]
+
+            if allow_nonstandard:
+                args.append('--allow-nonstandard')
 
             for wordlist_path in wordlist_paths:
                 args.extend(['--wordlists', wordlist_path])
