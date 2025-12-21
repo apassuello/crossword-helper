@@ -140,10 +140,14 @@ function App() {
     validateGrid(newGrid);
   }, [selectedCell, grid, gridSize]);
 
-  const handleAutofill = useCallback(async () => {
+  const handleAutofill = useCallback(async (options = {}) => {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
 
     try {
+      // Create an AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), (options.timeout || 300) * 1000 + 10000);
+
       // Call backend autofill endpoint
       const response = await fetch('/api/fill', {
         method: 'POST',
@@ -152,13 +156,18 @@ function App() {
           size: gridSize,
           grid: grid.map(row => row.map(cell =>
             cell.isBlack ? '#' : (cell.letter || '.')
-          ))
-        })
+          )),
+          wordlists: options.wordlists || ['comprehensive'],
+          timeout: options.timeout || 300,
+          min_score: options.minScore || 30
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.grid) {
         // Update grid with filled results
         const newGrid = [...grid.map(row => [...row])];
         result.grid.forEach((row, r) => {
@@ -172,10 +181,14 @@ function App() {
         setGrid(newGrid);
         setAutofillProgress({ status: 'complete', progress: 100, message: 'Autofill complete!' });
       } else {
-        setAutofillProgress({ status: 'error', progress: 0, message: result.error || 'Autofill failed' });
+        setAutofillProgress({ status: 'error', progress: 0, message: result.error?.message || 'Autofill failed' });
       }
     } catch (error) {
-      setAutofillProgress({ status: 'error', progress: 0, message: error.message });
+      if (error.name === 'AbortError') {
+        setAutofillProgress({ status: 'error', progress: 0, message: 'Request timed out - try with smaller wordlists or increase timeout' });
+      } else {
+        setAutofillProgress({ status: 'error', progress: 0, message: error.message });
+      }
     }
   }, [grid, gridSize]);
 
