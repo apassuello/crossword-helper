@@ -1,0 +1,136 @@
+.tool-panel {
+  padding: 2rem;
+
+  h2 {
+    margin-bottom: 1.5rem;
+    color: #667eea;
+  }
+
+  .tool-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    h3 {
+      margin-bottom: 1rem;
+      color: #333;
+      font-size: 1.1rem;
+    }
+
+    .size-selector {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+
+      .size-btn {
+        flex: 1;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        color: #666;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: #e8eaf6;
+          border-color: #667eea;
+        }
+
+        &.active {
+          background: #667eea;
+          color: white;
+          border-color: #667eea;
+        }
+      }
+    }
+
+    .help-text {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+
+    .stats-list {
+      display: grid;
+      gap: 0.5rem;
+
+      .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+
+        .stat-label {
+          color: #666;
+        }
+
+        .stat-value {
+          font-weight: 600;
+          color: #333;
+        }
+      }
+    }
+
+    .validation-success {
+      padding: 1rem;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border-radius: 8px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .validation-errors {
+      padding: 1rem;
+      background: #ffebee;
+      border-radius: 8px;
+
+      .error-item {
+        color: #c62828;
+        margin: 0.25rem 0;
+      }
+    }
+
+    .action-buttons {
+      display: grid;
+      gap: 0.5rem;
+
+      .action-btn {
+        padding: 0.75rem;
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: #667eea;
+          color: white;
+        }
+      }
+    }
+
+    .standards-list {
+      list-style: none;
+      display: grid;
+      gap: 0.5rem;
+
+      li {
+        padding: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        border-left: 3px solid #667eea;
+      }
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "wordlists": {
+    "core/common_3_letter": {
+      "name": "Common 3-Letter Words",
+      "category": "core",
+      "description": "High-frequency 3-letter English words and crossword fill",
+      "difficulty": "easy",
+      "tags": ["common", "3-letter", "basic", "essential"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "core/crosswordese": {
+      "name": "Classic Crosswordese",
+      "category": "core",
+      "description": "Words that appear frequently in crossword puzzles",
+      "difficulty": "medium",
+      "tags": ["crosswordese", "classic", "common-fill"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "core/standard": {
+      "name": "Standard Words",
+      "category": "core",
+      "description": "Standard English words for general fill",
+      "difficulty": "easy",
+      "tags": ["standard", "general", "english"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "themed/expressions_and_slang": {
+      "name": "Expressions & Slang",
+      "category": "themed",
+      "description": "Modern slang, texting abbreviations, internet culture, and common expressions from NYT crosswords",
+      "difficulty": "medium",
+      "tags": ["slang", "modern", "expressions", "texting", "internet", "memes", "casual"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "comprehensive": {
+      "name": "Comprehensive Dictionary",
+      "category": "core",
+      "description": "Complete crossword dictionary with 453,992 words from Matt Abate, Chris Jones, and custom expressions",
+      "difficulty": "all",
+      "tags": ["comprehensive", "complete", "all-words", "master"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "comprehensive_scored": {
+      "name": "Comprehensive Dictionary (Scored)",
+      "category": "core",
+      "description": "Complete crossword dictionary with scoring - 453,992 words with quality scores",
+      "difficulty": "all",
+      "tags": ["comprehensive", "complete", "scored", "master"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "custom/personal": {
+      "name": "Personal Theme Words",
+      "category": "custom",
+      "description": "Custom themed words for personal puzzles",
+      "difficulty": "medium",
+      "tags": ["custom", "themed", "personal"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "custom/gift_for_sarah": {
+      "name": "Gift for Sarah",
+      "category": "custom",
+      "description": "Special themed words for Sarah's puzzle",
+      "difficulty": "easy",
+      "tags": ["custom", "gift", "special", "sarah"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    }
+  },
+  "categories": {
+    "core": {
+      "name": "Core Wordlists",
+      "description": "Essential wordlists for basic crossword construction",
+      "icon": "📚"
+    },
+    "themed": {
+      "name": "Themed Collections",
+      "description": "Words organized by themes, topics, and cultural references",
+      "icon": "🎨"
+    },
+    "difficulty": {
+      "name": "By Difficulty",
+      "description": "Wordlists organized by solving difficulty",
+      "icon": "📊"
+    },
+    "custom": {
+      "name": "Custom Lists",
+      "description": "User-created and personalized wordlists",
+      "icon": "✏️"
+    },
+    "imports": {
+      "name": "Imported Lists",
+      "description": "Wordlists imported from external sources",
+      "icon": "📥"
+    }
+  },
+  "tags": {
+    "common": { "color": "#4CAF50", "description": "Frequently used words" },
+    "3-letter": { "color": "#2196F3", "description": "Three-letter words" },
+    "4-letter": { "color": "#2196F3", "description": "Four-letter words" },
+    "5-letter": { "color": "#2196F3", "description": "Five-letter words" },
+    "crosswordese": { "color": "#FF9800", "description": "Classic crossword fill" },
+    "slang": { "color": "#9C27B0", "description": "Slang and informal language" },
+    "modern": { "color": "#E91E63", "description": "Contemporary words and expressions" },
+    "texting": { "color": "#00BCD4", "description": "Text messaging abbreviations" },
+    "internet": { "color": "#3F51B5", "description": "Internet and meme culture" },
+    "custom": { "color": "#795548", "description": "User-created content" },
+    "themed": { "color": "#607D8B", "description": "Theme-specific words" },
+    "essential": { "color": "#F44336", "description": "Must-have words for constructors" }
+  }
+}

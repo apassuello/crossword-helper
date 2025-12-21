@@ -54,12 +54,20 @@ def pattern_search():
         backend_dir = Path(__file__).parent.parent.parent
         data_dir = backend_dir / 'data' / 'wordlists'
 
-        for wordlist_name in data.get('wordlists', ['personal', 'standard']):
-            # Handle both names like "standard" and full paths
+        for wordlist_name in data.get('wordlists', ['comprehensive']):
+            # Handle paths with category (e.g., "core/standard") or without
             if '/' in wordlist_name or '\\' in wordlist_name:
-                wordlist_path = Path(wordlist_name)
-            else:
+                # Could be a category path like "core/standard"
                 wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    # Try as absolute path
+                    wordlist_path = Path(wordlist_name)
+            else:
+                # Simple name, try in root then common locations
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    # Try in core directory
+                    wordlist_path = data_dir / 'core' / f"{wordlist_name}.txt"
 
             if wordlist_path.exists():
                 wordlist_paths.append(str(wordlist_path))
@@ -147,12 +155,20 @@ def fill_grid():
         backend_dir = Path(__file__).parent.parent.parent
         data_dir = backend_dir / 'data' / 'wordlists'
 
-        for wordlist_name in data.get('wordlists', ['standard']):
-            # Handle both names like "standard" and full paths
+        for wordlist_name in data.get('wordlists', ['comprehensive']):
+            # Handle paths with category (e.g., "core/standard") or without
             if '/' in wordlist_name or '\\' in wordlist_name:
-                wordlist_path = Path(wordlist_name)
-            else:
+                # Could be a category path like "core/standard"
                 wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    # Try as absolute path
+                    wordlist_path = Path(wordlist_name)
+            else:
+                # Simple name, try in root then common locations
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    # Try in core directory
+                    wordlist_path = data_dir / 'core' / f"{wordlist_name}.txt"
 
             if wordlist_path.exists():
                 wordlist_paths.append(str(wordlist_path))

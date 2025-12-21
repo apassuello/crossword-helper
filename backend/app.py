@@ -8,6 +8,7 @@ middleware, and error handlers.
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from backend.api.routes import api
+from backend.api.wordlist_routes import wordlist_api
 import os
 
 
@@ -33,8 +34,9 @@ def create_app(testing=False):
     # CORS (allow localhost)
     CORS(app, origins=['http://localhost:5000', 'http://127.0.0.1:5000'])
 
-    # Register API blueprint
+    # Register API blueprints
     app.register_blueprint(api, url_prefix='/api')
+    app.register_blueprint(wordlist_api, url_prefix='/api')
 
     # Serve frontend
     @app.route('/')
