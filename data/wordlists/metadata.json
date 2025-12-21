@@ -40,6 +40,26 @@
       "last_modified": "2024-12-21",
       "auto_generated": false
     },
+    "themed/foreign_classics": {
+      "name": "Foreign Classics",
+      "category": "themed",
+      "description": "Classic Spanish and French words commonly found in NYT crosswords",
+      "difficulty": "medium",
+      "tags": ["foreign", "spanish", "french", "international", "nyt"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
+    "themed/foreign_words": {
+      "name": "Foreign Words",
+      "category": "themed",
+      "description": "Spanish and French words (5,745 words) typical in English crosswords",
+      "difficulty": "medium",
+      "tags": ["foreign", "spanish", "french", "international", "comprehensive"],
+      "created": "2024-12-21",
+      "last_modified": "2024-12-21",
+      "auto_generated": false
+    },
     "comprehensive": {
       "name": "Comprehensive Dictionary",
       "category": "core",

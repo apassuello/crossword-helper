@@ -178,6 +178,34 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
               />
               <span>Expressions & Slang</span>
             </label>
+            <label className="wordlist-option">
+              <input
+                type="checkbox"
+                checked={selectedWordlists.includes('themed/foreign_classics')}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedWordlists([...selectedWordlists, 'themed/foreign_classics']);
+                  } else {
+                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'themed/foreign_classics'));
+                  }
+                }}
+              />
+              <span>Foreign Classics (ES/FR)</span>
+            </label>
+            <label className="wordlist-option">
+              <input
+                type="checkbox"
+                checked={selectedWordlists.includes('themed/foreign_words')}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedWordlists([...selectedWordlists, 'themed/foreign_words']);
+                  } else {
+                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'themed/foreign_words'));
+                  }
+                }}
+              />
+              <span>Foreign Words (5.7k)</span>
+            </label>
           </div>
         </div>
 

@@ -151,6 +151,45 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
               />
               Crosswordese
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={options.wordlists.includes('themed/expressions_and_slang')}
+                onChange={(e) => {
+                  const lists = e.target.checked
+                    ? [...options.wordlists, 'themed/expressions_and_slang']
+                    : options.wordlists.filter(l => l !== 'themed/expressions_and_slang');
+                  handleOptionChange('wordlists', lists);
+                }}
+              />
+              Expressions & Slang
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={options.wordlists.includes('themed/foreign_classics')}
+                onChange={(e) => {
+                  const lists = e.target.checked
+                    ? [...options.wordlists, 'themed/foreign_classics']
+                    : options.wordlists.filter(l => l !== 'themed/foreign_classics');
+                  handleOptionChange('wordlists', lists);
+                }}
+              />
+              Foreign Classics (ES/FR)
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={options.wordlists.includes('themed/foreign_words')}
+                onChange={(e) => {
+                  const lists = e.target.checked
+                    ? [...options.wordlists, 'themed/foreign_words']
+                    : options.wordlists.filter(l => l !== 'themed/foreign_words');
+                  handleOptionChange('wordlists', lists);
+                }}
+              />
+              Foreign Words (5.7k)
+            </label>
           </div>
         </div>
       </div>
