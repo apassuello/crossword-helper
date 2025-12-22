@@ -78,6 +78,10 @@ class WordTrie:
         # Insert word into trie
         node = self._length_roots[length]
 
+        # Update root's score bounds (fix for pruning bug)
+        node.min_score = min(node.min_score, word.score) if node.min_score > 0 else word.score
+        node.max_score = max(node.max_score, word.score)
+
         for char in word.text:
             if char not in node.children:
                 node.children[char] = TrieNode()

@@ -3,8 +3,14 @@ Unit tests for WordTrie data structure.
 """
 
 import pytest
-from cli.src.fill.word_trie import WordTrie, TrieNode
-from cli.src.fill.word_list import ScoredWord
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
+
+from fill.word_trie import WordTrie, TrieNode
+from fill.word_list import ScoredWord
 
 
 def test_trie_node_creation():
