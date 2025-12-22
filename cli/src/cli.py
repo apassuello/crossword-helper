@@ -110,12 +110,14 @@ def validate(grid_file: str):
               help='Maximum seconds to spend filling')
 @click.option('--min-score', type=int, default=30,
               help='Minimum word quality score (1-100)')
+@click.option('--algorithm', '-a', type=click.Choice(['regex', 'trie']), default='regex',
+              help='Pattern matching algorithm (regex=classic, trie=fast)')
 @click.option('--output', '-o', type=click.Path(),
               help='Output file (defaults to overwriting input)')
 @click.option('--allow-nonstandard', is_flag=True, default=False,
               help='Allow non-standard grid sizes (not 11/15/21)')
-def fill(grid_file: str, wordlists: tuple, timeout: int, min_score: int, output: Optional[str],
-         allow_nonstandard: bool):
+def fill(grid_file: str, wordlists: tuple, timeout: int, min_score: int, algorithm: str,
+         output: Optional[str], allow_nonstandard: bool):
     """Fill a crossword grid using CSP autofill."""
     # Load grid
     click.echo(f"Loading grid from {grid_file}...")
@@ -136,9 +138,9 @@ def fill(grid_file: str, wordlists: tuple, timeout: int, min_score: int, output:
     word_list = WordList(all_words)
     click.echo(f"  Loaded {len(word_list)} words")
 
-    # Create autofill engine
-    pattern_matcher = PatternMatcher(word_list)
-    autofill = Autofill(grid, word_list, pattern_matcher, timeout, min_score)
+    # Create autofill engine with selected algorithm
+    click.echo(f"  Algorithm: {algorithm} ({'fast trie-based' if algorithm == 'trie' else 'classic regex'})")
+    autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm)
 
     # Get empty slots
     empty_slots = grid.get_empty_slots()

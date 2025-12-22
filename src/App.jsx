@@ -159,7 +159,8 @@ function App() {
           )),
           wordlists: options.wordlists || ['comprehensive'],
           timeout: options.timeout || 300,
-          min_score: options.minScore || 30
+          min_score: options.minScore || 30,
+          algorithm: options.algorithm || 'regex'
         }),
         signal: controller.signal
       });

@@ -187,7 +187,8 @@ def fill_grid():
             grid_data=grid_data,
             wordlist_paths=wordlist_paths,
             timeout_seconds=data.get('timeout', 300),
-            min_score=data.get('min_score', 30)
+            min_score=data.get('min_score', 30),
+            algorithm=data.get('algorithm', 'regex')  # 'regex' or 'trie'
         )
 
         # CLI returns filled grid with metadata

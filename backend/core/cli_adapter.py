@@ -217,6 +217,7 @@ class CLIAdapter:
         wordlist_paths: List[str],
         timeout_seconds: int = 300,
         min_score: int = 30,
+        algorithm: str = 'regex',
         allow_nonstandard: bool = None
     ) -> Dict[str, Any]:
         """
@@ -227,6 +228,7 @@ class CLIAdapter:
             wordlist_paths: List of paths to word list files
             timeout_seconds: Maximum time to spend filling
             min_score: Minimum word quality score
+            algorithm: Pattern matching algorithm ('regex' or 'trie')
             allow_nonstandard: Allow non-standard grid sizes (auto-detected if None)
 
         Returns:
@@ -260,7 +262,8 @@ class CLIAdapter:
         try:
             # Build command args
             args = ['fill', grid_path, '--output', output_path,
-                   '--timeout', str(timeout_seconds), '--min-score', str(min_score)]
+                   '--timeout', str(timeout_seconds), '--min-score', str(min_score),
+                   '--algorithm', algorithm]
 
             if allow_nonstandard:
                 args.append('--allow-nonstandard')

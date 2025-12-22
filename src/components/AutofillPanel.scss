@@ -90,6 +90,61 @@
           font-weight: normal;
         }
       }
+
+      .algorithm-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+
+        .radio-option {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          border: 2px solid #e0e0e0;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover {
+            border-color: #667eea;
+            background: #f8f9fa;
+          }
+
+          input[type="radio"] {
+            margin-top: 0.25rem;
+            cursor: pointer;
+          }
+
+          input[type="radio"]:checked + .radio-label {
+            strong {
+              color: #667eea;
+            }
+          }
+
+          .radio-label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+
+            strong {
+              font-size: 1rem;
+              color: #333;
+            }
+
+            small {
+              font-size: 0.85rem;
+              color: #666;
+              font-weight: normal;
+            }
+          }
+        }
+
+        .radio-option:has(input[type="radio"]:checked) {
+          border-color: #667eea;
+          background: linear-gradient(135deg, #667eea08 0%, #764ba208 100%);
+        }
+      }
     }
   }
 

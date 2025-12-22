@@ -15,6 +15,7 @@ import time
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
+from .trie_pattern_matcher import TriePatternMatcher
 
 
 @dataclass
@@ -42,7 +43,8 @@ class Autofill:
                  word_list: WordList,
                  pattern_matcher: PatternMatcher = None,
                  timeout: int = 300,
-                 min_score: int = 30):
+                 min_score: int = 30,
+                 algorithm: str = 'regex'):
         """
         Initialize autofill solver.
 
@@ -52,10 +54,21 @@ class Autofill:
             pattern_matcher: Pattern matching engine (created if not provided)
             timeout: Maximum seconds to spend filling
             min_score: Minimum word score to consider
+            algorithm: Pattern matching algorithm - 'regex' (classic) or 'trie' (fast)
         """
         self.grid = grid
         self.word_list = word_list
-        self.pattern_matcher = pattern_matcher or PatternMatcher(word_list)
+        self.algorithm = algorithm
+
+        # Create pattern matcher if not provided
+        if pattern_matcher is None:
+            if algorithm == 'trie':
+                self.pattern_matcher = TriePatternMatcher(word_list)
+            else:
+                self.pattern_matcher = PatternMatcher(word_list)
+        else:
+            self.pattern_matcher = pattern_matcher
+
         self.timeout = timeout
         self.min_score = min_score
 

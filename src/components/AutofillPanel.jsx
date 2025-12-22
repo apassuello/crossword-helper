@@ -6,7 +6,8 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
     minScore: 50,
     preferPersonalWords: true,
     timeout: 300,
-    wordlists: ['comprehensive']
+    wordlists: ['comprehensive'],
+    algorithm: 'regex'  // 'regex' or 'trie'
   });
 
   const handleOptionChange = (key, value) => {
@@ -94,6 +95,38 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
             />
             Prefer personal word list
           </label>
+        </div>
+
+        <div className="option-group">
+          <label>Algorithm</label>
+          <div className="algorithm-selector">
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="algorithm"
+                value="regex"
+                checked={options.algorithm === 'regex'}
+                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
+              />
+              <span className="radio-label">
+                <strong>Regex</strong> (Classic)
+                <small>Stable, well-tested algorithm</small>
+              </span>
+            </label>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="algorithm"
+                value="trie"
+                checked={options.algorithm === 'trie'}
+                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
+              />
+              <span className="radio-label">
+                <strong>Trie</strong> (Fast)
+                <small>10-50x faster for large wordlists</small>
+              </span>
+            </label>
+          </div>
         </div>
 
         <div className="option-group">
