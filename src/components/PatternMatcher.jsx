@@ -11,6 +11,7 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
   const [filterMinScore, setFilterMinScore] = useState(0);
   const [availableWordlists, setAvailableWordlists] = useState([]);
   const [selectedWordlists, setSelectedWordlists] = useState(['comprehensive']);
+  const [algorithm, setAlgorithm] = useState('regex');  // Algorithm selection state
 
   // Load available wordlists on mount
   useEffect(() => {
@@ -38,7 +39,8 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
       const response = await axios.post('/api/pattern', {
         pattern: pattern.toUpperCase(),
         max_results: 50,
-        wordlists: selectedWordlists
+        wordlists: selectedWordlists,
+        algorithm: algorithm  // Pass algorithm to API
       });
 
       let searchResults = response.data.results || [];
@@ -64,7 +66,7 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
     } finally {
       setLoading(false);
     }
-  }, [pattern, sortBy, filterMinScore, selectedWordlists]);
+  }, [pattern, sortBy, filterMinScore, selectedWordlists, algorithm]);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -210,6 +212,19 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
         </div>
 
         <div className="filter-controls">
+          <div className="control-group">
+            <label>Algorithm:</label>
+            <select value={algorithm} onChange={(e) => setAlgorithm(e.target.value)}>
+              <option value="regex">Regex (Classic)</option>
+              <option value="trie">Trie (Fast)</option>
+            </select>
+            {algorithm === 'trie' && (
+              <span className="algorithm-badge" style={{marginLeft: '8px', color: '#4caf50', fontSize: '12px'}}>
+                ⚡ 4-10x faster
+              </span>
+            )}
+          </div>
+
           <div className="control-group">
             <label>Sort by:</label>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>

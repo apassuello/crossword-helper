@@ -21,6 +21,7 @@ from .trie_pattern_matcher import TriePatternMatcher
 @dataclass
 class FillResult:
     """Result of autofill attempt."""
+
     success: bool
     grid: Grid
     time_elapsed: float
@@ -38,13 +39,15 @@ class Autofill:
     efficiently while maintaining crossword quality.
     """
 
-    def __init__(self,
-                 grid: Grid,
-                 word_list: WordList,
-                 pattern_matcher: PatternMatcher = None,
-                 timeout: int = 300,
-                 min_score: int = 30,
-                 algorithm: str = 'regex'):
+    def __init__(
+        self,
+        grid: Grid,
+        word_list: WordList,
+        pattern_matcher: PatternMatcher = None,
+        timeout: int = 300,
+        min_score: int = 30,
+        algorithm: str = "trie",
+    ):
         """
         Initialize autofill solver.
 
@@ -62,7 +65,7 @@ class Autofill:
 
         # Create pattern matcher if not provided
         if pattern_matcher is None:
-            if algorithm == 'trie':
+            if algorithm == "trie":
                 self.pattern_matcher = TriePatternMatcher(word_list)
             else:
                 self.pattern_matcher = PatternMatcher(word_list)
@@ -78,7 +81,9 @@ class Autofill:
 
         # Domain tracking and constraint graph (initialized on fill())
         self.domains: Dict[int, Set[str]] = {}  # slot_id -> set of valid words
-        self.constraints: Dict[int, List[Tuple[int, int, int]]] = {}  # slot_id -> [(other_slot, my_pos, other_pos)]
+        self.constraints: Dict[int, List[Tuple[int, int, int]]] = (
+            {}
+        )  # slot_id -> [(other_slot, my_pos, other_pos)]
         self.slot_list: List[Dict] = []  # All slots
         self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
 
@@ -109,7 +114,7 @@ class Autofill:
                 slots_filled=0,
                 total_slots=0,
                 problematic_slots=[],
-                iterations=0
+                iterations=0,
             )
 
         # Initialize constraint graph and domains
@@ -125,7 +130,7 @@ class Autofill:
                 slots_filled=0,
                 total_slots=total_slots,
                 problematic_slots=slots,
-                iterations=0
+                iterations=0,
             )
 
         # Sort slots by constraint (MCV heuristic)
@@ -150,7 +155,7 @@ class Autofill:
             slots_filled=slots_filled,
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
-            iterations=self.iterations
+            iterations=self.iterations,
         )
 
     def _initialize_csp(self, slots: List[Dict]) -> None:
@@ -171,7 +176,7 @@ class Autofill:
 
         # Create slot ID mapping
         for idx, slot in enumerate(slots):
-            key = (slot['row'], slot['col'], slot['direction'])
+            key = (slot["row"], slot["col"], slot["direction"])
             self.slot_id_map[key] = idx
 
         # Build constraint graph
@@ -194,7 +199,7 @@ class Autofill:
             candidates = self.pattern_matcher.find(
                 pattern,
                 min_score=self.min_score,
-                max_results=1000  # Larger domain initially
+                max_results=1000,  # Larger domain initially
             )
             self.domains[idx] = {word for word, score in candidates}
 
@@ -211,30 +216,30 @@ class Autofill:
             and pos2 is position in slot2. None if no intersection.
         """
         # Must be different directions
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None
 
         # Determine across and down
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across, down = slot1, slot2
         else:
             across, down = slot2, slot1
 
         # Check intersection
-        across_row = across['row']
-        across_col_start = across['col']
-        across_col_end = across_col_start + across['length']
+        across_row = across["row"]
+        across_col_start = across["col"]
+        across_col_end = across_col_start + across["length"]
 
-        down_row_start = down['row']
-        down_row_end = down_row_start + down['length']
-        down_col = down['col']
+        down_row_start = down["row"]
+        down_row_end = down_row_start + down["length"]
+        down_col = down["col"]
 
         # Does down column intersect across range?
         if across_col_start <= down_col < across_col_end:
             # Does across row intersect down range?
             if down_row_start <= across_row < down_row_end:
                 # They intersect!
-                if slot1['direction'] == 'across':
+                if slot1["direction"] == "across":
                     pos1 = down_col - across_col_start
                     pos2 = across_row - down_row_start
                 else:
@@ -343,7 +348,7 @@ class Autofill:
 
         # Skip if already filled
         pattern = self.grid.get_pattern_for_slot(slot)
-        if '?' not in pattern:
+        if "?" not in pattern:
             # Slot already filled, move to next
             return self._backtrack(slots, current_index + 1)
 
@@ -361,12 +366,7 @@ class Autofill:
                 continue
 
             # Place word
-            self.grid.place_word(
-                word,
-                slot['row'],
-                slot['col'],
-                slot['direction']
-            )
+            self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
             self.used_words.add(word)
 
             # Forward check
@@ -377,10 +377,7 @@ class Autofill:
 
             # Backtrack
             self.grid.remove_word(
-                slot['row'],
-                slot['col'],
-                slot['length'],
-                slot['direction']
+                slot["row"], slot["col"], slot["length"], slot["direction"]
             )
             self.used_words.remove(word)
 
@@ -402,9 +399,10 @@ class Autofill:
         Returns:
             Sorted list of slots
         """
+
         def constraint_key(slot):
             # Get domain size
-            key = (slot['row'], slot['col'], slot['direction'])
+            key = (slot["row"], slot["col"], slot["direction"])
             slot_id = self.slot_id_map.get(key)
 
             if slot_id is not None and slot_id in self.domains:
@@ -413,15 +411,17 @@ class Autofill:
             else:
                 # Fallback to pattern matching
                 pattern = self.grid.get_pattern_for_slot(slot)
-                domain_size = self.pattern_matcher.count_matches(pattern, self.min_score)
+                domain_size = self.pattern_matcher.count_matches(
+                    pattern, self.min_score
+                )
 
             # Count empty positions (wildcards)
             pattern = self.grid.get_pattern_for_slot(slot)
-            empty_count = pattern.count('?')
+            empty_count = pattern.count("?")
 
             # Prefer slots with fewer candidate words and more letters filled
             # Negative length for tie-breaking (prefer longer words)
-            return (domain_size, empty_count, -slot['length'])
+            return (domain_size, empty_count, -slot["length"])
 
         return sorted(slots, key=constraint_key)
 
@@ -439,9 +439,7 @@ class Autofill:
 
         # Get matching words
         candidates = self.pattern_matcher.find(
-            pattern,
-            min_score=self.min_score,
-            max_results=100
+            pattern, min_score=self.min_score, max_results=100
         )
 
         return candidates
@@ -460,7 +458,7 @@ class Autofill:
             True if placement is safe, False if creates dead end
         """
         # Get slot ID
-        key = (slot['row'], slot['col'], slot['direction'])
+        key = (slot["row"], slot["col"], slot["direction"])
         slot_id = self.slot_id_map.get(key)
 
         if slot_id is None:
@@ -473,7 +471,7 @@ class Autofill:
             pattern = self.grid.get_pattern_for_slot(self.slot_list[other_id])
 
             # Skip if fully filled
-            if '?' not in pattern:
+            if "?" not in pattern:
                 continue
 
             # Check if domain has compatible words
@@ -483,7 +481,7 @@ class Autofill:
                     continue
                 # Quick pattern match
                 matches = all(
-                    pattern[i] == '?' or pattern[i] == word[i]
+                    pattern[i] == "?" or pattern[i] == word[i]
                     for i in range(len(pattern))
                 )
                 if matches:
@@ -508,15 +506,17 @@ class Autofill:
         """
         crossing = []
 
-        row, col = slot['row'], slot['col']
-        length = slot['length']
-        direction = slot['direction']
+        row, col = slot["row"], slot["col"]
+        length = slot["length"]
+        direction = slot["direction"]
 
         for other_slot in all_slots:
             # Skip same slot
-            if (other_slot['row'] == row and
-                other_slot['col'] == col and
-                other_slot['direction'] == direction):
+            if (
+                other_slot["row"] == row
+                and other_slot["col"] == col
+                and other_slot["direction"] == direction
+            ):
                 continue
 
             # Check if they intersect
@@ -537,11 +537,11 @@ class Autofill:
             True if slots cross each other
         """
         # Slots must be in different directions to intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Determine which is across and which is down
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across, down = slot1, slot2
         else:
             across, down = slot2, slot1
@@ -551,17 +551,19 @@ class Autofill:
         # Down slot spans rows [down_row, down_row + down_len)
         # They intersect if down column is in across range AND across row is in down range
 
-        across_row = across['row']
-        across_col_start = across['col']
-        across_col_end = across_col_start + across['length']
+        across_row = across["row"]
+        across_col_start = across["col"]
+        across_col_end = across_col_start + across["length"]
 
-        down_row_start = down['row']
-        down_row_end = down_row_start + down['length']
-        down_col = down['col']
+        down_row_start = down["row"]
+        down_row_end = down_row_start + down["length"]
+        down_col = down["col"]
 
         # Check intersection
-        if (across_col_start <= down_col < across_col_end and
-            down_row_start <= across_row < down_row_end):
+        if (
+            across_col_start <= down_col < across_col_end
+            and down_row_start <= across_row < down_row_end
+        ):
             return True
 
         return False

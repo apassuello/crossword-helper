@@ -45,10 +45,7 @@ class CLIAdapter:
             raise ValueError(f"CLI path is not a file: {self.cli_path}")
 
     def _run_command(
-        self,
-        args: List[str],
-        timeout: Optional[int] = None,
-        check_success: bool = True
+        self, args: List[str], timeout: Optional[int] = None, check_success: bool = True
     ) -> Tuple[str, str, int]:
         """
         Run a CLI command and return stdout, stderr, and return code.
@@ -76,31 +73,30 @@ class CLIAdapter:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                cwd=self.cli_path.parent  # Run from CLI directory
+                cwd=self.cli_path.parent,  # Run from CLI directory
             )
 
             if check_success and result.returncode != 0:
                 raise subprocess.CalledProcessError(
-                    result.returncode,
-                    cmd,
-                    result.stdout,
-                    result.stderr
+                    result.returncode, cmd, result.stdout, result.stderr
                 )
 
             return result.stdout, result.stderr, result.returncode
 
         except subprocess.TimeoutExpired as e:
             raise subprocess.TimeoutExpired(
-                cmd, timeout,
-                output=getattr(e, 'output', None),
-                stderr=getattr(e, 'stderr', None)
+                cmd,
+                timeout,
+                output=getattr(e, "output", None),
+                stderr=getattr(e, "stderr", None),
             )
 
     def pattern(
         self,
         pattern: str,
         wordlist_paths: Optional[List[str]] = None,
-        max_results: int = 20
+        max_results: int = 20,
+        algorithm: str = "regex",
     ) -> Dict[str, Any]:
         """
         Find words matching a pattern.
@@ -109,6 +105,7 @@ class CLIAdapter:
             pattern: Pattern to search (e.g., "C?T")
             wordlist_paths: List of paths to word list files
             max_results: Maximum number of results to return
+            algorithm: Pattern matching algorithm ("regex" or "trie")
 
         Returns:
             Dict with 'results' and 'meta' keys
@@ -121,21 +118,24 @@ class CLIAdapter:
             raise ValueError("Pattern cannot be empty")
 
         # Build command args
-        args = ['pattern', pattern, '--json-output', '--max-results', str(max_results)]
+        args = ["pattern", pattern, "--json-output", "--max-results", str(max_results),
+                "--algorithm", algorithm]
 
         if wordlist_paths:
             for wordlist_path in wordlist_paths:
-                args.extend(['--wordlists', wordlist_path])
+                args.extend(["--wordlists", wordlist_path])
 
         # Run command
-        stdout, stderr, _ = self._run_command(args, timeout=10)
+        stdout, stderr, _ = self._run_command(args, timeout=300)
 
         # Parse JSON output
         try:
             result = json.loads(stdout)
             return result
         except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
+            raise ValueError(
+                f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
+            )
 
     def normalize(self, text: str) -> Dict[str, Any]:
         """
@@ -155,7 +155,7 @@ class CLIAdapter:
             raise ValueError("Text cannot be empty")
 
         # Build command args
-        args = ['normalize', text, '--json-output']
+        args = ["normalize", text, "--json-output"]
 
         # Run command (use very short timeout for this simple operation)
         stdout, stderr, _ = self._run_command(args, timeout=5)
@@ -165,9 +165,13 @@ class CLIAdapter:
             result = json.loads(stdout)
             return result
         except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
+            raise ValueError(
+                f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
+            )
 
-    def number(self, grid_data: Dict[str, Any], allow_nonstandard: bool = False) -> Dict[str, Any]:
+    def number(
+        self, grid_data: Dict[str, Any], allow_nonstandard: bool = False
+    ) -> Dict[str, Any]:
         """
         Auto-number a crossword grid.
 
@@ -187,26 +191,29 @@ class CLIAdapter:
 
         # Write grid to temporary file
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(grid_data, f)
             temp_path = f.name
 
         try:
             # Build command args
-            args = ['number', temp_path, '--json-output']
+            args = ["number", temp_path, "--json-output"]
 
             if allow_nonstandard:
-                args.append('--allow-nonstandard')
+                args.append("--allow-nonstandard")
 
-            # Run command
-            stdout, stderr, _ = self._run_command(args, timeout=5)
+            # Run command (allow more time for large grids)
+            stdout, stderr, _ = self._run_command(args, timeout=60)
 
             # Parse JSON output
             try:
                 result = json.loads(stdout)
                 return result
             except json.JSONDecodeError as e:
-                raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
+                raise ValueError(
+                    f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
+                )
         finally:
             # Clean up temp file
             Path(temp_path).unlink(missing_ok=True)
@@ -217,8 +224,8 @@ class CLIAdapter:
         wordlist_paths: List[str],
         timeout_seconds: int = 300,
         min_score: int = 30,
-        algorithm: str = 'regex',
-        allow_nonstandard: bool = None
+        algorithm: str = "trie",
+        allow_nonstandard: bool = None,
     ) -> Dict[str, Any]:
         """
         Auto-fill a crossword grid using CSP solver.
@@ -246,40 +253,50 @@ class CLIAdapter:
 
         # Auto-detect if grid size is non-standard
         if allow_nonstandard is None:
-            grid_size = grid_data.get('size', len(grid_data.get('grid', [])))
+            grid_size = grid_data.get("size", len(grid_data.get("grid", [])))
             allow_nonstandard = grid_size not in [11, 15, 21]
 
         # Write grid to temporary file
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(grid_data, f)
             grid_path = f.name
 
         # Create temp output file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             output_path = f.name
 
         try:
             # Build command args
-            args = ['fill', grid_path, '--output', output_path,
-                   '--timeout', str(timeout_seconds), '--min-score', str(min_score),
-                   '--algorithm', algorithm]
+            args = [
+                "fill",
+                grid_path,
+                "--output",
+                output_path,
+                "--timeout",
+                str(timeout_seconds),
+                "--min-score",
+                str(min_score),
+                "--algorithm",
+                algorithm,
+            ]
 
             if allow_nonstandard:
-                args.append('--allow-nonstandard')
+                args.append("--allow-nonstandard")
 
             for wordlist_path in wordlist_paths:
-                args.extend(['--wordlists', wordlist_path])
+                args.extend(["--wordlists", wordlist_path])
 
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
                 timeout=timeout_seconds + 10,  # Add 10s buffer
-                check_success=False  # Partial fills are OK
+                check_success=False,  # Partial fills are OK
             )
 
             # Read filled grid from output file
-            with open(output_path, 'r') as f:
+            with open(output_path, "r") as f:
                 result = json.load(f)
 
             return result
@@ -298,9 +315,7 @@ class CLIAdapter:
         try:
             # Try running a simple command
             stdout, stderr, code = self._run_command(
-                ['normalize', 'TEST', '--json-output'],
-                timeout=5,
-                check_success=False
+                ["normalize", "TEST", "--json-output"], timeout=5, check_success=False
             )
             return code == 0
         except Exception:
