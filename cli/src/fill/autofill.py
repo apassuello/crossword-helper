@@ -45,7 +45,7 @@ class Autofill:
         word_list: WordList,
         pattern_matcher: PatternMatcher = None,
         timeout: int = 300,
-        min_score: int = 30,
+        min_score: int = 0,  # FIXED: Was 30, now 0 to allow full search space
         algorithm: str = "trie",
         progress_reporter=None,
     ):
@@ -203,7 +203,7 @@ class Autofill:
             candidates = self.pattern_matcher.find(
                 pattern,
                 min_score=self.min_score,
-                max_results=1000,  # Larger domain initially
+                max_results=None,  # FIXED: Was 1000, now None to get ALL matches for complete letter coverage
             )
             self.domains[idx] = {word for word, score in candidates}
 
@@ -465,7 +465,7 @@ class Autofill:
 
         # Get matching words
         candidates = self.pattern_matcher.find(
-            pattern, min_score=self.min_score, max_results=100
+            pattern, min_score=self.min_score, max_results=1000  # FIXED: Was 100, now 1000 for more backtracking options
         )
 
         return candidates
