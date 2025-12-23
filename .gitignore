@@ -61,3 +61,6 @@ lerna-debug.log*
 frontend/dist/
 .vite/
 *.local
+
+# Test output files
+test_filled*.json
