@@ -153,6 +153,12 @@ def validate(grid_file: str):
     default=False,
     help="Output JSON with progress to stderr (for API integration)",
 )
+@click.option(
+    "--attempts",
+    type=int,
+    default=1,
+    help="Number of randomized restart attempts (Phase 3.2)",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -162,6 +168,7 @@ def fill(
     output: Optional[str],
     allow_nonstandard: bool,
     json_output: bool,
+    attempts: int,
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -212,19 +219,36 @@ def fill(
 
     if not json_output:
         click.echo(f"\nFilling {len(empty_slots)} empty slots...")
-        click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
+        if attempts > 1:
+            timeout_per_attempt = timeout // attempts
+            click.echo(f"Strategy: Randomized restart ({attempts} attempts)")
+            click.echo(f"Timeout: {timeout}s total ({timeout_per_attempt}s per attempt), Min score: {min_score}\n")
+        else:
+            click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
 
-    # Fill grid (only show progress bar in non-JSON mode)
-    if json_output:
-        result = autofill.fill()
+    # Fill grid (use fill_with_restarts if attempts > 1)
+    if attempts > 1:
+        timeout_per_attempt = timeout // attempts
+        if json_output:
+            result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+        else:
+            with click.progressbar(length=100, label="Progress") as bar:
+                result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+                # Update progress bar
+                if result.total_slots > 0:
+                    progress_pct = int((result.slots_filled / result.total_slots) * 100)
+                    bar.update(progress_pct)
     else:
-        with click.progressbar(length=100, label="Progress") as bar:
+        # Single attempt (Phase 3.1 or earlier)
+        if json_output:
             result = autofill.fill()
-
-            # Update progress bar
-            if result.total_slots > 0:
-                progress_pct = int((result.slots_filled / result.total_slots) * 100)
-                bar.update(progress_pct)
+        else:
+            with click.progressbar(length=100, label="Progress") as bar:
+                result = autofill.fill()
+                # Update progress bar
+                if result.total_slots > 0:
+                    progress_pct = int((result.slots_filled / result.total_slots) * 100)
+                    bar.update(progress_pct)
 
     # Send completion status for API integration with diagnostic info
     if result.success:

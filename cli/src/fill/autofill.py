@@ -82,6 +82,7 @@ class Autofill:
         self.start_time = 0.0
         self.iterations = 0
         self.used_words = set()
+        self.random_seed = None  # Phase 3.2: Seed for randomized restart
 
         # Domain tracking and constraint graph (initialized on fill())
         self.domains: Dict[int, Set[str]] = {}  # slot_id -> set of valid words
@@ -97,13 +98,14 @@ class Autofill:
         self.letter_frequency_table: Dict[int, Dict[int, Dict[str, int]]] = {}
         self._build_letter_frequency_table()
 
-    def fill(self, interactive: bool = False, use_mac: bool = True) -> FillResult:
+    def fill(self, interactive: bool = False, use_mac: bool = True, random_seed: int = None) -> FillResult:
         """
         Fill grid using backtracking CSP.
 
         Args:
             interactive: If True, prompt user before each placement (not implemented)
             use_mac: If True, use MAC (Maintaining Arc Consistency) for better pruning (Phase 2)
+            random_seed: If provided, shuffle candidates randomly for restart strategy (Phase 3.2)
 
         Returns:
             FillResult with success status and filled grid
@@ -111,6 +113,7 @@ class Autofill:
         self.start_time = time.time()
         self.iterations = 0
         self.used_words = set()
+        self.random_seed = random_seed
 
         # Get unfilled slots
         slots = self.grid.get_empty_slots()
@@ -170,6 +173,79 @@ class Autofill:
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
+        )
+
+    def fill_with_restarts(
+        self,
+        attempts: int = 3,
+        timeout_per_attempt: int = 100,
+        interactive: bool = False,
+        use_mac: bool = True
+    ) -> FillResult:
+        """
+        Fill grid with randomized restart strategy (Phase 3.2).
+
+        Tries multiple attempts with different random seeds, returns best result.
+        This helps escape local optima by exploring different search paths.
+
+        Args:
+            attempts: Number of restart attempts
+            timeout_per_attempt: Timeout for each individual attempt (seconds)
+            interactive: If True, prompt user before each placement
+            use_mac: If True, use MAC algorithm
+
+        Returns:
+            Best FillResult across all attempts
+        """
+        best_result = None
+        original_timeout = self.timeout
+        original_grid_state = self.grid.to_dict()
+
+        for attempt in range(attempts):
+            # Reset grid to original state
+            if attempt > 0:
+                self.grid = Grid.from_dict(original_grid_state)
+
+            # Set timeout for this attempt
+            self.timeout = timeout_per_attempt
+
+            # Use different random seed for each attempt
+            random_seed = attempt + 1 if attempt > 0 else None  # First attempt: no shuffle
+
+            # Try filling with this seed
+            try:
+                result = self.fill(
+                    interactive=interactive,
+                    use_mac=use_mac,
+                    random_seed=random_seed
+                )
+
+                # Track best result
+                if best_result is None or result.slots_filled > best_result.slots_filled:
+                    best_result = result
+                    # If perfect solution, stop early
+                    if result.success:
+                        break
+
+            except TimeoutError:
+                # Attempt timed out, continue to next
+                continue
+
+        # Restore original timeout
+        self.timeout = original_timeout
+
+        # Restore best grid state
+        if best_result:
+            self.grid = best_result.grid
+
+        return best_result if best_result else FillResult(
+            success=False,
+            grid=self.grid,
+            time_elapsed=attempts * timeout_per_attempt,
+            slots_filled=0,
+            total_slots=len(self.grid.get_empty_slots()),
+            problematic_slots=self.grid.get_empty_slots(),
+            iterations=0,
         )
 
     def _initialize_csp(self, slots: List[Dict]) -> None:
@@ -755,7 +831,12 @@ class Autofill:
             candidates_with_lcv.sort(key=lambda x: (x[2], x[1]), reverse=True)
             candidates = [(word, score) for word, score, _ in candidates_with_lcv]
 
-        # Try each candidate (now sorted by LCV - least constraining first)
+        # Phase 3.2: Randomized restart - shuffle candidates if seed provided
+        if self.random_seed is not None:
+            rng = random.Random(self.random_seed + current_index)  # Unique seed per slot
+            rng.shuffle(candidates)
+
+        # Try each candidate (now sorted by LCV - least constraining first, or shuffled)
         for word, score in candidates:
             if word in self.used_words:
                 continue
