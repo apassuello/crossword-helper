@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './AutofillPanel.scss';
+import ProgressIndicator from './ProgressIndicator';
 
 function AutofillPanel({ onStartAutofill, progress, grid }) {
   const [options, setOptions] = useState({
@@ -239,24 +240,20 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
 
       {progress && (
         <div className="progress-section">
-          <h3>Progress</h3>
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{
-                width: `${progress.progress}%`,
-                backgroundColor:
-                  progress.status === 'error' ? '#f44336' :
-                  progress.status === 'complete' ? '#4caf50' :
-                  '#2196f3'
-              }}
-            />
-          </div>
-          <div className="progress-message">
-            {progress.message}
-          </div>
+          <h3>Autofill Progress</h3>
+          <ProgressIndicator
+            type={progress.progress > 0 ? "bar" : "spinner"}
+            progress={progress.progress || 0}
+            message={progress.message || `Using ${options.algorithm === 'trie' ? 'Trie (Fast)' : 'Regex (Classic)'} algorithm...`}
+            size="large"
+            color={
+              progress.status === 'error' ? 'danger' :
+              progress.status === 'complete' ? 'success' :
+              'primary'
+            }
+          />
           {progress.status === 'running' && (
-            <button className="cancel-btn">
+            <button className="cancel-btn" style={{marginTop: '1rem'}}>
               Cancel
             </button>
           )}

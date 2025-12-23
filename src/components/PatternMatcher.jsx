@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import './PatternMatcher.scss';
+import ProgressIndicator from './ProgressIndicator';
+import { useSSEProgress } from '../hooks/useSSEProgress';
 
 function PatternMatcher({ selectedCell, onSelectWord }) {
   const [pattern, setPattern] = useState('');
@@ -12,6 +14,7 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
   const [availableWordlists, setAvailableWordlists] = useState([]);
   const [selectedWordlists, setSelectedWordlists] = useState(['comprehensive']);
   const [algorithm, setAlgorithm] = useState('regex');  // Algorithm selection state
+  const searchProgress = useSSEProgress();
 
   // Load available wordlists on mount
   useEffect(() => {
@@ -34,39 +37,76 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
 
     setLoading(true);
     setError(null);
+    setResults([]);  // Clear previous results
 
     try {
-      const response = await axios.post('/api/pattern', {
+      // Start search with progress tracking
+      const initResponse = await axios.post('/api/pattern/with-progress', {
         pattern: pattern.toUpperCase(),
         max_results: 50,
         wordlists: selectedWordlists,
-        algorithm: algorithm  // Pass algorithm to API
+        algorithm: algorithm
       });
 
-      let searchResults = response.data.results || [];
+      const { task_id } = initResponse.data;
 
-      // Sort results
-      if (sortBy === 'score') {
-        searchResults.sort((a, b) => b.score - a.score);
-      } else if (sortBy === 'alpha') {
-        searchResults.sort((a, b) => a.word.localeCompare(b.word));
-      } else if (sortBy === 'length') {
-        searchResults.sort((a, b) => a.word.length - b.word.length);
-      }
+      // Connect to SSE for progress updates
+      searchProgress.connect(task_id);
 
-      // Filter by minimum score
-      if (filterMinScore > 0) {
-        searchResults = searchResults.filter(r => r.score >= filterMinScore);
-      }
-
-      setResults(searchResults);
     } catch (err) {
-      setError(err.response?.data?.error || 'Search failed');
+      const errorMsg = err.response?.data?.error || 'Search failed';
+      setError(errorMsg);
       setResults([]);
-    } finally {
       setLoading(false);
     }
-  }, [pattern, sortBy, filterMinScore, selectedWordlists, algorithm]);
+  }, [pattern, selectedWordlists, algorithm, searchProgress]);
+
+  // Watch for search completion
+  useEffect(() => {
+    const fetchResults = async () => {
+      if (searchProgress.status === 'complete' && loading) {
+        try {
+          // Fetch final results from regular endpoint
+          const response = await axios.post('/api/pattern', {
+            pattern: pattern.toUpperCase(),
+            max_results: 50,
+            wordlists: selectedWordlists,
+            algorithm: algorithm
+          });
+
+          let searchResults = response.data.results || [];
+
+          // Sort results
+          if (sortBy === 'score') {
+            searchResults.sort((a, b) => b.score - a.score);
+          } else if (sortBy === 'alpha') {
+            searchResults.sort((a, b) => a.word.localeCompare(b.word));
+          } else if (sortBy === 'length') {
+            searchResults.sort((a, b) => a.word.length - b.word.length);
+          }
+
+          // Filter by minimum score
+          if (filterMinScore > 0) {
+            searchResults = searchResults.filter(r => r.score >= filterMinScore);
+          }
+
+          setResults(searchResults);
+          setLoading(false);
+        } catch (err) {
+          const errorMsg = err.response?.data?.error || 'Failed to fetch results';
+          setError(errorMsg);
+          setResults([]);
+          setLoading(false);
+        }
+      } else if (searchProgress.status === 'error' && loading) {
+        setError(searchProgress.message || 'Search failed');
+        setResults([]);
+        setLoading(false);
+      }
+    };
+
+    fetchResults();
+  }, [searchProgress.status, searchProgress.message, loading, pattern, selectedWordlists, algorithm, sortBy, filterMinScore]);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -250,6 +290,20 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+
+      {loading && (
+        <ProgressIndicator
+          type={searchProgress.progress > 0 ? "bar" : "spinner"}
+          progress={searchProgress.progress || 0}
+          message={searchProgress.message || `Searching with ${algorithm === 'trie' ? 'Trie (Fast)' : 'Regex (Classic)'} algorithm...`}
+          size="medium"
+          color={
+            searchProgress.status === 'error' ? 'danger' :
+            searchProgress.status === 'complete' ? 'success' :
+            'primary'
+          }
+        />
+      )}
 
       {results.length > 0 && (
         <div className="results-section">

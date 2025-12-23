@@ -9,6 +9,7 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 from backend.api.routes import api
 from backend.api.wordlist_routes import wordlist_api
+from backend.api.progress_routes import progress_api
 import os
 
 
@@ -37,6 +38,7 @@ def create_app(testing=False):
     # Register API blueprints
     app.register_blueprint(api, url_prefix='/api')
     app.register_blueprint(wordlist_api, url_prefix='/api')
+    app.register_blueprint(progress_api, url_prefix='/api')
 
     # Serve frontend
     @app.route('/')

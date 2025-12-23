@@ -47,6 +47,7 @@ class Autofill:
         timeout: int = 300,
         min_score: int = 30,
         algorithm: str = "trie",
+        progress_reporter=None,
     ):
         """
         Initialize autofill solver.
@@ -58,10 +59,12 @@ class Autofill:
             timeout: Maximum seconds to spend filling
             min_score: Minimum word score to consider
             algorithm: Pattern matching algorithm - 'regex' (classic) or 'trie' (fast)
+            progress_reporter: Optional ProgressReporter for progress updates
         """
         self.grid = grid
         self.word_list = word_list
         self.algorithm = algorithm
+        self.progress_reporter = progress_reporter
 
         # Create pattern matcher if not provided
         if pattern_matcher is None:
@@ -86,6 +89,7 @@ class Autofill:
         )  # slot_id -> [(other_slot, my_pos, other_pos)]
         self.slot_list: List[Dict] = []  # All slots
         self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
+        self.last_progress_report = 0  # Track last reported progress percentage
 
     def fill(self, interactive: bool = False) -> FillResult:
         """
@@ -339,6 +343,18 @@ class Autofill:
             if time.time() - self.start_time > self.timeout:
                 raise TimeoutError("Autofill timeout")
 
+        # Report progress (every 5% to avoid flooding)
+        if self.progress_reporter and len(slots) > 0:
+            current_progress = int((current_index / len(slots)) * 100)
+            if current_progress - self.last_progress_report >= 5:
+                self.last_progress_report = current_progress
+                filled_slots = sum(1 for s in slots[:current_index]
+                                 if '?' not in self.grid.get_pattern_for_slot(s))
+                self.progress_reporter.update(
+                    current_progress,
+                    f'Filling slots: {filled_slots}/{len(slots)} filled'
+                )
+
         # Base case: all slots filled
         if current_index >= len(slots):
             return True
@@ -371,6 +387,16 @@ class Autofill:
 
             # Forward check
             if self._forward_check(slot):
+                # Send incremental grid update
+                if self.progress_reporter:
+                    filled_count = sum(1 for s in slots if '?' not in self.grid.get_pattern_for_slot(s))
+                    self.progress_reporter.update(
+                        min(95, int((filled_count / len(slots)) * 100)),
+                        f'Filling slots: {filled_count}/{len(slots)} filled',
+                        'running',
+                        {'grid': self.grid.to_dict()['grid']}  # Send current grid state
+                    )
+
                 # Recurse
                 if self._backtrack(slots, current_index + 1):
                     return True  # Success!

@@ -59,7 +59,8 @@ class TriePatternMatcher:
         self,
         pattern: str,
         min_score: int = 30,
-        max_results: int = 100
+        max_results: int = 100,
+        progress_callback=None
     ) -> List[Tuple[str, int]]:
         """
         Find words matching pattern.
@@ -68,6 +69,7 @@ class TriePatternMatcher:
             pattern: Pattern string (e.g., "?I?A" or ".I.A")
             min_score: Minimum crossword-ability score
             max_results: Maximum number of results
+            progress_callback: Optional callback(current, total) for progress updates
 
         Returns:
             List of (word, score) tuples, sorted by score descending
@@ -94,7 +96,7 @@ class TriePatternMatcher:
         self._cache_misses += 1
 
         # Use trie to find matches
-        matches = self.trie.find_pattern(pattern, min_score, max_results)
+        matches = self.trie.find_pattern(pattern, min_score, max_results, progress_callback)
 
         # Convert to (word, score) tuples
         result = [(word.text, word.score) for word in matches]

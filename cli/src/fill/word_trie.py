@@ -112,7 +112,8 @@ class WordTrie:
         self,
         pattern: str,
         min_score: int = 0,
-        max_results: Optional[int] = None
+        max_results: Optional[int] = None,
+        progress_callback=None
     ) -> List[ScoredWord]:
         """
         Find all words matching a pattern.
@@ -125,6 +126,7 @@ class WordTrie:
             pattern: Pattern string (e.g., "C?T", "RE??")
             min_score: Minimum word score to include
             max_results: Maximum number of results (None = unlimited)
+            progress_callback: Optional callback(current, total) for progress updates
 
         Returns:
             List of matching ScoredWord objects, sorted by score (descending)
@@ -145,15 +147,24 @@ class WordTrie:
         if length not in self._length_roots:
             return []
 
+        # Estimate total nodes to search (rough approximation for progress)
+        wildcard_count = pattern.count('?')
+        estimated_total = max(1, 26 ** min(wildcard_count, 3))  # Cap estimate at 3 wildcards
+
         # Search trie recursively
         results = []
+        progress_state = {'nodes_visited': 0}
+
         self._search_trie(
             node=self._length_roots[length],
             pattern=pattern,
             index=0,
             min_score=min_score,
             results=results,
-            max_results=max_results
+            max_results=max_results,
+            progress_callback=progress_callback,
+            progress_state=progress_state,
+            estimated_total=estimated_total
         )
 
         # Sort by score (descending)
@@ -172,7 +183,10 @@ class WordTrie:
         index: int,
         min_score: int,
         results: List[ScoredWord],
-        max_results: Optional[int]
+        max_results: Optional[int],
+        progress_callback=None,
+        progress_state=None,
+        estimated_total=1
     ) -> None:
         """
         Recursive trie search with wildcard support and pruning.
@@ -184,7 +198,21 @@ class WordTrie:
             min_score: Minimum score threshold
             results: Accumulator for matching words
             max_results: Stop after finding this many results
+            progress_callback: Optional callback for progress updates
+            progress_state: Dict tracking nodes_visited
+            estimated_total: Estimated total nodes to search
         """
+        # Track visited nodes for progress
+        if progress_state is not None:
+            progress_state['nodes_visited'] += 1
+
+            # Report progress every 100 nodes
+            if progress_callback and progress_state['nodes_visited'] % 100 == 0:
+                progress_callback(
+                    min(progress_state['nodes_visited'], estimated_total),
+                    estimated_total
+                )
+
         # Early exit if we have enough results
         if max_results is not None and len(results) >= max_results:
             return
@@ -217,7 +245,10 @@ class WordTrie:
                     index + 1,
                     min_score,
                     results,
-                    max_results
+                    max_results,
+                    progress_callback,
+                    progress_state,
+                    estimated_total
                 )
 
                 # Early exit if we have enough results
@@ -232,7 +263,10 @@ class WordTrie:
                     index + 1,
                     min_score,
                     results,
-                    max_results
+                    max_results,
+                    progress_callback,
+                    progress_state,
+                    estimated_total
                 )
 
     def count_matches(self, pattern: str, min_score: int = 0) -> int:

@@ -144,12 +144,8 @@ function App() {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
 
     try {
-      // Create an AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), (options.timeout || 300) * 1000 + 10000);
-
-      // Call backend autofill endpoint
-      const response = await fetch('/api/fill', {
+      // Start autofill with progress tracking
+      const initResponse = await fetch('/api/fill/with-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,35 +157,96 @@ function App() {
           timeout: options.timeout || 300,
           min_score: options.minScore || 30,
           algorithm: options.algorithm || 'regex'
-        }),
-        signal: controller.signal
+        })
       });
 
-      clearTimeout(timeoutId);
-      const result = await response.json();
+      const { task_id } = await initResponse.json();
 
-      if (response.ok && result.grid) {
-        // Update grid with filled results
-        const newGrid = [...grid.map(row => [...row])];
-        result.grid.forEach((row, r) => {
-          row.forEach((cell, c) => {
-            if (cell !== '#' && cell !== '.') {
-              newGrid[r][c].letter = cell;
-            }
+      // Connect to SSE for progress updates
+      const eventSource = new EventSource(`/api/progress/${task_id}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setAutofillProgress({
+            status: data.status || 'running',
+            progress: data.progress || 0,
+            message: data.message || 'Processing...'
           });
-        });
 
-        setGrid(newGrid);
-        setAutofillProgress({ status: 'complete', progress: 100, message: 'Autofill complete!' });
-      } else {
-        setAutofillProgress({ status: 'error', progress: 0, message: result.error?.message || 'Autofill failed' });
-      }
+          // Apply incremental grid updates if present
+          if (data.data && data.data.grid && data.status === 'running') {
+            const newGrid = [...grid.map(row => [...row])];
+            data.data.grid.forEach((row, r) => {
+              row.forEach((cell, c) => {
+                if (cell !== '#' && cell !== '.') {
+                  newGrid[r][c].letter = cell;
+                }
+              });
+            });
+            setGrid(newGrid);
+          }
+
+          // When complete, update grid with results from event data
+          if (data.status === 'complete') {
+            eventSource.close();
+
+            // Check if result grid is included in the event
+            if (data.data && data.data.grid) {
+              // Update grid with filled results (full or partial)
+              const newGrid = [...grid.map(row => [...row])];
+              data.data.grid.forEach((row, r) => {
+                row.forEach((cell, c) => {
+                  if (cell !== '#' && cell !== '.') {
+                    newGrid[r][c].letter = cell;
+                  }
+                });
+              });
+              setGrid(newGrid);
+
+              // Show appropriate message based on success
+              if (data.data.success) {
+                setAutofillProgress({
+                  status: 'complete',
+                  progress: 100,
+                  message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
+                });
+              } else {
+                // Partial fill with suggestions
+                const fillPct = data.data.fill_percentage || 0;
+                let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
+
+                // Add first suggestion if available
+                if (data.data.suggestions && data.data.suggestions.length > 0) {
+                  message += ` - ${data.data.suggestions[0].message}`;
+                }
+
+                setAutofillProgress({
+                  status: fillPct > 0 ? 'warning' : 'error',
+                  progress: fillPct,
+                  message: message
+                });
+              }
+            } else {
+              setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
+            }
+          } else if (data.status === 'error') {
+            eventSource.close();
+            setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
+          }
+        } catch (error) {
+          console.error('Failed to parse SSE event:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        eventSource.close();
+        setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
+      };
+
     } catch (error) {
-      if (error.name === 'AbortError') {
-        setAutofillProgress({ status: 'error', progress: 0, message: 'Request timed out - try with smaller wordlists or increase timeout' });
-      } else {
-        setAutofillProgress({ status: 'error', progress: 0, message: error.message });
-      }
+      setAutofillProgress({ status: 'error', progress: 0, message: error.message });
     }
   }, [grid, gridSize]);
 

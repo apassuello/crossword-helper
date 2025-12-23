@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import './ExportPanel.scss';
+import ProgressIndicator from './ProgressIndicator';
 
 function ExportPanel({ grid, gridSize, numbering }) {
   const [exportFormat, setExportFormat] = useState('json');
   const [includeClues, setIncludeClues] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = () => {
-    if (!grid) return;
+  const handleExport = async () => {
+    if (!grid || isExporting) return;
+
+    setIsExporting(true);
 
     const gridData = {
       size: gridSize,
@@ -17,16 +21,20 @@ function ExportPanel({ grid, gridSize, numbering }) {
       numbering: numbering
     };
 
-    if (exportFormat === 'json') {
-      const json = JSON.stringify(gridData, null, 2);
-      downloadFile('crossword.json', json, 'application/json');
-    } else if (exportFormat === 'html') {
-      const html = generateHTML(gridData);
-      downloadFile('crossword.html', html, 'text/html');
-    } else if (exportFormat === 'text') {
-      const text = generateText(gridData);
-      downloadFile('crossword.txt', text, 'text/plain');
-    }
+    // Add a small delay to show the progress indicator
+    setTimeout(() => {
+      if (exportFormat === 'json') {
+        const json = JSON.stringify(gridData, null, 2);
+        downloadFile('crossword.json', json, 'application/json');
+      } else if (exportFormat === 'html') {
+        const html = generateHTML(gridData);
+        downloadFile('crossword.html', html, 'text/html');
+      } else if (exportFormat === 'text') {
+        const text = generateText(gridData);
+        downloadFile('crossword.txt', text, 'text/plain');
+      }
+      setIsExporting(false);
+    }, 500);
   };
 
   const downloadFile = (filename, content, mimeType) => {
@@ -163,11 +171,22 @@ function ExportPanel({ grid, gridSize, numbering }) {
           <button onClick={handlePreview} className="preview-btn">
             Preview
           </button>
-          <button onClick={handleExport} className="export-btn">
-            Export
+          <button onClick={handleExport} className="export-btn" disabled={isExporting}>
+            {isExporting ? 'Exporting...' : 'Export'}
           </button>
         </div>
       </div>
+
+      {isExporting && (
+        <div style={{marginTop: '1rem'}}>
+          <ProgressIndicator
+            type="spinner"
+            message={`Generating ${exportFormat.toUpperCase()} file...`}
+            size="medium"
+            color="primary"
+          />
+        </div>
+      )}
 
       {preview && (
         <div className="preview-section">

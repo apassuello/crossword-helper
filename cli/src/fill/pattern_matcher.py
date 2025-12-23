@@ -36,7 +36,8 @@ class PatternMatcher:
     def find(self,
              pattern: str,
              min_score: int = 30,
-             max_results: int = 100) -> List[Tuple[str, int]]:
+             max_results: int = 100,
+             progress_callback=None) -> List[Tuple[str, int]]:
         """
         Find words matching pattern.
 
@@ -44,6 +45,7 @@ class PatternMatcher:
             pattern: Pattern string (e.g., "?I?A" or ".I.A")
             min_score: Minimum crossword-ability score
             max_results: Maximum number of results
+            progress_callback: Optional callback(current, total) for progress updates
 
         Returns:
             List of (word, score) tuples, sorted by score descending
@@ -65,15 +67,20 @@ class PatternMatcher:
 
         # Get words of matching length
         candidate_words = self.word_list.get_by_length(length, min_score)
+        total_words = len(candidate_words)
 
         # Convert pattern to regex
         regex = self._pattern_to_regex(pattern)
 
         # Filter by pattern match
         matches = []
-        for word in candidate_words:
+        for idx, word in enumerate(candidate_words):
             if regex.match(word.text):
                 matches.append((word.text, word.score))
+
+            # Report progress every 1000 words
+            if progress_callback and idx % 1000 == 0:
+                progress_callback(idx, total_words)
 
             # Stop if we have enough high-scoring matches
             if len(matches) >= max_results:

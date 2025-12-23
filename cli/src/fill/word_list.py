@@ -9,6 +9,7 @@ from typing import List, Tuple, Dict, Set
 from dataclasses import dataclass
 import re
 import os
+import pickle
 from pathlib import Path
 
 
@@ -36,37 +37,43 @@ class WordList:
     - Letter diversity (repeated letters score lower)
     """
 
-    def __init__(self, words: List[str] = None):
+    def __init__(self, words: List[str] = None, progress_callback=None):
         """
         Initialize word list.
 
         Args:
             words: List of words to include (will be uppercased and validated)
+            progress_callback: Optional callback(current, total) for progress updates
         """
         self.words: List[ScoredWord] = []
         self._length_index: Dict[int, List[ScoredWord]] = {}
         self._first_letter_index: Dict[str, List[ScoredWord]] = {}
 
         if words:
-            self.add_words(words)
+            self.add_words(words, progress_callback)
 
-    def add_words(self, words: List[str]) -> None:
+    def add_words(self, words: List[str], progress_callback=None) -> None:
         """
         Add words to list with automatic scoring.
 
         Args:
             words: Words to add (will be uppercased and validated)
+            progress_callback: Optional callback(current, total) for progress updates
         """
-        for word in words:
+        total = len(words)
+        seen = set()  # O(1) duplicate checking
+
+        for idx, word in enumerate(words):
             word = word.upper().strip()
 
             # Validate word
             if not self._is_valid_word(word):
                 continue
 
-            # Skip if already exists
-            if any(w.text == word for w in self.words):
+            # Skip if already exists (O(1) with set)
+            if word in seen:
                 continue
+            seen.add(word)
 
             # Score and add
             score = self._score_word(word)
@@ -88,6 +95,14 @@ class WordList:
             if first_letter not in self._first_letter_index:
                 self._first_letter_index[first_letter] = []
             self._first_letter_index[first_letter].append(scored_word)
+
+            # Report progress every 5000 words
+            if progress_callback and idx > 0 and idx % 5000 == 0:
+                progress_callback(idx, total)
+
+        # Final progress update
+        if progress_callback:
+            progress_callback(total, total)
 
         # Sort indices by score (descending)
         for words in self._length_index.values():
@@ -202,15 +217,17 @@ class WordList:
         return f"WordList(words={len(self.words)})"
 
     @classmethod
-    def from_file(cls, filepath: str) -> 'WordList':
+    def from_file(cls, filepath: str, progress_callback=None, use_cache=True) -> 'WordList':
         """
-        Load word list from file.
+        Load word list from file, using cache if available.
 
         Args:
             filepath: Path to text file with one word per line
+            progress_callback: Optional callback(current, total) for progress updates
+            use_cache: If True, check for .pkl cache file first (default: True)
 
         Returns:
-            WordList loaded from file
+            WordList loaded from file or cache
 
         Raises:
             ValueError: If filepath is invalid or inaccessible
@@ -228,6 +245,25 @@ class WordList:
             if not resolved_path.is_file():
                 raise ValueError(f"Path is not a regular file: {filepath}")
 
+            # Check for cache file (.pkl)
+            if use_cache:
+                cache_path = resolved_path.with_suffix('.pkl')
+
+                if cache_path.exists():
+                    # Check if cache is newer than source file
+                    source_mtime = resolved_path.stat().st_mtime
+                    cache_mtime = cache_path.stat().st_mtime
+
+                    if cache_mtime >= source_mtime:
+                        # Cache is up-to-date, use it
+                        try:
+                            return cls.from_cache(str(cache_path))
+                        except (ValueError, FileNotFoundError) as e:
+                            # Cache is corrupt, fall through to text loading
+                            import sys
+                            print(f"Warning: Cache corrupted, rebuilding: {e}", file=sys.stderr)
+
+            # No cache or cache disabled - load from text file
             # Check file size (prevent loading huge files)
             file_size = resolved_path.stat().st_size
             if file_size > 100 * 1024 * 1024:  # 100MB limit
@@ -237,7 +273,84 @@ class WordList:
             with open(resolved_path, 'r', encoding='utf-8') as f:
                 words = [line.strip() for line in f if line.strip()]
 
-            return cls(words)
+            return cls(words, progress_callback)
 
         except (OSError, IOError) as e:
             raise ValueError(f"Failed to read word list from {filepath}: {e}")
+
+    def to_cache(self, cache_path: str) -> None:
+        """
+        Save word list to binary cache file for fast loading.
+
+        Args:
+            cache_path: Path to save cache file (.pkl)
+
+        Raises:
+            IOError: If cache file cannot be written
+        """
+        cache_path = Path(cache_path)
+
+        # Create parent directory if needed
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Serialize entire WordList state
+        cache_data = {
+            'words': self.words,
+            'length_index': self._length_index,
+            'first_letter_index': self._first_letter_index,
+            'version': '1.0'  # For future compatibility
+        }
+
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+        except (OSError, IOError) as e:
+            raise IOError(f"Failed to write cache to {cache_path}: {e}")
+
+    @classmethod
+    def from_cache(cls, cache_path: str) -> 'WordList':
+        """
+        Load word list from binary cache file.
+
+        Args:
+            cache_path: Path to cache file (.pkl)
+
+        Returns:
+            WordList loaded from cache
+
+        Raises:
+            FileNotFoundError: If cache file does not exist
+            ValueError: If cache file is invalid or corrupt
+        """
+        cache_path = Path(cache_path)
+
+        if not cache_path.exists():
+            raise FileNotFoundError(f"Cache file not found: {cache_path}")
+
+        if not cache_path.is_file():
+            raise ValueError(f"Cache path is not a file: {cache_path}")
+
+        try:
+            with open(cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+
+            # Validate cache structure
+            if not isinstance(cache_data, dict):
+                raise ValueError("Invalid cache format")
+
+            required_keys = {'words', 'length_index', 'first_letter_index'}
+            if not required_keys.issubset(cache_data.keys()):
+                raise ValueError(f"Cache missing required keys: {required_keys - cache_data.keys()}")
+
+            # Create instance and restore state
+            instance = cls()
+            instance.words = cache_data['words']
+            instance._length_index = cache_data['length_index']
+            instance._first_letter_index = cache_data['first_letter_index']
+
+            return instance
+
+        except (OSError, IOError) as e:
+            raise ValueError(f"Failed to read cache from {cache_path}: {e}")
+        except pickle.UnpicklingError as e:
+            raise ValueError(f"Cache file is corrupt: {e}")

@@ -17,8 +17,11 @@ from backend.api.validators import (
     validate_fill_request,
 )
 from backend.api.errors import handle_error
+from backend.api.progress_routes import create_progress_tracker, send_progress, cleanup_progress_tracker
 from pathlib import Path
 import subprocess
+import threading
+import json
 
 api = Blueprint("api", __name__)
 
@@ -195,5 +198,222 @@ def fill_grid():
         return handle_error("INVALID_REQUEST", str(e), 400)
     except subprocess.TimeoutExpired:
         return handle_error("TIMEOUT", "Grid fill timed out", 507)
+    except Exception as e:
+        return handle_error("INTERNAL_ERROR", str(e), 500)
+
+
+# ==================================================
+# SSE-enabled routes for real-time progress tracking
+# ==================================================
+
+def run_cli_with_progress(task_id, cmd_args, timeout=300):
+    """
+    Run CLI command and send progress updates via SSE.
+
+    Args:
+        task_id: Progress tracker task ID
+        cmd_args: CLI command arguments
+        timeout: Command timeout in seconds
+    """
+    import sys
+
+    try:
+        # Build full command
+        cli_path = cli_adapter.cli_path
+        cmd = [str(cli_path)] + cmd_args
+
+        print(f"[DEBUG] Running command: {' '.join(cmd)}", file=sys.stderr, flush=True)
+        send_progress(task_id, 5, 'Starting CLI process...', 'running')
+
+        # Start process with stderr capture
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cli_path.parent,
+            bufsize=1,  # Line buffered
+        )
+
+        print(f"[DEBUG] Process started with PID {process.pid}", file=sys.stderr, flush=True)
+        send_progress(task_id, 10, 'CLI process running...', 'running')
+
+        # Read stderr in real-time for progress updates
+        while True:
+            line = process.stderr.readline()
+            if not line:
+                break
+
+            print(f"[DEBUG] Stderr line: {line.strip()}", file=sys.stderr, flush=True)
+
+            # Parse progress JSON from stderr
+            try:
+                progress_data = json.loads(line.strip())
+                if progress_data.get('type') == 'progress':
+                    print(f"[DEBUG] Progress event: {progress_data.get('message', '')}", file=sys.stderr, flush=True)
+                    send_progress(
+                        task_id,
+                        progress_data.get('progress', 0),
+                        progress_data.get('message', 'Processing...'),
+                        progress_data.get('status', 'running'),
+                        progress_data.get('data')  # Forward grid data if present
+                    )
+            except json.JSONDecodeError:
+                # Not a progress update, ignore
+                print(f"[DEBUG] Not JSON: {line.strip()}", file=sys.stderr, flush=True)
+
+        # Wait for completion
+        stdout, stderr = process.communicate(timeout=timeout)
+
+        print(f"[DEBUG] Process completed. Return code: {process.returncode}", file=sys.stderr, flush=True)
+        print(f"[DEBUG] Stdout length: {len(stdout)}, Stderr length: {len(stderr)}", file=sys.stderr, flush=True)
+
+        if process.returncode == 0:
+            # Parse filled grid from stdout JSON
+            try:
+                result_data = json.loads(stdout.strip())
+                print(f"[DEBUG] Parsed result: grid size = {len(result_data.get('grid', []))}", file=sys.stderr, flush=True)
+                # Send completion with grid data
+                send_progress(task_id, 100, 'Complete', 'complete', result_data)
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[DEBUG] Failed to parse stdout as JSON: {e}", file=sys.stderr, flush=True)
+                send_progress(task_id, 100, 'Complete', 'complete')
+        else:
+            send_progress(task_id, 0, f'Error: {stderr[:200]}', 'error')
+
+    except subprocess.TimeoutExpired:
+        send_progress(task_id, 0, 'Operation timed out', 'error')
+    except Exception as e:
+        print(f"[DEBUG] Exception: {e}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc()
+        send_progress(task_id, 0, f'Error: {str(e)}', 'error')
+
+
+@api.route("/pattern/with-progress", methods=["POST"])
+def pattern_search_with_progress():
+    """POST /api/pattern/with-progress - Pattern search with SSE progress tracking."""
+    try:
+        # Validate request
+        data = validate_pattern_request(request.json)
+
+        # Create progress tracker
+        task_id = create_progress_tracker()
+
+        # Resolve wordlist paths (same as regular pattern route)
+        wordlist_paths = []
+        backend_dir = Path(__file__).parent.parent.parent
+        data_dir = backend_dir / "data" / "wordlists"
+
+        for wordlist_name in data.get("wordlists", ["comprehensive"]):
+            if "/" in wordlist_name or "\\" in wordlist_name:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    wordlist_path = Path(wordlist_name)
+            else:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
+
+            if wordlist_path.exists():
+                wordlist_paths.append(str(wordlist_path))
+
+        # Build CLI command
+        cmd_args = [
+            "pattern",
+            data["pattern"],
+            "--json-output",
+            "--max-results", str(data.get("max_results", 20)),
+            "--algorithm", data.get("algorithm", "regex")
+        ]
+
+        for wp in wordlist_paths:
+            cmd_args.extend(["--wordlists", wp])
+
+        # Start background task
+        thread = threading.Thread(
+            target=run_cli_with_progress,
+            args=(task_id, cmd_args, 60),
+            daemon=True
+        )
+        thread.start()
+
+        # Return task ID for SSE connection
+        return jsonify({
+            "task_id": task_id,
+            "progress_url": f"/api/progress/{task_id}"
+        }), 202
+
+    except ValueError as e:
+        return handle_error("INVALID_REQUEST", str(e), 400)
+    except Exception as e:
+        return handle_error("INTERNAL_ERROR", str(e), 500)
+
+
+@api.route("/fill/with-progress", methods=["POST"])
+def fill_with_progress():
+    """POST /api/fill/with-progress - Grid fill with SSE progress tracking."""
+    try:
+        # Validate request
+        data = validate_fill_request(request.json)
+
+        # Create progress tracker
+        task_id = create_progress_tracker()
+
+        # Resolve wordlist paths (same as regular fill route)
+        wordlist_paths = []
+        backend_dir = Path(__file__).parent.parent.parent
+        data_dir = backend_dir / "data" / "wordlists"
+
+        for wordlist_name in data.get("wordlists", ["comprehensive"]):
+            if "/" in wordlist_name or "\\" in wordlist_name:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    wordlist_path = Path(wordlist_name)
+            else:
+                wordlist_path = data_dir / f"{wordlist_name}.txt"
+                if not wordlist_path.exists():
+                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
+
+            if wordlist_path.exists():
+                wordlist_paths.append(str(wordlist_path))
+
+        # Save grid to temp file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            grid_data = {"size": data["size"], "grid": data["grid"]}
+            json.dump(grid_data, f)
+            grid_file = f.name
+
+        # Build CLI command
+        cmd_args = [
+            "fill",
+            grid_file,
+            "--timeout", str(data.get("timeout", 300)),
+            "--min-score", str(data.get("min_score", 30)),
+            "--algorithm", data.get("algorithm", "trie"),
+            "--allow-nonstandard",
+            "--json-output"  # Enable progress reporting via stderr
+        ]
+
+        for wp in wordlist_paths:
+            cmd_args.extend(["--wordlists", wp])
+
+        # Start background task
+        thread = threading.Thread(
+            target=run_cli_with_progress,
+            args=(task_id, cmd_args, data.get("timeout", 300) + 10),
+            daemon=True
+        )
+        thread.start()
+
+        # Return task ID for SSE connection
+        return jsonify({
+            "task_id": task_id,
+            "progress_url": f"/api/progress/{task_id}"
+        }), 202
+
+    except ValueError as e:
+        return handle_error("INVALID_REQUEST", str(e), 400)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
