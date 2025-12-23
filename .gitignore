@@ -64,3 +64,6 @@ frontend/dist/
 
 # Test output files
 test_filled*.json
+
+# Phase 1 test outputs
+test_phase*.json
