@@ -12,6 +12,7 @@ from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass
 from collections import deque
 import time
+import random
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
@@ -91,12 +92,13 @@ class Autofill:
         self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
         self.last_progress_report = 0  # Track last reported progress percentage
 
-    def fill(self, interactive: bool = False) -> FillResult:
+    def fill(self, interactive: bool = False, use_mac: bool = True) -> FillResult:
         """
         Fill grid using backtracking CSP.
 
         Args:
             interactive: If True, prompt user before each placement (not implemented)
+            use_mac: If True, use MAC (Maintaining Arc Consistency) for better pruning (Phase 2)
 
         Returns:
             FillResult with success status and filled grid
@@ -140,9 +142,12 @@ class Autofill:
         # Sort slots by constraint (MCV heuristic)
         slots = self._sort_slots_by_constraint(slots)
 
-        # Try to fill using backtracking
+        # Try to fill using backtracking (with or without MAC)
         try:
-            success = self._backtrack(slots, 0)
+            if use_mac:
+                success = self._backtrack_with_mac(slots, 0)
+            else:
+                success = self._backtrack(slots, 0)  # Original algorithm
         except TimeoutError:
             success = False
 
@@ -205,7 +210,69 @@ class Autofill:
                 min_score=self.min_score,
                 max_results=None,  # FIXED: Was 1000, now None to get ALL matches for complete letter coverage
             )
-            self.domains[idx] = {word for word, score in candidates}
+
+            # Apply stratified sampling if domain too large (Phase 2 optimization)
+            if len(candidates) > 10000:
+                self.domains[idx] = self._stratified_sample(candidates, target_size=5000)
+            else:
+                self.domains[idx] = {word for word, score in candidates}
+
+    def _stratified_sample(
+        self,
+        candidates: List[Tuple[str, int]],
+        target_size: int = 5000
+    ) -> Set[str]:
+        """
+        Sample domain ensuring letter diversity across score ranges (Phase 2).
+
+        Strategy:
+        1. Divide candidates into score deciles
+        2. Sample proportionally from each decile
+        3. Ensure all 26 letters represented at each position
+
+        Args:
+            candidates: List of (word, score) tuples
+            target_size: Target domain size
+
+        Returns:
+            Set of sampled words with good letter coverage
+        """
+        if len(candidates) <= target_size:
+            return {word for word, score in candidates}
+
+        # Group by score deciles
+        sorted_cands = sorted(candidates, key=lambda x: x[1], reverse=True)
+        decile_size = max(1, len(sorted_cands) // 10)
+
+        sampled = set()
+        per_decile = target_size // 10
+
+        # Sample from each decile
+        for i in range(10):
+            start = i * decile_size
+            end = start + decile_size if i < 9 else len(sorted_cands)
+            decile = sorted_cands[start:end]
+
+            if decile:
+                sample_size = min(per_decile, len(decile))
+                sample = random.sample(decile, sample_size)
+                sampled.update(word for word, score in sample)
+
+        # Verify letter coverage at each position
+        if candidates:
+            pattern_length = len(candidates[0][0])
+            for pos in range(pattern_length):
+                letters_at_pos = {word[pos] for word in sampled if pos < len(word)}
+                missing = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ') - letters_at_pos
+
+                # Add highest-scored word with each missing letter
+                if missing:
+                    for letter in missing:
+                        matching = [w for w, s in candidates if len(w) > pos and w[pos] == letter]
+                        if matching:
+                            sampled.add(matching[0])
+
+        return sampled
 
     def _get_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
         """
@@ -321,6 +388,39 @@ class Autofill:
 
         return revised
 
+    def _ac3_incremental(self, assigned_slot_id: int) -> bool:
+        """
+        Run AC-3 starting from a newly assigned slot (Phase 2 - MAC).
+
+        More efficient than full AC-3: only propagates constraints
+        from the assigned slot outward.
+
+        Args:
+            assigned_slot_id: Slot that was just filled
+
+        Returns:
+            True if consistent, False if any domain becomes empty
+        """
+        # Initialize queue with arcs FROM assigned slot
+        queue = deque()
+        for other_id, pos1, pos2 in self.constraints.get(assigned_slot_id, []):
+            queue.append((other_id, assigned_slot_id, pos2, pos1))
+
+        # Standard AC-3 loop
+        while queue:
+            slot_id, other_id, pos1, pos2 = queue.popleft()
+
+            if self._revise(slot_id, other_id, pos1, pos2):
+                if len(self.domains[slot_id]) == 0:
+                    return False  # Domain wipeout
+
+                # Add affected arcs
+                for neighbor_id, my_pos, neighbor_pos in self.constraints[slot_id]:
+                    if neighbor_id != other_id:
+                        queue.append((neighbor_id, slot_id, neighbor_pos, my_pos))
+
+        return True
+
     def _backtrack(self, slots: List[Dict], current_index: int) -> bool:
         """
         Recursive backtracking algorithm.
@@ -408,6 +508,99 @@ class Autofill:
             self.used_words.remove(word)
 
         # No candidate worked
+        return False
+
+    def _backtrack_with_mac(self, slots: List[Dict], current_index: int) -> bool:
+        """
+        Backtracking with MAC (Maintaining Arc Consistency) - Phase 2.
+
+        Runs incremental AC-3 after each assignment to detect failures early.
+
+        Args:
+            slots: List of slots to fill (sorted by constraint)
+            current_index: Current position in slots list
+
+        Returns:
+            True if successfully filled, False if no solution
+        """
+        self.iterations += 1
+
+        # Check timeout
+        if time.time() - self.start_time > self.timeout:
+            raise TimeoutError("Autofill timeout")
+
+        # Check every 100 iterations for timeout (more frequent than original)
+        if self.iterations % 100 == 0:
+            if time.time() - self.start_time > self.timeout:
+                raise TimeoutError("Autofill timeout")
+
+        # Report progress
+        if self.progress_reporter and len(slots) > 0:
+            current_progress = int((current_index / len(slots)) * 100)
+            if current_progress - self.last_progress_report >= 5:
+                self.last_progress_report = current_progress
+                filled_slots = sum(1 for s in slots[:current_index]
+                                 if '?' not in self.grid.get_pattern_for_slot(s))
+                self.progress_reporter.update(
+                    current_progress,
+                    f'Filling slots (MAC): {filled_slots}/{len(slots)} filled'
+                )
+
+        # Base case: all slots filled
+        if current_index >= len(slots):
+            return True
+
+        # Get current slot
+        slot = slots[current_index]
+
+        # Skip if already filled
+        pattern = self.grid.get_pattern_for_slot(slot)
+        if "?" not in pattern:
+            return self._backtrack_with_mac(slots, current_index + 1)
+
+        # Get candidate words
+        candidates = self._get_candidates(slot)
+
+        if not candidates:
+            return False
+
+        # Try each candidate
+        for word, score in candidates:
+            if word in self.used_words:
+                continue
+
+            # Place word
+            self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+            self.used_words.add(word)
+
+            # Save domains (for backtracking)
+            saved_domains = {k: v.copy() for k, v in self.domains.items()}
+
+            # Run incremental AC-3 from this slot (KEY MAC STEP!)
+            slot_id = self.slot_id_map.get((slot["row"], slot["col"], slot["direction"]))
+
+            if slot_id is not None and self._ac3_incremental(slot_id):
+                # AC-3 succeeded, send progress update
+                if self.progress_reporter:
+                    filled_count = sum(1 for s in slots if '?' not in self.grid.get_pattern_for_slot(s))
+                    self.progress_reporter.update(
+                        min(95, int((filled_count / len(slots)) * 100)),
+                        f'Filling slots (MAC): {filled_count}/{len(slots)} filled',
+                        'running',
+                        {'grid': self.grid.to_dict()['grid']}
+                    )
+
+                # Recurse
+                if self._backtrack_with_mac(slots, current_index + 1):
+                    return True
+
+            # Backtrack: restore domains and remove word
+            self.domains = saved_domains
+            self.grid.remove_word(
+                slot["row"], slot["col"], slot["length"], slot["direction"]
+            )
+            self.used_words.remove(word)
+
         return False
 
     def _sort_slots_by_constraint(self, slots: List[Dict]) -> List[Dict]:
