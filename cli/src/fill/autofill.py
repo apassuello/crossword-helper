@@ -92,6 +92,11 @@ class Autofill:
         self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
         self.last_progress_report = 0  # Track last reported progress percentage
 
+        # Phase 3: Letter frequency table for fast LCV heuristic
+        # Structure: {word_length: {position: {letter: frequency}}}
+        self.letter_frequency_table: Dict[int, Dict[int, Dict[str, int]]] = {}
+        self._build_letter_frequency_table()
+
     def fill(self, interactive: bool = False, use_mac: bool = True) -> FillResult:
         """
         Fill grid using backtracking CSP.
@@ -273,6 +278,156 @@ class Autofill:
                             sampled.add(matching[0])
 
         return sampled
+
+    def _build_letter_frequency_table(self) -> None:
+        """
+        Build letter frequency table for fast LCV heuristic (Phase 3).
+
+        Analyzes the word list to count letter frequency at each position
+        for each word length. Used for estimating constraint impact.
+
+        Structure: {word_length: {position: {letter: count}}}
+
+        Example:
+            {3: {0: {'A': 1500, 'B': 200, ...}, 1: {...}, 2: {...}}, ...}
+        """
+        # Initialize table for word lengths 3-21 (standard crossword range)
+        for length in range(3, 22):
+            self.letter_frequency_table[length] = {}
+            for pos in range(length):
+                self.letter_frequency_table[length][pos] = {
+                    chr(ord('A') + i): 0 for i in range(26)
+                }
+
+        # Count letter frequencies from word list
+        for word_obj in self.word_list.words:
+            word = word_obj.text.upper()
+            length = len(word)
+
+            # Skip if not in valid range
+            if length < 3 or length > 21:
+                continue
+
+            # Count each letter at each position
+            for pos, letter in enumerate(word):
+                if letter.isalpha() and letter in self.letter_frequency_table[length][pos]:
+                    self.letter_frequency_table[length][pos][letter] += 1
+
+    def _lcv_score_fast(self, word: str, slot: Dict) -> float:
+        """
+        Fast LCV scoring using letter frequency heuristic (Phase 3).
+
+        Estimates how constraining a word is by summing letter frequencies
+        at crossing positions. Higher score = less constraining.
+
+        Args:
+            word: Candidate word to score
+            slot: Slot to place word in
+
+        Returns:
+            LCV score (higher = less constraining, prefer this word)
+        """
+        score = 0.0
+        word = word.upper()
+
+        # Find slot ID for this slot
+        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_id = self.slot_id_map.get(slot_key)
+
+        if slot_id is None:
+            # Slot not in constraint graph, return neutral score
+            return 1000.0
+
+        # Get all crossing constraints for this slot
+        crossing_constraints = self.constraints.get(slot_id, [])
+
+        for other_slot_id, my_pos, other_pos in crossing_constraints:
+            # Get the crossing slot
+            other_slot = self.slot_list[other_slot_id]
+            other_length = other_slot['length']
+
+            # Get the letter at crossing position
+            if my_pos >= len(word):
+                continue  # Safety check
+
+            crossing_letter = word[my_pos]
+
+            # Look up frequency of this letter at other slot's position
+            if other_length in self.letter_frequency_table:
+                if other_pos in self.letter_frequency_table[other_length]:
+                    frequency = self.letter_frequency_table[other_length][other_pos].get(
+                        crossing_letter, 0
+                    )
+                    score += frequency
+
+        # Normalize by number of crossings (or return 0 if no crossings)
+        if len(crossing_constraints) > 0:
+            score = score / len(crossing_constraints)
+        else:
+            score = 1000.0  # No crossings = not constraining
+
+        return score
+
+    def _lcv_score_accurate(self, word: str, slot: Dict) -> float:
+        """
+        Accurate LCV scoring via domain counting (Phase 3).
+
+        Computes exact count of valid words for crossing slots after
+        placing this candidate. More accurate but slower than fast heuristic.
+
+        Args:
+            word: Candidate word to score
+            slot: Slot to place word in
+
+        Returns:
+            LCV score (higher = less constraining, prefer this word)
+        """
+        score = 0.0
+        word = word.upper()
+
+        # Find slot ID for this slot
+        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_id = self.slot_id_map.get(slot_key)
+
+        if slot_id is None:
+            return 10000.0  # Neutral score
+
+        # Get all crossing constraints
+        crossing_constraints = self.constraints.get(slot_id, [])
+
+        if len(crossing_constraints) == 0:
+            return 10000.0  # No crossings = not constraining
+
+        # For each crossing slot, count valid words after placing candidate
+        for other_slot_id, my_pos, other_pos in crossing_constraints:
+            other_slot = self.slot_list[other_slot_id]
+
+            # Get current pattern for crossing slot
+            current_pattern = self.grid.get_pattern_for_slot(other_slot)
+
+            # Compute new pattern after placing our word
+            if my_pos >= len(word) or other_pos >= len(current_pattern):
+                continue  # Safety check
+
+            crossing_letter = word[my_pos]
+            new_pattern = list(current_pattern)
+            new_pattern[other_pos] = crossing_letter
+            new_pattern_str = ''.join(new_pattern)
+
+            # Count how many words match the new pattern
+            matching_words = self.pattern_matcher.find(
+                new_pattern_str,
+                min_score=self.min_score,
+                max_results=None  # Count all matches
+            )
+
+            # Add count to score (more matches = less constraining)
+            score += len(matching_words)
+
+        # Average across crossings
+        score = score / len(crossing_constraints)
+
+        return score
 
     def _get_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
         """
@@ -564,7 +719,43 @@ class Autofill:
         if not candidates:
             return False
 
-        # Try each candidate
+        # Phase 3: Apply LCV (Least Constraining Value) heuristic
+        # Hybrid approach: Fast filtering + accurate ranking for top candidates
+        if len(candidates) > 100:
+            # Many candidates: Use fast LCV heuristic for initial filtering
+            candidates_with_lcv = []
+            for word, word_score in candidates:
+                lcv_score = self._lcv_score_fast(word, slot)
+                candidates_with_lcv.append((word, word_score, lcv_score))
+
+            # Sort by LCV (descending), then word score (descending)
+            candidates_with_lcv.sort(key=lambda x: (x[2], x[1]), reverse=True)
+
+            # Take top 100 candidates
+            top_candidates = candidates_with_lcv[:100]
+
+            # Refine with accurate LCV for these top 100
+            refined_candidates = []
+            for word, word_score, fast_lcv in top_candidates:
+                accurate_lcv = self._lcv_score_accurate(word, slot)
+                refined_candidates.append((word, word_score, accurate_lcv))
+
+            # Final sort by accurate LCV
+            refined_candidates.sort(key=lambda x: (x[2], x[1]), reverse=True)
+            candidates = [(word, score) for word, score, _ in refined_candidates]
+
+        else:
+            # Few candidates: Use accurate LCV directly
+            candidates_with_lcv = []
+            for word, word_score in candidates:
+                lcv_score = self._lcv_score_accurate(word, slot)
+                candidates_with_lcv.append((word, word_score, lcv_score))
+
+            # Sort by LCV (descending), then word score (descending)
+            candidates_with_lcv.sort(key=lambda x: (x[2], x[1]), reverse=True)
+            candidates = [(word, score) for word, score, _ in candidates_with_lcv]
+
+        # Try each candidate (now sorted by LCV - least constraining first)
         for word, score in candidates:
             if word in self.used_words:
                 continue
