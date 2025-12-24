@@ -131,9 +131,15 @@ def validate(grid_file: str):
 @click.option(
     "--algorithm",
     "-a",
-    type=click.Choice(["regex", "trie"]),
-    default="trie",
-    help="Pattern matching algorithm (regex=classic, trie=fast)",
+    type=click.Choice(["regex", "trie", "beam", "repair", "hybrid"]),
+    default="hybrid",
+    help="Fill algorithm (regex/trie=classic CSP, beam=beam search, repair=iterative repair, hybrid=beam+repair)",
+)
+@click.option(
+    "--beam-width",
+    type=int,
+    default=5,
+    help="Beam width for beam search algorithms (default: 5)",
 )
 @click.option(
     "--output",
@@ -165,6 +171,7 @@ def fill(
     timeout: int,
     min_score: int,
     algorithm: str,
+    beam_width: int,
     output: Optional[str],
     allow_nonstandard: bool,
     json_output: bool,
@@ -202,13 +209,50 @@ def fill(
 
     if not json_output:
         click.echo(f"  Loaded {len(word_list)} words")
-        click.echo(
-            f"  Algorithm: {algorithm} ({'fast trie-based' if algorithm == 'trie' else 'classic regex'})"
-        )
+
+    # Create pattern matcher based on algorithm
+    from .fill.pattern_matcher import PatternMatcher
+    from .fill.trie_pattern_matcher import TriePatternMatcher
+    from .fill.beam_search_autofill import BeamSearchAutofill
+    from .fill.iterative_repair import IterativeRepair
+    from .fill.hybrid_autofill import HybridAutofill
+
+    # Use trie for beam/repair/hybrid algorithms for better performance
+    use_trie = algorithm in ['trie', 'beam', 'repair', 'hybrid']
+    pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
+
+    # Display algorithm info
+    if not json_output:
+        algo_descriptions = {
+            'regex': 'classic regex-based CSP',
+            'trie': 'fast trie-based CSP',
+            'beam': f'beam search (width={beam_width})',
+            'repair': 'iterative repair',
+            'hybrid': f'hybrid (beam width={beam_width} + repair)'
+        }
+        click.echo(f"  Algorithm: {algorithm} ({algo_descriptions.get(algorithm, algorithm)})")
 
     progress.update(30, f'Loaded {len(word_list)} words, starting autofill')
 
-    autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
+    # Create appropriate autofill instance based on algorithm
+    if algorithm == 'beam':
+        autofill = BeamSearchAutofill(
+            grid, word_list, pattern_matcher,
+            beam_width=beam_width, min_score=min_score, progress_reporter=progress
+        )
+    elif algorithm == 'repair':
+        autofill = IterativeRepair(
+            grid, word_list, pattern_matcher,
+            min_score=min_score, progress_reporter=progress
+        )
+    elif algorithm == 'hybrid':
+        autofill = HybridAutofill(
+            grid, word_list, pattern_matcher,
+            beam_width=beam_width, min_score=min_score, progress_reporter=progress
+        )
+    else:
+        # Default to classic Autofill for 'regex' and 'trie'
+        autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
 
     # Get empty slots
     empty_slots = grid.get_empty_slots()
@@ -226,29 +270,49 @@ def fill(
         else:
             click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
 
-    # Fill grid (use fill_with_restarts if attempts > 1)
-    if attempts > 1:
-        timeout_per_attempt = timeout // attempts
+    # Fill grid
+    # New algorithms (beam, repair, hybrid) use fill(timeout), classic uses fill() or fill_with_restarts()
+    if algorithm in ['beam', 'repair', 'hybrid']:
+        # New algorithms don't support multiple attempts - they use timeout directly
+        if attempts > 1 and not json_output:
+            click.echo(click.style(
+                f"Warning: --attempts parameter ignored for {algorithm} algorithm",
+                fg="yellow"
+            ))
+
         if json_output:
-            result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+            result = autofill.fill(timeout=timeout)
         else:
             with click.progressbar(length=100, label="Progress") as bar:
-                result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+                result = autofill.fill(timeout=timeout)
                 # Update progress bar
                 if result.total_slots > 0:
                     progress_pct = int((result.slots_filled / result.total_slots) * 100)
                     bar.update(progress_pct)
     else:
-        # Single attempt (Phase 3.1 or earlier)
-        if json_output:
-            result = autofill.fill()
+        # Classic autofill (regex, trie)
+        if attempts > 1:
+            timeout_per_attempt = timeout // attempts
+            if json_output:
+                result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+            else:
+                with click.progressbar(length=100, label="Progress") as bar:
+                    result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
+                    # Update progress bar
+                    if result.total_slots > 0:
+                        progress_pct = int((result.slots_filled / result.total_slots) * 100)
+                        bar.update(progress_pct)
         else:
-            with click.progressbar(length=100, label="Progress") as bar:
+            # Single attempt
+            if json_output:
                 result = autofill.fill()
-                # Update progress bar
-                if result.total_slots > 0:
-                    progress_pct = int((result.slots_filled / result.total_slots) * 100)
-                    bar.update(progress_pct)
+            else:
+                with click.progressbar(length=100, label="Progress") as bar:
+                    result = autofill.fill()
+                    # Update progress bar
+                    if result.total_slots > 0:
+                        progress_pct = int((result.slots_filled / result.total_slots) * 100)
+                        bar.update(progress_pct)
 
     # Send completion status for API integration with diagnostic info
     if result.success:

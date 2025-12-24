@@ -7,7 +7,7 @@ for 10-50x faster pattern matching with large word lists.
 API-compatible with pattern_matcher.PatternMatcher for easy switching.
 """
 
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from .word_list import WordList, ScoredWord
 from .word_trie import WordTrie, build_trie_from_wordlist
 
@@ -59,7 +59,7 @@ class TriePatternMatcher:
         self,
         pattern: str,
         min_score: int = 30,
-        max_results: int = 100,
+        max_results: Optional[int] = None,
         progress_callback=None
     ) -> List[Tuple[str, int]]:
         """
@@ -68,7 +68,7 @@ class TriePatternMatcher:
         Args:
             pattern: Pattern string (e.g., "?I?A" or ".I.A")
             min_score: Minimum crossword-ability score
-            max_results: Maximum number of results
+            max_results: Maximum number of results (None = unlimited)
             progress_callback: Optional callback(current, total) for progress updates
 
         Returns:
