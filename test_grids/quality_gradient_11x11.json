@@ -1,0 +1,32 @@
+{
+  "size": 11,
+  "grid": [
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    [".", ".", ".", ".", "#", ".", "#", ".", ".", ".", "."],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    [".", ".", ".", "#", ".", ".", ".", "#", ".", ".", "."],
+    [".", ".", ".", ".", ".", "#", ".", ".", ".", ".", "."],
+    ["#", "#", ".", ".", ".", ".", ".", ".", ".", "#", "#"],
+    [".", ".", ".", ".", ".", "#", ".", ".", ".", ".", "."],
+    [".", ".", ".", "#", ".", ".", ".", "#", ".", ".", "."],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    [".", ".", ".", ".", "#", ".", "#", ".", ".", ".", "."],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."]
+  ],
+  "metadata": {
+    "name": "Quality Gradient Test",
+    "purpose": "Test length-dependent quality thresholds and constraint propagation",
+    "expected_behavior": "Long words (11-letter) should require high quality (min_score=60), short words (3-letter) should accept any quality",
+    "key_slots": [
+      {"row": 0, "col": 0, "direction": "across", "length": 11, "required_quality": "high (min_score=60)"},
+      {"row": 2, "col": 0, "direction": "across", "length": 9, "required_quality": "medium (min_score=40)"},
+      {"row": 1, "col": 4, "direction": "down", "length": 3, "required_quality": "any (min_score=0)"},
+      {"row": 5, "col": 5, "direction": "across", "length": 5, "note": "Center - heavily constrained by surrounding words"}
+    ],
+    "total_words": 42,
+    "black_squares": 16,
+    "black_percentage": 13.2,
+    "symmetry": "180-degree rotational",
+    "challenge": "Center region becomes over-constrained if quality thresholds not enforced"
+  }
+}

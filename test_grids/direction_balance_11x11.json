@@ -1,0 +1,31 @@
+{
+  "size": 11,
+  "grid": [
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    [".", ".", ".", "#", "#", "#", "#", "#", ".", ".", "."],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    ["#", "#", ".", ".", ".", ".", ".", ".", ".", "#", "#"],
+    ["#", ".", ".", ".", ".", "#", ".", ".", ".", ".", "#"],
+    ["#", ".", ".", ".", "#", "#", "#", ".", ".", ".", "#"],
+    ["#", ".", ".", ".", ".", "#", ".", ".", ".", ".", "#"],
+    ["#", "#", ".", ".", ".", ".", ".", ".", ".", "#", "#"],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
+    [".", ".", ".", "#", "#", "#", "#", "#", ".", ".", "."],
+    [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."]
+  ],
+  "metadata": {
+    "name": "Direction Balance Test",
+    "purpose": "Test direction interleaving - equal long ACROSS and DOWN words",
+    "expected_behavior": "Should alternate directions when filling 11-letter words",
+    "key_slots": [
+      {"row": 0, "col": 0, "direction": "across", "length": 11, "note": "First long ACROSS"},
+      {"row": 0, "col": 0, "direction": "down", "length": 11, "note": "First long DOWN - must interleave"},
+      {"row": 10, "col": 0, "direction": "across", "length": 11, "note": "Second long ACROSS"},
+      {"row": 0, "col": 10, "direction": "down", "length": 11, "note": "Second long DOWN"}
+    ],
+    "total_words": 38,
+    "black_squares": 22,
+    "black_percentage": 18.2,
+    "symmetry": "180-degree rotational"
+  }
+}
