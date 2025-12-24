@@ -233,30 +233,52 @@ class BeamSearchAutofill:
         )
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
-        # DEBUG: Print first 5 slots to verify length-first sorting
-        print("\nDEBUG: First 5 slots (should be longest first):")
-        for i, slot in enumerate(sorted_slots[:5]):
-            print(f"  Slot {i+1}: length={slot['length']}, pos=({slot['row']},{slot['col']}), dir={slot['direction']}")
+        # DEBUG: Note that we're using DYNAMIC MRV, not static ordering
+        print("\nDEBUG: Using DYNAMIC MRV variable ordering (will interleave directions naturally)")
+        print(f"Total slots to fill: {total_slots}")
 
-        # Main beam search loop
-        for slot_idx, slot in enumerate(sorted_slots):
+        # Main beam search loop with DYNAMIC MRV
+        # Track which slots have been filled
+        filled_slots = set(self.theme_entries.keys())  # Start with theme entries
+        slot_idx = 0
+
+        while len(filled_slots) < total_slots:
             self.iterations += 1
+            slot_idx += 1
 
             # Check timeout
             elapsed = time.time() - self.start_time
             if elapsed > timeout:
                 break
 
-            # DEBUG: Print what's being filled (first 3 slots only to avoid spam)
-            if slot_idx < 3:
-                print(f"\nDEBUG: Filling slot {slot_idx+1}/{total_slots}: length={slot['length']}, pos=({slot['row']},{slot['col']}), dir={slot['direction']}")
+            # DYNAMIC MRV: Select next slot based on current state
+            unfilled_slots = [s for s in all_slots
+                             if (s['row'], s['col'], s['direction']) not in filled_slots]
+
+            if not unfilled_slots:
+                break  # All slots filled
+
+            # Use first beam state as reference for MRV calculation
+            slot = self._select_next_slot_dynamic_mrv(unfilled_slots, beam[0])
+
+            if slot is None:
+                print(f"\nDEBUG: No slot selected by MRV at iteration {slot_idx}")
+                break
+
+            # Mark slot as being filled
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            filled_slots.add(slot_id)
+
+            # DEBUG: Print what MRV selected (shows direction interleaving)
+            if slot_idx <= 10:  # Show first 10 to see interleaving pattern
+                print(f"\nDEBUG MRV: Slot {slot_idx}/{total_slots}: {slot['direction'].upper():6s} length={slot['length']:2d} at ({slot['row']:2d},{slot['col']:2d})")
 
             # Report progress
             if self.progress_reporter:
-                progress = int((slot_idx / total_slots) * 90) + 10  # 10-100%
+                progress = int((len(filled_slots) / total_slots) * 90) + 10  # 10-100%
                 self.progress_reporter.update(
                     progress,
-                    f"Beam search: slot {slot_idx + 1}/{total_slots}"
+                    f"Beam search: slot {len(filled_slots)}/{total_slots}"
                 )
 
             # Expand beam
@@ -287,17 +309,33 @@ class BeamSearchAutofill:
                 print(f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early.")
                 break
 
-            # PHASE 4: Apply Diverse Beam Search instead of simple pruning
-            # This replaces both diversity_bonus and simple pruning with a more sophisticated approach
-            if len(expanded_beam) > self.beam_width:
+            # PHASE 4: Apply Smart Adaptive Beam Width + Diverse Beam Search
+            # Calculate adaptive width based on current search state
+            # (unfilled_slots already calculated above for MRV)
+            adaptive_width = self._get_adaptive_beam_width(
+                beam_states=beam,
+                unfilled_slots=unfilled_slots,
+                total_slots=total_slots,
+                slot=slot
+            )
+
+            # Apply pruning with adaptive width
+            if len(expanded_beam) > adaptive_width:
                 # Get candidate words for this slot (for diversity calculation)
                 pattern = beam[0].grid.get_pattern_for_slot(slot) if beam else ""
                 min_score = self._get_min_score_for_length(slot['length'])
                 slot_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
                 slot_candidates = filter_crosswordese(slot_candidates, slot['length'])
 
+                # Temporarily override beam_width for diverse pruning
+                original_width = self.beam_width
+                self.beam_width = adaptive_width
+
                 # Apply Diverse Beam Search to select diverse states
                 beam = self._diverse_beam_prune(expanded_beam, slot, num_groups=4, diversity_lambda=0.5)
+
+                # Restore original width
+                self.beam_width = original_width
             else:
                 # Not enough states to need diversity - just take all
                 beam = expanded_beam
@@ -518,6 +556,464 @@ class BeamSearchAutofill:
             return 50   # Common words only
         else:  # 9+ letters
             return 70   # High-quality phrases only
+
+    def _get_adaptive_beam_width(
+        self,
+        beam_states: List[BeamState],
+        unfilled_slots: List[Dict],
+        total_slots: int,
+        slot: Dict
+    ) -> int:
+        """
+        Smart adaptive beam width based on search state, not just depth.
+
+        Key insights from research:
+        - WIDEN when diversity is low (prevent collapse)
+        - NARROW when few viable candidates exist (efficiency)
+        - WIDEN in middle depths (fight convergence)
+
+        Args:
+            beam_states: Current beam of states
+            unfilled_slots: Remaining unfilled slots
+            total_slots: Total number of slots in grid
+            slot: Current slot being filled
+
+        Returns:
+            Adaptive beam width (3-20)
+        """
+        # Calculate depth
+        depth = 1.0 - (len(unfilled_slots) / total_slots)
+        base_width = self.beam_width
+
+        # Factor 1: Calculate diversity (variance in scores)
+        if len(beam_states) > 1:
+            scores = [s.score for s in beam_states]
+            mean_score = sum(scores) / len(scores)
+            variance = sum((s - mean_score) ** 2 for s in scores) / len(scores)
+            # Normalize variance
+            normalized_variance = variance / (mean_score ** 2 + 0.001)
+        else:
+            normalized_variance = 1.0
+
+        # Low variance = risk of collapse, need MORE width
+        if normalized_variance < 0.05:
+            diversity_factor = 1.5  # INCREASE width to maintain diversity
+        elif normalized_variance < 0.1:
+            diversity_factor = 1.2
+        else:
+            diversity_factor = 1.0
+
+        # Factor 2: Count viable candidates for current slot
+        pattern = beam_states[0].grid.get_pattern_for_slot(slot) if beam_states else "?" * slot['length']
+        min_score = self._get_min_score_for_length(slot['length'])
+        candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+        viable_count = len(candidates)
+
+        # Few candidates = can use narrower beam
+        candidate_factor = min(1.0, viable_count / (base_width * 2))
+        if candidate_factor < 0.3:
+            candidate_factor = 0.3  # Don't narrow too much
+
+        # Factor 3: Smart depth adjustment (not simple narrowing!)
+        if depth < 0.3:
+            depth_factor = 1.0  # Full width early for exploration
+        elif depth < 0.7:
+            depth_factor = 1.2  # WIDER in middle (fight convergence!)
+        else:
+            depth_factor = 0.8  # Only mild narrowing near end
+
+        # Calculate final width
+        adaptive_width = int(base_width * diversity_factor * candidate_factor * depth_factor)
+
+        # Clamp between reasonable bounds
+        adaptive_width = max(3, min(20, adaptive_width))
+
+        # Debug output
+        if hasattr(self, 'debug_adaptive') and self.debug_adaptive:
+            print(f"DEBUG ADAPTIVE WIDTH: depth={depth:.2f}, variance={normalized_variance:.3f}, "
+                  f"viable={viable_count}, factors=(div={diversity_factor:.1f}, "
+                  f"cand={candidate_factor:.2f}, depth={depth_factor:.1f}) → width={adaptive_width}")
+
+        return adaptive_width
+
+    def _select_next_slot_dynamic_mrv(
+        self,
+        unfilled_slots: List[Dict],
+        current_state: BeamState
+    ) -> Optional[Dict]:
+        """
+        Dynamic MRV + degree heuristic for variable ordering.
+        Recomputed after each assignment based on current domains.
+
+        Key insight from Ginsberg (1990): "Dynamic ordering is NECESSARY
+        for solving more difficult problems"
+
+        Args:
+            unfilled_slots: List of slots not yet filled
+            current_state: Current beam state for domain evaluation
+
+        Returns:
+            Next slot to fill, or None if no slots remain
+        """
+        if not unfilled_slots:
+            return None
+
+        candidates = []
+        for slot in unfilled_slots:
+            # Get current pattern for this slot
+            pattern = current_state.grid.get_pattern_for_slot(slot)
+
+            # MRV: Count currently valid candidates given state
+            min_score = self._get_min_score_for_length(slot['length'])
+            valid_words = self.pattern_matcher.find(pattern, min_score=min_score)
+            domain_size = len(valid_words)
+
+            # Degree: Count unfilled crossing slots
+            degree = 0
+            for crossing in self._get_slot_crossings(slot):
+                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+                if crossing_id not in current_state.slot_assignments:
+                    degree += 1
+
+            # Track for selection
+            candidates.append({
+                'slot': slot,
+                'domain_size': domain_size,
+                'degree': degree,
+                'length': slot['length'],
+                'direction': slot['direction']
+            })
+
+        if not candidates:
+            return None
+
+        # Determine last filled direction for tie-breaking
+        last_direction = None
+        if current_state.slot_assignments:
+            # Get the most recently filled slot's direction
+            last_slot_key = list(current_state.slot_assignments.keys())[-1]
+            last_direction = last_slot_key[2]  # (row, col, direction)
+
+        # Sort by MRV (ascending), then degree (descending), then length (descending)
+        # Final tie-breaker: prefer alternating directions to encourage interleaving
+        # If this is the first slot, prefer DOWN to avoid bias from get_word_slots() ordering
+        candidates.sort(key=lambda c: (
+            c['domain_size'],
+            -c['degree'],
+            -c['length'],
+            0 if (last_direction is None and c['direction'] == 'down') or \
+                 (last_direction is not None and c['direction'] != last_direction) else 1
+        ))
+
+        selected = candidates[0]
+
+        # Debug: Verify direction interleaving
+        # Always show MRV selection for first 10 slots to verify interleaving
+        if len(current_state.slot_assignments) <= 10:
+            directions = [c['direction'] for c in candidates[:5]]
+            domain_sizes = [c['domain_size'] for c in candidates[:5]]
+            print(f"  MRV top 5: {list(zip(directions, domain_sizes))}")
+            print(f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})")
+
+        return selected['slot']
+
+    def _get_slot_crossings(self, slot: Dict) -> List[Dict]:
+        """
+        Get all slots that cross this slot.
+
+        Args:
+            slot: Slot dictionary with row, col, direction, length
+
+        Returns:
+            List of crossing slot dictionaries
+        """
+        crossings = []
+        all_slots = self.grid.get_word_slots()
+
+        for other_slot in all_slots:
+            # Skip same slot
+            if (other_slot['row'] == slot['row'] and
+                other_slot['col'] == slot['col'] and
+                other_slot['direction'] == slot['direction']):
+                continue
+
+            # Check for intersection
+            if slot['direction'] == 'across' and other_slot['direction'] == 'down':
+                # This slot is horizontal, other is vertical
+                if (slot['row'] >= other_slot['row'] and
+                    slot['row'] < other_slot['row'] + other_slot['length'] and
+                    other_slot['col'] >= slot['col'] and
+                    other_slot['col'] < slot['col'] + slot['length']):
+                    crossings.append(other_slot)
+            elif slot['direction'] == 'down' and other_slot['direction'] == 'across':
+                # This slot is vertical, other is horizontal
+                if (slot['col'] >= other_slot['col'] and
+                    slot['col'] < other_slot['col'] + other_slot['length'] and
+                    other_slot['row'] >= slot['row'] and
+                    other_slot['row'] < slot['row'] + slot['length']):
+                    crossings.append(other_slot)
+
+        return crossings
+
+    def _mac_propagate(
+        self,
+        slot: Dict,
+        word: str,
+        state: BeamState,
+        domains: Dict[Tuple[int, int, str], List[str]]
+    ) -> Tuple[bool, Dict, Set]:
+        """
+        Maintaining Arc Consistency (AC-3 algorithm).
+        Transitive constraint propagation after assignment.
+
+        Key insight from Sabin & Freuder (1994): "MAC is the most efficient
+        general algorithm for solving hard CSPs"
+
+        Args:
+            slot: Slot being filled
+            word: Word being assigned to slot
+            state: Current beam state
+            domains: Current domains for all slots
+
+        Returns:
+            (success, reduced_domains, conflict_set)
+            - success: False if domain wipeout detected
+            - reduced_domains: Which domains were reduced and by how much
+            - conflict_set: Slots involved in the conflict
+        """
+        # Initialize queue with all arcs affected by this assignment
+        queue = []
+        slot_id = (slot['row'], slot['col'], slot['direction'])
+
+        for crossing in self._get_slot_crossings(slot):
+            crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+            if crossing_id not in state.slot_assignments:
+                queue.append((crossing_id, slot_id))
+
+        reduced_domains = {}
+        conflict_set = set()
+
+        while queue:
+            xi_id, xj_id = queue.pop(0)
+
+            # Skip if xi is already assigned
+            if xi_id in state.slot_assignments:
+                continue
+
+            # Get the slots
+            xi_slot = self._get_slot_by_id(xi_id)
+            if not xi_slot:
+                continue
+
+            # Revise domain of xi given xj's assignment
+            removed = self._revise_domain(
+                xi_slot, xi_id,
+                slot if xj_id == slot_id else self._get_slot_by_id(xj_id),
+                word if xj_id == slot_id else state.slot_assignments.get(xj_id, ''),
+                domains
+            )
+
+            if removed:
+                if xi_id not in reduced_domains:
+                    reduced_domains[xi_id] = []
+                reduced_domains[xi_id].extend(removed)
+
+                # Domain wipeout - conflict detected
+                if xi_id in domains and len(domains[xi_id]) == 0:
+                    conflict_set.add(xj_id)
+                    return False, reduced_domains, conflict_set
+
+                # Add all OTHER neighbors of xi to queue (transitive propagation)
+                for neighbor in self._get_slot_crossings(xi_slot):
+                    neighbor_id = (neighbor['row'], neighbor['col'], neighbor['direction'])
+                    if neighbor_id != xj_id and neighbor_id in state.slot_assignments:
+                        queue.append((xi_id, neighbor_id))
+
+        return True, reduced_domains, conflict_set
+
+    def _revise_domain(
+        self,
+        xi_slot: Dict,
+        xi_id: Tuple,
+        xj_slot: Dict,
+        xj_word: str,
+        domains: Dict
+    ) -> List[str]:
+        """
+        Remove values from xi's domain with no support in xj.
+
+        Args:
+            xi_slot: Slot whose domain is being revised
+            xi_id: ID of xi_slot
+            xj_slot: Constraining slot
+            xj_word: Word assigned to xj
+            domains: Current domains
+
+        Returns:
+            List of removed words
+        """
+        if not xj_word or xi_id not in domains:
+            return []
+
+        # Find crossing position
+        crossing_pos = self._get_crossing_position(xi_slot, xj_slot)
+        if crossing_pos is None:
+            return []
+
+        xi_pos, xj_pos = crossing_pos
+        required_letter = xj_word[xj_pos]
+
+        # Remove words from xi that don't match required letter
+        removed = []
+        remaining = []
+        for word in domains[xi_id]:
+            if word[xi_pos] != required_letter:
+                removed.append(word)
+            else:
+                remaining.append(word)
+
+        domains[xi_id] = remaining
+        return removed
+
+    def _get_slot_by_id(self, slot_id: Tuple) -> Optional[Dict]:
+        """Get slot dict by its ID tuple (row, col, direction)."""
+        row, col, direction = slot_id
+        for slot in self.grid.get_word_slots():
+            if (slot['row'] == row and
+                slot['col'] == col and
+                slot['direction'] == direction):
+                return slot
+        return None
+
+    def _get_crossing_position(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+        """
+        Get the position where two slots cross.
+
+        Returns:
+            (pos_in_slot1, pos_in_slot2) or None if no crossing
+        """
+        if slot1['direction'] == slot2['direction']:
+            return None  # Parallel slots don't cross
+
+        if slot1['direction'] == 'across':
+            h_slot, v_slot = slot1, slot2
+        else:
+            h_slot, v_slot = slot2, slot1
+
+        # Check if they intersect
+        h_row, h_col = h_slot['row'], h_slot['col']
+        v_row, v_col = v_slot['row'], v_slot['col']
+
+        if (h_row >= v_row and h_row < v_row + v_slot['length'] and
+            v_col >= h_col and v_col < h_col + h_slot['length']):
+            # They cross!
+            h_pos = v_col - h_col
+            v_pos = h_row - v_row
+
+            if slot1['direction'] == 'across':
+                return (h_pos, v_pos)
+            else:
+                return (v_pos, h_pos)
+
+        return None
+
+    def _order_values_lcv(
+        self,
+        slot: Dict,
+        candidates: List[Tuple[str, int]],
+        state: BeamState
+    ) -> List[Tuple[str, int]]:
+        """
+        Order candidates by Least Constraining Value heuristic.
+        Prefer words that leave more options for neighboring variables.
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Reordered candidates with LCV consideration
+        """
+        scored_candidates = []
+
+        for word, quality_score in candidates:
+            # Count how many options this removes from neighbors
+            constraints_removed = 0
+
+            for crossing in self._get_slot_crossings(slot):
+                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+
+                # Skip already filled slots
+                if crossing_id in state.slot_assignments:
+                    continue
+
+                # Get crossing position
+                crossing_pos = self._get_crossing_position(slot, crossing)
+                if crossing_pos:
+                    my_pos, their_pos = crossing_pos
+                    required_letter = word[my_pos]
+
+                    # Count how many words would be eliminated
+                    pattern = state.grid.get_pattern_for_slot(crossing)
+                    min_score = self._get_min_score_for_length(crossing['length'])
+                    crossing_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+
+                    for other_word, _ in crossing_candidates:
+                        if other_word[their_pos] != required_letter:
+                            constraints_removed += 1
+
+            # Combine quality with constraint impact (lower constraints_removed is better)
+            # Normalize constraints_removed to 0-100 scale
+            lcv_penalty = min(100, constraints_removed / 10)
+            combined_score = quality_score - 0.3 * lcv_penalty
+
+            scored_candidates.append((word, quality_score, combined_score))
+
+        # Sort by combined score (higher is better)
+        scored_candidates.sort(key=lambda x: -x[2])
+
+        # Return in original format but with LCV ordering
+        return [(w, s) for w, s, _ in scored_candidates]
+
+    def _stratified_shuffle(
+        self,
+        candidates: List[Tuple[str, int]],
+        tier_boundaries: List[int] = [10, 30, 60, 100]
+    ) -> List[Tuple[str, int]]:
+        """
+        Shuffle within quality tiers to prevent alphabetical bias
+        while preserving quality gradient.
+
+        Args:
+            candidates: List of (word, score) tuples
+            tier_boundaries: Percentile boundaries for tiers
+
+        Returns:
+            Stratified shuffled candidates
+        """
+        import random
+
+        n = len(candidates)
+        if n == 0:
+            return []
+
+        # Sort by quality first
+        sorted_candidates = sorted(candidates, key=lambda x: -x[1])
+
+        result = []
+        prev_idx = 0
+
+        for boundary in tier_boundaries:
+            tier_size = int(n * boundary / 100)
+            tier = sorted_candidates[prev_idx:tier_size]
+
+            # Shuffle within tier
+            random.shuffle(tier)
+            result.extend(tier)
+            prev_idx = tier_size
+
+        return result
 
     def _diverse_beam_prune(
         self,
@@ -936,29 +1432,19 @@ class BeamSearchAutofill:
                 if len(quality_candidates) >= 5:
                     all_candidates = quality_candidates
 
-            # SHUFFLE WITHIN SCORE TIERS: Break alphabetical bias while preserving quality
-            # Problem: Candidates are sorted by score, then alphabetically within same score
-            # Solution: Shuffle within each score group to get diverse letters at same quality level
-            from collections import defaultdict
-            import random
+            # PHASE 4 ENHANCEMENT: Apply LCV ordering then stratified shuffling
+            # Step 1: Order by Least Constraining Value (prefer words that leave more options)
+            all_candidates = self._order_values_lcv(slot, all_candidates, state)
 
-            # Group by score
-            by_score = defaultdict(list)
-            for word, score in all_candidates:
-                by_score[score].append((word, score))
+            # Step 2: Apply stratified shuffling to break alphabetical bias while preserving quality
+            # This prevents beam collapse from alphabetical ordering
+            all_candidates = self._stratified_shuffle(all_candidates)
 
-            # Shuffle within each score group (deterministic seed)
-            slot_seed = slot['row'] * 100 + slot['col'] * 10 + (1 if slot['direction'] == 'across' else 0)
-            for score in by_score:
-                random.Random(slot_seed + score).shuffle(by_score[score])
-
-            # Flatten back: high scores first, but shuffled within each score
-            shuffled_candidates = []
-            for score in sorted(by_score.keys(), reverse=True):
-                shuffled_candidates.extend(by_score[score])
-
-            # Now use shuffled candidates for stratified beam sampling
-            all_candidates = shuffled_candidates
+            # Debug output for LCV impact
+            if hasattr(self, 'debug_lcv') and self.debug_lcv and beam_idx == 0:
+                print(f"DEBUG LCV: Top 5 candidates after LCV+shuffle for slot at ({slot['row']},{slot['col']}):")
+                for word, score in all_candidates[:5]:
+                    print(f"  {word}: score={score}")
 
             # (Verbose debug output removed)
 
@@ -1000,8 +1486,39 @@ class BeamSearchAutofill:
                 # Compute score
                 new_state.score = self._compute_score(new_state, word_score)
 
+                # PHASE 4: MAC Propagation for early conflict detection
+                # Initialize domains if not already present
+                if not hasattr(new_state, 'domains'):
+                    new_state.domains = {}
+                    # Initialize domains for all unfilled slots
+                    for s in self.grid.get_word_slots():
+                        s_id = (s['row'], s['col'], s['direction'])
+                        if s_id not in new_state.slot_assignments:
+                            pattern = new_state.grid.get_pattern_for_slot(s)
+                            min_score = self._get_min_score_for_length(s['length'])
+                            new_state.domains[s_id] = [
+                                w for w, _ in self.pattern_matcher.find(pattern, min_score=min_score)
+                            ]
+
+                # Apply MAC propagation
+                success, reduced, conflicts = self._mac_propagate(
+                    slot, word, new_state, new_state.domains
+                )
+
+                if not success:
+                    # MAC detected conflict - skip this candidate
+                    total_skipped_viability += 1
+                    if hasattr(self, 'debug_mac') and self.debug_mac:
+                        print(f"DEBUG MAC: Pruned {word} due to domain wipeout in {conflicts}")
+                    continue
+
+                # Track reductions for potential backtracking
+                if not hasattr(new_state, 'domain_reductions'):
+                    new_state.domain_reductions = {}
+                new_state.domain_reductions[slot_id] = reduced
+
                 # Check viability with PREDICTIVE RISK ASSESSMENT
-                # Pass the slot we just filled so viability check only examines intersecting slots
+                # Now enhanced with domain information from MAC
                 is_viable, risk_penalty = self._evaluate_state_viability(new_state, slot)
 
                 if is_viable:
