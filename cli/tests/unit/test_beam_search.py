@@ -413,10 +413,12 @@ class TestBeamSearchAutofill:
         )
 
         # Empty grid should be viable (has candidates for all slots)
-        assert autofill._is_viable_state(state) is True
+        is_viable, risk_penalty = autofill._evaluate_state_viability(state)
+        assert is_viable is True
+        assert 0.0 < risk_penalty <= 1.0  # Penalty should be positive (penalties multiply)
 
     def test_is_viable_state_with_dead_end(self, word_list, pattern_matcher_trie):
-        """Test _is_viable_state with dead-end state."""
+        """Test _evaluate_state_viability with dead-end state."""
         grid = Grid(11)
         grid.set_black_square(5, 5)
 
@@ -433,10 +435,11 @@ class TestBeamSearchAutofill:
             used_words={'QQQ'}
         )
 
-        # This might be viable or not depending on word list
-        # The key is that the method runs without error
-        result = autofill._is_viable_state(state)
-        assert isinstance(result, bool)
+        # Method should return tuple (bool, float)
+        is_viable, risk_penalty = autofill._evaluate_state_viability(state)
+        assert isinstance(is_viable, bool)
+        assert isinstance(risk_penalty, float)
+        assert 0.0 <= risk_penalty <= 1.0  # Penalty should be in valid range
 
     def test_sort_slots_by_constraint(self, small_grid, word_list, pattern_matcher_trie):
         """Test _sort_slots_by_constraint sorts slots by length-first."""

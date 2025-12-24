@@ -11,6 +11,7 @@ import time
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
+from .crosswordese import filter_crosswordese
 
 
 @dataclass
@@ -108,10 +109,13 @@ class BeamSearchAutofill:
         candidates_per_slot: int = 10,
         min_score: int = 0,
         diversity_bonus: float = 0.1,
-        progress_reporter=None
+        progress_reporter=None,
+        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None
     ):
         """
         Initialize beam search solver.
+
+        PHASE 2.2 - Research Gap #6: Theme Entry Prioritization
 
         Args:
             grid: Grid to fill (can be partially filled)
@@ -122,6 +126,9 @@ class BeamSearchAutofill:
             min_score: Minimum word quality score (default: 0)
             diversity_bonus: Bonus for diverse beams 0.0-1.0 (default: 0.1)
             progress_reporter: Optional progress reporting
+            theme_entries: Dict of theme entries {(row, col, direction): word}
+                          These are NON-NEGOTIABLE and will be placed first
+                          Example: {(0, 0, 'across'): 'THEMEANSWER'}
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -144,6 +151,7 @@ class BeamSearchAutofill:
         self.min_score = min_score
         self.diversity_bonus = diversity_bonus
         self.progress_reporter = progress_reporter
+        self.theme_entries = theme_entries or {}  # Theme entries (NON-NEGOTIABLE)
 
         # State tracking
         self.start_time = 0.0
@@ -194,18 +202,34 @@ class BeamSearchAutofill:
                 iterations=0
             )
 
-        # Sort slots by constraint level (length-first, then MRV)
+        # Sort slots with THEME ENTRY PRIORITIZATION
+        # Theme entries are NON-NEGOTIABLE and must be placed first
         # CRITICAL: Longest slots filled first to ensure high-quality words
-        sorted_slots = self._sort_slots_by_constraint(all_slots)
+        if self.theme_entries:
+            sorted_slots, theme_words = self._prioritize_theme_entries(all_slots)
+        else:
+            sorted_slots = self._sort_slots_by_constraint(all_slots)
+            theme_words = set()
 
-        # Initialize beam with beam_width copies of initial state
+        # Pre-fill theme entries in grid (if any)
+        initial_grid = self.grid.clone()
+        theme_slot_count = 0
+        theme_slot_assignments = {}
+
+        for slot_id, word in self.theme_entries.items():
+            row, col, direction = slot_id
+            initial_grid.place_word(word.upper(), row, col, direction)
+            theme_slot_assignments[slot_id] = word.upper()
+            theme_slot_count += 1
+
+        # Initialize beam with theme entries pre-filled
         initial_state = BeamState(
-            grid=self.grid.clone(),
-            slots_filled=0,
+            grid=initial_grid,
+            slots_filled=theme_slot_count,  # Theme entries already placed
             total_slots=total_slots,
-            score=0.0,
-            used_words=set(),
-            slot_assignments={}
+            score=100.0 * theme_slot_count,  # Initial score for theme entries
+            used_words=theme_words.copy(),  # Theme words marked as used
+            slot_assignments=theme_slot_assignments.copy()
         )
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
@@ -263,12 +287,20 @@ class BeamSearchAutofill:
                 print(f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early.")
                 break
 
-            # Apply diversity bonus
-            if self.diversity_bonus > 0:
-                expanded_beam = self._apply_diversity_bonus(expanded_beam)
+            # PHASE 4: Apply Diverse Beam Search instead of simple pruning
+            # This replaces both diversity_bonus and simple pruning with a more sophisticated approach
+            if len(expanded_beam) > self.beam_width:
+                # Get candidate words for this slot (for diversity calculation)
+                pattern = beam[0].grid.get_pattern_for_slot(slot) if beam else ""
+                min_score = self._get_min_score_for_length(slot['length'])
+                slot_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+                slot_candidates = filter_crosswordese(slot_candidates, slot['length'])
 
-            # Prune beam
-            beam = self._prune_beam(expanded_beam, self.beam_width)
+                # Apply Diverse Beam Search to select diverse states
+                beam = self._diverse_beam_prune(expanded_beam, slot, num_groups=4, diversity_lambda=0.5)
+            else:
+                # Not enough states to need diversity - just take all
+                beam = expanded_beam
 
             # Check for complete solution
             complete_states = [s for s in beam if s.slots_filled == total_slots]
@@ -310,45 +342,455 @@ class BeamSearchAutofill:
 
     def _sort_slots_by_constraint(self, slots: List[Dict]) -> List[Dict]:
         """
-        Sort slots by constraint level using length-first ordering.
+        Sort slots by length-first ordering with DIRECTION INTERLEAVING.
 
-        CRITICAL: Fill LONGEST words first (research-backed).
+        CRITICAL FIXES (Phase 1.1 - Research Gap #1):
+        1. Fill LONGEST words first (Ginsberg 1990, Shortz, Dr.Fill)
+        2. INTERLEAVE directions (Across, Down, Across, Down...)
+           - Prevents impossible vertical constraints
+           - Shortz (NYT): "Never commit to all acrosses before downs"
+           - Crossfire: "Interleaved construction mode (default)"
 
-        Research consensus (Ginsberg 1990, Shortz, Crossfire, Dr.Fill):
-        - Long words (9-11 letters): Structural backbone, ~1k real candidates
-        - Short words (3-5 letters): Flexible "glue", ~2k candidates
-        - Filling short first creates impossible long patterns → gibberish
+        Previous bug: All 11-letter ACROSS → all 11-letter DOWN
+        Result: DOWN words impossible/gibberish
 
-        Sorting priority:
-        1. Length (descending): Longest slots first
-        2. Domain size (ascending): MRV for ties (fewest candidates first)
-        3. Empty count (ascending): More constrained first
+        Algorithm:
+        1. Group slots by length (descending: 11, 9, 7, 5, 3)
+        2. Within each length group:
+           a. Separate ACROSS and DOWN
+           b. Sort each by secondary constraint
+           c. INTERLEAVE: A, D, A, D, A, D...
+        3. Return interleaved list
 
         Args:
             slots: List of slot dicts
 
         Returns:
-            Sorted list (longest first, then most constrained)
+            Sorted list with direction interleaving
+        """
+        from collections import defaultdict
+
+        # Group by length
+        length_groups = defaultdict(list)
+        for slot in slots:
+            length_groups[slot['length']].append(slot)
+
+        result = []
+
+        # Process each length group (longest first)
+        for length in sorted(length_groups.keys(), reverse=True):
+            group = length_groups[length]
+
+            # Separate by direction
+            across = [s for s in group if s['direction'] == 'across']
+            down = [s for s in group if s['direction'] == 'down']
+
+            # Sort each by secondary constraint (domain size, empty count)
+            across_sorted = self._sort_by_secondary_constraint(across)
+            down_sorted = self._sort_by_secondary_constraint(down)
+
+            # INTERLEAVE directions: A, D, A, D, A, D...
+            max_len = max(len(across_sorted), len(down_sorted))
+            for i in range(max_len):
+                if i < len(across_sorted):
+                    result.append(across_sorted[i])
+                if i < len(down_sorted):
+                    result.append(down_sorted[i])
+
+        return result
+
+    def _sort_by_secondary_constraint(self, slots: List[Dict]) -> List[Dict]:
+        """
+        Secondary sort within same length/direction by constraint level.
+
+        Used after grouping by length and direction to order slots
+        within each group by how constrained they are.
+
+        Sorting criteria:
+        1. Domain size (ascending): Fewer candidates = more constrained
+        2. Empty count (ascending): More letters filled = more constrained
+
+        Args:
+            slots: List of slots (same length, same direction)
+
+        Returns:
+            Sorted list (most constrained first)
         """
         def constraint_key(slot: Dict):
             pattern = self.grid.get_pattern_for_slot(slot)
 
+            # Use length-dependent quality threshold
+            min_score = self._get_min_score_for_length(slot['length'])
+
             # Count candidates (domain size)
             candidates = self.pattern_matcher.find(
                 pattern,
-                min_score=self.min_score
+                min_score=min_score
             )
             domain_size = len(candidates)
 
             # Count empty cells
             empty_count = pattern.count('?')
 
-            # PRIMARY: Length (descending) - LONGEST FIRST!
-            # SECONDARY: Domain size (ascending) - most constrained first
-            # TERTIARY: Empty count (ascending) - more filled letters first
-            return (-slot['length'], domain_size, empty_count)
+            # Sort by domain size, then empty count
+            return (domain_size, empty_count)
 
         return sorted(slots, key=constraint_key)
+
+    def _prioritize_theme_entries(self, slots: List[Dict]) -> Tuple[List[Dict], Set[str]]:
+        """
+        Separate theme entries from regular slots and prioritize them.
+
+        PHASE 2.2 - Research Gap #6: Theme Entry Prioritization
+
+        Theme entries are NON-NEGOTIABLE words that must appear in the puzzle
+        (typically the answer to the puzzle's theme). They are:
+        - Placed FIRST, before any other fill
+        - Never changed during search or repair
+        - Sorted by length (longest first) among themselves
+
+        Research (Shortz, NYT): "Theme entries are non-negotiable"
+        Research (Ginsberg): "Mandatory entries have weight ∞"
+
+        Args:
+            slots: All slots in grid
+
+        Returns:
+            Tuple of (ordered_slots, theme_words) where:
+            - ordered_slots: Theme slots first, then regular slots
+            - theme_words: Set of theme words (to mark as used)
+        """
+        theme_slots = []
+        regular_slots = []
+        theme_words = set()
+
+        for slot in slots:
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            if slot_id in self.theme_entries:
+                theme_slots.append(slot)
+                theme_words.add(self.theme_entries[slot_id].upper())
+            else:
+                regular_slots.append(slot)
+
+        # Sort theme slots by length (longest first)
+        theme_slots_sorted = sorted(theme_slots, key=lambda s: s['length'], reverse=True)
+
+        # Sort regular slots with interleaving
+        regular_slots_sorted = self._sort_slots_by_constraint(regular_slots)
+
+        # Theme entries ALWAYS come first
+        return (theme_slots_sorted + regular_slots_sorted, theme_words)
+
+    def _get_min_score_for_length(self, length: int) -> int:
+        """
+        Return quality threshold appropriate for word length.
+
+        CRITICAL FIX (Phase 1.2 - Research Gap #2):
+        Different word lengths require different quality standards.
+
+        Research (NYT Crossword Construction Guidelines, Will Shortz):
+        - Short words (3-4 letters): "Glue" words, can be obscure crosswordese
+        - Medium words (5-6 letters): Should be recognizable
+        - Long words (7-8 letters): Must be common, in-the-language
+        - Very long (9+ letters): Must be high-quality, well-known phrases
+
+        Previous bug: min_score=30 for ALL lengths
+        Result: Long words accept low-quality fills, grid looks poor
+
+        Args:
+            length: Word length in letters
+
+        Returns:
+            Minimum score threshold for this length:
+            - 3-letter: 0 (any word, including ESNE, ERE, ORE)
+            - 4-letter: 10 (slightly filtered)
+            - 5-6 letter: 30 (prefer common)
+            - 7-8 letter: 50 (common only)
+            - 9+ letter: 70 (high-quality only)
+        """
+        if length <= 3:
+            return 0    # Accept any word (crosswordese OK)
+        elif length == 4:
+            return 10   # Slightly filtered
+        elif length <= 6:
+            return 30   # Prefer common words
+        elif length <= 8:
+            return 50   # Common words only
+        else:  # 9+ letters
+            return 70   # High-quality phrases only
+
+    def _diverse_beam_prune(
+        self,
+        expanded_beam: List[BeamState],
+        slot: Dict,
+        num_groups: int = 4,
+        diversity_lambda: float = 0.5
+    ) -> List[BeamState]:
+        """
+        Select diverse states from expanded beam using Diverse Beam Search principles.
+
+        Instead of generating new states, this selects diverse states from
+        an already-expanded beam to prevent collapse.
+
+        Args:
+            expanded_beam: All candidate states
+            slot: Current slot being filled
+            num_groups: Number of diversity groups
+            diversity_lambda: Diversity weight
+
+        Returns:
+            Diverse subset of beam_width states
+        """
+        if len(expanded_beam) <= self.beam_width:
+            return expanded_beam
+
+        # Sort states by score first
+        sorted_states = sorted(expanded_beam, key=lambda s: s.score, reverse=True)
+
+        # Partition into diversity groups
+        groups = []
+        beams_per_group = max(1, self.beam_width // num_groups)
+
+        for g in range(num_groups):
+            group = []
+
+            for state in sorted_states:
+                if state in [s for grp in groups for s in grp]:
+                    continue  # Already selected in previous group
+
+                # Calculate diversity penalty against previous groups
+                diversity_penalty = 0.0
+                if groups:
+                    for prev_group in groups:
+                        for prev_state in prev_group:
+                            # Measure state difference
+                            diff = self._state_diversity_score(state, prev_state)
+                            diversity_penalty += diff
+
+                    # Normalize
+                    num_prev_states = sum(len(g) for g in groups)
+                    if num_prev_states > 0:
+                        diversity_penalty /= num_prev_states
+
+                # Augmented score
+                augmented_score = state.score + diversity_lambda * diversity_penalty
+                group.append((state, augmented_score))
+
+            # Select top diverse candidates for this group
+            group.sort(key=lambda x: -x[1])
+            selected = [state for state, _ in group[:beams_per_group]]
+
+            if selected:
+                groups.append(selected)
+
+        # Flatten groups
+        result = []
+        for group in groups:
+            result.extend(group)
+
+        # Debug output
+        if len(result) > 0:
+            print(f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates")
+            print(f"    Groups={num_groups}, Lambda={diversity_lambda}")
+
+        return result[:self.beam_width]
+
+    def _state_diversity_score(self, state1: BeamState, state2: BeamState) -> float:
+        """
+        Calculate diversity score between two beam states.
+
+        Measures how different two states are based on their word assignments.
+
+        Args:
+            state1: First state
+            state2: Second state
+
+        Returns:
+            Diversity score (higher = more different)
+        """
+        # Count different word assignments
+        all_slots = set(state1.slot_assignments.keys()) | set(state2.slot_assignments.keys())
+
+        different_count = 0
+        for slot_id in all_slots:
+            word1 = state1.slot_assignments.get(slot_id, "")
+            word2 = state2.slot_assignments.get(slot_id, "")
+            if word1 != word2:
+                different_count += 1
+
+        # Normalize by total slots
+        return different_count / max(1, len(all_slots))
+
+    def _diverse_beam_search(
+        self,
+        beam: List[BeamState],
+        slot: Dict,
+        candidates: List[Tuple[str, int]],
+        num_groups: int = 4,
+        diversity_lambda: float = 0.5
+    ) -> List[BeamState]:
+        """
+        Diverse Beam Search (Vijayakumar et al., 2016 AAAI).
+
+        PHASE 4 - Critical Fix #1: Replace adaptive beam width with diversity mechanism.
+
+        Research (Cohen et al. 2019 "Beam Search Curse"):
+        - Adaptive narrowing (8→5→3→1) is NOT validated
+        - Beam quality is "highly non-monotonic" - narrowing can worsen solutions
+        - Instead, use constant width + diversity to prevent beam collapse
+
+        Research (Vijayakumar et al. 2016 "Diverse Beam Search"):
+        - 300% increase in distinct solutions
+        - Better top-1 solutions through exploration/exploitation balance
+
+        Args:
+            beam: Current beam states
+            slot: Slot being filled
+            candidates: Word candidates with scores
+            num_groups: Number of diversity groups (default 4)
+            diversity_lambda: Diversity weight (0.5 = balanced)
+
+        Returns:
+            New diverse beam states (constant width)
+        """
+        if not beam or not candidates:
+            return []
+
+        groups = []
+        beams_per_group = max(1, self.beam_width // num_groups)
+
+        for g in range(num_groups):
+            group_states = []
+
+            for state in beam[:beams_per_group]:  # Take subset of beam for this group
+                for word, score in candidates:
+                    if word in state.used_words:
+                        continue
+
+                    # Calculate diversity penalty (Hamming distance to previous groups)
+                    diversity_penalty = 0.0
+                    if groups:
+                        for prev_group in groups:
+                            for prev_state in prev_group:
+                                # Count differing letters at crossing positions
+                                diff = self._hamming_distance_at_crossings(
+                                    word, prev_state, slot
+                                )
+                                diversity_penalty += diff
+                        # Normalize by number of previous states
+                        num_prev_states = sum(len(g) for g in groups)
+                        if num_prev_states > 0:
+                            diversity_penalty /= num_prev_states
+
+                    # Augmented score = quality + diversity bonus
+                    augmented_score = score + diversity_lambda * diversity_penalty
+
+                    # Create new state
+                    new_state = state.clone()
+                    new_state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    new_state.slots_filled += 1
+                    new_state.score += augmented_score
+                    new_state.used_words.add(word)
+                    new_state.slot_assignments[(slot['row'], slot['col'], slot['direction'])] = word
+
+                    group_states.append((new_state, augmented_score))
+
+            # Select top candidates for this group
+            group_states.sort(key=lambda x: -x[1])
+            group = [state for state, _ in group_states[:beams_per_group]]
+
+            if group:
+                groups.append(group)
+
+        # Flatten groups into single beam (maintain constant width)
+        result = []
+        for group in groups:
+            result.extend(group)
+
+        # DEBUG: Show diversity effect
+        if result:
+            print(f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups")
+            print(f"    Diversity lambda={diversity_lambda} applied to prevent collapse")
+
+        return result[:self.beam_width]  # Maintain constant beam width
+
+    def _hamming_distance_at_crossings(
+        self, word: str, state: BeamState, slot: Dict
+    ) -> int:
+        """
+        Count differing letters at intersection positions.
+
+        Helper for Diverse Beam Search - measures diversity between
+        word placement and existing state at crossing points.
+
+        Args:
+            word: Word to place
+            state: Existing beam state
+            slot: Slot where word would be placed
+
+        Returns:
+            Number of differing letters at crossings
+        """
+        diff_count = 0
+
+        # Get all crossing slots for this slot
+        for other_slot in state.grid.slots:
+            if other_slot['direction'] != slot['direction']:
+                # Check if they intersect
+                intersection = self._get_slot_intersection(slot, other_slot)
+                if intersection:
+                    my_pos, their_pos = intersection
+
+                    # Check if other slot is filled
+                    other_id = (other_slot['row'], other_slot['col'], other_slot['direction'])
+                    if other_id in state.slot_assignments:
+                        other_word = state.slot_assignments[other_id]
+                        # Count if letters differ
+                        if my_pos < len(word) and their_pos < len(other_word):
+                            if word[my_pos] != other_word[their_pos]:
+                                diff_count += 1
+
+        return diff_count
+
+    def _get_slot_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+        """
+        Get intersection positions between two slots.
+
+        Args:
+            slot1: First slot
+            slot2: Second slot
+
+        Returns:
+            (slot1_position, slot2_position) if they intersect, None otherwise
+        """
+        if slot1['direction'] == slot2['direction']:
+            return None  # Parallel slots don't intersect
+
+        # Get cell coordinates for each slot
+        cells1 = set()
+        cells2 = set()
+
+        if slot1['direction'] == 'across':
+            for i in range(slot1['length']):
+                cells1.add((slot1['row'], slot1['col'] + i, i))
+        else:  # down
+            for i in range(slot1['length']):
+                cells1.add((slot1['row'] + i, slot1['col'], i))
+
+        if slot2['direction'] == 'across':
+            for i in range(slot2['length']):
+                cells2.add((slot2['row'], slot2['col'] + i, i))
+        else:  # down
+            for i in range(slot2['length']):
+                cells2.add((slot2['row'] + i, slot2['col'], i))
+
+        # Find intersection
+        for r1, c1, pos1 in cells1:
+            for r2, c2, pos2 in cells2:
+                if r1 == r2 and c1 == c2:
+                    return (pos1, pos2)
+
+        return None
 
     def _is_quality_word(self, word: str) -> bool:
         """
@@ -459,17 +901,29 @@ class BeamSearchAutofill:
                 expanded.append(state)
                 continue
 
+            # Use length-dependent quality threshold
+            min_score = self._get_min_score_for_length(slot['length'])
+
             # Get ALL candidate words
             all_candidates = self.pattern_matcher.find(
                 pattern,
-                min_score=self.min_score
+                min_score=min_score
             )
 
             if len(all_candidates) == 0:
                 # No candidates: this beam state is dead
                 continue
 
-            # (Debug output removed for performance)
+            # CROSSWORDESE FILTER (Phase 2.1 - Research Gap #8):
+            # Filter out unacceptable crosswordese based on slot length
+            # - 3-4 letters: Crosswordese OK (glue words)
+            # - 5-6 letters: Crosswordese penalized (score reduced 50%)
+            # - 7+ letters: Crosswordese completely filtered (unacceptable)
+            all_candidates = filter_crosswordese(all_candidates, slot['length'])
+
+            if len(all_candidates) == 0:
+                # No candidates after crosswordese filter: dead end
+                continue
 
             # QUALITY FILTER: For long slots, reject likely gibberish
             if slot['length'] >= 7:
@@ -546,9 +1000,13 @@ class BeamSearchAutofill:
                 # Compute score
                 new_state.score = self._compute_score(new_state, word_score)
 
-                # Check viability (no dead ends)
+                # Check viability with PREDICTIVE RISK ASSESSMENT
                 # Pass the slot we just filled so viability check only examines intersecting slots
-                if self._is_viable_state(new_state, slot):
+                is_viable, risk_penalty = self._evaluate_state_viability(new_state, slot)
+
+                if is_viable:
+                    # Apply risk penalty to score (discourages risky paths)
+                    new_state.score *= risk_penalty
                     expanded.append(new_state)
                     total_added += 1
                 else:
@@ -722,30 +1180,36 @@ class BeamSearchAutofill:
         # Check for any common positions
         return bool(pos1 & pos2)
 
-    def _is_viable_state(self, state: BeamState, last_filled_slot: Dict = None) -> bool:
+    def _evaluate_state_viability(self, state: BeamState, last_filled_slot: Dict = None) -> Tuple[bool, float]:
         """
-        Check if state has any dead ends (slots with 0 candidates).
+        Check viability with PREDICTIVE RISK ASSESSMENT.
 
-        OPTIMIZATION: Only checks slots that intersect with last_filled_slot
-        instead of all slots. This reduces false negatives dramatically while
-        maintaining correctness.
+        CRITICAL FIX (Phase 1.4 - Research Gap #4):
+        Go beyond binary viability (possible/impossible) to assess risk level.
+
+        Previous bug: Only checked if count == 0 (dead end)
+        Problem: Doesn't detect risky states with only 1-2 candidates
+        Result: Algorithm commits to paths that fail 2-3 slots later
+
+        Enhancement: Return risk penalty based on candidate counts:
+        - 0 candidates: Dead end (return False)
+        - 1-2 candidates: Severe risk (0.70× score penalty)
+        - 3-4 candidates: High risk (0.85× score penalty)
+        - 5-9 candidates: Medium risk (0.95× score penalty)
+        - 10+ candidates: No penalty (1.0×)
+
+        Research (Ginsberg 1990): "Look-ahead is critical"
+
+        OPTIMIZATION: Only checks intersecting slots for efficiency.
 
         Args:
             state: Beam state to check
             last_filled_slot: The slot we just filled (optional)
 
         Returns:
-            True if viable (checked slots have ≥1 candidate)
-            False if dead end (any checked slot has 0 candidates)
-
-        Complexity: O(intersecting_slots × pattern_match_time)
-            - Before: O(38 slots × pattern_match)
-            - After: O(~10 slots × pattern_match) [73% reduction]
-
-        Rationale:
-            - Checking ALL slots after placing 3 words is too pessimistic
-            - Distant slots may look impossible now but become viable later
-            - Only need to check slots that share cells with just-placed word
+            (is_viable, risk_penalty) tuple where:
+            - is_viable: True if no dead ends
+            - risk_penalty: Multiplier ∈ [0.70, 1.0] based on risk
         """
         # Get slots to check (only intersecting ones if we have a reference)
         if last_filled_slot:
@@ -753,6 +1217,10 @@ class BeamSearchAutofill:
         else:
             # No reference - check all (first few slots)
             slots_to_check = state.grid.get_empty_slots()
+
+        # Initialize penalty (no penalty = 1.0)
+        total_penalty = 1.0
+        risky_slots = 0
 
         # DEBUG: Track viability check details
         if hasattr(state, '_debug_viability_count'):
@@ -763,14 +1231,17 @@ class BeamSearchAutofill:
         if state._debug_viability_count < 2:
             print(f"\nDEBUG VIABILITY: Checking {len(slots_to_check)} intersecting slots")
 
-        # Check each slot has at least one candidate
+        # Check each slot and assess risk
         for slot in slots_to_check:
             pattern = state.grid.get_pattern_for_slot(slot)
+
+            # Use length-dependent quality threshold
+            min_score = self._get_min_score_for_length(slot['length'])
 
             # Get candidates (excluding used words)
             candidates = self.pattern_matcher.find(
                 pattern,
-                min_score=self.min_score
+                min_score=min_score
             )
 
             # Filter out used words
@@ -779,19 +1250,36 @@ class BeamSearchAutofill:
                 if word not in state.used_words
             ]
 
-            # Dead end if no candidates
-            if not available_candidates:
+            count = len(available_candidates)
+
+            # PREDICTIVE RISK ASSESSMENT
+            if count == 0:
+                # Dead end - not viable
                 if state._debug_viability_count < 2:
                     print(f"  DEAD END: slot at ({slot['row']},{slot['col']}) {slot['direction']} length={slot['length']}")
                     print(f"    Pattern: '{pattern}'")
                     print(f"    Total candidates: {len(candidates)}, Available (not used): 0")
-                    print(f"    Used words: {list(state.used_words)[:5]}...")
-                return False
+                return (False, 0.0)
+            elif count <= 2:
+                # Severe risk: Very few options
+                total_penalty *= 0.70
+                risky_slots += 1
+            elif count <= 4:
+                # High risk: Limited options
+                total_penalty *= 0.85
+                risky_slots += 1
+            elif count <= 9:
+                # Medium risk: Some constraint
+                total_penalty *= 0.95
+            # 10+ candidates: No penalty (comfortable margin)
 
         if state._debug_viability_count < 2:
-            print(f"  ✓ All {len(slots_to_check)} intersecting slots viable!")
+            if risky_slots > 0:
+                print(f"  ✓ Viable, but {risky_slots} risky slots (penalty: {total_penalty:.2f}×)")
+            else:
+                print(f"  ✓ All {len(slots_to_check)} intersecting slots have good options!")
 
-        return True
+        return (True, total_penalty)
 
     def _apply_diversity_bonus(
         self,
