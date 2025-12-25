@@ -5,7 +5,8 @@ from .value_ordering import (
     CompositeValueOrdering,
     LCVValueOrdering,
     StratifiedValueOrdering,
-    QualityValueOrdering
+    QualityValueOrdering,
+    ThresholdDiverseOrdering
 )
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     'CompositeValueOrdering',
     'LCVValueOrdering',
     'StratifiedValueOrdering',
-    'QualityValueOrdering'
+    'QualityValueOrdering',
+    'ThresholdDiverseOrdering'
 ]

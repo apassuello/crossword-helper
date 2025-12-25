@@ -275,3 +275,100 @@ class QualityValueOrdering(ValueOrderingStrategy):
 
         # Sort by quality score (descending)
         return sorted(filtered, key=lambda x: -x[1])
+
+
+class ThresholdDiverseOrdering(ValueOrderingStrategy):
+    """
+    Threshold-based ordering with temperature for exploration.
+
+    Phase 4.5: Research-validated approach from Stanford crossword paper.
+
+    Algorithm:
+    1. Set quality threshold (e.g., score >= 50)
+    2. Filter candidates above threshold
+    3. If too few, adaptively lower threshold
+    4. Within threshold group, order by LCV (if available)
+    5. Add temperature-based randomization for exploration
+    6. Preserve top candidates for exploitation
+
+    This balances exploration (trying diverse words) with exploitation
+    (preferring high-quality words).
+
+    Based on:
+    - Stanford crossword research (temperature=0.9, p-sampling=0.9)
+    - Diverse Beam Search paper (Vijayakumar et al. 2016)
+    """
+
+    def __init__(self, threshold: int = 50, temperature: float = 0.3):
+        """
+        Initialize threshold-diverse ordering.
+
+        Args:
+            threshold: Minimum quality score to consider (default 50)
+            temperature: Randomization factor 0-1 (0=greedy, 1=fully random)
+                        Default 0.3 provides gentle exploration
+        """
+        self.threshold = threshold
+        self.temperature = temperature
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates by threshold + diversity.
+
+        Algorithm:
+        1. Filter to candidates above threshold
+        2. If too few, gradually lower threshold (adaptive)
+        3. Sort by quality within threshold group
+        4. Preserve top 20% for exploitation
+        5. Shuffle remaining with temperature for exploration
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Ordered candidates balancing quality and diversity
+        """
+        if not candidates:
+            return candidates
+
+        # Adaptive threshold lowering when stuck
+        current_threshold = self.threshold
+        filtered = [(w, s) for w, s in candidates if s >= current_threshold]
+
+        # Lower threshold if too few candidates (adaptive)
+        while len(filtered) < 5 and current_threshold > 0:
+            current_threshold -= 10
+            filtered = [(w, s) for w, s in candidates if s >= current_threshold]
+
+        if len(filtered) < 2:
+            # Very few candidates, use all
+            filtered = candidates
+
+        # Sort by quality
+        sorted_candidates = sorted(filtered, key=lambda x: -x[1])
+
+        if self.temperature == 0:
+            # Greedy: no randomization
+            return sorted_candidates
+
+        # Exploitation: Keep top 20% as-is (preserve best options)
+        top_k = max(1, len(sorted_candidates) // 5)
+        top_candidates = sorted_candidates[:top_k]
+        rest_candidates = sorted_candidates[top_k:]
+
+        # Exploration: Shuffle remaining with temperature
+        if self.temperature >= 1.0:
+            # Full randomization
+            random.shuffle(rest_candidates)
+        elif self.temperature > 0:
+            # Weighted shuffle based on temperature
+            # Higher temperature = more shuffling
+            for i in range(len(rest_candidates)):
+                if random.random() < self.temperature:
+                    # Swap with random position
+                    j = random.randint(i, len(rest_candidates) - 1)
+                    rest_candidates[i], rest_candidates[j] = rest_candidates[j], rest_candidates[i]
+
+        return top_candidates + rest_candidates

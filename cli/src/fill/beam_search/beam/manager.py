@@ -79,7 +79,8 @@ class BeamManager(BeamManagementStrategy):
         evaluate_viability_func,
         compute_score_func,
         is_quality_word_func,
-        base_beam_width: int
+        base_beam_width: int,
+        value_ordering=None  # Phase 4.5: Added value ordering
     ):
         """
         Initialize beam manager.
@@ -91,12 +92,14 @@ class BeamManager(BeamManagementStrategy):
             compute_score_func: Function to compute state score
             is_quality_word_func: Function to check word quality
             base_beam_width: Base beam width
+            value_ordering: Value ordering strategy (Phase 4.5)
         """
         self.pattern_matcher = pattern_matcher
         self.get_min_score = get_min_score_func
         self.evaluate_viability = evaluate_viability_func
         self.compute_score = compute_score_func
         self.is_quality_word = is_quality_word_func
+        self.value_ordering = value_ordering  # Phase 4.5
         self.base_beam_width = base_beam_width
         self.debug_lcv = False
         self.debug_mac = False
@@ -184,9 +187,10 @@ class BeamManager(BeamManagementStrategy):
                 if len(quality_candidates) >= 5:
                     all_candidates = quality_candidates
 
-            # PHASE 4 ENHANCEMENT: Apply LCV ordering then stratified shuffling
-            # Note: These are handled externally by ValueOrdering component
-            # For now, we'll use the candidates as provided
+            # PHASE 4.5 FIX: Apply value ordering (was planned but never wired up!)
+            if self.value_ordering:
+                all_candidates = self.value_ordering.order_values(slot, all_candidates, state)
+            # If no value ordering, use candidates as-is
 
             # STRATIFIED SAMPLING: Each beam gets overlapping slice from shuffled candidates
             # With 48k+ shuffled candidates, overlapping slices give diversity + coherence

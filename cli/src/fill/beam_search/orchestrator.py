@@ -14,7 +14,12 @@ from ..pattern_matcher import PatternMatcher
 from .state import BeamState
 from .selection.slot_selector import MRVSlotSelector
 from .constraints.engine import MACConstraintEngine
-from .selection.value_ordering import CompositeValueOrdering, LCVValueOrdering, StratifiedValueOrdering
+from .selection.value_ordering import (
+    CompositeValueOrdering,
+    LCVValueOrdering,
+    StratifiedValueOrdering,
+    ThresholdDiverseOrdering
+)
 from .beam.diversity import DiversityManager
 from .beam.manager import BeamManager
 from .evaluation.state_evaluator import StateEvaluator
@@ -101,13 +106,20 @@ class BeamSearchOrchestrator:
             pattern_matcher=self.pattern_matcher
         )
 
-        # Value ordering (composite strategy: LCV + stratified shuffling)
+        # Value ordering (composite strategy: LCV + threshold-diverse + stratified)
+        # Phase 4.5: Added ThresholdDiverseOrdering for exploration-exploitation balance
         lcv_ordering = LCVValueOrdering(
             pattern_matcher=self.pattern_matcher,
             min_score_func=self._get_min_score_for_length
         )
+        threshold_ordering = ThresholdDiverseOrdering(threshold=50, temperature=0.4)
         stratified_ordering = StratifiedValueOrdering(tier_size=5)
-        self.value_ordering = CompositeValueOrdering([lcv_ordering, stratified_ordering])
+        # Phase 4.5: Composite value ordering (LCV + threshold-diverse + stratified)
+        self.value_ordering = CompositeValueOrdering([
+            lcv_ordering,           # Least constraining value (prefer words that leave options open)
+            threshold_ordering,      # Threshold + temperature exploration (Phase 4.5)
+            stratified_ordering      # Stratified shuffling for diversity
+        ])
 
         # Diversity management
         self.diversity_manager = DiversityManager()
@@ -126,7 +138,8 @@ class BeamSearchOrchestrator:
             evaluate_viability_func=self.state_evaluator.evaluate_state_viability,
             compute_score_func=self.state_evaluator.compute_score,
             is_quality_word_func=self.state_evaluator.is_quality_word,
-            base_beam_width=self.beam_width
+            base_beam_width=self.beam_width,
+            value_ordering=self.value_ordering  # Phase 4.5: Wire up value ordering!
         )
 
     def _get_min_score_for_length(self, length: int) -> int:
@@ -174,6 +187,8 @@ class BeamSearchOrchestrator:
 
         self.start_time = time.time()
         self.iterations = 0
+        self.failed_expansions = 0  # Phase 4.5: Track expansion failures
+        self.max_failed_expansions = 10  # Phase 4.5: Allow 10 failures before giving up
 
         # Get all empty slots
         all_slots = self.grid.get_empty_slots()
@@ -252,8 +267,19 @@ class BeamSearchOrchestrator:
                 expanded_beam = self._try_backtracking(beam, slot)
 
             if not expanded_beam:
-                logger.debug(f"\nDEBUG: Beam expansion failed at slot {slot_idx}! Exiting.")
-                break
+                # Phase 4.5: Persistent retry instead of immediate exit
+                self.failed_expansions += 1
+                logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_idx} (failure {self.failed_expansions}/{self.max_failed_expansions})")
+
+                # Try deeper backtracking before giving up
+                if self.failed_expansions < self.max_failed_expansions:
+                    logger.debug(f"  Skipping this slot temporarily, will try next MRV slot...")
+                    # Skip this slot, algorithm will circle back when constraints change
+                    filled_slots.discard(slot_id)  # Unmark as attempted
+                    continue
+                else:
+                    logger.debug(f"  Max failures reached, stopping.")
+                    break
 
             # Adaptive beam width
             adaptive_width = self.beam_manager.get_adaptive_beam_width(
@@ -305,29 +331,100 @@ class BeamSearchOrchestrator:
 
         return initial_grid, theme_slot_count, theme_slot_assignments, theme_words, sorted_slots
 
+    def _backtrack_beam_states(self, beam: List[BeamState], depth: int = 1) -> List[BeamState]:
+        """
+        Perform true chronological backtracking by undoing recent slot assignments.
+
+        Phase 4.5: This is REAL backtracking - undoes previous assignments
+        to explore alternative paths, unlike fake backtracking that just
+        tries more candidates for the same stuck slot.
+
+        Args:
+            beam: Current beam states
+            depth: Number of slots to backtrack (undo)
+
+        Returns:
+            Beam with last 'depth' assignments removed, ready to retry
+        """
+        backtracked_beam = []
+
+        for state in beam:
+            if len(state.slot_assignments) < depth:
+                # Can't backtrack this far, skip this state
+                continue
+
+            # Create new state with last 'depth' assignments removed
+            new_state = state.clone()
+
+            # Get last N assignments to remove (chronological order)
+            sorted_assignments = sorted(
+                state.slot_assignments.items(),
+                key=lambda x: x  # Chronological order by slot_id
+            )[-depth:]
+
+            for slot_id, word in sorted_assignments:
+                row, col, direction = slot_id
+                word_length = len(word)
+
+                # Remove word from grid
+                new_state.grid.remove_word(row, col, word_length, direction)
+
+                # Remove from tracking structures
+                del new_state.slot_assignments[slot_id]
+                new_state.used_words.discard(word)
+                new_state.slots_filled -= 1
+
+            backtracked_beam.append(new_state)
+
+        logger.debug(f"  Backtracked {len(backtracked_beam)} states by depth={depth}")
+        return backtracked_beam
+
     def _try_backtracking(self, beam: List[BeamState], slot: Dict) -> List[BeamState]:
-        """Try backtracking with more candidates if expansion fails."""
+        """
+        Try backtracking with more candidates AND true state backtracking.
+
+        Phase 4.5: Enhanced with true chronological backtracking.
+        """
         logger.debug(f"\nDEBUG: Trying backtracking...")
 
-        # Try 2x candidates
+        # Try 1: More candidates (2x)
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
         if expanded:
             return expanded
 
-        # Try 5x candidates
+        # Try 2: Even more candidates (5x)
         logger.debug(f"  Retry with 5x candidates...")
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
         if expanded:
             return expanded
 
-        # Try with no score filter
+        # Try 3: No score filter
         logger.debug(f"  Retry with min_score=0...")
         old_min_score = self.min_score
         self.min_score = 0
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
         self.min_score = old_min_score
+        if expanded:
+            return expanded
 
-        return expanded
+        # Try 4: TRUE BACKTRACKING - undo last assignment (Phase 4.5 NEW)
+        logger.debug(f"  Trying chronological backtracking (depth=1)...")
+        backtracked_beam = self._backtrack_beam_states(beam, depth=1)
+        if backtracked_beam:
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10)
+            if expanded:
+                return expanded
+
+        # Try 5: Deeper backtracking (Phase 4.5 NEW)
+        if self.failed_expansions > 3:
+            logger.debug(f"  Trying deeper backtracking (depth=2)...")
+            backtracked_beam = self._backtrack_beam_states(beam, depth=2)
+            if backtracked_beam:
+                expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
+                if expanded:
+                    return expanded
+
+        return []  # All backtracking strategies failed
 
     def _create_result(
         self,
