@@ -99,6 +99,110 @@
       "created": "2024-12-21",
       "last_modified": "2024-12-21",
       "auto_generated": false
+    },
+    "external/normalized/peter_broda": {
+      "name": "Peter Broda Wordlist",
+      "category": "external",
+      "description": "Peter Broda's comprehensive crossword wordlist with 483,499 scored words. One of the most respected wordlists in crossword construction.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "scored", "professional", "broda"],
+      "source": "https://peterbroda.me/crosswords/wordlist/",
+      "license": "Free for personal use",
+      "word_count": 483499,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/crosshatch": {
+      "name": "Crosshatch/Diehl Wordlist",
+      "category": "external",
+      "description": "Mark Diehl's trimmed version of Peter Broda's list with 250,901 scored words. Curated for quality crossword construction.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "scored", "curated", "crosshatch"],
+      "source": "https://github.com/ben4808/crosshatch",
+      "license": "MIT",
+      "word_count": 250901,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/christophsjones": {
+      "name": "Chris Jones Wordlist",
+      "category": "external",
+      "description": "173,320 scored words curated from NYT, WSJ, WaPo, UKACD, Peter Broda's list, and Peter Norvig's frequency counts.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "scored", "newspaper", "curated"],
+      "source": "https://github.com/christophsjones/crossword-wordlist",
+      "license": "Public Domain",
+      "word_count": 173320,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/enable": {
+      "name": "ENABLE Dictionary",
+      "category": "external",
+      "description": "Enhanced North American Benchmark Lexicon with 172,669 words. Public domain Scrabble dictionary used by Words with Friends.",
+      "difficulty": "medium",
+      "tags": ["scrabble", "dictionary", "enable", "public-domain"],
+      "source": "https://github.com/dolph/dictionary",
+      "license": "Public Domain",
+      "word_count": 172669,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/ospd": {
+      "name": "OSPD (Official Scrabble Players Dictionary)",
+      "category": "external",
+      "description": "79,244 words from the Official Scrabble Players Dictionary. Good for Scrabble-valid crossword fill.",
+      "difficulty": "medium",
+      "tags": ["scrabble", "ospd", "official", "tournament"],
+      "source": "https://github.com/stmorse/IP-crossword",
+      "license": "Educational Use",
+      "word_count": 79244,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/rifkin_300k": {
+      "name": "Rifkin 300K Dictionary",
+      "category": "external",
+      "description": "307,337 English words aggregated from multiple sources including rosettacode.org, umich.edu, SIL.org, and mieliestronk.com.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "dictionary", "aggregated"],
+      "source": "https://github.com/jeremy-rifkin/Wordlist",
+      "license": "MIT",
+      "word_count": 307337,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/common_5k": {
+      "name": "Common 5K Words",
+      "category": "external",
+      "description": "4,996 common English words from Michael Wehar's public domain word list. Good for easy crossword fill.",
+      "difficulty": "easy",
+      "tags": ["common", "easy", "basic", "public-domain"],
+      "source": "https://github.com/MichaelWehar/Public-Domain-Word-Lists",
+      "license": "Public Domain",
+      "word_count": 4996,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
+    },
+    "external/normalized/crossword_nexus": {
+      "name": "Crossword Nexus Collaborative Wordlist",
+      "category": "external",
+      "description": "The largest open-source crossword wordlist with 557,877 scored words. Community-maintained by Crossword Nexus with contributions from constructors worldwide.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "scored", "collaborative", "community", "crossword-nexus"],
+      "source": "https://github.com/Crossword-Nexus/collaborative-word-list",
+      "license": "MIT",
+      "word_count": 557877,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
     }
   },
   "categories": {
@@ -126,6 +230,11 @@
       "name": "Imported Lists",
       "description": "Wordlists imported from external sources",
       "icon": "📥"
+    },
+    "external": {
+      "name": "External Wordlists",
+      "description": "Curated wordlists from open-source repositories (Peter Broda, ENABLE, OSPD, etc.)",
+      "icon": "🌐"
     }
   },
   "tags": {
