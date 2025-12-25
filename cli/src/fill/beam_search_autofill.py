@@ -341,17 +341,23 @@ class BeamSearchAutofill:
                 beam = expanded_beam
 
             # Check for complete solution
+            # FIX #2 (Phase 4.2): With Fix #1, slots_filled now counts ONLY completely filled slots
+            # So this check should now be correct
             complete_states = [s for s in beam if s.slots_filled == total_slots]
             if complete_states:
                 print(f"\nDEBUG: Found complete solution at slot {slot_idx+1}!")
                 best_complete = max(complete_states, key=lambda s: s.score)
                 time_elapsed = time.time() - self.start_time
 
+                # FIX #4 (Phase 4.2): Double-check actual grid completion
+                actual_filled = sum(1 for slot in all_slots
+                                   if '?' not in best_complete.grid.get_pattern_for_slot(slot))
+
                 return FillResult(
-                    success=True,
+                    success=(actual_filled == total_slots),  # Verify actual completion
                     grid=best_complete.grid,
                     time_elapsed=time_elapsed,
-                    slots_filled=best_complete.slots_filled,
+                    slots_filled=actual_filled,  # Use verified count
                     total_slots=total_slots,
                     problematic_slots=[],
                     iterations=self.iterations
@@ -379,11 +385,16 @@ class BeamSearchAutofill:
                     slot['row'], slot['col'], slot['length'], slot['direction']
                 )
 
+        # FIX #3 (Phase 4.2): Calculate ACTUAL filled slots from grid state
+        # Don't trust best_state.slots_filled - verify by checking grid
+        actual_filled = sum(1 for slot in all_slots
+                           if '?' not in best_state.grid.get_pattern_for_slot(slot))
+
         return FillResult(
             success=False,
             grid=best_state.grid,
             time_elapsed=time_elapsed,
-            slots_filled=best_state.slots_filled,
+            slots_filled=actual_filled,  # Use verified count, not best_state.slots_filled
             total_slots=total_slots,
             problematic_slots=problematic_slots,
             iterations=self.iterations
@@ -1489,10 +1500,16 @@ class BeamSearchAutofill:
                 )
 
                 # Update metadata
-                new_state.slots_filled += 1
                 new_state.used_words.add(word)
                 slot_id = (slot['row'], slot['col'], slot['direction'])
                 new_state.slot_assignments[slot_id] = word
+
+                # FIX #1 (Phase 4.2): Only increment slots_filled if slot is COMPLETELY filled
+                # Previous bug: Counted every word placement, even if slot still had '?' wildcards
+                # Correct: Only count when pattern has no '?' remaining
+                pattern = new_state.grid.get_pattern_for_slot(slot)
+                if '?' not in pattern:
+                    new_state.slots_filled += 1
 
                 # Compute score
                 new_state.score = self._compute_score(new_state, word_score)
