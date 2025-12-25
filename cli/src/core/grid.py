@@ -458,9 +458,26 @@ class Grid:
         all_slots = self.get_word_slots()
 
         for slot in all_slots:
-            pattern = self.get_pattern_for_slot(slot)
-            # If pattern contains '?', slot is not completely filled
-            if '?' in pattern:
+            # Check actual cell values, not pattern strings
+            # A cell is filled if it's a black square (-1) OR a positive value (letter)
+            # Anything else (0, None, unexpected values) = empty
+            row, col = slot['row'], slot['col']
+            length = slot['length']
+            direction = slot['direction']
+
+            has_empty = False
+            for i in range(length):
+                if direction == 'across':
+                    cell_value = self.cells[row, col + i]
+                else:  # down
+                    cell_value = self.cells[row + i, col]
+
+                # Inverse logic: if NOT (black square OR positive letter), then empty
+                if not (cell_value == BLACK_SQUARE or cell_value > 0):
+                    has_empty = True
+                    break
+
+            if has_empty:
                 empty_slots.append(slot)
 
         return empty_slots
