@@ -350,8 +350,10 @@ class BeamSearchAutofill:
                 time_elapsed = time.time() - self.start_time
 
                 # FIX #4 (Phase 4.2): Double-check actual grid completion
+                # FIX #6 (Phase 4.3): Also check for dots '.' (empty cells)
                 actual_filled = sum(1 for slot in all_slots
-                                   if '?' not in best_complete.grid.get_pattern_for_slot(slot))
+                                   if '?' not in best_complete.grid.get_pattern_for_slot(slot)
+                                   and '.' not in best_complete.grid.get_pattern_for_slot(slot))
 
                 return FillResult(
                     success=(actual_filled == total_slots),  # Verify actual completion
@@ -387,8 +389,10 @@ class BeamSearchAutofill:
 
         # FIX #3 (Phase 4.2): Calculate ACTUAL filled slots from grid state
         # Don't trust best_state.slots_filled - verify by checking grid
+        # FIX #6 (Phase 4.3): Also check for dots '.' (empty cells)
         actual_filled = sum(1 for slot in all_slots
-                           if '?' not in best_state.grid.get_pattern_for_slot(slot))
+                           if '?' not in best_state.grid.get_pattern_for_slot(slot)
+                           and '.' not in best_state.grid.get_pattern_for_slot(slot))
 
         return FillResult(
             success=False,
@@ -1488,6 +1492,12 @@ class BeamSearchAutofill:
                     total_skipped_duplicate += 1
                     continue
 
+                # FIX #5 (Phase 4.3): CRITICAL - Validate word length matches slot length
+                # This should never fail if pattern matching is correct, but add defensive check
+                # to prevent partial placements that leave dots in grid
+                if len(word) != slot['length']:
+                    continue
+
                 # Create new state
                 new_state = state.clone()
 
@@ -1506,9 +1516,10 @@ class BeamSearchAutofill:
 
                 # FIX #1 (Phase 4.2): Only increment slots_filled if slot is COMPLETELY filled
                 # Previous bug: Counted every word placement, even if slot still had '?' wildcards
-                # Correct: Only count when pattern has no '?' remaining
+                # FIX #6 (Phase 4.3): Also check for dots '.' (empty cells)
+                # Correct: Only count when pattern has no '?' or '.' remaining
                 pattern = new_state.grid.get_pattern_for_slot(slot)
-                if '?' not in pattern:
+                if '?' not in pattern and '.' not in pattern:
                     new_state.slots_filled += 1
 
                 # Compute score
