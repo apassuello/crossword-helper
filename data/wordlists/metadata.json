@@ -203,6 +203,19 @@
       "created": "2025-12-25",
       "last_modified": "2025-12-25",
       "auto_generated": true
+    },
+    "external/normalized/spreadthewordlist": {
+      "name": "Spread the Word(list)",
+      "category": "external",
+      "description": "308,687 scored words compiled by Brooke Husic & Enrique Henestroza Anguiano. Data-driven from USA Today, Universal, Modern crosswords, Wikipedia, Jeopardy, and Scrabble words.",
+      "difficulty": "all",
+      "tags": ["comprehensive", "scored", "modern", "data-driven", "spreadthewordlist"],
+      "source": "https://www.spreadthewordlist.com/",
+      "license": "CC-BY-NC-SA",
+      "word_count": 308687,
+      "created": "2025-12-25",
+      "last_modified": "2025-12-25",
+      "auto_generated": true
     }
   },
   "categories": {
