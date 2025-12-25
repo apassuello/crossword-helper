@@ -67,10 +67,12 @@ class BeamState:
         if not isinstance(other, BeamState):
             return False
 
-        # Check grid equality
-        # Note: Grid doesn't have __eq__, so compare cells
-        return (self.grid == other.grid and
-                self.used_words == other.used_words)
+        # Check grid equality by comparing cells content
+        # Grid doesn't have __eq__, so compare cells directly
+        import numpy as np
+        grids_equal = np.array_equal(self.grid.cells, other.grid.cells)
+
+        return (grids_equal and self.used_words == other.used_words)
 
     def __hash__(self) -> int:
         """

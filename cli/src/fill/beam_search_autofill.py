@@ -93,3 +93,57 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator
     # No code duplication needed - the orchestrator handles everything!
+
+    # Backward compatibility proxy methods for tests
+    # These delegate to the appropriate components
+
+    def _compute_score(self, state: BeamState, word_score: int) -> float:
+        """Proxy to StateEvaluator.compute_score() for backward compatibility."""
+        return self.state_evaluator.compute_score(state, word_score)
+
+    def _evaluate_state_viability(self, state: BeamState, last_filled_slot=None):
+        """Proxy to StateEvaluator.evaluate_state_viability() for backward compatibility."""
+        return self.state_evaluator.evaluate_state_viability(state, last_filled_slot)
+
+    def _count_differences(self, state1: BeamState, state2: BeamState) -> int:
+        """Proxy to DiversityManager.count_differences() for backward compatibility."""
+        return self.diversity_manager.count_differences(state1, state2)
+
+    def _sort_slots_by_constraint(self, slots, grid=None):
+        """Proxy to SlotSelector.order_slots() for backward compatibility."""
+        if grid is None:
+            grid = self.grid
+        return self.slot_selector.order_slots(slots, grid)
+
+    def _expand_beam(self, beam, slot, candidates_per_slot):
+        """Proxy to BeamManager.expand_beam() for backward compatibility."""
+        return self.beam_manager.expand_beam(beam, slot, candidates_per_slot)
+
+    def _prune_beam(self, beam, beam_width):
+        """Proxy to BeamManager.prune_beam() for backward compatibility."""
+        return self.beam_manager.prune_beam(beam, beam_width)
+
+    def _apply_diversity_bonus(self, beam, slot=None):
+        """
+        Apply diversity bonus to beam states (for backward compatibility).
+
+        Modifies beam state scores in-place to add diversity bonuses.
+        This is a simplified version for test compatibility.
+        """
+        if len(beam) <= 1:
+            return beam
+
+        # Calculate pairwise diversity and apply bonuses
+        for i, state in enumerate(beam):
+            diversity_bonus = 0.0
+            for j, other in enumerate(beam):
+                if i != j:
+                    diff_count = self.diversity_manager.count_differences(state, other)
+                    diversity_bonus += diff_count * self.diversity_bonus
+
+            # Apply average diversity bonus
+            if len(beam) > 1:
+                avg_bonus = diversity_bonus / (len(beam) - 1)
+                state.score += avg_bonus
+
+        return beam

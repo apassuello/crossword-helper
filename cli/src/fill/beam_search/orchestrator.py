@@ -92,7 +92,8 @@ class BeamSearchOrchestrator:
         # Slot selection
         self.slot_selector = MRVSlotSelector(
             pattern_matcher=self.pattern_matcher,
-            get_min_score_func=self._get_min_score_for_length
+            word_list=self.word_list,
+            theme_entries=self.theme_entries
         )
 
         # Constraint propagation
@@ -169,7 +170,7 @@ class BeamSearchOrchestrator:
         from ..autofill import FillResult
 
         if timeout < 10:
-            raise ValueError(f"timeout must be >=10 seconds, got {timeout}")
+            raise ValueError(f"timeout must be ≥10 seconds, got {timeout}")
 
         self.start_time = time.time()
         self.iterations = 0
@@ -285,10 +286,10 @@ class BeamSearchOrchestrator:
         """Prepare initial grid state with theme entries."""
         if self.theme_entries:
             sorted_slots, theme_words = self.slot_selector.prioritize_theme_entries(
-                all_slots, self.theme_entries
+                all_slots
             )
         else:
-            sorted_slots = self.slot_selector.order_slots(all_slots)
+            sorted_slots = self.slot_selector.order_slots(all_slots, self.grid)
             theme_words = set()
 
         # Pre-fill theme entries
