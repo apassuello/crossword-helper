@@ -109,15 +109,13 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
 
     for word in words:
         if is_slam_dunk_gibberish(word):
-            # Categorize by reason
+            # Categorize by reason (matching the 3 rules in is_slam_dunk_gibberish)
             if len(set(word)) == 1:
                 removed['all_same_letter'].append(word)
-            elif re.search(r'(.)\1{3,}', word):
-                removed['repeated_letters'].append(word)
-            elif re.search(r'[BCDFGHJKLMNPQRSTVWXYZ]{5,}', word):
-                removed['consonant_cluster'].append(word)
-            elif not any(c in 'AEIOUY' for c in word):
+            elif len(word) >= 5 and not any(c in 'AEIOUY' for c in word):
                 removed['no_vowels'].append(word)
+            elif len(word) >= 6 and all(word[i] == word[i % 2] for i in range(len(word))) and len(set(word)) <= 2:
+                removed['alternating_pattern'].append(word)
             else:
                 removed['other_pattern'].append(word)
         else:
