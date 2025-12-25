@@ -399,6 +399,7 @@ class IterativeRepair:
             )
 
             # Find first unused word
+            placed = False
             for word, score in candidates:
                 if word not in used_words:
                     # Place word
@@ -409,7 +410,15 @@ class IterativeRepair:
                         slot['direction']
                     )
                     used_words.add(word)
+                    placed = True
                     break
+
+            # FIX #2 (Phase 4.1): Handle empty candidates
+            # If no valid candidates found, clear slot to prevent gibberish
+            if not placed:
+                self.grid.remove_word(
+                    slot['row'], slot['col'], slot['length'], slot['direction']
+                )
 
     def _find_conflicts(
         self,
@@ -567,10 +576,13 @@ class IterativeRepair:
                 best_count = new_count
 
             # Restore original
-            if original_pattern.replace('?', ''):  # If had any letters
+            # FIX #3 (Phase 4.1): Fix pattern restoration bug
+            # Old code: if original_pattern.replace('?', ''):  # WRONG - can crash
+            # New code: Explicit check for wildcards
+            if '?' not in original_pattern:  # Pattern has no wildcards - it's a real word
                 grid.place_word(original_pattern, slot['row'], slot['col'], slot['direction'])
             else:
-                # Clear the slot
+                # Clear the slot (pattern has wildcards, not a valid word)
                 grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
 
         # Return result

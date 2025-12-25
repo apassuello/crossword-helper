@@ -368,6 +368,17 @@ class BeamSearchAutofill:
             if slot_id not in best_state.slot_assignments:
                 problematic_slots.append(slot)
 
+        # FIX #1 (Phase 4.1 - REVISED): Clear GIBBERISH from unfilled slots
+        # Only clear slots that contain obvious gibberish patterns
+        # Don't clear all unfilled slots (too aggressive - breaks partial fills)
+        for slot in problematic_slots:
+            pattern = best_state.grid.get_pattern_for_slot(slot)
+            # Check if pattern contains gibberish (repeated letters)
+            if self._is_gibberish_pattern(pattern):
+                best_state.grid.remove_word(
+                    slot['row'], slot['col'], slot['length'], slot['direction']
+                )
+
         return FillResult(
             success=False,
             grid=best_state.grid,
@@ -1899,3 +1910,49 @@ class BeamSearchAutofill:
                 (quality_score * quality_weight / 100)
 
         return total
+
+    def _is_gibberish_pattern(self, pattern: str) -> bool:
+        """
+        Check if a pattern contains obvious gibberish (repeated letters, impossible clusters).
+
+        Args:
+            pattern: Word or pattern to check (may contain '?' wildcards)
+
+        Returns:
+            True if pattern appears to be gibberish
+
+        Examples:
+            AAAAA → True (all same letter)
+            AAA → True (all same letter)
+            NNN → True (all same letter)
+            BRNNN → True (impossible consonant cluster + repeated N)
+            DRAMA → False (valid word pattern)
+            D?AMA → False (partial valid pattern)
+        """
+        # Remove wildcards for checking
+        letters_only = pattern.replace('?', '')
+
+        if not letters_only or len(letters_only) < 3:
+            return False  # Too short to be obviously gibberish
+
+        # Check for 3+ repeated letters in a row
+        for i in range(len(letters_only) - 2):
+            if letters_only[i] == letters_only[i+1] == letters_only[i+2]:
+                return True  # AAA, NNN, etc.
+
+        # Check if entire pattern is same letter
+        if len(set(letters_only)) == 1:
+            return True  # AAAAA, NNN, etc.
+
+        # Check for impossible consonant clusters (4+ consonants)
+        vowels = set('AEIOUY')
+        consonant_run = 0
+        for char in letters_only:
+            if char not in vowels:
+                consonant_run += 1
+                if consonant_run >= 4:
+                    return True  # BRNNN, STRNG, etc.
+            else:
+                consonant_run = 0
+
+        return False
