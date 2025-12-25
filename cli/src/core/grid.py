@@ -10,11 +10,19 @@ Uses NumPy for efficient grid operations and enforces standard crossword rules:
 
 import numpy as np
 from typing import Dict, Set, Tuple, List, Optional
+from .cell_types import (
+    EMPTY_CELL as EMPTY_STR,  # '.'
+    BLACK_CELL as BLACK_STR,  # '#'
+    WILDCARD,  # '?'
+    is_empty,
+    is_black,
+    is_letter,
+    grid_to_pattern,
+)
 
-
-# Cell encoding constants
-BLACK_SQUARE = -1
-EMPTY_CELL = 0
+# Cell encoding constants for NumPy array
+BLACK_SQUARE = -1  # Internal encoding for black squares
+EMPTY_CELL = 0     # Internal encoding for empty cells
 
 
 class Grid:
@@ -104,9 +112,9 @@ class Grid:
         value = self.cells[row, col]
 
         if value == BLACK_SQUARE:
-            return '#'
+            return BLACK_STR  # '#'
         elif value == EMPTY_CELL:
-            return '.'
+            return EMPTY_STR  # '.'
         else:
             # Decode: 1=A, 2=B, ..., 26=Z
             return chr(value - 1 + ord('A'))
@@ -346,11 +354,11 @@ class Grid:
             else:  # down
                 cell = self.get_cell(row + i, col)
 
-            if cell == '.':
-                pattern.append('?')
-            elif cell == '#':
+            if is_empty(cell):
+                pattern.append(WILDCARD)  # '.' -> '?'
+            elif is_black(cell):
                 # Shouldn't happen in a valid slot
-                pattern.append('?')
+                pattern.append(WILDCARD)
             else:
                 # Letter
                 pattern.append(cell)
@@ -371,6 +379,14 @@ class Grid:
             ValueError: If word doesn't fit in grid or direction is invalid
         """
         word = word.upper()
+
+        # CRITICAL: Ensure word contains only letters (no wildcards or empty markers)
+        if WILDCARD in word:
+            raise ValueError(f"Cannot place wildcard '{WILDCARD}' in grid. Word: {word}")
+        if EMPTY_STR in word:
+            raise ValueError(f"Cannot place empty marker '{EMPTY_STR}' in grid. Word: {word}")
+        if not all(c.isalpha() for c in word):
+            raise ValueError(f"Word must contain only letters A-Z. Got: {word}")
 
         # Validate direction
         if direction not in ('across', 'down'):

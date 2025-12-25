@@ -8,10 +8,14 @@ and avoid local optima that plague single-path backtracking approaches.
 from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass, field
 import time
+import logging
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
 from .crosswordese import filter_crosswordese
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,6 +38,8 @@ class BeamState:
     score: float                                        # Quality score (0.0-100.0)
     used_words: Set[str] = field(default_factory=set)  # Words placed (prevent duplicates)
     slot_assignments: Dict[Tuple[int, int, str], str] = field(default_factory=dict)  # slot → word
+    domains: Dict[Tuple[int, int, str], List[str]] = field(default_factory=dict)  # slot → candidate words
+    domain_reductions: Dict[Tuple[int, int, str], List] = field(default_factory=dict)  # slot → MAC reductions
 
     def completion_rate(self) -> float:
         """Return fraction of slots filled (0.0-1.0)"""
@@ -54,7 +60,9 @@ class BeamState:
             total_slots=self.total_slots,
             score=self.score,
             used_words=self.used_words.copy(),  # CRITICAL: copy set
-            slot_assignments=self.slot_assignments.copy()
+            slot_assignments=self.slot_assignments.copy(),
+            domains={k: v.copy() if isinstance(v, list) else v for k, v in self.domains.items()},
+            domain_reductions=self.domain_reductions.copy()
         )
 
     def __eq__(self, other: 'BeamState') -> bool:
@@ -234,8 +242,8 @@ class BeamSearchAutofill:
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
         # DEBUG: Note that we're using DYNAMIC MRV, not static ordering
-        print("\nDEBUG: Using DYNAMIC MRV variable ordering (will interleave directions naturally)")
-        print(f"Total slots to fill: {total_slots}")
+        logger.debug("\nDEBUG: Using DYNAMIC MRV variable ordering (will interleave directions naturally)")
+        logger.debug(f"Total slots to fill: {total_slots}")
 
         # Main beam search loop with DYNAMIC MRV
         # Track which slots have been filled
@@ -262,7 +270,7 @@ class BeamSearchAutofill:
             slot = self._select_next_slot_dynamic_mrv(unfilled_slots, beam[0])
 
             if slot is None:
-                print(f"\nDEBUG: No slot selected by MRV at iteration {slot_idx}")
+                logger.debug(f"\nDEBUG: No slot selected by MRV at iteration {slot_idx}")
                 break
 
             # Mark slot as being filled
@@ -271,7 +279,7 @@ class BeamSearchAutofill:
 
             # DEBUG: Print what MRV selected (shows direction interleaving)
             if slot_idx <= 10:  # Show first 10 to see interleaving pattern
-                print(f"\nDEBUG MRV: Slot {slot_idx}/{total_slots}: {slot['direction'].upper():6s} length={slot['length']:2d} at ({slot['row']:2d},{slot['col']:2d})")
+                logger.debug(f"\nDEBUG MRV: Slot {slot_idx}/{total_slots}: {slot['direction'].upper():6s} length={slot['length']:2d} at ({slot['row']:2d},{slot['col']:2d})")
 
             # Report progress
             if self.progress_reporter:
@@ -286,19 +294,19 @@ class BeamSearchAutofill:
 
             # BACKTRACKING: If expansion fails, try with more candidates
             if not expanded_beam and slot_idx > 0:
-                print(f"\nDEBUG: Beam expansion failed at slot {slot_idx+1}. Trying backtracking...")
+                logger.debug(f"\nDEBUG: Beam expansion failed at slot {slot_idx+1}. Trying backtracking...")
 
                 # Try expanding with 2x more candidates
                 expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 2)
 
                 # If still failing, try 5x more candidates
                 if not expanded_beam:
-                    print(f"  Retry with 5x candidates...")
+                    logger.debug(f"  Retry with 5x candidates...")
                     expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 5)
 
                 # If still failing, try with NO score filter (min_score=0 temporarily)
                 if not expanded_beam:
-                    print(f"  Retry with min_score=0...")
+                    logger.debug(f"  Retry with min_score=0...")
                     old_min_score = self.min_score
                     self.min_score = 0
                     expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 10)
@@ -306,7 +314,7 @@ class BeamSearchAutofill:
 
             # Final fallback: exit if truly no options
             if not expanded_beam:
-                print(f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early.")
+                logger.debug(f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early.")
                 break
 
             # PHASE 4: Apply Smart Adaptive Beam Width + Diverse Beam Search
@@ -345,7 +353,7 @@ class BeamSearchAutofill:
             # So this check should now be correct
             complete_states = [s for s in beam if s.slots_filled == total_slots]
             if complete_states:
-                print(f"\nDEBUG: Found complete solution at slot {slot_idx+1}!")
+                logger.debug(f"\nDEBUG: Found complete solution at slot {slot_idx+1}!")
                 best_complete = max(complete_states, key=lambda s: s.score)
                 time_elapsed = time.time() - self.start_time
 
@@ -736,8 +744,8 @@ class BeamSearchAutofill:
         if len(current_state.slot_assignments) <= 10:
             directions = [c['direction'] for c in candidates[:5]]
             domain_sizes = [c['domain_size'] for c in candidates[:5]]
-            print(f"  MRV top 5: {list(zip(directions, domain_sizes))}")
-            print(f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})")
+            logger.debug(f"  MRV top 5: {list(zip(directions, domain_sizes))}")
+            logger.debug(f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})")
 
         return selected['slot']
 
@@ -1110,8 +1118,8 @@ class BeamSearchAutofill:
 
         # Debug output
         if len(result) > 0:
-            print(f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates")
-            print(f"    Groups={num_groups}, Lambda={diversity_lambda}")
+            logger.debug(f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates")
+            logger.debug(f"    Groups={num_groups}, Lambda={diversity_lambda}")
 
         return result[:self.beam_width]
 
@@ -1229,8 +1237,8 @@ class BeamSearchAutofill:
 
         # DEBUG: Show diversity effect
         if result:
-            print(f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups")
-            print(f"    Diversity lambda={diversity_lambda} applied to prevent collapse")
+            logger.debug(f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups")
+            logger.debug(f"    Diversity lambda={diversity_lambda} applied to prevent collapse")
 
         return result[:self.beam_width]  # Maintain constant beam width
 
@@ -1466,9 +1474,9 @@ class BeamSearchAutofill:
 
             # Debug output for LCV impact
             if hasattr(self, 'debug_lcv') and self.debug_lcv and beam_idx == 0:
-                print(f"DEBUG LCV: Top 5 candidates after LCV+shuffle for slot at ({slot['row']},{slot['col']}):")
+                logger.debug(f"DEBUG LCV: Top 5 candidates after LCV+shuffle for slot at ({slot['row']},{slot['col']}):")
                 for word, score in all_candidates[:5]:
-                    print(f"  {word}: score={score}")
+                    logger.debug(f"  {word}: score={score}")
 
             # (Verbose debug output removed)
 
@@ -1524,9 +1532,8 @@ class BeamSearchAutofill:
                 new_state.score = self._compute_score(new_state, word_score)
 
                 # PHASE 4: MAC Propagation for early conflict detection
-                # Initialize domains if not already present
-                if not hasattr(new_state, 'domains'):
-                    new_state.domains = {}
+                # Initialize domains if needed
+                if not new_state.domains:
                     # Initialize domains for all unfilled slots
                     for s in self.grid.get_word_slots():
                         s_id = (s['row'], s['col'], s['direction'])
@@ -1546,12 +1553,10 @@ class BeamSearchAutofill:
                     # MAC detected conflict - skip this candidate
                     total_skipped_viability += 1
                     if hasattr(self, 'debug_mac') and self.debug_mac:
-                        print(f"DEBUG MAC: Pruned {word} due to domain wipeout in {conflicts}")
+                        logger.debug(f"DEBUG MAC: Pruned {word} due to domain wipeout in {conflicts}")
                     continue
 
                 # Track reductions for potential backtracking
-                if not hasattr(new_state, 'domain_reductions'):
-                    new_state.domain_reductions = {}
                 new_state.domain_reductions[slot_id] = reduced
 
                 # Check viability with PREDICTIVE RISK ASSESSMENT
@@ -1568,10 +1573,10 @@ class BeamSearchAutofill:
 
         # DEBUG: Show why expansion might have failed
         if not expanded:
-            print(f"\nDEBUG: Expansion failed!")
-            print(f"  Skipped (duplicate): {total_skipped_duplicate}")
-            print(f"  Skipped (viability): {total_skipped_viability}")
-            print(f"  Added: {total_added}")
+            logger.debug(f"\nDEBUG: Expansion failed!")
+            logger.debug(f"  Skipped (duplicate): {total_skipped_duplicate}")
+            logger.debug(f"  Skipped (viability): {total_skipped_viability}")
+            logger.debug(f"  Added: {total_added}")
 
         return expanded
 
@@ -1783,7 +1788,7 @@ class BeamSearchAutofill:
             state._debug_viability_count = 0
 
         if state._debug_viability_count < 2:
-            print(f"\nDEBUG VIABILITY: Checking {len(slots_to_check)} intersecting slots")
+            logger.debug(f"\nDEBUG VIABILITY: Checking {len(slots_to_check)} intersecting slots")
 
         # Check each slot and assess risk
         for slot in slots_to_check:
@@ -1810,9 +1815,9 @@ class BeamSearchAutofill:
             if count == 0:
                 # Dead end - not viable
                 if state._debug_viability_count < 2:
-                    print(f"  DEAD END: slot at ({slot['row']},{slot['col']}) {slot['direction']} length={slot['length']}")
-                    print(f"    Pattern: '{pattern}'")
-                    print(f"    Total candidates: {len(candidates)}, Available (not used): 0")
+                    logger.debug(f"  DEAD END: slot at ({slot['row']},{slot['col']}) {slot['direction']} length={slot['length']}")
+                    logger.debug(f"    Pattern: '{pattern}'")
+                    logger.debug(f"    Total candidates: {len(candidates)}, Available (not used): 0")
                 return (False, 0.0)
             elif count <= 2:
                 # Severe risk: Very few options
@@ -1829,9 +1834,9 @@ class BeamSearchAutofill:
 
         if state._debug_viability_count < 2:
             if risky_slots > 0:
-                print(f"  ✓ Viable, but {risky_slots} risky slots (penalty: {total_penalty:.2f}×)")
+                logger.debug(f"  ✓ Viable, but {risky_slots} risky slots (penalty: {total_penalty:.2f}×)")
             else:
-                print(f"  ✓ All {len(slots_to_check)} intersecting slots have good options!")
+                logger.debug(f"  ✓ All {len(slots_to_check)} intersecting slots have good options!")
 
         return (True, total_penalty)
 

@@ -51,12 +51,12 @@ def is_slam_dunk_gibberish(word: str) -> bool:
     if len(word) >= 4 and len(set(word)) == 1:
         return True  # AAAA, NNNN, etc.
 
-    # Rule 2: No vowels in word >= 5 letters (excluding Y as vowel)
-    # Increased threshold from 4 to 5 to keep common 4-letter abbreviations
-    if len(word) >= 5:
+    # Rule 2: No vowels in word >= 6 letters (excluding Y as vowel)
+    # Threshold set to 6 to keep 5-letter onomatopoeia (SHHHH, BRRRR) and abbreviations
+    if len(word) >= 6:
         vowels = set('AEIOUY')
         if not any(c in vowels for c in word):
-            return True  # BRNNN, LGBTQ, etc.
+            return True  # BRNNGSNSTN, THNKSFRTHMMRS (compressed phrases), etc.
 
     # Rule 3: Alternating repeated pattern (ABABAB, but only if 6+ chars)
     if len(word) >= 6:
@@ -112,7 +112,7 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
             # Categorize by reason (matching the 3 rules in is_slam_dunk_gibberish)
             if len(set(word)) == 1:
                 removed['all_same_letter'].append(word)
-            elif len(word) >= 5 and not any(c in 'AEIOUY' for c in word):
+            elif len(word) >= 6 and not any(c in 'AEIOUY' for c in word):
                 removed['no_vowels'].append(word)
             elif len(word) >= 6 and all(word[i] == word[i % 2] for i in range(len(word))) and len(set(word)) <= 2:
                 removed['alternating_pattern'].append(word)
