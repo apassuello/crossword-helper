@@ -51,8 +51,22 @@ def health_check():
 def pattern_search():
     """POST /api/pattern - Pattern search endpoint (Phase 3: uses CLI)."""
     try:
+        # Check Content-Type
+        if not request.is_json:
+            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+
+        # Parse JSON with error handling
+        try:
+            data = request.get_json()
+        except Exception as e:
+            return handle_error("INVALID_JSON", f"Failed to parse JSON: {str(e)}", 400)
+
+        # Check for empty body
+        if data is None:
+            return handle_error("EMPTY_BODY", "Request body cannot be empty", 400)
+
         # Validate request
-        data = validate_pattern_request(request.json)
+        data = validate_pattern_request(data)
 
         # Resolve wordlist paths
         wordlist_paths = []
@@ -100,8 +114,22 @@ def pattern_search():
 def number_grid():
     """POST /api/number - Grid numbering validation endpoint (Phase 3: uses CLI)."""
     try:
+        # Check Content-Type
+        if not request.is_json:
+            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+
+        # Parse JSON with error handling
+        try:
+            data = request.get_json()
+        except Exception as e:
+            return handle_error("INVALID_JSON", f"Failed to parse JSON: {str(e)}", 400)
+
+        # Check for empty body
+        if data is None:
+            return handle_error("EMPTY_BODY", "Request body cannot be empty", 400)
+
         # Validate request
-        data = validate_grid_request(request.json)
+        data = validate_grid_request(data)
 
         # Check if grid size is non-standard
         grid_size = data.get("size", len(data.get("grid", [])))
@@ -129,8 +157,22 @@ def number_grid():
 def normalize_entry():
     """POST /api/normalize - Convention normalization endpoint (Phase 3: uses CLI)."""
     try:
+        # Check Content-Type
+        if not request.is_json:
+            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+
+        # Parse JSON with error handling
+        try:
+            data = request.get_json()
+        except Exception as e:
+            return handle_error("INVALID_JSON", f"Failed to parse JSON: {str(e)}", 400)
+
+        # Check for empty body
+        if data is None:
+            return handle_error("EMPTY_BODY", "Request body cannot be empty", 400)
+
         # Validate request
-        data = validate_normalize_request(request.json)
+        data = validate_normalize_request(data)
 
         # Delegate to CLI via adapter (with caching for performance)
         result = cli_adapter.normalize(data["text"])
@@ -150,8 +192,22 @@ def normalize_entry():
 def fill_grid():
     """POST /api/fill - Autofill crossword grid endpoint (Phase 3.3: uses CLI)."""
     try:
+        # Check Content-Type
+        if not request.is_json:
+            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+
+        # Parse JSON with error handling
+        try:
+            data = request.get_json()
+        except Exception as e:
+            return handle_error("INVALID_JSON", f"Failed to parse JSON: {str(e)}", 400)
+
+        # Check for empty body
+        if data is None:
+            return handle_error("EMPTY_BODY", "Request body cannot be empty", 400)
+
         # Validate request
-        data = validate_fill_request(request.json)
+        data = validate_fill_request(data)
 
         # Resolve wordlist paths
         wordlist_paths = []
@@ -222,7 +278,6 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
         cli_path = cli_adapter.cli_path
         cmd = [str(cli_path)] + cmd_args
 
-        print(f"[DEBUG] Running command: {' '.join(cmd)}", file=sys.stderr, flush=True)
         send_progress(task_id, 5, 'Starting CLI process...', 'running')
 
         # Start process with stderr capture
@@ -235,7 +290,6 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
             bufsize=1,  # Line buffered
         )
 
-        print(f"[DEBUG] Process started with PID {process.pid}", file=sys.stderr, flush=True)
         send_progress(task_id, 10, 'CLI process running...', 'running')
 
         # Read stderr in real-time for progress updates
@@ -244,13 +298,10 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
             if not line:
                 break
 
-            print(f"[DEBUG] Stderr line: {line.strip()}", file=sys.stderr, flush=True)
-
             # Parse progress JSON from stderr
             try:
                 progress_data = json.loads(line.strip())
                 if progress_data.get('type') == 'progress':
-                    print(f"[DEBUG] Progress event: {progress_data.get('message', '')}", file=sys.stderr, flush=True)
                     send_progress(
                         task_id,
                         progress_data.get('progress', 0),
@@ -260,23 +311,18 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
                     )
             except json.JSONDecodeError:
                 # Not a progress update, ignore
-                print(f"[DEBUG] Not JSON: {line.strip()}", file=sys.stderr, flush=True)
+                pass
 
         # Wait for completion
         stdout, stderr = process.communicate(timeout=timeout)
-
-        print(f"[DEBUG] Process completed. Return code: {process.returncode}", file=sys.stderr, flush=True)
-        print(f"[DEBUG] Stdout length: {len(stdout)}, Stderr length: {len(stderr)}", file=sys.stderr, flush=True)
 
         if process.returncode == 0:
             # Parse filled grid from stdout JSON
             try:
                 result_data = json.loads(stdout.strip())
-                print(f"[DEBUG] Parsed result: grid size = {len(result_data.get('grid', []))}", file=sys.stderr, flush=True)
                 # Send completion with grid data
                 send_progress(task_id, 100, 'Complete', 'complete', result_data)
             except (json.JSONDecodeError, Exception) as e:
-                print(f"[DEBUG] Failed to parse stdout as JSON: {e}", file=sys.stderr, flush=True)
                 send_progress(task_id, 100, 'Complete', 'complete')
         else:
             send_progress(task_id, 0, f'Error: {stderr[:200]}', 'error')
@@ -284,7 +330,6 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
     except subprocess.TimeoutExpired:
         send_progress(task_id, 0, 'Operation timed out', 'error')
     except Exception as e:
-        print(f"[DEBUG] Exception: {e}", file=sys.stderr, flush=True)
         import traceback
         traceback.print_exc()
         send_progress(task_id, 0, f'Error: {str(e)}', 'error')
@@ -385,6 +430,13 @@ def fill_with_progress():
             json.dump(grid_data, f)
             grid_file = f.name
 
+        # Save theme entries to temp file if provided (Phase 3.2)
+        theme_entries_file = None
+        if "theme_entries" in data and data["theme_entries"]:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+                json.dump(data["theme_entries"], f)
+                theme_entries_file = f.name
+
         # Build CLI command
         cmd_args = [
             "fill",
@@ -398,6 +450,10 @@ def fill_with_progress():
 
         for wp in wordlist_paths:
             cmd_args.extend(["--wordlists", wp])
+
+        # Add theme entries flag if provided
+        if theme_entries_file:
+            cmd_args.extend(["--theme-entries", theme_entries_file])
 
         # Start background task
         thread = threading.Thread(

@@ -54,6 +54,72 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
     return emptySlots;
   };
 
+  const getThemeEntries = () => {
+    if (!grid) return {};
+
+    const themeEntries = {};
+
+    // Helper to extract word from grid
+    const extractWord = (row, col, direction) => {
+      let word = '';
+      if (direction === 'across') {
+        let c = col;
+        while (c < grid[row].length && !grid[row][c].isBlack) {
+          word += grid[row][c].letter || '.';
+          c++;
+        }
+      } else {
+        let r = row;
+        while (r < grid.length && !grid[r][col].isBlack) {
+          word += grid[r][col].letter || '.';
+          r++;
+        }
+      }
+      return word;
+    };
+
+    // Find all theme-locked words
+    const processedSlots = new Set();
+
+    for (let row = 0; row < grid.length; row++) {
+      for (let col = 0; col < grid[row].length; col++) {
+        const cell = grid[row][col];
+
+        if (cell.isThemeLocked && !cell.isBlack && cell.letter) {
+          // Check if this is the start of an across word
+          const isStartAcross = col === 0 || grid[row][col - 1].isBlack;
+          if (isStartAcross) {
+            const slotKey = `${row},${col},across`;
+            if (!processedSlots.has(slotKey)) {
+              const word = extractWord(row, col, 'across');
+              // Only add if word is complete (no dots) and length > 1
+              if (!word.includes('.') && word.length > 1) {
+                themeEntries[`(${slotKey})`] = word;
+                processedSlots.add(slotKey);
+              }
+            }
+          }
+
+          // Check if this is the start of a down word
+          const isStartDown = row === 0 || grid[row - 1][col].isBlack;
+          if (isStartDown) {
+            const slotKey = `${row},${col},down`;
+            if (!processedSlots.has(slotKey)) {
+              const word = extractWord(row, col, 'down');
+              // Only add if word is complete (no dots) and length > 1
+              if (!word.includes('.') && word.length > 1) {
+                themeEntries[`(${slotKey})`] = word;
+                processedSlots.add(slotKey);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return themeEntries;
+  };
+
   return (
     <div className="autofill-panel">
       <h2>Autofill Grid</h2>
@@ -66,6 +132,14 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
         <div className="empty-slots">
           Empty slots to fill: <strong>{getEmptySlots()}</strong>
         </div>
+        {Object.keys(getThemeEntries()).length > 0 && (
+          <div className="theme-entries" style={{marginTop: '0.5rem', color: '#7b1fa2', fontWeight: '500'}}>
+            Theme entries locked: <strong>{Object.keys(getThemeEntries()).length}</strong>
+            <small style={{display: 'block', fontSize: '0.85rem', fontWeight: 'normal', color: '#666', marginTop: '0.25rem'}}>
+              Right-click cells to lock/unlock theme words
+            </small>
+          </div>
+        )}
       </div>
 
       <div className="autofill-options">
@@ -231,7 +305,7 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
       {!progress && (
         <button
           className="autofill-btn"
-          onClick={() => onStartAutofill(options)}
+          onClick={() => onStartAutofill({...options, theme_entries: getThemeEntries()})}
           disabled={getEmptySlots() === 0}
         >
           Start Autofill

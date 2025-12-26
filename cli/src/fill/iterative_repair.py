@@ -96,7 +96,8 @@ class IterativeRepair:
         pattern_matcher: PatternMatcher,
         min_score: int = 0,
         max_iterations: int = 1000,
-        progress_reporter=None
+        progress_reporter=None,
+        theme_entries=None
     ):
         """
         Initialize iterative repair solver.
@@ -108,6 +109,7 @@ class IterativeRepair:
             min_score: Minimum word quality score (default: 0)
             max_iterations: Maximum repair iterations (default: 1000)
             progress_reporter: Optional progress reporting
+            theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -119,6 +121,7 @@ class IterativeRepair:
         self.grid = grid
         self.word_list = word_list
         self.pattern_matcher = pattern_matcher
+        self.theme_entries = theme_entries
         self.min_score = min_score
         self.max_iterations = max_iterations
         self.progress_reporter = progress_reporter

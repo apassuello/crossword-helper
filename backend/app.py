@@ -32,8 +32,13 @@ def create_app(testing=False):
     app.config['TESTING'] = testing
     app.config['JSON_SORT_KEYS'] = False  # Preserve key order in JSON responses
 
-    # CORS (allow localhost)
-    CORS(app, origins=['http://localhost:5000', 'http://127.0.0.1:5000'])
+    # CORS (allow localhost for both Flask server and React dev server)
+    CORS(app, origins=[
+        'http://localhost:5000',      # Flask server
+        'http://127.0.0.1:5000',
+        'http://localhost:3000',      # React dev server
+        'http://127.0.0.1:3000'
+    ])
 
     # Register API blueprints
     app.register_blueprint(api, url_prefix='/api')

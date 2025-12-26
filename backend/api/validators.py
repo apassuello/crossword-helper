@@ -199,4 +199,26 @@ def validate_fill_request(data: dict) -> dict:
         if not 0 <= data['min_score'] <= 100:
             raise ValueError("Field 'min_score' must be between 0 and 100")
 
+    # Validate theme_entries (Phase 3.2)
+    if 'theme_entries' in data:
+        if not isinstance(data['theme_entries'], dict):
+            raise ValueError("Field 'theme_entries' must be object")
+
+        # Validate each theme entry
+        for key, word in data['theme_entries'].items():
+            if not isinstance(key, str):
+                raise ValueError("Theme entry keys must be strings in format '(row,col,direction)'")
+            if not isinstance(word, str):
+                raise ValueError("Theme entry values must be strings (words)")
+
+            # Validate key format: "(row,col,direction)"
+            if not key.startswith('(') or not key.endswith(')'):
+                raise ValueError(f"Theme entry key '{key}' must be in format '(row,col,direction)'")
+
+            # Basic validation - just check it has 3 comma-separated parts
+            key_content = key.strip('()')
+            parts = key_content.split(',')
+            if len(parts) != 3:
+                raise ValueError(f"Theme entry key '{key}' must have format '(row,col,direction)'")
+
     return data

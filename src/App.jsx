@@ -4,6 +4,7 @@ import PatternMatcher from './components/PatternMatcher';
 import ToolPanel from './components/ToolPanel';
 import AutofillPanel from './components/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
+import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
 import './styles/App.scss';
 
@@ -14,7 +15,7 @@ function App() {
   const [numbering, setNumbering] = useState({});
   const [validationErrors, setValidationErrors] = useState([]);
   const [autofillProgress, setAutofillProgress] = useState(null);
-  const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, export, wordlists
+  const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
 
   // Initialize empty grid
   useEffect(() => {
@@ -28,7 +29,8 @@ function App() {
         isBlack: false,
         number: null,
         isError: false,
-        isHighlighted: false
+        isHighlighted: false,
+        isThemeLocked: false  // Phase 3: Theme entry locking
       }))
     );
     setGrid(newGrid);
@@ -97,6 +99,22 @@ function App() {
     validateGrid(newGrid);
   }, [grid, gridSize]);
 
+  const toggleThemeLock = useCallback((row, col) => {
+    if (!grid || grid[row][col].isBlack) return;
+
+    // Create deep copy with new objects
+    const newGrid = grid.map((gridRow, r) =>
+      gridRow.map((cell, c) => {
+        if (r === row && c === col) {
+          return { ...cell, isThemeLocked: !cell.isThemeLocked };
+        }
+        return { ...cell };
+      })
+    );
+
+    setGrid(newGrid);
+  }, [grid]);
+
   const setLetter = useCallback((row, col, letter) => {
     if (!grid || grid[row][col].isBlack) return;
 
@@ -156,7 +174,8 @@ function App() {
           wordlists: options.wordlists || ['comprehensive'],
           timeout: options.timeout || 300,
           min_score: options.minScore || 30,
-          algorithm: options.algorithm || 'regex'
+          algorithm: options.algorithm || 'regex',
+          theme_entries: options.theme_entries || {}
         })
       });
 
@@ -176,14 +195,18 @@ function App() {
 
           // Apply incremental grid updates if present
           if (data.data && data.data.grid && data.status === 'running') {
-            const newGrid = [...grid.map(row => [...row])];
-            data.data.grid.forEach((row, r) => {
-              row.forEach((cell, c) => {
-                if (cell !== '#' && cell !== '.') {
-                  newGrid[r][c].letter = cell;
+            // Create deep copy with new objects (not shallow copy)
+            const newGrid = grid.map((row, r) =>
+              row.map((cell, c) => {
+                const cliCell = data.data.grid[r][c];
+                if (cliCell === '#') {
+                  return { ...cell, isBlack: true };
+                } else if (cliCell !== '#' && cliCell !== '.' && cliCell !== '') {
+                  return { ...cell, letter: cliCell };
                 }
-              });
-            });
+                return { ...cell };
+              })
+            );
             setGrid(newGrid);
           }
 
@@ -193,15 +216,18 @@ function App() {
 
             // Check if result grid is included in the event
             if (data.data && data.data.grid) {
-              // Update grid with filled results (full or partial)
-              const newGrid = [...grid.map(row => [...row])];
-              data.data.grid.forEach((row, r) => {
-                row.forEach((cell, c) => {
-                  if (cell !== '#' && cell !== '.') {
-                    newGrid[r][c].letter = cell;
+              // Update grid with filled results (full or partial) - create deep copy with new objects
+              const newGrid = grid.map((row, r) =>
+                row.map((cell, c) => {
+                  const cliCell = data.data.grid[r][c];
+                  if (cliCell === '#') {
+                    return { ...cell, isBlack: true };
+                  } else if (cliCell !== '#' && cliCell !== '.' && cliCell !== '') {
+                    return { ...cell, letter: cliCell };
                   }
-                });
-              });
+                  return { ...cell };
+                })
+              );
               setGrid(newGrid);
 
               // Show appropriate message based on success
@@ -250,6 +276,39 @@ function App() {
     }
   }, [grid, gridSize]);
 
+  const handleGridImport = useCallback((importedData) => {
+    const { grid: importedGrid, size, numbering: importedNumbering } = importedData;
+
+    // Update grid size if different
+    if (size !== gridSize) {
+      setGridSize(size);
+    }
+
+    // Update grid state
+    setGrid(importedGrid);
+
+    // Update numbering (or recalculate if not provided)
+    if (importedNumbering && Object.keys(importedNumbering).length > 0) {
+      setNumbering(importedNumbering);
+      // Apply numbering to grid cells
+      Object.entries(importedNumbering).forEach(([coords, number]) => {
+        const [row, col] = coords.split(',').map(Number);
+        if (importedGrid[row] && importedGrid[row][col]) {
+          importedGrid[row][col].number = number;
+        }
+      });
+    } else {
+      // Recalculate numbering if not provided
+      updateNumbering(importedGrid);
+    }
+
+    // Validate the imported grid
+    validateGrid(importedGrid);
+
+    // Switch to edit tool to show the imported grid
+    setCurrentTool('edit');
+  }, [gridSize, updateNumbering, validateGrid]);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -277,6 +336,12 @@ function App() {
             Autofill
           </button>
           <button
+            className={`tool-btn ${currentTool === 'import' ? 'active' : ''}`}
+            onClick={() => setCurrentTool('import')}
+          >
+            Import
+          </button>
+          <button
             className={`tool-btn ${currentTool === 'export' ? 'active' : ''}`}
             onClick={() => setCurrentTool('export')}
           >
@@ -300,6 +365,7 @@ function App() {
             onSelectCell={setSelectedCell}
             onToggleBlack={toggleBlackSquare}
             onSetLetter={setLetter}
+            onToggleThemeLock={toggleThemeLock}
             validationErrors={validationErrors}
             numbering={numbering}
           />
@@ -328,6 +394,13 @@ function App() {
               onStartAutofill={handleAutofill}
               progress={autofillProgress}
               grid={grid}
+            />
+          )}
+
+          {currentTool === 'import' && (
+            <ImportPanel
+              onImport={handleGridImport}
+              currentGridSize={gridSize}
             />
           )}
 

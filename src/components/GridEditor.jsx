@@ -12,6 +12,7 @@ function GridEditor({
   onSelectCell,
   onToggleBlack,
   onSetLetter,
+  onToggleThemeLock,
   validationErrors,
   numbering
 }) {
@@ -42,10 +43,26 @@ function GridEditor({
     }
   };
 
+  const handleCellRightClick = (row, col, e) => {
+    e.preventDefault();  // Prevent context menu
+    if (onToggleThemeLock) {
+      onToggleThemeLock(row, col);
+    }
+  };
+
   const handleKeyDown = (e) => {
     if (!focusedCell) return;
 
     const { row, col } = focusedCell;
+
+    // Ctrl/Cmd+L to toggle theme lock
+    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+      e.preventDefault();
+      if (onToggleThemeLock) {
+        onToggleThemeLock(row, col);
+      }
+      return;
+    }
 
     if (e.key === 'ArrowUp' && row > 0) {
       setFocusedCell({ row: row - 1, col });
@@ -184,19 +201,22 @@ function GridEditor({
                     height={CELL_SIZE}
                     fill={
                       cell.isBlack ? '#333' :
+                      cell.isThemeLocked ? '#e1bee7' :  // Light purple for theme-locked cells
                       isFocused ? '#ffd700' :
                       isHighlighted ? '#e3f2fd' :
                       isHovered ? '#f5f5f5' :
                       'white'
                     }
                     stroke={
+                      cell.isThemeLocked ? '#9c27b0' :  // Purple border for theme-locked
                       cell.isError ? '#f44336' :
                       isFocused ? '#ffa500' :
                       '#ddd'
                     }
-                    strokeWidth={isFocused ? 2 : 1}
+                    strokeWidth={cell.isThemeLocked || isFocused ? 2 : 1}
                     className="grid-cell"
                     onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
+                    onContextMenu={(e) => handleCellRightClick(rowIdx, colIdx, e)}
                     onMouseEnter={() => setHoveredCell({ row: rowIdx, col: colIdx })}
                     style={{ cursor: 'pointer' }}
                   />
@@ -229,6 +249,16 @@ function GridEditor({
                     >
                       {cell.letter}
                     </text>
+                  )}
+
+                  {/* Theme lock icon */}
+                  {cell.isThemeLocked && !cell.isBlack && (
+                    <g transform={`translate(${x + CELL_SIZE - 12}, ${y + CELL_SIZE - 12})`} pointerEvents="none">
+                      {/* Lock icon (simplified) */}
+                      <circle cx="5" cy="6" r="3.5" fill="none" stroke="#7b1fa2" strokeWidth="1.2"/>
+                      <rect x="2" y="6" width="6" height="5" rx="1" fill="#7b1fa2"/>
+                      <circle cx="5" cy="8" r="0.8" fill="white"/>
+                    </g>
                   )}
                 </g>
               );

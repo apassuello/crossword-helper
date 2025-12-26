@@ -165,6 +165,11 @@ def validate(grid_file: str):
     default=1,
     help="Number of randomized restart attempts (Phase 3.2)",
 )
+@click.option(
+    "--theme-entries",
+    type=click.Path(exists=True),
+    help="JSON file with theme entries to preserve during fill (format: {\"(row,col,direction)\": \"WORD\"})",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -176,6 +181,7 @@ def fill(
     allow_nonstandard: bool,
     json_output: bool,
     attempts: int,
+    theme_entries: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -210,6 +216,31 @@ def fill(
     if not json_output:
         click.echo(f"  Loaded {len(word_list)} words")
 
+    # Load theme entries if provided
+    theme_entries_dict = None
+    if theme_entries:
+        progress.update(25, f'Loading theme entries from {theme_entries}')
+        if not json_output:
+            click.echo(f"Loading theme entries from {theme_entries}...")
+
+        with open(theme_entries, "r") as f:
+            theme_data = json.load(f)
+
+        # Convert JSON format {"(row,col,direction)": "WORD"} to Python format {(row, col, direction): "WORD"}
+        theme_entries_dict = {}
+        for key_str, word in theme_data.items():
+            # Parse key like "(0,1,across)" or "(0, 1, across)"
+            key_str = key_str.strip("()")
+            parts = [p.strip().strip("'\"") for p in key_str.split(",")]
+            if len(parts) == 3:
+                row, col, direction = int(parts[0]), int(parts[1]), parts[2]
+                theme_entries_dict[(row, col, direction)] = word.upper()
+
+        if not json_output:
+            click.echo(f"  Loaded {len(theme_entries_dict)} theme entries")
+            for (row, col, direction), word in theme_entries_dict.items():
+                click.echo(f"    • {direction.capitalize()} at ({row},{col}): {word}")
+
     # Create pattern matcher based on algorithm
     from .fill.pattern_matcher import PatternMatcher
     from .fill.trie_pattern_matcher import TriePatternMatcher
@@ -238,20 +269,29 @@ def fill(
     if algorithm == 'beam':
         autofill = BeamSearchAutofill(
             grid, word_list, pattern_matcher,
-            beam_width=beam_width, min_score=min_score, progress_reporter=progress
+            beam_width=beam_width, min_score=min_score, progress_reporter=progress,
+            theme_entries=theme_entries_dict
         )
     elif algorithm == 'repair':
         autofill = IterativeRepair(
             grid, word_list, pattern_matcher,
-            min_score=min_score, progress_reporter=progress
+            min_score=min_score, progress_reporter=progress,
+            theme_entries=theme_entries_dict
         )
     elif algorithm == 'hybrid':
         autofill = HybridAutofill(
             grid, word_list, pattern_matcher,
-            beam_width=beam_width, min_score=min_score, progress_reporter=progress
+            beam_width=beam_width, min_score=min_score, progress_reporter=progress,
+            theme_entries=theme_entries_dict
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'
+        # Note: Classic autofill doesn't support theme entries
+        if theme_entries_dict and not json_output:
+            click.echo(click.style(
+                f"Warning: Theme entries not supported for {algorithm} algorithm. Use beam, repair, or hybrid.",
+                fg="yellow"
+            ))
         autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
 
     # Get empty slots
