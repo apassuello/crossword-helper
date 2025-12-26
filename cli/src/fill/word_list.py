@@ -174,15 +174,16 @@ class WordList:
         - Regular letters: +5 each
         - Uncommon letters: -15 each
         - Length bonus: +2 per letter
-        - Repeated letter penalty: -5 per repetition
+        - Repeated letter penalty: -10 per repetition (Phase 5.1: increased from 5)
+        - Adjacent repeat penalty: -20 per instance (Phase 5.1: NEW - penalizes TT, SS, etc.)
 
-        Final score clamped to 1-100.
+        Final score clamped to 1-150 (Phase 5.1: extended from 1-100).
 
         Args:
             word: Word to score (must be uppercase)
 
         Returns:
-            Score from 1-100
+            Score from 1-150
         """
         score = 0
 
@@ -201,10 +202,16 @@ class WordList:
         # Repeated letter penalty (diverse letters are better)
         unique_letters = len(set(word))
         repetitions = len(word) - unique_letters
-        score -= repetitions * 5
+        score -= repetitions * 10  # Phase 5.1: Increased from 5 to 10
 
-        # Clamp to 1-100
-        score = max(1, min(100, score))
+        # Phase 5.1: NEW - Heavy penalty for adjacent repeated letters
+        # Words like AIRMATTRESS (has TT, SS) are constraining for crossings
+        adjacent_repeats = sum(1 for i in range(len(word) - 1) if word[i] == word[i + 1])
+        score -= adjacent_repeats * 20  # Each double letter: -20 points
+
+        # Phase 5.1: Extended range to 1-150 (was 1-100)
+        # This prevents clamping from removing differentiation
+        score = max(1, min(150, score))
 
         return score
 

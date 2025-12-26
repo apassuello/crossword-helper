@@ -251,6 +251,11 @@ class BeamManager(BeamManagementStrategy):
                     new_state.score *= risk_penalty
                     expanded.append(new_state)
                     total_added += 1
+
+                    # Phase 5.1: Track word usage for pattern diversity
+                    # If value_ordering supports pattern tracking, update bigram counts
+                    if hasattr(self.value_ordering, 'track_word_usage'):
+                        self.value_ordering.track_word_usage(word)
                 else:
                     total_skipped_viability += 1
 

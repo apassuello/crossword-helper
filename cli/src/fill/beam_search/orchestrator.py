@@ -108,11 +108,12 @@ class BeamSearchOrchestrator:
 
         # Value ordering (composite strategy: LCV + threshold-diverse + stratified)
         # Phase 4.5: Added ThresholdDiverseOrdering for exploration-exploitation balance
+        # Phase 5.1: Increased temperature to 0.8 for more exploration
         lcv_ordering = LCVValueOrdering(
             pattern_matcher=self.pattern_matcher,
             min_score_func=self._get_min_score_for_length
         )
-        threshold_ordering = ThresholdDiverseOrdering(threshold=50, temperature=0.4)
+        threshold_ordering = ThresholdDiverseOrdering(threshold=50, temperature=0.8)  # Phase 5.1: Was 0.4
         stratified_ordering = StratifiedValueOrdering(tier_size=5)
         # Phase 4.5: Composite value ordering (LCV + threshold-diverse + stratified)
         self.value_ordering = CompositeValueOrdering([

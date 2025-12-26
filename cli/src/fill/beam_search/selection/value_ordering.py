@@ -111,10 +111,30 @@ class LCVValueOrdering(ValueOrderingStrategy):
             # Higher total_remaining = less constraining = better
             lcv_scored.append((word, quality_score, total_remaining))
 
-        # Sort by LCV (most remaining options first), then by quality
-        lcv_scored.sort(key=lambda x: (-x[2], -x[1]))
+        if not lcv_scored:
+            return []
 
-        return [(word, score) for word, score, _ in lcv_scored]
+        # Phase 5.1: Calculate adjusted scores that preserve LCV information
+        # Instead of just sorting and discarding constraint info, we adjust the scores
+        # so downstream strategies (ThresholdDiverseOrdering) preserve the ordering
+
+        # Find max_remaining to normalize constraint penalties
+        max_remaining = max(r for _, _, r in lcv_scored) if lcv_scored else 1
+
+        adjusted_candidates = []
+        for word, quality_score, total_remaining in lcv_scored:
+            # Calculate how many constraints this word removes (higher = worse)
+            constraints_removed = max_remaining - total_remaining
+
+            # Combine quality with constraint penalty
+            # Weight of 0.7 makes constraint impact significant
+            adjusted_score = quality_score - (0.7 * constraints_removed)
+            adjusted_candidates.append((word, int(adjusted_score)))
+
+        # Sort by adjusted score (quality - constraint penalty)
+        adjusted_candidates.sort(key=lambda x: -x[1])
+
+        return adjusted_candidates
 
     def _get_crossing_slots(self, slot: Dict, grid: Grid) -> List[Dict]:
         """Get all slots that cross the given slot."""
@@ -240,6 +260,20 @@ class CompositeValueOrdering(ValueOrderingStrategy):
             result = strategy.order_values(slot, result, state)
         return result
 
+    def track_word_usage(self, word: str):
+        """
+        Forward word usage tracking to all strategies that support it.
+
+        Phase 5.1: Allows composite strategy to propagate tracking calls
+        to child strategies (e.g., ThresholdDiverseOrdering).
+
+        Args:
+            word: Word that was just placed
+        """
+        for strategy in self.strategies:
+            if hasattr(strategy, 'track_word_usage'):
+                strategy.track_word_usage(word)
+
 
 class QualityValueOrdering(ValueOrderingStrategy):
     """
@@ -299,28 +333,32 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
     - Diverse Beam Search paper (Vijayakumar et al. 2016)
     """
 
-    def __init__(self, threshold: int = 50, temperature: float = 0.3):
+    def __init__(self, threshold: int = 50, temperature: float = 0.8):
         """
         Initialize threshold-diverse ordering.
 
         Args:
             threshold: Minimum quality score to consider (default 50)
             temperature: Randomization factor 0-1 (0=greedy, 1=fully random)
-                        Default 0.3 provides gentle exploration
+                        Default 0.8 provides balanced exploration (Phase 5.1: was 0.3)
         """
         self.threshold = threshold
         self.temperature = temperature
+        # Phase 5.1: Pattern diversity tracking
+        self.recent_bigrams = {}  # Track recently used letter pairs
+        self.bigram_decay = 0.9   # Decay factor per word placed
 
     def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
         """
         Order candidates by threshold + diversity.
 
         Algorithm:
-        1. Filter to candidates above threshold
-        2. If too few, gradually lower threshold (adaptive)
-        3. Sort by quality within threshold group
-        4. Preserve top 20% for exploitation
-        5. Shuffle remaining with temperature for exploration
+        1. Apply bigram diversity penalties (Phase 5.1: NEW)
+        2. Filter to candidates above threshold
+        3. If too few, gradually lower threshold (adaptive)
+        4. Sort by quality within threshold group
+        5. Preserve top 20% for exploitation
+        6. Shuffle remaining with temperature for exploration
 
         Args:
             slot: Slot being filled
@@ -332,6 +370,24 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         """
         if not candidates:
             return candidates
+
+        # Phase 5.1: Apply bigram diversity penalties
+        # Penalize words with recently-used letter patterns
+        diversity_adjusted = []
+        for word, score in candidates:
+            penalty = 0
+
+            # Check each bigram (pair of adjacent letters)
+            for i in range(len(word) - 1):
+                bigram = word[i:i+2]
+                if bigram in self.recent_bigrams:
+                    # Penalize proportional to recent usage
+                    penalty += self.recent_bigrams[bigram] * 5  # 5 points per occurrence
+
+            diversity_adjusted.append((word, score - int(penalty)))
+
+        # Use diversity-adjusted scores for rest of ordering
+        candidates = diversity_adjusted
 
         # Adaptive threshold lowering when stuck
         current_threshold = self.threshold
@@ -372,3 +428,29 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
                     rest_candidates[i], rest_candidates[j] = rest_candidates[j], rest_candidates[i]
 
         return top_candidates + rest_candidates
+
+    def track_word_usage(self, word: str):
+        """
+        Track bigrams from a selected word to encourage pattern diversity.
+
+        Phase 5.1: After a word is placed, record its letter bigrams and apply
+        decay to all tracked bigrams. This encourages natural diversity by
+        penalizing repeated patterns without permanent exclusion.
+
+        Args:
+            word: The word that was just placed (uppercase)
+        """
+        # Add bigrams from selected word
+        for i in range(len(word) - 1):
+            bigram = word[i:i+2]
+            # Increment count for this bigram
+            self.recent_bigrams[bigram] = self.recent_bigrams.get(bigram, 0) + 1
+
+        # Apply decay to all bigram counts (prevents permanent penalties)
+        # This allows patterns to be used again after some time
+        for bigram in list(self.recent_bigrams.keys()):
+            self.recent_bigrams[bigram] *= self.bigram_decay
+
+            # Remove bigrams with very low counts to keep dict small
+            if self.recent_bigrams[bigram] < 0.1:
+                del self.recent_bigrams[bigram]
