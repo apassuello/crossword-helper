@@ -29,12 +29,12 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     }
   }, []);
 
-  // Save task ID when autofill starts
+  // Save task ID when autofill starts (don't wait for 'running' status to avoid race condition)
   useEffect(() => {
-    if (currentTaskId && progress?.status === 'running') {
+    if (currentTaskId) {
       localStorage.setItem('current_autofill_task', currentTaskId);
     }
-  }, [currentTaskId, progress?.status]);
+  }, [currentTaskId]);
 
   const fetchPausedState = async (taskId) => {
     try {

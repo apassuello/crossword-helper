@@ -886,7 +886,9 @@ class Autofill:
                                  if '?' not in self.grid.get_pattern_for_slot(s))
                 self.progress_reporter.update(
                     current_progress,
-                    f'Filling slots (MAC): {filled_slots}/{len(slots)} filled'
+                    f'Filling slots (MAC): {filled_slots}/{len(slots)} filled',
+                    'running',
+                    {'grid': self.grid.to_dict()['grid']}
                 )
 
         # Base case: all slots filled
