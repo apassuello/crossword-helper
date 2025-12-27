@@ -428,6 +428,12 @@ def fill_with_progress():
         if theme_entries_file:
             cmd_args.extend(["--theme-entries", theme_entries_file])
 
+        # Add adaptive mode flag if enabled (auto black square placement)
+        if data.get("adaptive_mode", False):
+            cmd_args.append("--adaptive")
+            if "max_adaptations" in data:
+                cmd_args.extend(["--max-adaptations", str(data["max_adaptations"])])
+
         # Start background task
         thread = threading.Thread(
             target=run_cli_with_progress,

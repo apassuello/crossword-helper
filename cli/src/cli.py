@@ -170,6 +170,18 @@ def validate(grid_file: str):
     type=click.Path(exists=True),
     help="JSON file with theme entries to preserve during fill (format: {\"(row,col,direction)\": \"WORD\"})",
 )
+@click.option(
+    "--adaptive",
+    is_flag=True,
+    default=False,
+    help="Enable adaptive mode: automatically place black squares when stuck",
+)
+@click.option(
+    "--max-adaptations",
+    type=int,
+    default=3,
+    help="Maximum number of adaptive black square placements (default: 3)",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -182,6 +194,8 @@ def fill(
     json_output: bool,
     attempts: int,
     theme_entries: Optional[str],
+    adaptive: bool,
+    max_adaptations: int,
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -293,6 +307,28 @@ def fill(
                 fg="yellow"
             ))
         autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
+
+    # Wrap with adaptive autofill if enabled
+    if adaptive:
+        from .fill.adaptive_autofill import AdaptiveAutofill
+        if not json_output:
+            click.echo(click.style(f"⚡ Adaptive mode enabled (max {max_adaptations} adaptations)", fg="cyan"))
+        progress.update(35, f'Adaptive mode enabled (max {max_adaptations} adaptations)')
+
+        # Wrap the base autofill with adaptive wrapper
+        # Note: AdaptiveAutofill needs wordlists as list, not WordList object
+        adaptive_options = {
+            'min_score': min_score,
+            'timeout': timeout,
+            'max_adaptations': max_adaptations,
+            'theme_entries': theme_entries_dict or {}
+        }
+        autofill = AdaptiveAutofill(
+            grid=grid,
+            wordlists=[word_list],  # Wrap in list
+            options=adaptive_options,
+            progress_reporter=progress
+        )
 
     # Get empty slots
     empty_slots = grid.get_empty_slots()

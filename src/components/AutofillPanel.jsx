@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import './AutofillPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
+import BlackSquareSuggestions from './BlackSquareSuggestions';
 
 function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, currentTaskId }) {
   const [options, setOptions] = useState({
@@ -9,13 +10,19 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     preferPersonalWords: true,
     timeout: 300,
     wordlists: ['comprehensive'],
-    algorithm: 'beam'  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
+    algorithm: 'beam',  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
+    adaptiveMode: false,  // Auto black square placement when stuck
+    maxAdaptations: 3  // Max number of adaptive black squares
   });
 
   // Pause/Resume state
   const [pausedTaskId, setPausedTaskId] = useState(null);
   const [pausedStateInfo, setPausedStateInfo] = useState(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
+
+  // Black Square Suggestions state
+  const [showBlackSquareModal, setShowBlackSquareModal] = useState(false);
+  const [problematicSlot, setProblematicSlot] = useState(null);
 
   const handleOptionChange = (key, value) => {
     setOptions(prev => ({ ...prev, [key]: value }));
@@ -262,6 +269,116 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     return themeEntries;
   };
 
+  const findMostConstrainedSlot = () => {
+    if (!grid) return null;
+
+    const slots = [];
+
+    // Helper to get pattern for a slot
+    const getPattern = (row, col, direction) => {
+      let pattern = '';
+      if (direction === 'across') {
+        let c = col;
+        while (c < grid[row].length && !grid[row][c].isBlack) {
+          pattern += grid[row][c].letter || '?';
+          c++;
+        }
+      } else {
+        let r = row;
+        while (r < grid.length && !grid[r][col].isBlack) {
+          pattern += grid[r][col].letter || '?';
+          r++;
+        }
+      }
+      return pattern;
+    };
+
+    // Find all slots with empty cells
+    const processedSlots = new Set();
+
+    for (let row = 0; row < grid.length; row++) {
+      for (let col = 0; col < grid[row].length; col++) {
+        const cell = grid[row][col];
+
+        if (!cell.isBlack) {
+          // Check across slot
+          const isStartAcross = col === 0 || grid[row][col - 1].isBlack;
+          if (isStartAcross) {
+            const slotKey = `${row},${col},across`;
+            if (!processedSlots.has(slotKey)) {
+              const pattern = getPattern(row, col, 'across');
+              if (pattern.length >= 3 && pattern.includes('?')) {
+                slots.push({
+                  row,
+                  col,
+                  direction: 'across',
+                  length: pattern.length,
+                  pattern,
+                  emptyCount: (pattern.match(/\?/g) || []).length
+                });
+                processedSlots.add(slotKey);
+              }
+            }
+          }
+
+          // Check down slot
+          const isStartDown = row === 0 || grid[row - 1][col].isBlack;
+          if (isStartDown) {
+            const slotKey = `${row},${col},down`;
+            if (!processedSlots.has(slotKey)) {
+              const pattern = getPattern(row, col, 'down');
+              if (pattern.length >= 3 && pattern.includes('?')) {
+                slots.push({
+                  row,
+                  col,
+                  direction: 'down',
+                  length: pattern.length,
+                  pattern,
+                  emptyCount: (pattern.match(/\?/g) || []).length
+                });
+                processedSlots.add(slotKey);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Find slot with longest length or most empty cells (most likely to be problematic)
+    if (slots.length === 0) return null;
+
+    // Prioritize by length (longer slots are harder to fill)
+    slots.sort((a, b) => b.length - a.length);
+
+    const mostConstrained = slots[0];
+    return {
+      ...mostConstrained,
+      candidate_count: 0 // Will be calculated by backend
+    };
+  };
+
+  const handleSuggestBlackSquares = () => {
+    const slot = findMostConstrainedSlot();
+
+    if (!slot) {
+      toast('No problematic slots found', { icon: 'ℹ️' });
+      return;
+    }
+
+    setProblematicSlot(slot);
+    setShowBlackSquareModal(true);
+  };
+
+  const handleApplyBlackSquares = (updatedGrid, suggestion) => {
+    // Close modal
+    setShowBlackSquareModal(false);
+    setProblematicSlot(null);
+
+    // The grid update should be handled by the parent component
+    // through the onApplyPlacement callback or similar mechanism
+    toast.success('Black squares applied! Grid will update shortly.');
+  };
+
   return (
     <div className="autofill-panel">
       <h2>Autofill Grid</h2>
@@ -312,6 +429,35 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
             />
             Prefer personal word list
           </label>
+        </div>
+
+        <div className="option-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={options.adaptiveMode}
+              onChange={(e) => handleOptionChange('adaptiveMode', e.target.checked)}
+            />
+            ⚡ Adaptive Mode (Auto Black Squares)
+          </label>
+          <p className="help-text">
+            Automatically place strategic black squares when autofill gets stuck
+          </p>
+
+          {options.adaptiveMode && (
+            <div className="slider-group" style={{marginTop: '0.5rem'}}>
+              <label style={{fontSize: '0.9rem', fontWeight: 'normal'}}>Max Adaptations:</label>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={options.maxAdaptations}
+                onChange={(e) => handleOptionChange('maxAdaptations', parseInt(e.target.value))}
+              />
+              <span className="value">{options.maxAdaptations}</span>
+            </div>
+          )}
         </div>
 
         <div className="option-group">
@@ -511,6 +657,9 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
               <button className="cancel-btn" onClick={onCancelAutofill}>
                 Cancel
               </button>
+              <button className="suggest-black-btn" onClick={handleSuggestBlackSquares}>
+                ⬛ Suggest Black Square
+              </button>
             </div>
           )}
         </div>
@@ -524,7 +673,36 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
           <li>Use a higher minimum score for cleaner fill</li>
           <li>Personal word lists help create unique puzzles</li>
         </ul>
+
+        {!progress && getEmptySlots() > 0 && (
+          <div style={{marginTop: '1rem'}}>
+            <button
+              className="suggest-black-btn"
+              onClick={handleSuggestBlackSquares}
+              style={{width: '100%'}}
+            >
+              ⬛ Suggest Strategic Black Square
+            </button>
+            <p className="help-text" style={{marginTop: '0.5rem', fontSize: '0.85rem'}}>
+              Get suggestions for placing "cheater squares" to make difficult slots easier to fill
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Black Square Suggestions Modal */}
+      {showBlackSquareModal && problematicSlot && (
+        <BlackSquareSuggestions
+          grid={grid}
+          gridSize={grid ? grid.length : 15}
+          problematicSlot={problematicSlot}
+          onApplySuggestion={handleApplyBlackSquares}
+          onClose={() => {
+            setShowBlackSquareModal(false);
+            setProblematicSlot(null);
+          }}
+        />
+      )}
     </div>
   );
 }

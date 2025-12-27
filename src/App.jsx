@@ -7,6 +7,7 @@ import AutofillPanel from './components/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
 import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
+import ThemeWordsPanel from './components/ThemeWordsPanel';
 import './styles/App.scss';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
   const [autofillProgress, setAutofillProgress] = useState(null);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
   const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [showThemePanel, setShowThemePanel] = useState(false);
   const eventSourceRef = React.useRef(null);
 
   // Initialize empty grid
@@ -200,7 +202,9 @@ function App() {
           timeout: options.timeout || 300,
           min_score: options.minScore || 30,
           algorithm: options.algorithm || 'regex',
-          theme_entries: options.theme_entries || {}
+          theme_entries: options.theme_entries || {},
+          adaptive_mode: options.adaptiveMode || false,
+          max_adaptations: options.maxAdaptations || 3
         })
       });
 
@@ -345,6 +349,14 @@ function App() {
     }
   }, [currentTaskId, autofillProgress]);
 
+  const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
+    // Update grid with the applied theme word
+    setGrid(updatedGrid);
+    updateNumbering(updatedGrid);
+
+    toast.success(`Applied "${placement.word}" to grid!`);
+  }, [updateNumbering]);
+
   const handleGridImport = useCallback((importedData) => {
     const { grid: importedGrid, size, numbering: importedNumbering } = importedData;
 
@@ -441,6 +453,12 @@ function App() {
           >
             Word Lists
           </button>
+          <button
+            className={`tool-btn ${showThemePanel ? 'active' : ''}`}
+            onClick={() => setShowThemePanel(!showThemePanel)}
+          >
+            🎯 Theme Words
+          </button>
         </div>
       </header>
 
@@ -513,6 +531,16 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Theme Words Panel (overlay) */}
+      {showThemePanel && (
+        <ThemeWordsPanel
+          grid={grid}
+          gridSize={gridSize}
+          onApplyPlacement={handleThemeWordApplied}
+          onClose={() => setShowThemePanel(false)}
+        />
+      )}
     </div>
   );
 }
