@@ -7,6 +7,7 @@ This module coordinates all beam search components to fill crossword grids.
 from typing import List, Tuple, Dict, Optional, Set
 import time
 import logging
+import json
 
 from ...core.grid import Grid
 from ..word_list import WordList
@@ -46,7 +47,9 @@ class BeamSearchOrchestrator:
         min_score: int = 0,
         diversity_bonus: float = 0.1,
         progress_reporter=None,
-        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None
+        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
+        pause_controller=None,
+        task_id: Optional[str] = None
     ):
         """
         Initialize beam search orchestrator.
@@ -61,6 +64,8 @@ class BeamSearchOrchestrator:
             diversity_bonus: Bonus for diverse beams 0.0-1.0 (default: 0.1)
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word}
+            pause_controller: Optional PauseController for pause/resume
+            task_id: Optional task identifier for pause/resume
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -84,6 +89,8 @@ class BeamSearchOrchestrator:
         self.diversity_bonus = diversity_bonus
         self.progress_reporter = progress_reporter
         self.theme_entries = theme_entries or {}
+        self.pause_controller = pause_controller
+        self.task_id = task_id
 
         # State tracking
         self.start_time = 0.0
@@ -188,7 +195,7 @@ class BeamSearchOrchestrator:
         assignments = frozenset(beam[0].slot_assignments.items())
         return hash(assignments)
 
-    def fill(self, timeout: int = 300):
+    def fill(self, timeout: int = 300, resume_state=None):
         """
         Fill grid using beam search.
 
@@ -196,6 +203,7 @@ class BeamSearchOrchestrator:
 
         Args:
             timeout: Maximum seconds to spend
+            resume_state: Optional BeamSearchState to resume from
 
         Returns:
             FillResult with best solution found
@@ -207,6 +215,10 @@ class BeamSearchOrchestrator:
 
         if timeout < 10:
             raise ValueError(f"timeout must be ≥10 seconds, got {timeout}")
+
+        # Check if resuming from saved state
+        if resume_state is not None:
+            return self._resume_fill(resume_state, timeout)
 
         self.start_time = time.time()
         self.iterations = 0
@@ -260,6 +272,20 @@ class BeamSearchOrchestrator:
             self.iterations += 1
             slot_idx += 1
 
+            # Check for pause request (every 10 iterations for performance)
+            if self.pause_controller and self.iterations % 10 == 0:
+                if self.pause_controller.should_pause():
+                    logger.info(f"Pause requested at iteration {self.iterations}")
+                    # Save state before pausing
+                    self._save_state_and_pause(
+                        beam, filled_slots, slot_idx, all_slots, total_slots
+                    )
+                    # Return partial result with paused status
+                    best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
+                    result = self._create_result(best_state, all_slots, total_slots, success=False)
+                    result.paused = True  # Mark as paused
+                    return result
+
             # Check timeout
             if time.time() - self.start_time > timeout:
                 break
@@ -278,12 +304,14 @@ class BeamSearchOrchestrator:
             slot_id = (slot['row'], slot['col'], slot['direction'])
             filled_slots.add(slot_id)
 
-            # Progress reporting
+            # Progress reporting with incremental grid updates
             if self.progress_reporter:
                 progress = int((len(filled_slots) / total_slots) * 90) + 10
                 self.progress_reporter.update(
                     progress,
-                    f"Beam search: slot {len(filled_slots)}/{total_slots}"
+                    f"Beam search: slot {len(filled_slots)}/{total_slots}",
+                    'running',
+                    {'grid': beam[0].grid.to_dict()['grid']}  # Send current grid state
                 )
 
             # Expand beam
@@ -655,6 +683,260 @@ class BeamSearchOrchestrator:
 
         logger.debug(f"  ✗ All backtracking strategies failed")
         return []  # All backtracking strategies failed
+
+    def _resume_fill(self, resume_state, timeout: int):
+        """
+        Resume beam search from saved state.
+
+        Args:
+            resume_state: BeamSearchState to resume from
+            timeout: Maximum seconds to spend
+
+        Returns:
+            FillResult with best solution found
+        """
+        from ..autofill import FillResult
+        from ..state_manager import StateManager
+
+        logger.info(f"Resuming beam search from iteration {resume_state.iterations}")
+
+        # Restore configuration
+        self.min_score = resume_state.min_score
+        self.beam_width = resume_state.beam_width
+        self.candidates_per_slot = resume_state.candidates_per_slot
+        self.diversity_bonus = resume_state.diversity_bonus
+
+        # Restore tracking state
+        self.iterations = resume_state.iterations
+        self.start_time = time.time()  # Fresh timeout
+
+        # Restore failure tracking
+        self.slot_attempt_history = {}
+        for key_str, attempts in resume_state.slot_attempt_history.items():
+            key_list = json.loads(key_str)
+            beam_sig = key_list[0]
+            slot_id = tuple(key_list[1])
+            self.slot_attempt_history[(beam_sig, slot_id)] = attempts
+
+        self.recently_failed = [tuple(slot_list) for slot_list in resume_state.recently_failed]
+
+        # Restore theme entries
+        self.theme_entries = {}
+        for key_str, word in resume_state.theme_entries.items():
+            slot_tuple = tuple(json.loads(key_str))
+            self.theme_entries[slot_tuple] = word
+
+        # Restore beam (deserialize BeamState objects)
+        beam = [
+            StateManager.deserialize_beam_state(beam_dict)
+            for beam_dict in resume_state.beam
+        ]
+
+        # Restore filled_slots
+        filled_slots = set(tuple(slot_list) for slot_list in resume_state.filled_slots)
+
+        # Get all slots and restore metadata
+        all_slots = resume_state.all_slots
+        total_slots = resume_state.total_slots
+        slot_idx = resume_state.slot_idx
+
+        logger.info(f"Restored {len(beam)} beam states, {len(filled_slots)}/{total_slots} slots filled")
+
+        # Continue the main beam search loop from where it paused
+        while len(filled_slots) < total_slots:
+            self.iterations += 1
+            slot_idx += 1
+
+            # Check for pause request (every 10 iterations for performance)
+            if self.pause_controller and self.iterations % 10 == 0:
+                if self.pause_controller.should_pause():
+                    logger.info(f"Pause requested at iteration {self.iterations}")
+                    # Save state before pausing
+                    self._save_state_and_pause(
+                        beam, filled_slots, slot_idx, all_slots, total_slots
+                    )
+                    # Return partial result with paused status
+                    best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
+                    result = self._create_result(best_state, all_slots, total_slots, success=False)
+                    result.paused = True  # Mark as paused
+                    return result
+
+            # Check timeout
+            if time.time() - self.start_time > timeout:
+                break
+
+            # Select next slot (Dynamic MRV)
+            unfilled_slots = [s for s in all_slots
+                             if (s['row'], s['col'], s['direction']) not in filled_slots]
+
+            if not unfilled_slots:
+                break
+
+            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
+            if slot is None:
+                break
+
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            filled_slots.add(slot_id)
+
+            # Progress reporting with incremental grid updates
+            if self.progress_reporter:
+                progress = int((len(filled_slots) / total_slots) * 90) + 10
+                self.progress_reporter.update(
+                    progress,
+                    f"Beam search (resumed): slot {len(filled_slots)}/{total_slots}",
+                    'running',
+                    {'grid': beam[0].grid.to_dict()['grid']}  # Send current grid state
+                )
+
+            # Expand beam
+            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
+
+            # Backtracking if needed
+            if not expanded_beam and slot_idx > 0:
+                expanded_beam = self._try_backtracking(beam, slot)
+
+            if not expanded_beam:
+                # Track this failure to prevent thrashing on same (beam, slot) combination
+                beam_sig = self._get_beam_signature(beam)
+                attempt_key = (beam_sig, slot_id)
+
+                # Increment attempt count for this specific (beam, slot) combination
+                attempts = self.slot_attempt_history.get(attempt_key, 0) + 1
+                self.slot_attempt_history[attempt_key] = attempts
+
+                # Track in recently_failed list for MRV deprioritization
+                if slot_id not in self.recently_failed:
+                    self.recently_failed.insert(0, slot_id)
+                    # Keep only last 5 failures
+                    if len(self.recently_failed) > 5:
+                        self.recently_failed.pop()
+
+                logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_id}")
+                logger.debug(f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination")
+                logger.debug(f"  Recently failed slots: {self.recently_failed[:3]}")
+
+                # If we haven't exhausted attempts for this combination, continue
+                # MRV will now heavily penalize this slot and try alternatives
+                if attempts < self.max_attempts_per_slot:
+                    logger.debug(f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})")
+                    filled_slots.discard(slot_id)
+                    continue
+
+                # Attempts exhausted for this (beam, slot) - need proper backtracking
+                logger.debug(f"  Max attempts reached for this slot, attempting backtracking...")
+
+                # If no filled slots to backtrack from, we're stuck
+                if len(filled_slots) == 0:
+                    logger.debug(f"  No slots to backtrack from, grid may be impossible")
+                    break
+
+                # Proper CSP backtracking: undo last assignment(s)
+                backtracked_beam = self._backtrack_beam_states(beam, depth=1)
+
+                if not backtracked_beam:
+                    logger.debug(f"  Backtracking failed, grid may be impossible")
+                    break
+
+                # Update beam to backtracked state
+                beam = backtracked_beam
+
+                # Remove the slot we just backtracked from filled_slots
+                # (it's the most recently added slot to the backtracked state)
+                if filled_slots:
+                    # Find slots in beam that are no longer filled after backtracking
+                    beam_filled_slots = set(beam[0].slot_assignments.keys())
+                    removed_slots = filled_slots - beam_filled_slots
+                    for removed_slot in removed_slots:
+                        filled_slots.discard(removed_slot)
+                        logger.debug(f"  Backtracked slot {removed_slot}")
+
+                # Remove current failing slot from filled_slots too
+                filled_slots.discard(slot_id)
+
+                logger.debug(f"  Backtracking complete, now have {len(filled_slots)} filled slots")
+                continue
+
+            # Adaptive beam width
+            adaptive_width = self.beam_manager.get_adaptive_beam_width(
+                beam, unfilled_slots, total_slots, slot
+            )
+
+            # Prune beam with diversity
+            if len(expanded_beam) > adaptive_width:
+                beam = self.diversity_manager.diverse_beam_prune(
+                    expanded_beam, slot, adaptive_width, num_groups=4, diversity_lambda=0.5
+                )
+            else:
+                beam = expanded_beam
+
+            # Check for complete solution
+            complete_states = [s for s in beam if s.slots_filled == total_slots]
+            if complete_states:
+                return self._create_result(
+                    max(complete_states, key=lambda s: s.score),
+                    all_slots,
+                    total_slots,
+                    success=True
+                )
+
+        # Return best partial solution
+        best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
+        return self._create_result(best_state, all_slots, total_slots, success=False)
+
+    def _save_state_and_pause(
+        self,
+        beam: List[BeamState],
+        filled_slots: Set,
+        slot_idx: int,
+        all_slots: List[Dict],
+        total_slots: int
+    ) -> None:
+        """
+        Save current beam search state to disk for pause/resume.
+
+        Args:
+            beam: Current beam states
+            filled_slots: Set of filled slot IDs
+            slot_idx: Current slot index
+            all_slots: All slots in grid
+            total_slots: Total slots count
+        """
+        if not self.task_id:
+            logger.warning("Cannot save state: no task_id provided")
+            return
+
+        try:
+            from ..state_manager import StateManager
+
+            # Capture current state
+            beam_search_state = StateManager.capture_beam_search_state(
+                self, beam, filled_slots, slot_idx
+            )
+
+            # Create metadata
+            metadata = {
+                'min_score': self.min_score,
+                'timeout': 300,  # Default timeout, will be overridden on resume
+                'grid_size': [self.grid.size, self.grid.size],
+                'total_slots': total_slots,
+                'slots_filled': len(filled_slots),
+                'iterations': self.iterations
+            }
+
+            # Save to disk
+            state_manager = StateManager()
+            file_path = state_manager.save_beam_search_state(
+                task_id=self.task_id,
+                beam_state=beam_search_state,
+                metadata=metadata,
+                compress=True
+            )
+
+            logger.info(f"Beam search state saved to {file_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save beam search state: {e}", exc_info=True)
 
     def _create_result(
         self,

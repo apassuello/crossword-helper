@@ -285,6 +285,17 @@ function App() {
             } else {
               setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
             }
+          } else if (data.status === 'paused') {
+            // Autofill was paused - close connection and show paused state
+            eventSource.close();
+            eventSourceRef.current = null;
+            setAutofillProgress({
+              status: 'paused',
+              progress: data.progress || 0,
+              message: data.message || 'Autofill paused - state saved'
+            });
+            // currentTaskId is kept for future pause operations
+            toast.success('Autofill paused successfully! You can resume later.');
           } else if (data.status === 'error') {
             eventSource.close();
             eventSourceRef.current = null;
@@ -478,6 +489,7 @@ function App() {
               onCancelAutofill={handleCancelAutofill}
               progress={autofillProgress}
               grid={grid}
+              currentTaskId={currentTaskId}
             />
           )}
 

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import './AutofillPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 
-function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid }) {
+function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, currentTaskId }) {
   const [options, setOptions] = useState({
     minScore: 50,
     preferPersonalWords: true,
@@ -11,8 +12,149 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid }) {
     algorithm: 'beam'  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
   });
 
+  // Pause/Resume state
+  const [pausedTaskId, setPausedTaskId] = useState(null);
+  const [pausedStateInfo, setPausedStateInfo] = useState(null);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+
   const handleOptionChange = (key, value) => {
     setOptions(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Check for paused state on mount
+  useEffect(() => {
+    const savedTaskId = localStorage.getItem('paused_autofill_task');
+    if (savedTaskId) {
+      fetchPausedState(savedTaskId);
+    }
+  }, []);
+
+  // Save task ID when autofill starts
+  useEffect(() => {
+    if (currentTaskId && progress?.status === 'running') {
+      localStorage.setItem('current_autofill_task', currentTaskId);
+    }
+  }, [currentTaskId, progress?.status]);
+
+  const fetchPausedState = async (taskId) => {
+    try {
+      const response = await fetch(`/api/fill/state/${taskId}`);
+      if (response.ok) {
+        const stateInfo = await response.json();
+        setPausedTaskId(taskId);
+        setPausedStateInfo(stateInfo);
+        setShowResumePrompt(true);
+      } else {
+        // State no longer exists, clear localStorage
+        localStorage.removeItem('paused_autofill_task');
+      }
+    } catch (err) {
+      console.error('Failed to fetch paused state:', err);
+      localStorage.removeItem('paused_autofill_task');
+    }
+  };
+
+  const handlePause = async () => {
+    if (!currentTaskId) {
+      toast.error('No active autofill task to pause');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/fill/pause/${currentTaskId}`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        toast.success('Pause requested - waiting for autofill to stop...');
+        // Save task ID for later resume
+        localStorage.setItem('paused_autofill_task', currentTaskId);
+        localStorage.removeItem('current_autofill_task');
+
+        // Wait a moment for pause to take effect
+        setTimeout(() => {
+          fetchPausedState(currentTaskId);
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Failed to pause autofill:', err);
+      toast.error('Failed to pause autofill. Please try again.');
+    }
+  };
+
+  const handleResume = async () => {
+    if (!pausedTaskId) {
+      toast.error('No paused state to resume');
+      return;
+    }
+
+    try {
+      // Get current grid for edit detection
+      const gridArray = grid.map(row =>
+        row.map(cell => cell.letter ? [cell.letter] : ['.'])
+      );
+
+      const response = await fetch('/api/fill/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_id: pausedTaskId,
+          edited_grid: gridArray,
+          options: options
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+
+        if (response.status === 409) {
+          // User edits create unsolvable configuration
+          toast.error(
+            `Cannot resume: Your edits create an unsolvable grid. ${error.details || ''} Please adjust your changes and try again.`,
+            { duration: 6000 }
+          );
+          return;
+        }
+
+        throw new Error(error.error || 'Resume failed');
+      }
+
+      const data = await response.json();
+
+      // Clear paused state
+      setPausedTaskId(null);
+      setPausedStateInfo(null);
+      setShowResumePrompt(false);
+      localStorage.removeItem('paused_autofill_task');
+
+      // Start autofill with new task ID
+      toast.success('Resuming autofill from saved state...');
+      console.log(`Resuming with new task ID: ${data.new_task_id}`);
+      onStartAutofill({...options, theme_entries: getThemeEntries(), resumeTaskId: data.new_task_id});
+
+    } catch (err) {
+      console.error('Failed to resume autofill:', err);
+      toast.error(`Failed to resume: ${err.message}`);
+    }
+  };
+
+  const handleDiscardPaused = () => {
+    if (confirm('Discard paused state? This cannot be undone.')) {
+      if (pausedTaskId) {
+        // Delete state file
+        fetch(`/api/fill/state/${pausedTaskId}`, { method: 'DELETE' })
+          .then(() => toast.success('Paused state discarded'))
+          .catch(err => {
+            console.error('Failed to delete state:', err);
+            toast.error('Failed to delete saved state');
+          });
+      }
+
+      setPausedTaskId(null);
+      setPausedStateInfo(null);
+      setShowResumePrompt(false);
+      localStorage.removeItem('paused_autofill_task');
+    }
   };
 
   const getEmptySlots = () => {
@@ -315,7 +457,28 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid }) {
         </div>
       </div>
 
-      {!progress && (
+      {/* Resume Prompt Banner */}
+      {showResumePrompt && pausedStateInfo && !progress && (
+        <div className="resume-prompt">
+          <h3>⏸ Paused Autofill Available</h3>
+          <p>
+            You have a paused autofill from {new Date(pausedStateInfo.timestamp).toLocaleString()}
+          </p>
+          <p>
+            <strong>{pausedStateInfo.slots_filled}/{pausedStateInfo.total_slots}</strong> slots filled
+          </p>
+          <div style={{display: 'flex', gap: '0.5rem'}}>
+            <button className="resume-btn" onClick={handleResume}>
+              ▶ Resume Autofill
+            </button>
+            <button className="discard-btn" onClick={handleDiscardPaused}>
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!progress && !showResumePrompt && (
         <button
           className="autofill-btn"
           onClick={() => onStartAutofill({...options, theme_entries: getThemeEntries()})}
@@ -336,17 +499,19 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid }) {
             color={
               progress.status === 'error' ? 'danger' :
               progress.status === 'complete' ? 'success' :
+              progress.status === 'paused' ? 'warning' :
               'primary'
             }
           />
           {progress.status === 'running' && (
-            <button
-              className="cancel-btn"
-              style={{marginTop: '1rem'}}
-              onClick={onCancelAutofill}
-            >
-              Cancel
-            </button>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap'}}>
+              <button className="pause-btn" onClick={handlePause}>
+                ⏸ Pause
+              </button>
+              <button className="cancel-btn" onClick={onCancelAutofill}>
+                Cancel
+              </button>
+            </div>
           )}
         </div>
       )}

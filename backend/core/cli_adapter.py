@@ -305,6 +305,80 @@ class CLIAdapter:
             Path(grid_path).unlink(missing_ok=True)
             Path(output_path).unlink(missing_ok=True)
 
+    def fill_with_resume(
+        self,
+        task_id: str,
+        state_file_path: str,
+        wordlist_paths: List[str],
+        timeout_seconds: int = 300,
+        min_score: int = 30,
+        algorithm: str = "trie"
+    ) -> Dict[str, Any]:
+        """
+        Resume auto-fill from saved state.
+
+        Args:
+            task_id: Task ID for pause control
+            state_file_path: Path to saved CSP state file
+            wordlist_paths: List of paths to word list files
+            timeout_seconds: Maximum time to spend filling
+            min_score: Minimum word quality score
+            algorithm: Pattern matching algorithm ('regex' or 'trie')
+
+        Returns:
+            Dict with filled grid and metadata
+
+        Raises:
+            ValueError: If state file is invalid
+            FileNotFoundError: If state file not found
+            subprocess.TimeoutExpired: If command times out
+        """
+        state_path = Path(state_file_path)
+        if not state_path.exists():
+            raise FileNotFoundError(f"State file not found: {state_file_path}")
+
+        # Create temp output file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            output_path = f.name
+
+        try:
+            # Build command args
+            args = [
+                "fill",
+                "--resume",
+                str(state_path),
+                "--output",
+                output_path,
+                "--timeout",
+                str(timeout_seconds),
+                "--min-score",
+                str(min_score),
+                "--algorithm",
+                algorithm,
+                "--task-id",
+                task_id
+            ]
+
+            for wordlist_path in wordlist_paths:
+                args.extend(["--wordlists", wordlist_path])
+
+            # Run command (with extended timeout)
+            stdout, stderr, _ = self._run_command(
+                args,
+                timeout=timeout_seconds + 10,  # Add 10s buffer
+                check_success=False,  # Partial fills are OK
+            )
+
+            # Read filled grid from output file
+            with open(output_path, "r") as f:
+                result = json.load(f)
+
+            return result
+        finally:
+            # Clean up temp output file
+            Path(output_path).unlink(missing_ok=True)
+
     def health_check(self) -> bool:
         """
         Check if CLI is accessible and working.

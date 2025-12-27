@@ -17,6 +17,8 @@ from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
 from .trie_pattern_matcher import TriePatternMatcher
+from .pause_controller import PauseController, PausedException
+from .state_manager import StateManager, CSPState
 
 
 @dataclass
@@ -30,6 +32,8 @@ class FillResult:
     total_slots: int
     problematic_slots: List[Dict]
     iterations: int
+    paused: bool = False  # NEW: True if autofill was paused
+    state_path: Optional[str] = None  # NEW: Path to saved state file if paused
 
 
 class Autofill:
@@ -49,6 +53,8 @@ class Autofill:
         min_score: int = 0,  # FIXED: Was 30, now 0 to allow full search space
         algorithm: str = "trie",
         progress_reporter=None,
+        pause_controller: Optional[PauseController] = None,  # NEW: Pause control
+        state_manager: Optional[StateManager] = None,  # NEW: State management
     ):
         """
         Initialize autofill solver.
@@ -61,11 +67,15 @@ class Autofill:
             min_score: Minimum word score to consider
             algorithm: Pattern matching algorithm - 'regex' (classic) or 'trie' (fast)
             progress_reporter: Optional ProgressReporter for progress updates
+            pause_controller: Optional PauseController for pause/resume support
+            state_manager: Optional StateManager for state serialization
         """
         self.grid = grid
         self.word_list = word_list
         self.algorithm = algorithm
         self.progress_reporter = progress_reporter
+        self.pause_controller = pause_controller
+        self.state_manager = state_manager or StateManager()
 
         # Create pattern matcher if not provided
         if pattern_matcher is None:
@@ -92,13 +102,22 @@ class Autofill:
         self.slot_list: List[Dict] = []  # All slots
         self.slot_id_map: Dict[Tuple, int] = {}  # (row, col, direction) -> slot_id
         self.last_progress_report = 0  # Track last reported progress percentage
+        self.slots_sorted: List[Dict] = []  # NEW: Sorted slots for resume
+        self.locked_slots: Set[int] = set()  # NEW: Locked slots (theme + user edits)
 
         # Phase 3: Letter frequency table for fast LCV heuristic
         # Structure: {word_length: {position: {letter: frequency}}}
         self.letter_frequency_table: Dict[int, Dict[int, Dict[str, int]]] = {}
         self._build_letter_frequency_table()
 
-    def fill(self, interactive: bool = False, use_mac: bool = True, random_seed: int = None) -> FillResult:
+    def fill(
+        self,
+        interactive: bool = False,
+        use_mac: bool = True,
+        random_seed: int = None,
+        resume_state: Optional[CSPState] = None,  # NEW: Resume from saved state
+        task_id: Optional[str] = None  # NEW: Task ID for state saving
+    ) -> FillResult:
         """
         Fill grid using backtracking CSP.
 
@@ -106,11 +125,19 @@ class Autofill:
             interactive: If True, prompt user before each placement (not implemented)
             use_mac: If True, use MAC (Maintaining Arc Consistency) for better pruning (Phase 2)
             random_seed: If provided, shuffle candidates randomly for restart strategy (Phase 3.2)
+            resume_state: If provided, resume from this saved state
+            task_id: Unique task ID for pause/resume (required if pause_controller provided)
 
         Returns:
             FillResult with success status and filled grid
         """
         self.start_time = time.time()
+
+        # Resume from saved state if provided
+        if resume_state is not None:
+            return self._resume_fill(resume_state, task_id, use_mac)
+
+        # Normal fill from scratch
         self.iterations = 0
         self.used_words = set()
         self.random_seed = random_seed
@@ -149,14 +176,85 @@ class Autofill:
 
         # Sort slots by constraint (MCV heuristic)
         slots = self._sort_slots_by_constraint(slots)
+        self.slots_sorted = slots  # Store for potential pause/resume
 
         # Try to fill using backtracking (with or without MAC)
         try:
             if use_mac:
-                success = self._backtrack_with_mac(slots, 0)
+                success = self._backtrack_with_mac(slots, 0, task_id)
             else:
                 success = self._backtrack(slots, 0)  # Original algorithm
         except TimeoutError:
+            success = False
+        except PausedException:
+            # Paused - state already saved in _backtrack_with_mac
+            success = False
+
+        time_elapsed = time.time() - self.start_time
+
+        # Calculate results
+        remaining_slots = self.grid.get_empty_slots()
+        slots_filled = total_slots - len(remaining_slots)
+
+        return FillResult(
+            success=success,
+            grid=self.grid,
+            time_elapsed=time_elapsed,
+            slots_filled=slots_filled,
+            total_slots=total_slots,
+            problematic_slots=remaining_slots if not success else [],
+            iterations=self.iterations,
+        )
+
+    def _resume_fill(
+        self,
+        resume_state: CSPState,
+        task_id: Optional[str],
+        use_mac: bool = True
+    ) -> FillResult:
+        """
+        Resume fill from saved state.
+
+        Args:
+            resume_state: Saved CSP state
+            task_id: Task ID for continuing pause/resume
+            use_mac: Whether to use MAC algorithm
+
+        Returns:
+            FillResult
+        """
+        # Restore state into this instance
+        self.state_manager.restore_to_autofill(self, resume_state)
+
+        # Resume timing (fresh timeout)
+        self.start_time = time.time()
+
+        # Get total slots
+        total_slots = len(self.slot_list)
+
+        # Convert locked slots list to set
+        self.locked_slots = set(resume_state.locked_slots)
+
+        # Continue backtracking from saved position
+        slots_list = [
+            self.slot_list[slot_id] for slot_id in resume_state.slots_sorted
+        ]
+
+        try:
+            if use_mac:
+                success = self._backtrack_with_mac(
+                    slots_list,
+                    resume_state.current_slot_index,
+                    task_id
+                )
+            else:
+                success = self._backtrack(
+                    slots_list,
+                    resume_state.current_slot_index
+                )
+        except TimeoutError:
+            success = False
+        except PausedException:
             success = False
 
         time_elapsed = time.time() - self.start_time
@@ -683,7 +781,9 @@ class Autofill:
                                  if '?' not in self.grid.get_pattern_for_slot(s))
                 self.progress_reporter.update(
                     current_progress,
-                    f'Filling slots: {filled_slots}/{len(slots)} filled'
+                    f'Filling slots: {filled_slots}/{len(slots)} filled',
+                    'running',
+                    {'grid': self.grid.to_dict()['grid']}
                 )
 
         # Base case: all slots filled
@@ -741,7 +841,12 @@ class Autofill:
         # No candidate worked
         return False
 
-    def _backtrack_with_mac(self, slots: List[Dict], current_index: int) -> bool:
+    def _backtrack_with_mac(
+        self,
+        slots: List[Dict],
+        current_index: int,
+        task_id: Optional[str] = None
+    ) -> bool:
         """
         Backtracking with MAC (Maintaining Arc Consistency) - Phase 2.
 
@@ -750,20 +855,27 @@ class Autofill:
         Args:
             slots: List of slots to fill (sorted by constraint)
             current_index: Current position in slots list
+            task_id: Task ID for pause/resume support
 
         Returns:
             True if successfully filled, False if no solution
+
+        Raises:
+            TimeoutError: If timeout exceeded
+            PausedException: If pause requested
         """
         self.iterations += 1
 
-        # Check timeout
-        if time.time() - self.start_time > self.timeout:
-            raise TimeoutError("Autofill timeout")
-
-        # Check every 100 iterations for timeout (more frequent than original)
+        # Check every 100 iterations for timeout and pause
         if self.iterations % 100 == 0:
+            # Check timeout
             if time.time() - self.start_time > self.timeout:
                 raise TimeoutError("Autofill timeout")
+
+            # Check pause signal
+            if self.pause_controller and self.pause_controller.should_pause():
+                self._handle_pause(current_index, task_id, len(slots))
+                raise PausedException("Autofill paused by user")
 
         # Report progress
         if self.progress_reporter and len(slots) > 0:
@@ -787,7 +899,7 @@ class Autofill:
         # Skip if already filled
         pattern = self.grid.get_pattern_for_slot(slot)
         if "?" not in pattern:
-            return self._backtrack_with_mac(slots, current_index + 1)
+            return self._backtrack_with_mac(slots, current_index + 1, task_id)
 
         # Get candidate words
         candidates = self._get_candidates(slot)
@@ -863,7 +975,7 @@ class Autofill:
                     )
 
                 # Recurse
-                if self._backtrack_with_mac(slots, current_index + 1):
+                if self._backtrack_with_mac(slots, current_index + 1, task_id):
                     return True
 
             # Backtrack: restore domains and remove word
@@ -1058,6 +1170,67 @@ class Autofill:
             return True
 
         return False
+
+    def _handle_pause(
+        self,
+        current_index: int,
+        task_id: Optional[str],
+        total_slots: int
+    ) -> None:
+        """
+        Handle pause request by saving current state.
+
+        Args:
+            current_index: Current backtracking position
+            task_id: Task ID for state file naming
+            total_slots: Total number of slots
+
+        Raises:
+            ValueError: If task_id not provided when needed
+        """
+        if not task_id:
+            raise ValueError("task_id required for pause/resume")
+
+        # Capture current state
+        csp_state = self.state_manager.capture_csp_state(
+            self,
+            current_index=current_index,
+            locked_slots=self.locked_slots
+        )
+
+        # Calculate current stats
+        remaining_slots = self.grid.get_empty_slots()
+        slots_filled = total_slots - len(remaining_slots)
+
+        # Save state with metadata
+        metadata = {
+            'min_score': self.min_score,
+            'timeout': self.timeout,
+            'algorithm': self.algorithm,
+            'grid_size': [self.grid.size, self.grid.size],
+            'total_slots': total_slots,
+            'slots_filled': slots_filled,
+            'time_elapsed': time.time() - self.start_time
+        }
+
+        state_path = self.state_manager.save_csp_state(
+            task_id=task_id,
+            csp_state=csp_state,
+            metadata=metadata,
+            compress=True
+        )
+
+        # Report pause via progress reporter
+        if self.progress_reporter:
+            self.progress_reporter.update(
+                int((slots_filled / total_slots) * 100),
+                f'Paused: {slots_filled}/{total_slots} slots filled',
+                'paused',
+                {
+                    'state_path': str(state_path),
+                    'grid': self.grid.to_dict()['grid']
+                }
+            )
 
     def __repr__(self) -> str:
         """String representation."""

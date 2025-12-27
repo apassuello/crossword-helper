@@ -148,6 +148,80 @@
     }
   }
 
+  // Pause/Resume UI
+  .resume-prompt {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    animation: slideIn 0.3s ease-out;
+
+    h3 {
+      margin: 0 0 0.5rem 0;
+      color: #856404;
+      font-size: 1.1rem;
+    }
+
+    p {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      color: #333;
+
+      &:last-of-type {
+        color: #666;
+      }
+
+      strong {
+        color: #856404;
+      }
+    }
+
+    .resume-btn {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+
+      &:hover {
+        background: #218838;
+      }
+    }
+
+    .discard-btn {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover {
+        background: #5a6268;
+      }
+    }
+  }
+
+  .pause-btn {
+    background: #ff9800;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+
+    &:hover {
+      background: #e68900;
+    }
+  }
+
   .autofill-btn {
     width: 100%;
     padding: 1rem;
@@ -239,5 +313,16 @@
   }
   50% {
     opacity: 0.8;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

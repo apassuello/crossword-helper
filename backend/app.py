@@ -10,6 +10,7 @@ from flask_cors import CORS
 from backend.api.routes import api
 from backend.api.wordlist_routes import wordlist_api
 from backend.api.progress_routes import progress_api
+from backend.api.pause_resume_routes import pause_resume_api
 import os
 
 
@@ -44,6 +45,7 @@ def create_app(testing=False):
     app.register_blueprint(api, url_prefix='/api')
     app.register_blueprint(wordlist_api, url_prefix='/api')
     app.register_blueprint(progress_api, url_prefix='/api')
+    app.register_blueprint(pause_resume_api, url_prefix='/api')
 
     # Serve frontend (Vite build)
     frontend_dist = os.path.join(base_dir, 'frontend', 'dist')
