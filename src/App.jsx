@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import GridEditor from './components/GridEditor';
 import PatternMatcher from './components/PatternMatcher';
 import ToolPanel from './components/ToolPanel';
@@ -16,6 +17,8 @@ function App() {
   const [validationErrors, setValidationErrors] = useState([]);
   const [autofillProgress, setAutofillProgress] = useState(null);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
+  const [currentTaskId, setCurrentTaskId] = useState(null);
+  const eventSourceRef = React.useRef(null);
 
   // Initialize empty grid
   useEffect(() => {
@@ -158,6 +161,28 @@ function App() {
     validateGrid(newGrid);
   }, [selectedCell, grid, gridSize]);
 
+  const handleSaveGrid = useCallback(() => {
+    try {
+      const gridData = {
+        size: gridSize,
+        grid: grid.map(row => row.map(cell => ({
+          letter: cell.letter || '',
+          isBlack: cell.isBlack || false,
+          isThemeLocked: cell.isThemeLocked || false,
+          number: cell.number || null
+        }))),
+        numbering: numbering,
+        timestamp: new Date().toISOString()
+      };
+
+      localStorage.setItem('crossword_saved_grid', JSON.stringify(gridData));
+      toast.success('Grid saved successfully to browser storage!');
+    } catch (err) {
+      console.error('Failed to save grid:', err);
+      toast.error('Failed to save grid: ' + err.message);
+    }
+  }, [grid, gridSize, numbering]);
+
   const handleAutofill = useCallback(async (options = {}) => {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
 
@@ -180,9 +205,11 @@ function App() {
       });
 
       const { task_id } = await initResponse.json();
+      setCurrentTaskId(task_id);
 
       // Connect to SSE for progress updates
       const eventSource = new EventSource(`/api/progress/${task_id}`);
+      eventSourceRef.current = eventSource;
 
       eventSource.onmessage = (event) => {
         try {
@@ -213,6 +240,8 @@ function App() {
           // When complete, update grid with results from event data
           if (data.status === 'complete') {
             eventSource.close();
+            eventSourceRef.current = null;
+            setCurrentTaskId(null);
 
             // Check if result grid is included in the event
             if (data.data && data.data.grid) {
@@ -258,6 +287,8 @@ function App() {
             }
           } else if (data.status === 'error') {
             eventSource.close();
+            eventSourceRef.current = null;
+            setCurrentTaskId(null);
             setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
           }
         } catch (error) {
@@ -268,6 +299,8 @@ function App() {
       eventSource.onerror = (error) => {
         console.error('SSE error:', error);
         eventSource.close();
+        eventSourceRef.current = null;
+        setCurrentTaskId(null);
         setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
       };
 
@@ -275,6 +308,31 @@ function App() {
       setAutofillProgress({ status: 'error', progress: 0, message: error.message });
     }
   }, [grid, gridSize]);
+
+  const handleCancelAutofill = useCallback(() => {
+    // Close SSE connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Update progress to cancelled state
+    setAutofillProgress({
+      status: 'error',
+      progress: autofillProgress?.progress || 0,
+      message: 'Cancelled by user'
+    });
+
+    // Clear task ID
+    setCurrentTaskId(null);
+
+    // Optional: Call backend to kill the process (for cleaner cancellation)
+    if (currentTaskId) {
+      fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' }).catch(err => {
+        console.warn('Failed to signal backend cancellation:', err);
+      });
+    }
+  }, [currentTaskId, autofillProgress]);
 
   const handleGridImport = useCallback((importedData) => {
     const { grid: importedGrid, size, numbering: importedNumbering } = importedData;
@@ -311,6 +369,25 @@ function App() {
 
   return (
     <div className="app">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          success: {
+            duration: 3000,
+            style: {
+              background: '#4caf50',
+              color: '#fff',
+            },
+          },
+          error: {
+            duration: 4000,
+            style: {
+              background: '#f44336',
+              color: '#fff',
+            },
+          },
+        }}
+      />
       <header className="app-header">
         <div className="header-brand">
           <h1>Crossword Helper</h1>
@@ -376,7 +453,13 @@ function App() {
             <ToolPanel
               gridSize={gridSize}
               onSizeChange={setGridSize}
-              onClearGrid={() => initializeGrid(gridSize)}
+              onClearGrid={() => {
+                if (window.confirm('Clear the entire grid? This cannot be undone.')) {
+                  initializeGrid(gridSize);
+                }
+              }}
+              onLoadGrid={() => setCurrentTool('import')}
+              onSaveGrid={handleSaveGrid}
               validationErrors={validationErrors}
               gridStats={grid ? calculateGridStats(grid) : null}
             />
@@ -392,6 +475,7 @@ function App() {
           {currentTool === 'autofill' && (
             <AutofillPanel
               onStartAutofill={handleAutofill}
+              onCancelAutofill={handleCancelAutofill}
               progress={autofillProgress}
               grid={grid}
             />

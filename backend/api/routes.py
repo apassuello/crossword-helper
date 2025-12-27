@@ -10,6 +10,7 @@ single source of truth architecture.
 
 from flask import Blueprint, request, jsonify
 from backend.core.cli_adapter import get_adapter
+from backend.core.wordlist_resolver import resolve_wordlist_paths
 from backend.api.validators import (
     validate_pattern_request,
     validate_grid_request,
@@ -68,28 +69,9 @@ def pattern_search():
         # Validate request
         data = validate_pattern_request(data)
 
-        # Resolve wordlist paths
-        wordlist_paths = []
-        backend_dir = Path(__file__).parent.parent.parent
-        data_dir = backend_dir / "data" / "wordlists"
-
-        for wordlist_name in data.get("wordlists", ["comprehensive"]):
-            # Handle paths with category (e.g., "core/standard") or without
-            if "/" in wordlist_name or "\\" in wordlist_name:
-                # Could be a category path like "core/standard"
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    # Try as absolute path
-                    wordlist_path = Path(wordlist_name)
-            else:
-                # Simple name, try in root then common locations
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    # Try in core directory
-                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
-
-            if wordlist_path.exists():
-                wordlist_paths.append(str(wordlist_path))
+        # Resolve wordlist paths using shared resolver
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         # Delegate to CLI via adapter
         result = cli_adapter.pattern(
@@ -209,34 +191,34 @@ def fill_grid():
         # Validate request
         data = validate_fill_request(data)
 
-        # Resolve wordlist paths
-        wordlist_paths = []
-        backend_dir = Path(__file__).parent.parent.parent
-        data_dir = backend_dir / "data" / "wordlists"
-
-        for wordlist_name in data.get("wordlists", ["comprehensive"]):
-            # Handle paths with category (e.g., "core/standard") or without
-            if "/" in wordlist_name or "\\" in wordlist_name:
-                # Could be a category path like "core/standard"
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    # Try as absolute path
-                    wordlist_path = Path(wordlist_name)
-            else:
-                # Simple name, try in root then common locations
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    # Try in core directory
-                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
-
-            if wordlist_path.exists():
-                wordlist_paths.append(str(wordlist_path))
+        # Resolve wordlist paths using shared resolver
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         if not wordlist_paths:
             return handle_error("INVALID_WORDLISTS", "No valid wordlists found", 400)
 
+        # Convert frontend grid format to CLI format
+        # Frontend: [{"letter": "A", "isBlack": false}, ...]
+        # CLI: ["A", "#", ".", ...]
+        cli_grid = []
+        for row in data["grid"]:
+            cli_row = []
+            for cell in row:
+                if isinstance(cell, dict):
+                    if cell.get("isBlack", False):
+                        cli_row.append("#")
+                    elif cell.get("letter", ""):
+                        cli_row.append(cell["letter"].upper())
+                    else:
+                        cli_row.append(".")
+                else:
+                    # Already in CLI format (string)
+                    cli_row.append(cell)
+            cli_grid.append(cli_row)
+
         # Prepare grid data
-        grid_data = {"size": data["size"], "grid": data["grid"]}
+        grid_data = {"size": data["size"], "grid": cli_grid}
 
         # Delegate to CLI via adapter
         result = cli_adapter.fill(
@@ -345,23 +327,9 @@ def pattern_search_with_progress():
         # Create progress tracker
         task_id = create_progress_tracker()
 
-        # Resolve wordlist paths (same as regular pattern route)
-        wordlist_paths = []
-        backend_dir = Path(__file__).parent.parent.parent
-        data_dir = backend_dir / "data" / "wordlists"
-
-        for wordlist_name in data.get("wordlists", ["comprehensive"]):
-            if "/" in wordlist_name or "\\" in wordlist_name:
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    wordlist_path = Path(wordlist_name)
-            else:
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
-
-            if wordlist_path.exists():
-                wordlist_paths.append(str(wordlist_path))
+        # Resolve wordlist paths using shared resolver
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         # Build CLI command
         cmd_args = [
@@ -405,28 +373,33 @@ def fill_with_progress():
         # Create progress tracker
         task_id = create_progress_tracker()
 
-        # Resolve wordlist paths (same as regular fill route)
-        wordlist_paths = []
-        backend_dir = Path(__file__).parent.parent.parent
-        data_dir = backend_dir / "data" / "wordlists"
-
-        for wordlist_name in data.get("wordlists", ["comprehensive"]):
-            if "/" in wordlist_name or "\\" in wordlist_name:
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    wordlist_path = Path(wordlist_name)
-            else:
-                wordlist_path = data_dir / f"{wordlist_name}.txt"
-                if not wordlist_path.exists():
-                    wordlist_path = data_dir / "core" / f"{wordlist_name}.txt"
-
-            if wordlist_path.exists():
-                wordlist_paths.append(str(wordlist_path))
+        # Resolve wordlist paths using shared resolver
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         # Save grid to temp file
+        # Convert frontend grid format to CLI format
+        # Frontend: [{"letter": "A", "isBlack": false}, ...]
+        # CLI: ["A", "#", ".", ...]
         import tempfile
+        cli_grid = []
+        for row in data["grid"]:
+            cli_row = []
+            for cell in row:
+                if isinstance(cell, dict):
+                    if cell.get("isBlack", False):
+                        cli_row.append("#")
+                    elif cell.get("letter", ""):
+                        cli_row.append(cell["letter"].upper())
+                    else:
+                        cli_row.append(".")
+                else:
+                    # Already in CLI format (string)
+                    cli_row.append(cell)
+            cli_grid.append(cli_row)
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            grid_data = {"size": data["size"], "grid": data["grid"]}
+            grid_data = {"size": data["size"], "grid": cli_grid}
             json.dump(grid_data, f)
             grid_file = f.name
 

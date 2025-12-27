@@ -51,23 +51,26 @@ class MRVSlotSelector(SlotSelectionStrategy):
         self.word_list = word_list
         self.theme_entries = theme_entries or {}
 
-    def select_next_slot(self, unfilled_slots: List[Dict], state: BeamState) -> Optional[Dict]:
+    def select_next_slot(self, unfilled_slots: List[Dict], state: BeamState, recently_failed: Optional[List[Tuple]] = None) -> Optional[Dict]:
         """
         Select next slot using Dynamic MRV with intelligent tie-breaking.
 
         Strategy:
         1. Calculate domain size for each slot
         2. Prefer slots with smallest domain (MRV)
-        3. Tie-break by degree (number of unfilled crossings)
-        4. Further tie-break by alternating direction
+        3. Heavily penalize recently failed slots to prevent thrashing
+        4. Tie-break by degree (number of unfilled crossings)
+        5. Further tie-break by alternating direction
 
         Args:
             unfilled_slots: List of slots not yet filled
             state: Current beam state for domain evaluation
+            recently_failed: Optional list of recently failed slot_ids (for deprioritization)
 
         Returns:
             Selected slot or None if no slots available
         """
+        recently_failed = recently_failed or []
         if not unfilled_slots:
             return None
 
@@ -116,6 +119,24 @@ class MRVSlotSelector(SlotSelectionStrategy):
             degree = candidate['degree']
             length = candidate['length']
             direction = candidate['direction']
+            slot_id = (candidate['slot']['row'], candidate['slot']['col'], candidate['slot']['direction'])
+
+            # Calculate failure penalty to prevent thrashing
+            failure_penalty = 0
+
+            # Heavy penalty for recently failed slots (prevents infinite retry loops)
+            if slot_id in recently_failed:
+                # Penalty based on how recently it failed (0-4 index)
+                recency_index = recently_failed.index(slot_id)
+                # Most recent failure gets highest penalty
+                failure_penalty = 1000 * (len(recently_failed) - recency_index)
+                logger.debug(f"    Slot {slot_id} has recent failure (recency={recency_index}), penalty={failure_penalty}")
+
+            # Extremely high penalty for impossible slots (domain_size=0)
+            # These should almost never be selected as they will always fail
+            if domain == 0:
+                failure_penalty += 10000
+                logger.debug(f"    Slot {slot_id} has zero domain, adding 10000 penalty")
 
             # Prefer alternating directions for natural fill
             direction_bonus = 0
@@ -123,10 +144,11 @@ class MRVSlotSelector(SlotSelectionStrategy):
                 if direction != last_direction:
                     direction_bonus = -0.1  # Small bonus for alternating
 
-            return (domain,           # Primary: smallest domain first
-                   -degree,           # Secondary: highest degree first
-                   -length,           # Tertiary: longest slots first
-                   direction_bonus)   # Quaternary: alternate directions
+            # Primary key is domain + failure penalty (prevents selecting impossible/failed slots)
+            return (domain + failure_penalty,  # Primary: domain + penalties
+                   -degree,                    # Secondary: highest degree first
+                   -length,                    # Tertiary: longest slots first
+                   direction_bonus)            # Quaternary: alternate directions
 
         candidates.sort(key=mrv_key)
 

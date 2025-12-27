@@ -8,6 +8,72 @@
     color: #667eea;
   }
 
+  .error-banner {
+    background: #fee;
+    border: 2px solid #f88;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #c00;
+
+    strong {
+      margin-right: 0.5rem;
+    }
+
+    .dismiss-btn {
+      background: none;
+      border: none;
+      color: #c00;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 1rem;
+      line-height: 1;
+
+      &:hover {
+        color: #900;
+      }
+    }
+  }
+
+  .status-banner {
+    background: #e8f5e9;
+    border: 2px solid #4caf50;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    color: #2e7d32;
+    font-weight: 500;
+  }
+
+  .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem auto;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+
+    p {
+      margin-top: 1rem;
+    }
+  }
+
   .panel-layout {
     display: grid;
     grid-template-columns: 320px 1fr;
@@ -439,6 +505,171 @@
               transform: translateY(-2px);
             }
           }
+        }
+      }
+    }
+  }
+
+  // Phase 4: Upload wordlist UI
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+
+    h2 {
+      margin: 0;
+    }
+
+    .upload-btn-header {
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+    }
+  }
+
+  .upload-section {
+    background: #f8f9fa;
+    border: 2px solid #667eea;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+
+    h3 {
+      margin-bottom: 1.5rem;
+      color: #667eea;
+    }
+
+    .upload-form {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+
+      .form-group {
+        margin-bottom: 1.5rem;
+
+        label {
+          display: block;
+          margin-bottom: 0.5rem;
+          font-weight: 600;
+          color: #333;
+        }
+
+        input[type="text"] {
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #e0e0e0;
+          border-radius: 6px;
+          font-size: 1rem;
+
+          &:focus {
+            outline: none;
+            border-color: #667eea;
+          }
+        }
+
+        input[type="file"] {
+          padding: 0.5rem 0;
+          cursor: pointer;
+        }
+
+        .file-info {
+          margin-top: 0.5rem;
+          padding: 0.5rem;
+          background: #e3f2fd;
+          border-radius: 4px;
+          font-size: 0.9rem;
+          color: #1976d2;
+        }
+      }
+
+      .upload-error {
+        padding: 0.75rem;
+        background: #ffebee;
+        border: 2px solid #f44336;
+        border-radius: 6px;
+        color: #c62828;
+        margin-bottom: 1rem;
+      }
+
+      .upload-actions {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+
+        .upload-btn {
+          flex: 1;
+          padding: 0.75rem 1.5rem;
+          background: #4caf50;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover:not(:disabled) {
+            background: #45a049;
+            transform: translateY(-1px);
+          }
+
+          &:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+          }
+        }
+
+        .cancel-btn {
+          padding: 0.75rem 1.5rem;
+          background: white;
+          color: #666;
+          border: 2px solid #e0e0e0;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover {
+            border-color: #999;
+            color: #333;
+          }
+        }
+      }
+
+      .upload-help {
+        padding: 1rem;
+        background: #fff3e0;
+        border-left: 4px solid #ff9800;
+        border-radius: 4px;
+
+        p {
+          margin: 0.5rem 0;
+          color: #666;
+          font-size: 0.9rem;
+
+          strong {
+            color: #333;
+          }
+        }
+
+        pre {
+          margin: 0.5rem 0;
+          padding: 0.5rem;
+          background: white;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 0.85rem;
+          color: #333;
         }
       }
     }

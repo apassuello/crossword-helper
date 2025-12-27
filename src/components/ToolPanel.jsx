@@ -1,7 +1,7 @@
 import React from 'react';
 import './ToolPanel.scss';
 
-function ToolPanel({ gridSize, onSizeChange, onClearGrid, validationErrors, gridStats }) {
+function ToolPanel({ gridSize, onSizeChange, onClearGrid, onLoadGrid, onSaveGrid, validationErrors, gridStats }) {
   return (
     <div className="tool-panel">
       <h2>Grid Tools</h2>
@@ -71,10 +71,10 @@ function ToolPanel({ gridSize, onSizeChange, onClearGrid, validationErrors, grid
           <button onClick={onClearGrid} className="action-btn">
             Clear Grid
           </button>
-          <button className="action-btn">
+          <button onClick={onLoadGrid} className="action-btn">
             Load Grid
           </button>
-          <button className="action-btn">
+          <button onClick={onSaveGrid} className="action-btn">
             Save Grid
           </button>
         </div>

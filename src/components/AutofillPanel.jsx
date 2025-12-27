@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import './AutofillPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 
-function AutofillPanel({ onStartAutofill, progress, grid }) {
+function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid }) {
   const [options, setOptions] = useState({
     minScore: 50,
     preferPersonalWords: true,
     timeout: 300,
     wordlists: ['comprehensive'],
-    algorithm: 'regex'  // 'regex' or 'trie'
+    algorithm: 'beam'  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
   });
 
   const handleOptionChange = (key, value) => {
@@ -179,13 +179,13 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
               <input
                 type="radio"
                 name="algorithm"
-                value="regex"
-                checked={options.algorithm === 'regex'}
+                value="beam"
+                checked={options.algorithm === 'beam'}
                 onChange={(e) => handleOptionChange('algorithm', e.target.value)}
               />
               <span className="radio-label">
-                <strong>Regex</strong> (Classic)
-                <small>Stable, well-tested algorithm</small>
+                <strong>Beam Search</strong> (Recommended)
+                <small>Best for complex grids, with anti-thrashing fixes</small>
               </span>
             </label>
             <label className="radio-option">
@@ -198,7 +198,20 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
               />
               <span className="radio-label">
                 <strong>Trie</strong> (Fast)
-                <small>10-50x faster for large wordlists</small>
+                <small>Classic CSP, faster for simple grids</small>
+              </span>
+            </label>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="algorithm"
+                value="regex"
+                checked={options.algorithm === 'regex'}
+                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
+              />
+              <span className="radio-label">
+                <strong>Regex</strong> (Legacy)
+                <small>Fallback option, slower</small>
               </span>
             </label>
           </div>
@@ -327,7 +340,11 @@ function AutofillPanel({ onStartAutofill, progress, grid }) {
             }
           />
           {progress.status === 'running' && (
-            <button className="cancel-btn" style={{marginTop: '1rem'}}>
+            <button
+              className="cancel-btn"
+              style={{marginTop: '1rem'}}
+              onClick={onCancelAutofill}
+            >
               Cancel
             </button>
           )}

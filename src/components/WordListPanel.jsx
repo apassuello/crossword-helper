@@ -14,6 +14,12 @@ const WordListPanel = () => {
   const [showStats, setShowStats] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [newWords, setNewWords] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const [error, setError] = useState(null);
+  const [operationStatus, setOperationStatus] = useState(null);
 
   // Load wordlists on mount
   useEffect(() => {
@@ -22,6 +28,7 @@ const WordListPanel = () => {
 
   const loadWordlists = async () => {
     try {
+      setError(null);
       const response = await axios.get('/api/wordlists');
       setWordlists(response.data.wordlists);
       setCategories(response.data.categories);
@@ -29,6 +36,7 @@ const WordListPanel = () => {
       setLoading(false);
     } catch (error) {
       console.error('Failed to load wordlists:', error);
+      setError('Failed to load wordlists. Please refresh the page.');
       setLoading(false);
     }
   };
@@ -36,6 +44,7 @@ const WordListPanel = () => {
   const loadWordlist = async (key) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await axios.get(`/api/wordlists/${key}`, {
         params: { stats: showStats }
       });
@@ -45,6 +54,7 @@ const WordListPanel = () => {
       setLoading(false);
     } catch (error) {
       console.error('Failed to load wordlist:', error);
+      setError(`Failed to load wordlist "${key}". Please try again.`);
       setLoading(false);
     }
   };
@@ -67,35 +77,199 @@ const WordListPanel = () => {
       .filter(w => w && !w.startsWith('#'));
 
     try {
+      setError(null);
+      setOperationStatus('Adding words...');
       await axios.put(`/api/wordlists/${selectedWordlist}`, {
         add_words: wordsToAdd
       });
       await loadWordlist(selectedWordlist);
       setNewWords('');
       setEditMode(false);
+      setOperationStatus(`Successfully added ${wordsToAdd.length} word(s)!`);
+      setTimeout(() => setOperationStatus(null), 3000);
     } catch (error) {
       console.error('Failed to add words:', error);
+      setError(error.response?.data?.error || 'Failed to add words. Please try again.');
+      setOperationStatus(null);
     }
   };
 
   const handleDeleteWordlist = async (key) => {
-    if (!confirm(`Delete wordlist "${key}"?`)) return;
+    if (!window.confirm(`Delete wordlist "${key}"? This cannot be undone.`)) return;
 
     try {
+      setError(null);
+      setOperationStatus('Deleting wordlist...');
       await axios.delete(`/api/wordlists/${key}`);
       await loadWordlists();
       if (selectedWordlist === key) {
         setSelectedWordlist(null);
         setWordlistContent(null);
       }
+      setOperationStatus(`Successfully deleted "${key}"!`);
+      setTimeout(() => setOperationStatus(null), 3000);
     } catch (error) {
       console.error('Failed to delete wordlist:', error);
+      setError(error.response?.data?.error || 'Failed to delete wordlist. Please try again.');
+      setOperationStatus(null);
+    }
+  };
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith('.txt')) {
+      setUploadError('Please select a .txt file');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('File size must be less than 10MB');
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadError('');
+
+    // Auto-populate name from filename (without .txt extension)
+    if (!uploadName) {
+      setUploadName(file.name.replace('.txt', ''));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadName.trim()) {
+      setUploadError('Please provide a name and select a file');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setUploadError('');
+
+      // Read file content
+      const content = await uploadFile.text();
+
+      // Send to backend
+      const response = await axios.post('/api/wordlists/import', {
+        name: uploadName.trim(),
+        content: content,
+        category: 'custom',
+        metadata: {
+          description: `Uploaded from ${uploadFile.name}`,
+          tags: ['custom', 'uploaded']
+        }
+      });
+
+      // Refresh wordlists
+      await loadWordlists();
+
+      // Reset form
+      setUploadFile(null);
+      setUploadName('');
+      setShowUpload(false);
+      setLoading(false);
+
+      // Auto-select the new wordlist
+      const newKey = response.data.name;
+      await loadWordlist(newKey);
+
+    } catch (error) {
+      console.error('Failed to upload wordlist:', error);
+      setUploadError(error.response?.data?.error || 'Failed to upload wordlist');
+      setLoading(false);
     }
   };
 
   return (
     <div className="wordlist-panel">
-      <h2>Word List Management</h2>
+      <div className="panel-header">
+        <h2>Word List Management</h2>
+        <button
+          className="upload-btn-header"
+          onClick={() => setShowUpload(!showUpload)}
+        >
+          {showUpload ? 'Cancel Upload' : '📤 Upload Wordlist'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="error-banner">
+          <strong>Error:</strong> {error}
+          <button className="dismiss-btn" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
+      {operationStatus && (
+        <div className="status-banner">
+          {operationStatus}
+        </div>
+      )}
+
+      {showUpload && (
+        <div className="upload-section">
+          <h3>Upload Wordlist</h3>
+          <div className="upload-form">
+            <div className="form-group">
+              <label>Wordlist Name:</label>
+              <input
+                type="text"
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+                placeholder="Enter a name for this wordlist"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Select File (.txt):</label>
+              <input
+                type="file"
+                accept=".txt"
+                onChange={handleFileSelect}
+              />
+              {uploadFile && (
+                <div className="file-info">
+                  Selected: {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
+            </div>
+
+            {uploadError && (
+              <div className="upload-error">{uploadError}</div>
+            )}
+
+            <div className="upload-actions">
+              <button
+                className="upload-btn"
+                onClick={handleUpload}
+                disabled={!uploadFile || !uploadName.trim() || loading}
+              >
+                {loading ? 'Uploading...' : 'Upload'}
+              </button>
+              <button
+                className="cancel-btn"
+                onClick={() => {
+                  setShowUpload(false);
+                  setUploadFile(null);
+                  setUploadName('');
+                  setUploadError('');
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="upload-help">
+              <p><strong>File Format:</strong> Plain text file with one word per line</p>
+              <p><strong>Example:</strong></p>
+              <pre>APPLE{'\n'}BANANA{'\n'}CHERRY</pre>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="panel-layout">
         {/* Left sidebar - Categories and wordlists */}
@@ -154,7 +328,10 @@ const WordListPanel = () => {
         {/* Right content - Selected wordlist details */}
         <div className="content">
           {loading ? (
-            <div className="loading">Loading...</div>
+            <div className="loading">
+              <div className="spinner"></div>
+              <p>Loading...</p>
+            </div>
           ) : wordlistContent ? (
             <div className="wordlist-content">
               <div className="content-header">

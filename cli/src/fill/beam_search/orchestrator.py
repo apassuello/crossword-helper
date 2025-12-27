@@ -89,6 +89,11 @@ class BeamSearchOrchestrator:
         self.start_time = 0.0
         self.iterations = 0
 
+        # Failure tracking (prevents thrashing on impossible slots)
+        self.slot_attempt_history = {}  # (beam_signature, slot_id) -> attempt_count
+        self.recently_failed = []  # List of recently failed slot_ids (for MRV deprioritization)
+        self.max_attempts_per_slot = 3  # Max retries per (beam, slot) combination before backtracking
+
         # Initialize components
         self._init_components()
 
@@ -147,7 +152,8 @@ class BeamSearchOrchestrator:
         """
         Return quality threshold appropriate for word length.
 
-        Different word lengths require different quality standards.
+        Respects user's --min-score setting as baseline, with 3-letter
+        words allowed to be more lenient (crosswordese needed for fill).
 
         Args:
             length: Word length in letters
@@ -157,14 +163,30 @@ class BeamSearchOrchestrator:
         """
         if length <= 3:
             return 0    # Accept any word (crosswordese OK)
-        elif length == 4:
-            return 10   # Slightly filtered
-        elif length <= 6:
-            return 30   # Prefer common words
-        elif length <= 8:
-            return 50   # Common words only
-        else:  # 9+ letters
-            return 70   # High-quality phrases only
+        else:
+            # Use user's min_score for all other lengths
+            return self.min_score
+
+    def _get_beam_signature(self, beam: List[BeamState]) -> int:
+        """
+        Create signature representing current beam configuration.
+
+        Uses the first beam state's slot assignments as a signature to identify
+        unique (beam, slot) combinations. This prevents retrying the same slot
+        with the same beam constraints.
+
+        Args:
+            beam: Current beam states
+
+        Returns:
+            Hash of beam configuration
+        """
+        if not beam:
+            return hash(frozenset())
+
+        # Use first beam state's assignments as signature
+        assignments = frozenset(beam[0].slot_assignments.items())
+        return hash(assignments)
 
     def fill(self, timeout: int = 300):
         """
@@ -190,6 +212,10 @@ class BeamSearchOrchestrator:
         self.iterations = 0
         self.failed_expansions = 0  # Phase 4.5: Track expansion failures
         self.max_failed_expansions = 10  # Phase 4.5: Allow 10 failures before giving up
+
+        # Reset failure tracking for this fill attempt
+        self.slot_attempt_history.clear()
+        self.recently_failed.clear()
 
         # Get all empty slots
         all_slots = self.grid.get_empty_slots()
@@ -245,7 +271,7 @@ class BeamSearchOrchestrator:
             if not unfilled_slots:
                 break
 
-            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0])
+            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
             if slot is None:
                 break
 
@@ -268,19 +294,65 @@ class BeamSearchOrchestrator:
                 expanded_beam = self._try_backtracking(beam, slot)
 
             if not expanded_beam:
-                # Phase 4.5: Persistent retry instead of immediate exit
-                self.failed_expansions += 1
-                logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_idx} (failure {self.failed_expansions}/{self.max_failed_expansions})")
+                # Track this failure to prevent thrashing on same (beam, slot) combination
+                beam_sig = self._get_beam_signature(beam)
+                attempt_key = (beam_sig, slot_id)
 
-                # Try deeper backtracking before giving up
-                if self.failed_expansions < self.max_failed_expansions:
-                    logger.debug(f"  Skipping this slot temporarily, will try next MRV slot...")
-                    # Skip this slot, algorithm will circle back when constraints change
-                    filled_slots.discard(slot_id)  # Unmark as attempted
+                # Increment attempt count for this specific (beam, slot) combination
+                attempts = self.slot_attempt_history.get(attempt_key, 0) + 1
+                self.slot_attempt_history[attempt_key] = attempts
+
+                # Track in recently_failed list for MRV deprioritization
+                if slot_id not in self.recently_failed:
+                    self.recently_failed.insert(0, slot_id)
+                    # Keep only last 5 failures
+                    if len(self.recently_failed) > 5:
+                        self.recently_failed.pop()
+
+                logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_id}")
+                logger.debug(f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination")
+                logger.debug(f"  Recently failed slots: {self.recently_failed[:3]}")
+
+                # If we haven't exhausted attempts for this combination, continue
+                # MRV will now heavily penalize this slot and try alternatives
+                if attempts < self.max_attempts_per_slot:
+                    logger.debug(f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})")
+                    filled_slots.discard(slot_id)
                     continue
-                else:
-                    logger.debug(f"  Max failures reached, stopping.")
+
+                # Attempts exhausted for this (beam, slot) - need proper backtracking
+                logger.debug(f"  Max attempts reached for this slot, attempting backtracking...")
+
+                # If no filled slots to backtrack from, we're stuck
+                if len(filled_slots) == 0:
+                    logger.debug(f"  No slots to backtrack from, grid may be impossible")
                     break
+
+                # Proper CSP backtracking: undo last assignment(s)
+                backtracked_beam = self._backtrack_beam_states(beam, depth=1)
+
+                if not backtracked_beam:
+                    logger.debug(f"  Backtracking failed, grid may be impossible")
+                    break
+
+                # Update beam to backtracked state
+                beam = backtracked_beam
+
+                # Remove the slot we just backtracked from filled_slots
+                # (it's the most recently added slot to the backtracked state)
+                if filled_slots:
+                    # Find slots in beam that are no longer filled after backtracking
+                    beam_filled_slots = set(beam[0].slot_assignments.keys())
+                    removed_slots = filled_slots - beam_filled_slots
+                    for removed_slot in removed_slots:
+                        filled_slots.discard(removed_slot)
+                        logger.debug(f"  Backtracked slot {removed_slot}")
+
+                # Remove current failing slot from filled_slots too
+                filled_slots.discard(slot_id)
+
+                logger.debug(f"  Backtracking complete, now have {len(filled_slots)} filled slots")
+                continue
 
             # Adaptive beam width
             adaptive_width = self.beam_manager.get_adaptive_beam_width(
@@ -332,6 +404,104 @@ class BeamSearchOrchestrator:
 
         return initial_grid, theme_slot_count, theme_slot_assignments, theme_words, sorted_slots
 
+    def _analyze_slot_conflicts(self, state: BeamState, slot: Dict) -> Set[Tuple[int, int, str]]:
+        """
+        Identify which filled slots are causing the current slot to have no valid candidates.
+
+        This enables intelligent backjumping: instead of chronologically undoing the
+        most recent assignment, we can jump back to the actual conflicting slot.
+
+        Args:
+            state: Current beam state
+            slot: The slot that failed (has no valid candidates)
+
+        Returns:
+            Set of slot_ids (row, col, direction) that conflict with current slot
+        """
+        conflicts = set()
+        pattern = state.grid.get_pattern_for_slot(slot)
+
+        # Get all filled intersecting slots
+        for slot_id, word in state.slot_assignments.items():
+            row, col, direction = slot_id
+
+            # Check if slots intersect
+            if not self._slots_intersect(slot, {'row': row, 'col': col, 'direction': direction, 'length': len(word)}):
+                continue
+
+            # Find intersection positions
+            intersection_pos_current, intersection_pos_other = self._get_intersection_positions(
+                slot, {'row': row, 'col': col, 'direction': direction, 'length': len(word)}
+            )
+
+            if intersection_pos_current is None or intersection_pos_other is None:
+                continue
+
+            # Get the constraint letter from the intersecting word
+            constraint_letter = word[intersection_pos_other]
+
+            # Create pattern without this constraint
+            pattern_list = list(pattern)
+            pattern_without_constraint = pattern_list.copy()
+            pattern_without_constraint[intersection_pos_current] = '?'
+            pattern_without = ''.join(pattern_without_constraint)
+
+            # Check if this constraint is eliminating all candidates
+            min_score = self._get_min_score_for_length(slot['length'])
+            candidates_without = self.pattern_matcher.find(pattern_without, min_score=0)  # Very lenient
+            candidates_with = self.pattern_matcher.find(pattern, min_score=min_score)
+
+            if len(candidates_without) > 0 and len(candidates_with) == 0:
+                # This constraint is problematic - it's eliminating all candidates
+                conflicts.add(slot_id)
+                logger.debug(f"    Conflict detected: slot {slot_id} with letter '{constraint_letter}' at pos {intersection_pos_current}")
+
+        logger.debug(f"  Analyzed conflicts for slot {(slot['row'], slot['col'], slot['direction'])}: found {len(conflicts)} conflicts")
+        return conflicts
+
+    def _slots_intersect(self, slot1: Dict, slot2: Dict) -> bool:
+        """Check if two slots intersect."""
+        # If same direction, they can't intersect (parallel)
+        if slot1['direction'] == slot2['direction']:
+            return False
+
+        # Check if they overlap
+        if slot1['direction'] == 'across':
+            # slot1 is across (row fixed), slot2 is down (col fixed)
+            # They intersect if slot1's row is in slot2's row range AND slot2's col is in slot1's col range
+            across_row, across_col = slot1['row'], slot1['col']
+            down_row, down_col = slot2['row'], slot2['col']
+
+            return (down_col >= across_col and down_col < across_col + slot1['length'] and
+                    across_row >= down_row and across_row < down_row + slot2['length'])
+        else:
+            # slot1 is down, slot2 is across
+            return self._slots_intersect(slot2, slot1)
+
+    def _get_intersection_positions(self, slot1: Dict, slot2: Dict) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Get the positions where two slots intersect.
+
+        Returns:
+            (position_in_slot1, position_in_slot2) or (None, None) if no intersection
+        """
+        if not self._slots_intersect(slot1, slot2):
+            return (None, None)
+
+        if slot1['direction'] == 'across':
+            # slot1 is across, slot2 is down
+            across_row, across_col = slot1['row'], slot1['col']
+            down_row, down_col = slot2['row'], slot2['col']
+
+            pos_in_across = down_col - across_col
+            pos_in_down = across_row - down_row
+
+            return (pos_in_across, pos_in_down)
+        else:
+            # slot1 is down, slot2 is across - swap and recurse
+            pos2, pos1 = self._get_intersection_positions(slot2, slot1)
+            return (pos1, pos2)
+
     def _backtrack_beam_states(self, beam: List[BeamState], depth: int = 1) -> List[BeamState]:
         """
         Perform true chronological backtracking by undoing recent slot assignments.
@@ -382,49 +552,108 @@ class BeamSearchOrchestrator:
 
     def _try_backtracking(self, beam: List[BeamState], slot: Dict) -> List[BeamState]:
         """
-        Try backtracking with more candidates AND true state backtracking.
+        Multi-level backtracking strategy with conflict analysis.
 
-        Phase 4.5: Enhanced with true chronological backtracking.
+        Strategy progression:
+        1. Try more candidates (relaxed constraints)
+        2. Try with no score filter
+        3. Conflict-directed backjumping (undo problematic assignments)
+        4. Chronological backtracking (undo recent assignments)
+
+        Returns:
+            Expanded beam or empty list if all strategies fail
         """
-        logger.debug(f"\nDEBUG: Trying backtracking...")
+        logger.debug(f"\nDEBUG: Trying backtracking strategies...")
 
         # Try 1: More candidates (2x)
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
         if expanded:
+            logger.debug(f"  ✓ Success with 2x candidates")
             return expanded
 
         # Try 2: Even more candidates (5x)
-        logger.debug(f"  Retry with 5x candidates...")
+        logger.debug(f"  Trying 5x candidates...")
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
         if expanded:
+            logger.debug(f"  ✓ Success with 5x candidates")
             return expanded
 
-        # Try 3: No score filter
-        logger.debug(f"  Retry with min_score=0...")
+        # Try 3: No score filter (accept any quality words)
+        logger.debug(f"  Trying min_score=0...")
         old_min_score = self.min_score
         self.min_score = 0
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
         self.min_score = old_min_score
         if expanded:
+            logger.debug(f"  ✓ Success with no score filter")
             return expanded
 
-        # Try 4: TRUE BACKTRACKING - undo last assignment (Phase 4.5 NEW)
+        # Try 4: CONFLICT-DIRECTED BACKJUMPING (intelligent)
+        # Analyze which filled slots are causing this failure and undo them
+        logger.debug(f"  Analyzing conflicts for intelligent backjumping...")
+        conflicts = self._analyze_slot_conflicts(beam[0], slot)
+
+        if conflicts:
+            logger.debug(f"  Found {len(conflicts)} conflicting slots, attempting backjump...")
+
+            # Create backjumped beam by removing conflicting assignments
+            backjumped_beam = []
+            for state in beam:
+                new_state = state.clone()
+
+                # Remove all conflicting assignments
+                for conflict_slot_id in conflicts:
+                    if conflict_slot_id in new_state.slot_assignments:
+                        word = new_state.slot_assignments[conflict_slot_id]
+                        row, col, direction = conflict_slot_id
+                        word_length = len(word)
+
+                        # Remove word from grid
+                        new_state.grid.remove_word(row, col, word_length, direction)
+
+                        # Remove from tracking structures
+                        del new_state.slot_assignments[conflict_slot_id]
+                        new_state.used_words.discard(word)
+                        new_state.slots_filled -= 1
+
+                        logger.debug(f"    Removed conflicting slot {conflict_slot_id} (word={word})")
+
+                backjumped_beam.append(new_state)
+
+            # Try expanding from backjumped state
+            expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10)
+            if expanded:
+                logger.debug(f"  ✓ Success with conflict-directed backjumping")
+                return expanded
+
+        # Try 5: CHRONOLOGICAL BACKTRACKING - undo last assignment
         logger.debug(f"  Trying chronological backtracking (depth=1)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
         if backtracked_beam:
             expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10)
             if expanded:
+                logger.debug(f"  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
 
-        # Try 5: Deeper backtracking (Phase 4.5 NEW)
-        if self.failed_expansions > 3:
-            logger.debug(f"  Trying deeper backtracking (depth=2)...")
-            backtracked_beam = self._backtrack_beam_states(beam, depth=2)
-            if backtracked_beam:
-                expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
-                if expanded:
-                    return expanded
+        # Try 6: DEEPER CHRONOLOGICAL BACKTRACKING
+        logger.debug(f"  Trying deeper chronological backtracking (depth=2)...")
+        backtracked_beam = self._backtrack_beam_states(beam, depth=2)
+        if backtracked_beam:
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
+            if expanded:
+                logger.debug(f"  ✓ Success with chronological backtracking (depth=2)")
+                return expanded
 
+        # Try 7: VERY DEEP BACKTRACKING (last resort)
+        logger.debug(f"  Trying very deep backtracking (depth=3)...")
+        backtracked_beam = self._backtrack_beam_states(beam, depth=3)
+        if backtracked_beam:
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20)
+            if expanded:
+                logger.debug(f"  ✓ Success with deep backtracking (depth=3)")
+                return expanded
+
+        logger.debug(f"  ✗ All backtracking strategies failed")
         return []  # All backtracking strategies failed
 
     def _create_result(

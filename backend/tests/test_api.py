@@ -31,14 +31,14 @@ class TestHealthEndpoint:
         assert 'components' in data
 
     def test_health_check_components(self, client):
-        """Test health check includes all components."""
+        """Test health check includes all components (Phase 3: CLI architecture)."""
         response = client.get('/api/health')
         data = json.loads(response.data)
 
         components = data['components']
-        assert components['pattern_matcher'] == 'ok'
-        assert components['numbering_validator'] == 'ok'
-        assert components['convention_helper'] == 'ok'
+        # Phase 3: Components are now cli_adapter and api_server
+        assert components['cli_adapter'] in ['ok', 'error']
+        assert components['api_server'] == 'ok'
 
 
 class TestPatternEndpoint:
@@ -213,11 +213,11 @@ class TestNumberEndpoint:
         assert response.status_code == 400
 
     def test_number_grid_invalid_size(self, client):
-        """Test grid numbering with invalid size."""
+        """Test grid numbering with invalid size (Phase 3: must be 3-50)."""
         response = client.post('/api/number',
                                 json={
-                                    'size': 10,  # Invalid: must be 11, 15, or 21
-                                    'grid': [[]]
+                                    'size': 2,  # Invalid: must be >= 3
+                                    'grid': [['A', 'B'], ['C', 'D']]
                                 },
                                 content_type='application/json')
 

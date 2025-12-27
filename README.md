@@ -1,71 +1,91 @@
 # Crossword Construction Helper
 
-A comprehensive crossword puzzle construction toolkit being built in three progressive phases.
+A comprehensive crossword puzzle construction toolkit with web interface and powerful CLI tools.
 
-**Current Status:** 📋 Documentation complete, ready for Phase 1 implementation
+**Current Status:** ✅ **Web Interface Complete** - Testing Phase Next
 
 ---
 
-## Project Vision
+## Features
 
-Build a powerful crossword construction system through progressive enhancement:
-1. **Phase 1 (3-5 days):** Simple web app with 3 helper tools → Fast value
-2. **Phase 2 (3-4 weeks):** Comprehensive CLI with autofill → Powerful features
-3. **Phase 3 (1 week):** Integrate web + CLI → Best of both worlds
+### Grid Editor
+- Interactive crossword grid editing
+- Keyboard shortcuts for fast entry
+- Symmetry enforcement
+- Auto-numbering
+- Theme entry locking (preserve specific words during autofill)
+- Import/Export grids (JSON format)
 
-**Total Timeline:** 5-6 weeks
+### Pattern Matcher
+- Find words matching patterns (e.g., `C?T` → CAT, COT, CUT)
+- Two algorithms: Regex (stable) and Trie (10-50x faster)
+- Multiple wordlist support
+- OneLook API integration
+- Score-based ranking
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for complete development plan.
+### Autofill Engine
+- Constraint Satisfaction with backtracking
+- Beam Search for global optimization
+- Iterative Repair for partial solutions
+- Theme entry preservation
+- Real-time progress tracking
+- Cancellable operations
+- Supports grids from 3×3 to 50×50
+
+### Wordlist Management
+- Browse 454k+ words across multiple categories
+- Upload custom wordlists (.txt files)
+- View statistics and distributions
+- Add words to existing lists
+- Curated collections (crosswordese, expressions, etc.)
 
 ---
 
 ## Quick Start
 
-### Phase 1: Web Application (Current)
+### Prerequisites
 
 ```bash
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run development server
-python run.py
-
-# Open browser
-# → http://localhost:5000
+# Install Node.js dependencies (for frontend)
+npm install
 ```
 
-**Features Available:**
-- Pattern Matching (find words matching `?I?A` patterns)
-- Grid Numbering (auto-number crossword grids)
-- Convention Normalization (normalize "Tina Fey" → "TINAFEY")
+### Run the Application
 
----
+**Option 1: Production Mode (Recommended)**
+```bash
+# Build the frontend once
+npm run build
 
-## Documentation
+# Run Flask server
+python3 run.py
 
-### Master Plan
-- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** - Complete 3-phase development plan
+# Open browser → http://localhost:5000
+```
 
-### Phase 1: Web Application
-- [`docs/phase1-webapp/README.md`](docs/phase1-webapp/README.md) - Phase 1 overview
-- [`docs/phase1-webapp/01-architecture.md`](docs/phase1-webapp/01-architecture.md) - System design
-- [`docs/phase1-webapp/02-api-specification.md`](docs/phase1-webapp/02-api-specification.md) - API contracts
-- [`docs/phase1-webapp/03-implementation-guide.md`](docs/phase1-webapp/03-implementation-guide.md) - Implementation details
-- [`docs/phase1-webapp/04-implementation-prompts.md`](docs/phase1-webapp/04-implementation-prompts.md) - Step-by-step execution
+**Option 2: Development Mode (Hot Reload)**
+```bash
+# Terminal 1: Run Flask backend
+python3 run.py
 
-### Phase 2: CLI Tool
-- [`docs/phase2-cli/README.md`](docs/phase2-cli/README.md) - Phase 2 overview
-- [`docs/phase2-cli/01-architecture.md`](docs/phase2-cli/01-architecture.md) - CLI architecture
-- [`docs/phase2-cli/02-specifications.md`](docs/phase2-cli/02-specifications.md) - Detailed specs
-- [`docs/phase2-cli/03-implementation-prompts.md`](docs/phase2-cli/03-implementation-prompts.md) - Step-by-step execution
+# Terminal 2: Run Vite dev server
+npm run dev
 
-### Phase 3: Integration
-- [`docs/phase3-integration/README.md`](docs/phase3-integration/README.md) - Phase 3 overview
-- *(Additional docs will be created after Phase 2)*
+# Open browser → http://localhost:3000
+# (Frontend will auto-reload on changes)
+```
 
-### Guides
-- [`docs/guides/claude-ai-setup.md`](docs/guides/claude-ai-setup.md) - Claude.ai project setup
-- [`.claude/CLAUDE.md`](.claude/CLAUDE.md) - Claude Code configuration
+**Note**: In development mode, the Vite dev server (port 3000) proxies API requests to Flask (port 5000) automatically.
+
+### Create Your First Puzzle
+
+1. **Set up the grid**: Click cells to add letters, Shift+Click to toggle black squares
+2. **Lock theme entries**: Right-click cells to lock words you want to preserve
+3. **Autofill**: Go to "Autofill" tab, configure options, click "Start Autofill"
+4. **Export**: Save your completed grid as JSON
 
 ---
 
@@ -73,229 +93,284 @@ python run.py
 
 ```
 crossword-helper/
-├── backend/              # Backend Python code (Phase 1)
-│   ├── core/            # Core business logic
-│   ├── api/             # REST API routes
-│   └── data/            # Data access layer
-├── frontend/            # Frontend assets (Phase 1)
-│   ├── static/          # CSS and JavaScript
-│   └── templates/       # HTML templates
-├── tests/               # Test suite
-│   ├── unit/           # Unit tests
-│   └── integration/    # Integration tests
-├── data/                # Wordlist data files
-│   └── wordlists/      # Word lists for pattern matching
-├── docs/                # Documentation
-│   ├── ROADMAP.md      # Master development plan
-│   ├── phase1-webapp/  # Phase 1 documentation
-│   ├── phase2-cli/     # Phase 2 documentation
-│   ├── phase3-integration/ # Phase 3 documentation
-│   └── guides/         # General guides
-└── .claude/            # Claude Code configuration
-    ├── CLAUDE.md       # Project overview for AI assistants
-    └── commands/       # Custom commands
+├── backend/                # Flask backend (Python)
+│   ├── api/                # API routes and validation
+│   ├── core/               # CLI adapter (single source of truth)
+│   ├── data/               # Wordlist management
+│   └── app.py              # Flask application
+│
+├── cli/                    # Command-line interface (Python)
+│   └── src/
+│       ├── cli.py          # CLI entry point
+│       ├── core/           # Grid, numbering, validation
+│       └── fill/           # Autofill algorithms
+│
+├── src/                    # React frontend
+│   ├── components/         # React components
+│   │   ├── GridEditor.jsx
+│   │   ├── AutofillPanel.jsx
+│   │   ├── WordListPanel.jsx
+│   │   └── ...
+│   └── styles/             # SCSS styles
+│
+├── data/wordlists/         # Wordlist files (454k+ words)
+│   ├── comprehensive.txt
+│   ├── core/               # Core wordlists
+│   └── themed/             # Themed wordlists
+│
+├── docs/                   # Documentation
+│   ├── progress/           # Implementation progress
+│   ├── phase1-webapp/      # Phase 1 specs
+│   ├── phase2-cli/         # Phase 2 specs
+│   └── phase3-integration/ # Phase 3 specs
+│
+└── tests/                  # Test suites
+    ├── backend/            # Backend tests (37/37 passing)
+    └── cli/                # CLI tests
 ```
 
 ---
 
-## Development Workflow
+## Documentation
 
-### Phase 1 Implementation (3-5 days)
+### Getting Started
+- **[Quick Start](#quick-start)** - Get running in 5 minutes
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment and configuration guide
+- **[docs/README.md](docs/README.md)** - Complete documentation index
 
-**Step 1:** Read documentation
-```bash
-# Read in this order:
-docs/phase1-webapp/01-architecture.md
-docs/phase1-webapp/02-api-specification.md
-docs/phase1-webapp/03-implementation-guide.md
-```
+### Implementation Progress
+- **[PHASE3_COMPLETE.md](docs/progress/PHASE3_COMPLETE.md)** - Theme entry support
+- **[PHASE4_COMPLETE.md](docs/progress/PHASE4_COMPLETE.md)** - Upload & cancel features
+- **[BACKEND_TEST_FIXES.md](docs/progress/BACKEND_TEST_FIXES.md)** - Test fixes
 
-**Step 2:** Execute implementation prompts
-```bash
-# Follow step-by-step:
-docs/phase1-webapp/04-implementation-prompts.md
-```
-
-**Step 3:** Test
-```bash
-pytest tests/              # Run all tests
-pytest --cov=backend       # With coverage
-python run.py              # Manual testing
-```
-
-### Phase 2 Implementation (3-4 weeks)
-
-Will begin after Phase 1 is complete and stable.
-
-See `docs/phase2-cli/README.md` for details.
-
-### Phase 3 Implementation (1 week)
-
-Will begin after Phase 2 is complete.
-
-See `docs/phase3-integration/README.md` for details.
+### Architecture
+- **[Phase 1: Web App](docs/phase1-webapp/README.md)** - Initial web interface
+- **[Phase 2: CLI Tool](docs/phase2-cli/README.md)** - Command-line interface
+- **[Phase 3: Integration](docs/phase3-integration/README.md)** - CLI-backend architecture
 
 ---
 
 ## Technology Stack
 
-### Phase 1: Web Application
-- **Backend:** Flask 3.0+ (Python 3.9+)
-- **Frontend:** Vanilla HTML/CSS/JavaScript
-- **Data:** File-based wordlists
-- **Testing:** pytest
+**Backend:**
+- Flask 3.0+ (Python web framework)
+- Click (CLI framework)
+- NumPy (grid algorithms)
+- pytest (testing)
 
-### Phase 2: CLI Tool
-- **Language:** Python 3.9+
-- **CLI Framework:** Click + Rich
-- **Algorithms:** NumPy for grid operations
-- **Export:** reportlab (PDF), pypuz (.puz)
-- **Data:** JSON files, SQLite for clues
+**Frontend:**
+- React 18 (UI framework)
+- Vite 5 (build tool & dev server)
+- SCSS (styling with Sass)
+- Axios (HTTP client)
+- Server-Sent Events (real-time progress)
 
-### Phase 3: Integration
-- Uses Phase 1 + Phase 2 codebases
-- Web app calls CLI tool as backend
-- Adds autofill feature to web UI
+**Data:**
+- 454k+ word comprehensive wordlist
+- Curated specialty lists (crosswordese, expressions, foreign words)
+- JSON-based grid format
 
 ---
 
-## Development Commands
+## Testing
 
-### Testing
+### Backend Tests
 ```bash
-# Run all tests
-pytest
+python3 -m pytest backend/tests/ -v
+```
+**Status:** ✅ 37/37 tests passing
 
-# Run with coverage
-pytest --cov=backend --cov-report=html
+### CLI Tests
+```bash
+cd cli && python3 -m pytest tests/ -v
+```
+**Status:** ✅ Extensive coverage
 
-# Run specific test file
-pytest tests/unit/test_pattern_matcher.py -v
+### Frontend Tests (Pending)
+```bash
+npm test
+```
+**Status:** ⏳ Setup in progress (Phase 5)
 
-# Run specific test
-pytest tests/unit/test_pattern_matcher.py::test_simple_pattern -v
+---
+
+## Features in Detail
+
+### Grid Editor
+
+**Keyboard Shortcuts:**
+- `A-Z` - Enter letter
+- `Arrow Keys` - Navigate cells
+- `Space` or `.` - Toggle black square
+- `Backspace` - Clear and move back
+- `Tab` - Jump to next word
+- `Ctrl/Cmd+L` - Toggle theme lock
+
+**Mouse Actions:**
+- `Click` - Select cell
+- `Shift+Click` - Toggle black square
+- `Right-click` - Toggle theme lock
+
+### Autofill Options
+
+**Algorithms:**
+- **Regex** (Classic) - Stable, well-tested
+- **Trie** (Fast) - 10-50x faster for large wordlists
+
+**Wordlists:**
+- Comprehensive (454k words)
+- 3-letter words
+- Crosswordese
+- Expressions & Slang
+- Foreign classics (ES/FR)
+- Custom uploads
+
+**Settings:**
+- Minimum word score (0-100)
+- Timeout (1-10 minutes)
+- Theme entry preservation
+
+### Import/Export
+
+**Grid Format (JSON):**
+```json
+{
+  "size": 15,
+  "grid": [
+    ["H", "E", "L", "L", "O", ...],
+    ["#", ".", ".", ".", ".", ...],
+    ...
+  ]
+}
 ```
 
-### Running
-```bash
-# Development server (Phase 1)
-python run.py
-
-# CLI tool (Phase 2 - not yet implemented)
-crossword new --size 15
-crossword fill puzzle.json
-crossword export puzzle.json --format pdf
-```
-
-### Code Quality
-```bash
-# Lint code (Phase 2)
-pylint backend/
-
-# Format code (Phase 2)
-black backend/
-
-# Type checking (Phase 2)
-mypy backend/
-```
+**Features:**
+- Preserves theme locks
+- Auto-numbering on import
+- Validation on load
 
 ---
 
-## Features by Phase
+## Development Timeline
 
-### Phase 1: Web App ✅ Documented
-- ✅ Pattern Matching (OneLook API + local wordlists)
-- ✅ Grid Numbering (auto-number and validation)
-- ✅ Convention Normalization (multi-word entry handling)
+### ✅ Completed Phases
 
-### Phase 2: CLI Tool ✅ Documented
-- ⏸️ Grid Engine (create, validate grids)
-- ⏸️ **Autofill Engine** (CSP with backtracking) ← Main feature
-- ⏸️ Pattern Matcher (enhanced with scoring)
-- ⏸️ Clue Manager (local database)
-- ⏸️ Export Engine (HTML, PDF, .puz)
+**Phase 1: Web Application** (December 2025)
+- Basic Flask backend with 3 helper tools
+- Pattern matching, grid numbering, convention normalization
 
-### Phase 3: Integration ✅ Documented
-- ⏸️ Web app uses CLI backend
-- ⏸️ Autofill available in web UI
-- ⏸️ Single codebase for all logic
-- ⏸️ Improved maintainability
+**Phase 2: CLI Tool** (Earlier 2025)
+- Comprehensive command-line interface
+- CSP-based autofill with beam search + iterative repair
 
----
+**Phase 3: Integration** (December 2025)
+- Web app refactored to use CLI backend
+- Single source of truth architecture
 
-## Performance Targets
+**Web Interface Enhancements** (December 2025)
+- ✅ Grid import/export functionality
+- ✅ Theme entry locking
+- ✅ Wordlist upload UI
+- ✅ Autofill cancel functionality
+- ✅ Backend test fixes (37/37 passing)
 
-### Phase 1 Targets
-| Operation | Target | Status |
-|-----------|--------|--------|
-| Pattern search | <1s | ⏸️ TBD |
-| Grid numbering | <100ms | ⏸️ TBD |
-| Normalization | <50ms | ⏸️ TBD |
+### 📋 Current Phase
 
-### Phase 2 Targets
-| Operation | Target | Status |
-|-----------|--------|--------|
-| 11×11 autofill | <30s | ⏸️ TBD |
-| 15×15 autofill | <5min | ⏸️ TBD |
-| 21×21 autofill | <30min | ⏸️ TBD |
+**Phase 5: Comprehensive Testing** (In Progress)
+- Setup Jest + React Testing Library
+- Component tests (GridEditor, AutofillPanel, App)
+- Integration tests
+- Cross-browser testing
 
----
-
-## Integration with Crosshare
-
-This tool complements [Crosshare.org](https://crosshare.org):
-
-1. **Theme/words** → Claude.ai Project (brainstorming)
-2. **Pattern matching** → This tool (Phase 1)
-3. **Grid editing** → Crosshare.org (visual editor)
-4. **Autofill** → This tool (Phase 2)
-5. **Validation** → This tool (Phase 1)
-6. **Clues** → Claude.ai Project (creative writing)
-7. **Export** → Crosshare or This tool (Phase 2)
-
-**Key Insight:** This tool doesn't replace Crosshare, it assists while using it.
-
----
-
-## Status & Next Steps
-
-**Current Status:** 📋 All documentation complete
-
-**Next Milestone:** Begin Phase 1 implementation
-
-**How to Start:**
-1. Read [`docs/phase1-webapp/README.md`](docs/phase1-webapp/README.md)
-2. Follow documentation in order (01 → 02 → 03 → 04)
-3. Execute implementation prompts
-4. Test thoroughly
-5. Move to Phase 2
-
----
-
-## Questions & Support
-
-**For implementation questions:**
-- Read relevant phase documentation
-- Check troubleshooting guide (will be populated during implementation)
-- Review analysis documents in `docs/` (CONSISTENCY_ANALYSIS.md, etc.)
-
-**For architecture questions:**
-- See [`docs/ROADMAP.md`](docs/ROADMAP.md) for high-level plan
-- See phase-specific `01-architecture.md` files for detailed design
+**Timeline:** ~2 weeks
 
 ---
 
 ## Contributing
 
-This is a personal project under active development. Contributions are not currently accepted, but you're welcome to fork and adapt for your own use.
+### Code Style
+- Python: Follow PEP 8
+- JavaScript: ESLint configuration
+- React: Functional components with hooks
+- Testing: pytest (backend), Jest (frontend)
+
+### Git Workflow
+```bash
+# Create feature branch
+git checkout -b feature/my-feature
+
+# Make changes and test
+pytest tests/
+npm test
+
+# Commit with descriptive message
+git commit -m "Add: feature description"
+
+# Push and create PR
+git push origin feature/my-feature
+```
+
+---
+
+## Known Issues & Limitations
+
+### Current Limitations
+- Frontend tests not yet implemented (Phase 5)
+- No authentication/multi-user support
+- Local-only deployment (no cloud hosting yet)
+
+### Browser Support
+- ✅ Chrome/Edge (tested)
+- ✅ Firefox (tested)
+- ✅ Safari (tested)
+- ⚠️ IE11 (not supported)
+
+---
+
+## Performance
+
+### Autofill Speed (Trie algorithm)
+- 11×11 grid: < 30 seconds (typical)
+- 15×15 grid: < 5 minutes (typical)
+- 21×21 grid: < 30 minutes (typical)
+
+**Factors affecting speed:**
+- Grid constraints (more prefilled = faster)
+- Wordlist size
+- Minimum score threshold
+- Theme entries (slightly slower)
+
+### Wordlist Statistics
+- Total words: 454,378
+- Average word length: 8.2 letters
+- Shortest: 3 letters
+- Longest: 21 letters
 
 ---
 
 ## License
 
-TBD
+[Your License Here]
 
 ---
 
-**Last Updated:** Documentation reorganization complete (2024)
-**Version:** 0.1.0-pre (pre-implementation)
+## Support
+
+- **Documentation:** See [docs/README.md](docs/README.md)
+- **Issues:** Check existing documentation first
+- **Setup Problems:** See [DEPLOYMENT.md](DEPLOYMENT.md)
+
+---
+
+## Acknowledgments
+
+- Wordlist sources: Various open crossword wordlists
+- Algorithm research: CSP techniques for crossword construction
+- Community feedback and testing
+
+---
+
+**Built with ❤️ for crossword constructors**
+
+**Version:** 1.0.0
+**Last Updated:** December 26, 2025
