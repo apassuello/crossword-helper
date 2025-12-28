@@ -454,3 +454,68 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
             # Remove bigrams with very low counts to keep dict small
             if self.recent_bigrams[bigram] < 0.1:
                 del self.recent_bigrams[bigram]
+
+
+class ThemeWordPriorityOrdering(ValueOrderingStrategy):
+    """
+    Theme word priority ordering strategy.
+
+    Phase 3.4: Theme List Priority Feature
+
+    Prioritizes words from a designated theme wordlist by:
+    1. Sorting theme words to the front of the candidate list
+    2. Adding a score bonus (+50) to theme words
+    3. Maintaining quality ordering within theme/non-theme groups
+
+    This ensures theme words are tried first while preserving the
+    existing quality-based ordering as a secondary criterion.
+    """
+
+    def __init__(self, theme_words: Optional[set] = None):
+        """
+        Initialize theme word priority ordering.
+
+        Args:
+            theme_words: Set of theme words to prioritize (uppercase)
+        """
+        self.theme_words = theme_words or set()
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates with theme words first.
+
+        Algorithm:
+        1. Separate theme words from non-theme words
+        2. Apply +50 score bonus to theme words
+        3. Sort each group by (adjusted) score
+        4. Return theme words + non-theme words
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Candidates with theme words prioritized
+        """
+        if not candidates or not self.theme_words:
+            # No theme words configured, return as-is
+            return candidates
+
+        theme_candidates = []
+        non_theme_candidates = []
+
+        for word, score in candidates:
+            if word in self.theme_words:
+                # Theme word: add +50 bonus
+                theme_candidates.append((word, score + 50))
+            else:
+                # Non-theme word: keep original score
+                non_theme_candidates.append((word, score))
+
+        # Sort each group by score (descending)
+        theme_candidates.sort(key=lambda x: -x[1])
+        non_theme_candidates.sort(key=lambda x: -x[1])
+
+        # Theme words first, then non-theme
+        return theme_candidates + non_theme_candidates

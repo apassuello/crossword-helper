@@ -56,7 +56,8 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         min_score: int = 0,
         diversity_bonus: float = 0.1,
         progress_reporter=None,
-        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None
+        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
+        theme_words=None
     ):
         """
         Initialize beam search solver.
@@ -74,6 +75,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word}
                           These are NON-NEGOTIABLE and will be placed first
+            theme_words: Set of words from theme wordlist to prioritize (optional)
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -88,7 +90,8 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             min_score=min_score,
             diversity_bonus=diversity_bonus,
             progress_reporter=progress_reporter,
-            theme_entries=theme_entries
+            theme_entries=theme_entries,
+            theme_words=theme_words
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator

@@ -19,7 +19,8 @@ from .selection.value_ordering import (
     CompositeValueOrdering,
     LCVValueOrdering,
     StratifiedValueOrdering,
-    ThresholdDiverseOrdering
+    ThresholdDiverseOrdering,
+    ThemeWordPriorityOrdering
 )
 from .beam.diversity import DiversityManager
 from .beam.manager import BeamManager
@@ -48,6 +49,7 @@ class BeamSearchOrchestrator:
         diversity_bonus: float = 0.1,
         progress_reporter=None,
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
+        theme_words=None,
         pause_controller=None,
         task_id: Optional[str] = None
     ):
@@ -64,6 +66,7 @@ class BeamSearchOrchestrator:
             diversity_bonus: Bonus for diverse beams 0.0-1.0 (default: 0.1)
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word}
+            theme_words: Set of words from theme wordlist to prioritize (optional)
             pause_controller: Optional PauseController for pause/resume
             task_id: Optional task identifier for pause/resume
 
@@ -89,6 +92,7 @@ class BeamSearchOrchestrator:
         self.diversity_bonus = diversity_bonus
         self.progress_reporter = progress_reporter
         self.theme_entries = theme_entries or {}
+        self.theme_words = theme_words or set()
         self.pause_controller = pause_controller
         self.task_id = task_id
 
@@ -118,17 +122,20 @@ class BeamSearchOrchestrator:
             pattern_matcher=self.pattern_matcher
         )
 
-        # Value ordering (composite strategy: LCV + threshold-diverse + stratified)
+        # Value ordering (composite strategy: theme priority + LCV + threshold-diverse + stratified)
         # Phase 4.5: Added ThresholdDiverseOrdering for exploration-exploitation balance
         # Phase 5.1: Increased temperature to 0.8 for more exploration
+        # Phase 3.4: Added ThemeWordPriorityOrdering for theme list prioritization
+        theme_priority = ThemeWordPriorityOrdering(theme_words=self.theme_words)  # Phase 3.4
         lcv_ordering = LCVValueOrdering(
             pattern_matcher=self.pattern_matcher,
             min_score_func=self._get_min_score_for_length
         )
         threshold_ordering = ThresholdDiverseOrdering(threshold=50, temperature=0.8)  # Phase 5.1: Was 0.4
         stratified_ordering = StratifiedValueOrdering(tier_size=5)
-        # Phase 4.5: Composite value ordering (LCV + threshold-diverse + stratified)
+        # Phase 4.5: Composite value ordering (theme priority FIRST, then LCV + threshold-diverse + stratified)
         self.value_ordering = CompositeValueOrdering([
+            theme_priority,          # Phase 3.4: Theme words first (before LCV)
             lcv_ordering,           # Least constraining value (prefer words that leave options open)
             threshold_ordering,      # Threshold + temperature exploration (Phase 4.5)
             stratified_ordering      # Stratified shuffling for diversity

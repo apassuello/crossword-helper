@@ -37,7 +37,8 @@ class HybridAutofill:
         beam_width: int = 5,
         max_repair_iterations: int = 500,
         progress_reporter=None,
-        theme_entries=None
+        theme_entries=None,
+        theme_words=None
     ):
         """
         Initialize hybrid autofill solver.
@@ -51,6 +52,7 @@ class HybridAutofill:
             max_repair_iterations: Repair parameter (default: 500)
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
+            theme_words: Set of words from theme wordlist to prioritize (optional)
         """
         self.grid = grid
         self.word_list = word_list
@@ -60,6 +62,7 @@ class HybridAutofill:
         self.max_repair_iterations = max_repair_iterations
         self.progress_reporter = progress_reporter
         self.theme_entries = theme_entries
+        self.theme_words = theme_words or set()
 
     def fill(
         self,
@@ -116,7 +119,8 @@ class HybridAutofill:
             beam_width=self.beam_width,
             min_score=self.min_score,
             progress_reporter=self.progress_reporter,
-            theme_entries=self.theme_entries
+            theme_entries=self.theme_entries,
+            theme_words=self.theme_words
         )
 
         beam_result = beam_search.fill(timeout=beam_timeout)
@@ -145,7 +149,8 @@ class HybridAutofill:
             min_score=self.min_score,
             max_iterations=self.max_repair_iterations,
             progress_reporter=self.progress_reporter,
-            theme_entries=self.theme_entries
+            theme_entries=self.theme_entries,
+            theme_words=self.theme_words
         )
 
         repair_result = repair.fill(timeout=repair_timeout)

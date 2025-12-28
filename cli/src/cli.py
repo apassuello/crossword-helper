@@ -171,6 +171,11 @@ def validate(grid_file: str):
     help="JSON file with theme entries to preserve during fill (format: {\"(row,col,direction)\": \"WORD\"})",
 )
 @click.option(
+    "--theme-wordlist",
+    type=click.Path(exists=True),
+    help="Wordlist to prioritize (theme list) - algorithm will prefer words from this list",
+)
+@click.option(
     "--adaptive",
     is_flag=True,
     default=False,
@@ -194,6 +199,7 @@ def fill(
     json_output: bool,
     attempts: int,
     theme_entries: Optional[str],
+    theme_wordlist: Optional[str],
     adaptive: bool,
     max_adaptations: int,
 ):
@@ -229,6 +235,19 @@ def fill(
 
     if not json_output:
         click.echo(f"  Loaded {len(word_list)} words")
+
+    # Load theme wordlist if provided (Phase 3.4: Theme List Priority)
+    theme_words = set()
+    if theme_wordlist:
+        progress.update(22, f'Loading theme wordlist from {theme_wordlist}')
+        if not json_output:
+            click.echo(f"⭐ Loading theme wordlist from {theme_wordlist}...")
+
+        with open(theme_wordlist, "r") as f:
+            theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith('#')}
+
+        if not json_output:
+            click.echo(f"  ⭐ Loaded {len(theme_words)} theme words (will be prioritized)")
 
     # Load theme entries if provided
     theme_entries_dict = None
@@ -284,19 +303,19 @@ def fill(
         autofill = BeamSearchAutofill(
             grid, word_list, pattern_matcher,
             beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict
+            theme_entries=theme_entries_dict, theme_words=theme_words
         )
     elif algorithm == 'repair':
         autofill = IterativeRepair(
             grid, word_list, pattern_matcher,
             min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict
+            theme_entries=theme_entries_dict, theme_words=theme_words
         )
     elif algorithm == 'hybrid':
         autofill = HybridAutofill(
             grid, word_list, pattern_matcher,
             beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict
+            theme_entries=theme_entries_dict, theme_words=theme_words
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'

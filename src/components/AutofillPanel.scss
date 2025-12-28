@@ -1,3 +1,145 @@
+// Wordlist sections styling
+.wordlist-section {
+  margin-bottom: 1rem;
+
+  h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    margin-top: 0.75rem;
+    color: #555;
+  }
+
+  &.custom-section {
+    border-top: 1px solid #e0e0e0;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+
+    h4 {
+      color: #7b1fa2;
+    }
+  }
+}
+
+.wordlist-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #f5f5f5;
+    }
+
+    input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+  }
+}
+
+.wordlist-item-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  .wordlist-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #f5f5f5;
+    }
+
+    input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+  }
+
+  .theme-designation {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem 0.25rem 2rem;
+    margin-left: 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-left: 2px solid #7b1fa2;
+    background-color: #f3e5f5;
+    border-radius: 0 4px 4px 0;
+    transition: all 0.2s;
+
+    &:hover {
+      background-color: #e1bee7;
+    }
+
+    input[type="radio"] {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .theme-label {
+      color: #7b1fa2;
+      font-weight: 500;
+    }
+  }
+}
+
+.theme-info {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: #fff3e0;
+  border-left: 3px solid #ff9800;
+  border-radius: 4px;
+
+  strong {
+    color: #e65100;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  .help-text {
+    margin: 0.25rem 0 0 0;
+    color: #666;
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+}
+
+.wordlist-loading {
+  text-align: center;
+  padding: 1rem;
+  color: #666;
+  font-style: italic;
+}
+
+.no-custom-lists {
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+
+  .help-text {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+  }
+}
+
 .autofill-panel {
   padding: 2rem;
 

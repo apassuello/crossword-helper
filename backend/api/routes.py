@@ -377,6 +377,13 @@ def fill_with_progress():
         wordlist_names = data.get("wordlists", ["comprehensive"])
         wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
+        # Resolve theme wordlist if specified (Phase 3.4: Theme List Priority)
+        theme_wordlist_path = None
+        if "themeList" in data and data["themeList"]:
+            theme_paths = resolve_wordlist_paths([data["themeList"]])
+            if theme_paths:
+                theme_wordlist_path = theme_paths[0]
+
         # Save grid to temp file
         # Convert frontend grid format to CLI format
         # Frontend: [{"letter": "A", "isBlack": false}, ...]
@@ -427,6 +434,10 @@ def fill_with_progress():
         # Add theme entries flag if provided
         if theme_entries_file:
             cmd_args.extend(["--theme-entries", theme_entries_file])
+
+        # Add theme wordlist flag if specified (Phase 3.4: Theme List Priority)
+        if theme_wordlist_path:
+            cmd_args.extend(["--theme-wordlist", theme_wordlist_path])
 
         # Add adaptive mode flag if enabled (auto black square placement)
         if data.get("adaptive_mode", False):

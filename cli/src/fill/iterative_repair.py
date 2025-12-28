@@ -97,7 +97,8 @@ class IterativeRepair:
         min_score: int = 0,
         max_iterations: int = 1000,
         progress_reporter=None,
-        theme_entries=None
+        theme_entries=None,
+        theme_words=None
     ):
         """
         Initialize iterative repair solver.
@@ -110,6 +111,7 @@ class IterativeRepair:
             max_iterations: Maximum repair iterations (default: 1000)
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
+            theme_words: Set of words from theme wordlist to prioritize (optional)
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -122,6 +124,7 @@ class IterativeRepair:
         self.word_list = word_list
         self.pattern_matcher = pattern_matcher
         self.theme_entries = theme_entries
+        self.theme_words = theme_words or set()
         self.min_score = min_score
         self.max_iterations = max_iterations
         self.progress_reporter = progress_reporter
@@ -545,6 +548,23 @@ class IterativeRepair:
             current_pattern.replace(current_pattern, '?' * slot['length']),  # Full wildcard
             min_score=self.min_score
         )
+
+        # Phase 3.4: Prioritize theme words if configured
+        if self.theme_words:
+            theme_candidates = []
+            non_theme_candidates = []
+
+            for word, score in candidates:
+                if word in self.theme_words:
+                    # Theme word: add +50 bonus
+                    theme_candidates.append((word, score + 50))
+                else:
+                    # Non-theme word: keep original score
+                    non_theme_candidates.append((word, score))
+
+            # Theme words first, then non-theme
+            # Each group is already sorted by score (from pattern_matcher)
+            candidates = theme_candidates + non_theme_candidates
 
         # Limit to top 50
         candidates = candidates[:50]

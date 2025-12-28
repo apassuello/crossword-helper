@@ -11,10 +11,18 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     preferPersonalWords: true,
     timeout: 300,
     wordlists: ['comprehensive'],
+    themeList: null,  // NEW: designated theme list for priority (null or wordlist key)
     algorithm: 'beam',  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
     adaptiveMode: false,  // Auto black square placement when stuck
     maxAdaptations: 3  // Max number of adaptive black squares
   });
+
+  // Available wordlists (loaded from API)
+  const [availableWordlists, setAvailableWordlists] = useState({
+    built_in: [],
+    custom: []
+  });
+  const [wordlistsLoading, setWordlistsLoading] = useState(true);
 
   // Pause/Resume state
   const [pausedTaskId, setPausedTaskId] = useState(null);
@@ -29,6 +37,11 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     setOptions(prev => ({ ...prev, [key]: value }));
   };
 
+  // Load available wordlists on mount
+  useEffect(() => {
+    loadAvailableWordlists();
+  }, []);
+
   // Check for paused state on mount
   useEffect(() => {
     const savedTaskId = localStorage.getItem('paused_autofill_task');
@@ -36,6 +49,24 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
       fetchPausedState(savedTaskId);
     }
   }, []);
+
+  const loadAvailableWordlists = async () => {
+    try {
+      const response = await axios.get('/api/wordlists');
+      const wordlists = response.data.wordlists;
+
+      // Separate built-in from custom
+      const builtIn = wordlists.filter(wl => wl.category !== 'custom');
+      const custom = wordlists.filter(wl => wl.category === 'custom');
+
+      setAvailableWordlists({ built_in: builtIn, custom: custom });
+      setWordlistsLoading(false);
+    } catch (error) {
+      console.error('Failed to load wordlists:', error);
+      setWordlistsLoading(false);
+      // Fall back to hardcoded lists if API fails
+    }
+  };
 
   // Save task ID when autofill starts (don't wait for 'running' status to avoid race condition)
   useEffect(() => {
@@ -506,86 +537,98 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
 
         <div className="option-group">
           <label>Word Lists</label>
-          <div className="wordlist-checkboxes">
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('comprehensive')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'comprehensive']
-                    : options.wordlists.filter(l => l !== 'comprehensive');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              Comprehensive (454k words)
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('core/common_3_letter')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'core/common_3_letter']
-                    : options.wordlists.filter(l => l !== 'core/common_3_letter');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              3-Letter Words
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('core/crosswordese')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'core/crosswordese']
-                    : options.wordlists.filter(l => l !== 'core/crosswordese');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              Crosswordese
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('themed/expressions_and_slang')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'themed/expressions_and_slang']
-                    : options.wordlists.filter(l => l !== 'themed/expressions_and_slang');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              Expressions & Slang
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('themed/foreign_classics')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'themed/foreign_classics']
-                    : options.wordlists.filter(l => l !== 'themed/foreign_classics');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              Foreign Classics (ES/FR)
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.wordlists.includes('themed/foreign_words')}
-                onChange={(e) => {
-                  const lists = e.target.checked
-                    ? [...options.wordlists, 'themed/foreign_words']
-                    : options.wordlists.filter(l => l !== 'themed/foreign_words');
-                  handleOptionChange('wordlists', lists);
-                }}
-              />
-              Foreign Words (5.7k)
-            </label>
-          </div>
+
+          {wordlistsLoading ? (
+            <div className="wordlist-loading">Loading wordlists...</div>
+          ) : (
+            <>
+              {/* Built-in wordlists */}
+              {availableWordlists.built_in.length > 0 && (
+                <div className="wordlist-section">
+                  <h4>Built-in Lists</h4>
+                  <div className="wordlist-checkboxes">
+                    {availableWordlists.built_in.map(wl => (
+                      <label key={wl.key}>
+                        <input
+                          type="checkbox"
+                          checked={options.wordlists.includes(wl.key)}
+                          onChange={(e) => {
+                            const lists = e.target.checked
+                              ? [...options.wordlists, wl.key]
+                              : options.wordlists.filter(l => l !== wl.key);
+                            handleOptionChange('wordlists', lists);
+                          }}
+                        />
+                        {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()} words)`}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Custom wordlists */}
+              {availableWordlists.custom.length > 0 && (
+                <div className="wordlist-section custom-section">
+                  <h4>🎨 Custom Lists</h4>
+                  <div className="wordlist-checkboxes">
+                    {availableWordlists.custom.map(wl => (
+                      <div key={wl.key} className="wordlist-item-container">
+                        <label className="wordlist-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={options.wordlists.includes(wl.key)}
+                            onChange={(e) => {
+                              const lists = e.target.checked
+                                ? [...options.wordlists, wl.key]
+                                : options.wordlists.filter(l => l !== wl.key);
+                              handleOptionChange('wordlists', lists);
+
+                              // If unchecking and it's the theme list, clear theme designation
+                              if (!e.target.checked && options.themeList === wl.key) {
+                                handleOptionChange('themeList', null);
+                              }
+                            }}
+                          />
+                          {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()} words)`}
+                        </label>
+
+                        {/* Theme designation radio button - only show if checked */}
+                        {options.wordlists.includes(wl.key) && (
+                          <label className="theme-designation">
+                            <input
+                              type="radio"
+                              name="themeList"
+                              checked={options.themeList === wl.key}
+                              onChange={() => handleOptionChange('themeList', wl.key)}
+                            />
+                            <span className="theme-label">⭐ Theme List</span>
+                          </label>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Theme list info banner */}
+                  {options.themeList && (
+                    <div className="theme-info">
+                      <strong>⭐ Theme List Active:</strong> {availableWordlists.custom.find(w => w.key === options.themeList)?.name}
+                      <p className="help-text">
+                        The autofill algorithm will prioritize words from this list and try to use as many as possible.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {availableWordlists.custom.length === 0 && (
+                <div className="no-custom-lists">
+                  <p className="help-text">
+                    No custom wordlists yet. Upload one in the "Word Lists" tab!
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
