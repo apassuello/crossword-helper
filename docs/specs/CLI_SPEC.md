@@ -209,7 +209,7 @@ crossword new --size 11 --output test.json
 
 ### Overview
 
-The CLI provides 8 primary commands organized by functionality:
+The CLI provides 11 primary commands organized by functionality:
 
 | Command | Category | Purpose | Typical Usage |
 |---------|----------|---------|---------------|
@@ -221,6 +221,9 @@ The CLI provides 8 primary commands organized by functionality:
 | `validate` | Grid Ops | Validate against NYT standards | Quality check |
 | `show` | Display | Display grid in terminal | Quick preview |
 | `export` | Export | Export to HTML/JSON | Final output |
+| `pause` | State Mgmt | Pause running autofill | ⚠️ Not yet implemented |
+| `resume` | State Mgmt | Resume from saved state | ⚠️ Not yet implemented |
+| `list-states` | State Mgmt | List saved autofill states | ⚠️ Not yet implemented |
 
 ---
 
@@ -781,6 +784,282 @@ crossword export puzzle.json \
 - PDF (via reportlab)
 - .puz (Across Lite format)
 - NYT submission format
+
+---
+
+### Command: `pause`
+
+> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
+>
+> Infrastructure exists in `cli/src/fill/pause_controller.py` - just needs CLI command exposure.
+
+**Purpose:** Request a running autofill task to pause gracefully
+
+**Usage:**
+```bash
+crossword pause <task_id>
+```
+
+**Arguments:**
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `task_id` | String | Yes | Task ID from autofill operation |
+
+**Example:**
+```bash
+# Start autofill (gets task_id)
+crossword fill puzzle.json --json-output
+# Output: {"task_id": "abc123", ...}
+
+# Pause it
+crossword pause abc123
+```
+
+**Output:**
+```
+Pause requested for task abc123
+State will be saved when autofill reaches next checkpoint
+```
+
+**Behavior:**
+1. Creates pause flag file `/tmp/crossword_pause_{task_id}.flag`
+2. CLI autofill process checks this file periodically
+3. When detected, saves CSP state and exits gracefully
+4. State saved to `/tmp/autofill_state_{task_id}.json`
+
+**Notes:**
+- Pause is not immediate - happens at next checkpoint (after current iteration)
+- State includes: grid, filled slots, CSP domains, backtrack count
+- Use `resume` command to continue from saved state
+
+**Implementation:**
+```python
+@cli.command()
+@click.argument('task_id')
+def pause(task_id: str):
+    """Pause a running autofill task"""
+    from cli.src.fill.pause_controller import PauseController
+
+    controller = PauseController(task_id)
+    controller.request_pause()
+    click.echo(f"Pause requested for task {task_id}")
+```
+
+---
+
+### Command: `resume`
+
+> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
+>
+> Infrastructure exists in `cli/src/fill/state_manager.py` - just needs CLI command exposure.
+
+**Purpose:** Resume autofill from a saved state file
+
+**Usage:**
+```bash
+crossword resume <state_file> [OPTIONS]
+```
+
+**Arguments:**
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `state_file` | Path | Yes | Saved state file (.json) |
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--output`, `-o` | Path | `resumed_grid.json` | Output file for completed grid |
+| `--json-output` | Flag | False | Output JSON to stdout |
+| `--algorithm` | Choice[csp,beam,repair] | `csp` | Continue with specified algorithm |
+
+**Example:**
+```bash
+# Resume from saved state
+crossword resume /tmp/autofill_state_abc123.json \
+  --output puzzle.json \
+  --json-output
+
+# Continue with beam search instead of CSP
+crossword resume saved_state.json --algorithm beam
+```
+
+**Output (JSON):**
+```json
+{
+  "success": true,
+  "grid": [[...]],
+  "filled_slots": 76,
+  "total_slots": 76,
+  "resumed_from_slot": 38,
+  "continued_for": 38,
+  "total_backtrack_count": 245
+}
+```
+
+**Behavior:**
+1. Loads saved CSP state from file
+2. Validates state integrity
+3. Resumes autofill from saved position
+4. Returns completed grid when done
+
+**State File Format:**
+```json
+{
+  "task_id": "abc123",
+  "timestamp": "2025-12-27T10:30:00Z",
+  "grid": [[...]],
+  "filled_slots": 38,
+  "total_slots": 76,
+  "csp_state": {
+    "domains": {...},
+    "constraints": {...},
+    "backtrack_count": 127
+  },
+  "options": {
+    "min_score": 50,
+    "timeout": 300,
+    "wordlists": ["comprehensive"]
+  }
+}
+```
+
+**Implementation:**
+```python
+@cli.command()
+@click.argument('state_file', type=click.Path(exists=True))
+@click.option('--output', '-o', default='resumed_grid.json')
+@click.option('--json-output', is_flag=True)
+@click.option('--algorithm', type=click.Choice(['csp', 'beam', 'repair']), default='csp')
+def resume(state_file: str, output: str, json_output: bool, algorithm: str):
+    """Resume autofill from a saved state"""
+    from cli.src.fill.state_manager import StateManager
+    from cli.src.fill.autofill import GridFiller
+
+    # Load state
+    state = StateManager.load_state(state_file)
+
+    # Resume autofill
+    filler = GridFiller.from_state(state, algorithm=algorithm)
+    result = filler.resume()
+
+    if json_output:
+        click.echo(json.dumps(result))
+    else:
+        click.echo(f"Resumed from slot {state['filled_slots']}")
+        click.echo(f"Completed: {result['filled_slots']}/{result['total_slots']} slots")
+```
+
+---
+
+### Command: `list-states`
+
+> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
+>
+> Infrastructure exists in `cli/src/fill/state_manager.py` - just needs CLI command exposure.
+
+**Purpose:** List all saved autofill states
+
+**Usage:**
+```bash
+crossword list-states [OPTIONS]
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--json-output` | Flag | False | Output JSON to stdout |
+| `--sort-by` | Choice[time,progress] | `time` | Sort by timestamp or progress |
+
+**Example:**
+```bash
+# List states (human-readable)
+crossword list-states
+
+# List states (JSON)
+crossword list-states --json-output
+
+# Sort by progress
+crossword list-states --sort-by progress
+```
+
+**Output (Human-Readable):**
+```
+Found 3 saved state(s):
+
+1. Task abc123 (saved 2 hours ago)
+   Progress: 38/76 slots (50%)
+   File: /tmp/autofill_state_abc123.json
+   Size: 245 KB
+
+2. Task xyz789 (saved 5 hours ago)
+   Progress: 60/76 slots (79%)
+   File: /tmp/autofill_state_xyz789.json
+   Size: 312 KB
+
+3. Task def456 (saved 1 day ago)
+   Progress: 12/76 slots (16%)
+   File: /tmp/autofill_state_def456.json
+   Size: 128 KB
+```
+
+**Output (JSON):**
+```json
+{
+  "states": [
+    {
+      "task_id": "abc123",
+      "timestamp": "2025-12-27T10:30:00Z",
+      "slots_filled": 38,
+      "total_slots": 76,
+      "progress": 50,
+      "file_path": "/tmp/autofill_state_abc123.json",
+      "file_size_kb": 245,
+      "age_seconds": 7200
+    }
+  ],
+  "count": 3,
+  "total_size_kb": 685
+}
+```
+
+**Implementation:**
+```python
+@cli.command('list-states')
+@click.option('--json-output', is_flag=True)
+@click.option('--sort-by', type=click.Choice(['time', 'progress']), default='time')
+def list_states(json_output: bool, sort_by: str):
+    """List all saved autofill states"""
+    from cli.src.fill.state_manager import StateManager
+
+    states = StateManager.list_states()
+
+    if sort_by == 'progress':
+        states.sort(key=lambda s: s['progress'], reverse=True)
+    else:
+        states.sort(key=lambda s: s['timestamp'], reverse=True)
+
+    if json_output:
+        click.echo(json.dumps({
+            'states': states,
+            'count': len(states),
+            'total_size_kb': sum(s['file_size_kb'] for s in states)
+        }))
+    else:
+        if not states:
+            click.echo("No saved states found")
+            return
+
+        click.echo(f"Found {len(states)} saved state(s):\n")
+        for i, state in enumerate(states, 1):
+            click.echo(f"{i}. Task {state['task_id']} (saved {_format_age(state['age_seconds'])} ago)")
+            click.echo(f"   Progress: {state['slots_filled']}/{state['total_slots']} slots ({state['progress']}%)")
+            click.echo(f"   File: {state['file_path']}")
+            click.echo(f"   Size: {state['file_size_kb']} KB\n")
+```
 
 ---
 

@@ -1114,6 +1114,10 @@ curl -X POST http://localhost:5000/api/fill/pause/abc123-def456
 
 ### Cancel Autofill
 
+> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.1)
+>
+> This endpoint is fully documented and will be implemented using the existing `PauseController` infrastructure. See BACKEND_SPEC.md for implementation notes.
+
 Cancel an active autofill task immediately.
 
 **Endpoint**: `POST /api/fill/cancel/{task_id}`

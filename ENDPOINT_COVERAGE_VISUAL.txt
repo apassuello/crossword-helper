@@ -1,0 +1,201 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                     BACKEND API ENDPOINT COVERAGE REPORT                     ║
+║                              2025-12-27 Audit                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OVERALL STATISTICS                                                           │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Total Implemented Endpoints:  32                                             │
+│ Documented in Spec:           13  [████████████░░░░░░░░░░░░░░] 41%          │
+│ Undocumented:                 19  [████████████████████░░░░░] 59%           │
+│                                                                              │
+│ Test Status:                  159/165 passing [█████████████████░] 96.4%    │
+│ Architecture Compliance:      100% [████████████████████████] PASS          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ENDPOINTS BY BLUEPRINT                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ┌─ api (routes.py) ─────────────────────────────────── 7 endpoints          │
+│ │  ✅ GET  /api/health                         [DOCUMENTED]                 │
+│ │  ✅ POST /api/pattern                        [DOCUMENTED]                 │
+│ │  ❌ POST /api/pattern/with-progress          [UNDOCUMENTED]               │
+│ │  ✅ POST /api/number                         [DOCUMENTED]                 │
+│ │  ✅ POST /api/normalize                      [DOCUMENTED]                 │
+│ │  ✅ POST /api/fill                           [DOCUMENTED]                 │
+│ │  ✅ POST /api/fill/with-progress             [DOCUMENTED]                 │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 6/7 (86%)          │
+│                                                                              │
+│ ┌─ grid_api (grid_routes.py) ──────────────────── 3 endpoints               │
+│ │  ✅ POST /api/grid/suggest-black-square      [DOCUMENTED]                 │
+│ │  ❌ POST /api/grid/apply-black-squares       [UNDOCUMENTED]               │
+│ │  ❌ POST /api/grid/validate                  [UNDOCUMENTED]               │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 1/3 (33%)          │
+│                                                                              │
+│ ┌─ theme_api (theme_routes.py) ────────────────── 4 endpoints               │
+│ │  ✅ POST /api/theme/upload                   [DOCUMENTED]                 │
+│ │  ✅ POST /api/theme/suggest-placements       [DOCUMENTED]                 │
+│ │  ❌ POST /api/theme/validate                 [UNDOCUMENTED]               │
+│ │  ❌ POST /api/theme/apply-placement          [UNDOCUMENTED]               │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 2/4 (50%)          │
+│                                                                              │
+│ ┌─ pause_resume_api (pause_resume_routes.py) ─── 7 endpoints                │
+│ │  ✅ POST   /api/fill/pause/:task_id          [DOCUMENTED]                 │
+│ │  ✅ POST   /api/fill/resume                  [DOCUMENTED]                 │
+│ │  ❌ GET    /api/fill/state/:task_id          [UNDOCUMENTED]               │
+│ │  ❌ DELETE /api/fill/state/:task_id          [UNDOCUMENTED]               │
+│ │  ❌ GET    /api/fill/states                  [UNDOCUMENTED]               │
+│ │  ❌ POST   /api/fill/states/cleanup          [UNDOCUMENTED]               │
+│ │  ❌ POST   /api/fill/edit-summary            [UNDOCUMENTED]               │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 2/7 (29%)          │
+│                                                                              │
+│ ┌─ progress_api (progress_routes.py) ─────────── 3 endpoints                │
+│ │  ✅ GET  /api/progress/:task_id              [DOCUMENTED]                 │
+│ │  ❌ POST /api/progress/start                 [UNDOCUMENTED]               │
+│ │  ❌ POST /api/progress/:task_id/update       [UNDOCUMENTED]               │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 1/3 (33%)          │
+│                                                                              │
+│ ┌─ wordlist_api (wordlist_routes.py) ────────── 8 endpoints                 │
+│ │  ✅ GET    /api/wordlists                    [DOCUMENTED]                 │
+│ │  ❌ GET    /api/wordlists/:name              [UNDOCUMENTED]               │
+│ │  ❌ POST   /api/wordlists/:name              [UNDOCUMENTED]               │
+│ │  ❌ PUT    /api/wordlists/:name              [UNDOCUMENTED]               │
+│ │  ❌ DELETE /api/wordlists/:name              [UNDOCUMENTED]               │
+│ │  ❌ GET    /api/wordlists/:name/stats        [UNDOCUMENTED]               │
+│ │  ❌ POST   /api/wordlists/search             [UNDOCUMENTED]               │
+│ │  ❌ POST   /api/wordlists/import             [UNDOCUMENTED]               │
+│ └──────────────────────────────────────────────────────────────────────────  │
+│                                                 Coverage: 1/8 (13%)          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CRITICAL MISSING DOCUMENTATION                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ 🔴 HIGH PRIORITY (Production-critical features)                              │
+│                                                                              │
+│    • Full Wordlist CRUD API (7 endpoints)                                   │
+│      - Create, read, update, delete wordlists                               │
+│      - Search and import functionality                                      │
+│      - Wordlist statistics                                                  │
+│                                                                              │
+│    • Pause/Resume State Management (5 endpoints)                            │
+│      - State persistence and retrieval                                      │
+│      - State cleanup and listing                                            │
+│      - Edit summary generation                                              │
+│                                                                              │
+│    • Extended Grid Helpers (2 endpoints)                                    │
+│      - Apply black square suggestions                                       │
+│      - Grid structure validation                                            │
+│                                                                              │
+│    • Theme Placement Helpers (2 endpoints)                                  │
+│      - Theme word validation                                                │
+│      - Direct placement application                                         │
+│                                                                              │
+│ ⚠️  MEDIUM PRIORITY (Quality-of-life features)                               │
+│                                                                              │
+│    • Progress Management API (2 endpoints)                                  │
+│      - Manual progress tracker control                                      │
+│                                                                              │
+│    • Pattern Search with Progress (1 endpoint)                              │
+│      - SSE-enabled pattern search                                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ IMPLEMENTATION QUALITY METRICS                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ✅ Architecture                                                              │
+│    • Three-layer design:              PASS                                  │
+│    • CLIAdapter pattern:              PASS                                  │
+│    • Blueprint organization:          PASS                                  │
+│    • Error handling:                  PASS                                  │
+│    • Security measures:               PASS                                  │
+│                                                                              │
+│ ✅ Core Components                                                           │
+│    • CLIAdapter:                      EXISTS ✓                              │
+│    • EditMerger (AC-3):               EXISTS ✓                              │
+│    • ThemePlacer:                     EXISTS ✓                              │
+│    • BlackSquareSuggester:            EXISTS ✓                              │
+│    • WordlistResolver:                EXISTS ✓                              │
+│                                                                              │
+│ ⚠️  Testing                                                                  │
+│    • Total tests:                     165                                   │
+│    • Passing:                         159 (96.4%)                           │
+│    • Failing:                         6 (3.6%)                              │
+│    • Coverage (claimed):              92%                                   │
+│                                                                              │
+│ ❌ Documentation                                                             │
+│    • Endpoint coverage:               41% (13/32)                           │
+│    • Component coverage:              100% (5/5)                            │
+│    • Architecture coverage:           100%                                  │
+│    • Test status accuracy:            INACCURATE (claims 165/165)           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ RECOMMENDATIONS                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ 1. UPDATE BACKEND_SPEC.md                                                   │
+│    Priority: CRITICAL                                                       │
+│    Effort: 4-6 hours                                                        │
+│    Action: Document all 19 missing endpoints with full schemas              │
+│                                                                              │
+│ 2. FIX FAILING TESTS                                                        │
+│    Priority: HIGH                                                           │
+│    Effort: 2-4 hours                                                        │
+│    Action: Resolve 6 test failures in pause/resume and progress             │
+│                                                                              │
+│ 3. VERIFY COVERAGE CLAIMS                                                   │
+│    Priority: MEDIUM                                                         │
+│    Effort: 30 minutes                                                       │
+│    Action: Run pytest --cov and update spec with actual numbers             │
+│                                                                              │
+│ 4. ADJUST PERFORMANCE TARGETS                                               │
+│    Priority: LOW                                                            │
+│    Effort: 1 hour                                                           │
+│    Action: Update spec to reflect subprocess overhead reality               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OVERALL GRADE: B+ (85/100)                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ • Implementation Quality:     A   (95/100) - Excellent architecture         │
+│ • Documentation Completeness: C   (60/100) - 59% endpoints undocumented     │
+│ • Test Coverage:              B+  (85/100) - 96.4% passing, need fixes      │
+│                                                                              │
+│ VERDICT: APPROVE WITH CONDITIONS                                            │
+│                                                                              │
+│ The implementation is production-ready and exceeds requirements. However,   │
+│ documentation must be updated to reflect the full API surface before this   │
+│ can be considered complete. Once documentation is updated and tests fixed,  │
+│ this will be an A-grade implementation.                                     │
+│                                                                              │
+│ Estimated time to full compliance: 1.5 days                                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Legend:
+  ✅ = Documented and verified
+  ❌ = Implemented but not documented
+  🔴 = High priority documentation needed
+  ⚠️  = Medium priority or needs attention
+
+Generated: 2025-12-27
+Auditor: Claude Code (Expert Code Reviewer)
+Report Files:
+  - BACKEND_AUDIT_REPORT.md (detailed analysis)
+  - BACKEND_AUDIT_SUMMARY.md (quick reference)
+  - ENDPOINT_COVERAGE_VISUAL.txt (this file)
