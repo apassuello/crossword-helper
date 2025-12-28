@@ -67,3 +67,8 @@ test_filled*.json
 
 # Phase 1 test outputs
 test_phase*.json
+
+# Development/demo scripts
+demo_theme_entries.py
+test_theme_entries.py
+test_grid.json
