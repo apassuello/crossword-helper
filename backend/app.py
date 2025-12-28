@@ -51,6 +51,19 @@ def create_app(testing=False):
     app.register_blueprint(theme_api, url_prefix='/api')
     app.register_blueprint(grid_api, url_prefix='/api')
 
+    # Error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        """Handle 404 Not Found errors with JSON response."""
+        from flask import jsonify
+        return jsonify({'error': 'Not found'}), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        """Handle 405 Method Not Allowed errors with JSON response."""
+        from flask import jsonify
+        return jsonify({'error': 'Method not allowed'}), 405
+
     # Serve frontend (Vite build)
     frontend_dist = os.path.join(base_dir, 'frontend', 'dist')
 
@@ -86,22 +99,9 @@ def create_app(testing=False):
         assets_dir = os.path.join(frontend_dist, 'assets')
         return send_from_directory(assets_dir, path)
 
-    @app.route('/<path:path>')
-    def serve_spa(path):
-        """
-        Catch-all route for client-side routing.
-        Serve index.html for any non-API, non-asset routes.
-        """
-        # Check if it's a file that exists (like favicon.ico)
-        file_path = os.path.join(frontend_dist, path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return send_from_directory(frontend_dist, path)
-
-        # Otherwise serve index.html for client-side routing
-        if os.path.exists(frontend_dist):
-            return send_from_directory(frontend_dist, 'index.html')
-        else:
-            return "Frontend not built. Run 'npm run build' first.", 404
+    # Note: Catch-all route should NOT be registered to avoid interfering with API error handling
+    # The SPA routing is handled by the root route serving index.html
+    # Frontend routes are handled by React Router on the client side
 
     return app
 
