@@ -476,27 +476,18 @@ class TestCLIErrorHandling:
         with pytest.raises(subprocess.CalledProcessError):
             cli_adapter._run_command(["invalid-command"])
 
-    def test_cli_malformed_json_output(self, cli_adapter):
+    def test_cli_malformed_json_output(self, cli_adapter, monkeypatch):
         """Test handling of malformed JSON from CLI."""
-        # This is hard to test without modifying CLI, but we can verify
-        # the error handling code path
+        # Mock _run_command to return invalid JSON
+        def mock_run_command(args, timeout=None):
+            # Return malformed JSON output
+            return ("not valid json {{{", "", 0)
+
+        monkeypatch.setattr(cli_adapter, '_run_command', mock_run_command)
+
+        # This should raise ValueError due to JSON parse error
         with pytest.raises(ValueError, match="Failed to parse CLI output"):
-            # Mock a scenario where JSON parsing fails
-            import json as json_module
-            original_loads = json_module.loads
-
-            def mock_loads(s):
-                if "invalid" in s:
-                    raise json_module.JSONDecodeError("test", s, 0)
-                return original_loads(s)
-
-            json_module.loads = mock_loads
-            try:
-                # This would normally work, but we're forcing JSON parse error
-                # In practice, we'd need to modify CLI to output invalid JSON
-                pass
-            finally:
-                json_module.loads = original_loads
+            cli_adapter.pattern("C?T", wordlist_paths=[])
 
 
 # ==================================================

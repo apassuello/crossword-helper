@@ -121,7 +121,7 @@ class TestFillWithProgressEndpoint:
                 "size": 3,
                 "grid": PATTERN_3X3_FRONTEND["grid"],
                 "wordlists": ["comprehensive"],
-                "timeout": 5,  # Short timeout for testing
+                "timeout": 10,  # Minimum allowed timeout
                 "min_score": 0
             },
             content_type='application/json'
