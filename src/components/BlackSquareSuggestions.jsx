@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import toast from 'react-hot-toast';
 import './BlackSquareSuggestions.scss';
 
@@ -23,23 +24,14 @@ function BlackSquareSuggestions({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/grid/suggest-black-square', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grid: grid,
-          grid_size: gridSize,
-          problematic_slot: problematicSlot,
-          max_suggestions: 3
-        })
+      const response = await axios.post('/api/grid/suggest-black-square', {
+        grid: grid,
+        grid_size: gridSize,
+        problematic_slot: problematicSlot,
+        max_suggestions: 3
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to get suggestions');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       setSuggestions(data.suggestions || []);
 
       if (data.suggestions.length === 0) {
@@ -48,7 +40,8 @@ function BlackSquareSuggestions({
 
     } catch (error) {
       console.error('Error fetching black square suggestions:', error);
-      toast.error(error.message || 'Failed to get suggestions');
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to get suggestions';
+      toast.error(errorMsg);
       setSuggestions([]);
     } finally {
       setLoading(false);
@@ -57,21 +50,13 @@ function BlackSquareSuggestions({
 
   const handleApplySuggestion = async (suggestion) => {
     try {
-      const response = await fetch('/api/grid/apply-black-squares', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grid: grid,
-          primary: { row: suggestion.row, col: suggestion.col },
-          symmetric: suggestion.symmetric_position
-        })
+      const response = await axios.post('/api/grid/apply-black-squares', {
+        grid: grid,
+        primary: { row: suggestion.row, col: suggestion.col },
+        symmetric: suggestion.symmetric_position
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to apply black squares');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       // Notify parent component
       if (onApplySuggestion) {
@@ -83,7 +68,8 @@ function BlackSquareSuggestions({
 
     } catch (error) {
       console.error('Error applying black squares:', error);
-      toast.error('Failed to apply black squares');
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to apply black squares';
+      toast.error(errorMsg);
     }
   };
 

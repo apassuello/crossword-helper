@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import './AutofillPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 import BlackSquareSuggestions from './BlackSquareSuggestions';
@@ -45,17 +46,13 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
 
   const fetchPausedState = async (taskId) => {
     try {
-      const response = await fetch(`/api/fill/state/${taskId}`);
-      if (response.ok) {
-        const stateInfo = await response.json();
-        setPausedTaskId(taskId);
-        setPausedStateInfo(stateInfo);
-        setShowResumePrompt(true);
-      } else {
-        // State no longer exists, clear localStorage
-        localStorage.removeItem('paused_autofill_task');
-      }
+      const response = await axios.get(`/api/fill/state/${taskId}`);
+      const stateInfo = response.data;
+      setPausedTaskId(taskId);
+      setPausedStateInfo(stateInfo);
+      setShowResumePrompt(true);
     } catch (err) {
+      // State no longer exists (404) or other error, clear localStorage
       console.error('Failed to fetch paused state:', err);
       localStorage.removeItem('paused_autofill_task');
     }
@@ -68,21 +65,17 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     }
 
     try {
-      const response = await fetch(`/api/fill/pause/${currentTaskId}`, {
-        method: 'POST'
-      });
+      await axios.post(`/api/fill/pause/${currentTaskId}`);
 
-      if (response.ok) {
-        toast.success('Pause requested - waiting for autofill to stop...');
-        // Save task ID for later resume
-        localStorage.setItem('paused_autofill_task', currentTaskId);
-        localStorage.removeItem('current_autofill_task');
+      toast.success('Pause requested - waiting for autofill to stop...');
+      // Save task ID for later resume
+      localStorage.setItem('paused_autofill_task', currentTaskId);
+      localStorage.removeItem('current_autofill_task');
 
-        // Wait a moment for pause to take effect
-        setTimeout(() => {
-          fetchPausedState(currentTaskId);
-        }, 2000);
-      }
+      // Wait a moment for pause to take effect
+      setTimeout(() => {
+        fetchPausedState(currentTaskId);
+      }, 2000);
     } catch (err) {
       console.error('Failed to pause autofill:', err);
       toast.error('Failed to pause autofill. Please try again.');
@@ -101,32 +94,13 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
         row.map(cell => cell.letter ? [cell.letter] : ['.'])
       );
 
-      const response = await fetch('/api/fill/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_id: pausedTaskId,
-          edited_grid: gridArray,
-          options: options
-        })
+      const response = await axios.post('/api/fill/resume', {
+        task_id: pausedTaskId,
+        edited_grid: gridArray,
+        options: options
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-
-        if (response.status === 409) {
-          // User edits create unsolvable configuration
-          toast.error(
-            `Cannot resume: Your edits create an unsolvable grid. ${error.details || ''} Please adjust your changes and try again.`,
-            { duration: 6000 }
-          );
-          return;
-        }
-
-        throw new Error(error.error || 'Resume failed');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       // Clear paused state
       setPausedTaskId(null);
@@ -141,7 +115,19 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
 
     } catch (err) {
       console.error('Failed to resume autofill:', err);
-      toast.error(`Failed to resume: ${err.message}`);
+
+      if (err.response?.status === 409) {
+        // User edits create unsolvable configuration
+        const error = err.response.data;
+        toast.error(
+          `Cannot resume: Your edits create an unsolvable grid. ${error.details || ''} Please adjust your changes and try again.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      const errorMsg = err.response?.data?.error || err.message || 'Resume failed';
+      toast.error(`Failed to resume: ${errorMsg}`);
     }
   };
 
@@ -149,7 +135,7 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     if (confirm('Discard paused state? This cannot be undone.')) {
       if (pausedTaskId) {
         // Delete state file
-        fetch(`/api/fill/state/${pausedTaskId}`, { method: 'DELETE' })
+        axios.delete(`/api/fill/state/${pausedTaskId}`)
           .then(() => toast.success('Paused state discarded'))
           .catch(err => {
             console.error('Failed to delete state:', err);

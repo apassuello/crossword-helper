@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import axios from 'axios';
 import GridEditor from './components/GridEditor';
 import PatternMatcher from './components/PatternMatcher';
 import ToolPanel from './components/ToolPanel';
@@ -190,25 +191,21 @@ function App() {
 
     try {
       // Start autofill with progress tracking
-      const initResponse = await fetch('/api/fill/with-progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          size: gridSize,
-          grid: grid.map(row => row.map(cell =>
-            cell.isBlack ? '#' : (cell.letter || '.')
-          )),
-          wordlists: options.wordlists || ['comprehensive'],
-          timeout: options.timeout || 300,
-          min_score: options.minScore || 30,
-          algorithm: options.algorithm || 'regex',
-          theme_entries: options.theme_entries || {},
-          adaptive_mode: options.adaptiveMode || false,
-          max_adaptations: options.maxAdaptations || 3
-        })
+      const initResponse = await axios.post('/api/fill/with-progress', {
+        size: gridSize,
+        grid: grid.map(row => row.map(cell =>
+          cell.isBlack ? '#' : (cell.letter || '.')
+        )),
+        wordlists: options.wordlists || ['comprehensive'],
+        timeout: options.timeout || 300,
+        min_score: options.minScore || 30,
+        algorithm: options.algorithm || 'regex',
+        theme_entries: options.theme_entries || {},
+        adaptive_mode: options.adaptiveMode || false,
+        max_adaptations: options.maxAdaptations || 3
       });
 
-      const { task_id } = await initResponse.json();
+      const { task_id } = initResponse.data;
       setCurrentTaskId(task_id);
 
       // Connect to SSE for progress updates
@@ -341,10 +338,10 @@ function App() {
     // Clear task ID
     setCurrentTaskId(null);
 
-    // Optional: Call backend to kill the process (for cleaner cancellation)
+    // Call backend to cancel the task
     if (currentTaskId) {
-      fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' }).catch(err => {
-        console.warn('Failed to signal backend cancellation:', err);
+      axios.post(`/api/fill/cancel/${currentTaskId}`).catch(err => {
+        console.warn('Failed to cancel autofill task:', err);
       });
     }
   }, [currentTaskId, autofillProgress]);

@@ -66,6 +66,60 @@ def pause_autofill(task_id: str):
         return handle_error(e, default_status=500)
 
 
+@pause_resume_api.route("/fill/cancel/<task_id>", methods=["POST"])
+def cancel_autofill(task_id: str):
+    """
+    POST /api/fill/cancel/<task_id>
+
+    Cancel a running autofill task.
+
+    Path Parameters:
+        task_id: Unique task identifier
+
+    Returns:
+        200: Cancel request processed
+            {
+                "success": true,
+                "task_id": "task_abc123",
+                "message": "Autofill cancelled",
+                "state_saved": true
+            }
+        404: Task not found or already completed
+        500: Server error
+
+    Example:
+        POST /api/fill/cancel/task_abc123
+        -> {"success": true, "message": "Autofill cancelled"}
+
+    Behavior:
+        - Sets pause flag to stop CLI process gracefully
+        - CLI will save state before exiting (can resume later if desired)
+        - Similar to pause, but signals user intent to abandon task
+    """
+    try:
+        from cli.src.fill.pause_controller import PauseController
+
+        # Create pause controller for this task
+        pause_controller = PauseController(task_id=task_id)
+
+        # Request pause (same mechanism as pause, but semantically different)
+        # The CLI will save state and exit. Frontend marks this as "cancelled"
+        pause_controller.request_pause()
+
+        logger.info(f"Cancel requested for task: {task_id}")
+
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Autofill cancelled",
+            "state_saved": True  # CLI saves state before exiting
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error cancelling task {task_id}: {e}")
+        return handle_error(e, default_status=500)
+
+
 @pause_resume_api.route("/fill/resume", methods=["POST"])
 def resume_autofill():
     """

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import axios from 'axios';
 import toast from 'react-hot-toast';
 import './ThemeWordsPanel.scss';
 
@@ -46,20 +47,12 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     try {
       // Upload to backend for parsing and validation
-      const response = await fetch('/api/theme/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: content,
-          grid_size: gridSize
-        })
+      const response = await axios.post('/api/theme/upload', {
+        content: content,
+        grid_size: gridSize
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to parse theme words');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       // Check validation
       if (!data.validation.valid) {
@@ -94,29 +87,21 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/theme/suggest-placements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          theme_words: words || themeWords,
-          grid_size: gridSize,
-          existing_grid: grid,
-          max_suggestions: 3
-        })
+      const response = await axios.post('/api/theme/suggest-placements', {
+        theme_words: words || themeWords,
+        grid_size: gridSize,
+        existing_grid: grid,
+        max_suggestions: 3
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to analyze placements');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       setSuggestions(data.suggestions);
       toast.success('Found placement suggestions!');
 
     } catch (error) {
       console.error('Error analyzing placements:', error);
-      toast.error(error.message || 'Failed to analyze placements');
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to analyze placements';
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -127,25 +112,17 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     try {
       // Apply placement to grid
-      const response = await fetch('/api/theme/apply-placement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grid: grid,
-          placement: {
-            word: suggestion.word,
-            row: suggestion.row,
-            col: suggestion.col,
-            direction: suggestion.direction
-          }
-        })
+      const response = await axios.post('/api/theme/apply-placement', {
+        grid: grid,
+        placement: {
+          word: suggestion.word,
+          row: suggestion.row,
+          col: suggestion.col,
+          direction: suggestion.direction
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to apply placement');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       // Update parent grid
       if (onApplyPlacement) {
