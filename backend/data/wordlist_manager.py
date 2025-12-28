@@ -118,15 +118,15 @@ class WordListManager:
                 # Normalize path separators
                 wordlist_key = wordlist_key.replace('\\', '/')
 
-                # Get metadata if available
-                metadata = self._metadata['wordlists'].get(
-                    wordlist_key,
-                    {
-                        'name': filename[:-4].replace('_', ' ').title(),
-                        'category': str(rel_path) if rel_path != Path('.') else 'uncategorized',
-                        'description': 'No description available'
-                    }
-                )
+                # Get metadata if available, with defaults for missing fields
+                default_metadata = {
+                    'name': filename[:-4].replace('_', ' ').title(),
+                    'category': str(rel_path) if rel_path != Path('.') else 'uncategorized',
+                    'description': 'No description available'
+                }
+                actual_metadata = self._metadata['wordlists'].get(wordlist_key, {})
+                # Merge defaults with actual metadata (actual takes precedence)
+                metadata = {**default_metadata, **actual_metadata}
 
                 # Apply category filter if specified
                 if category and metadata.get('category') != category:

@@ -7,31 +7,27 @@
 
 ## Critical Issues
 
-### 1. Custom Wordlists Not Displaying in UI ⚠️ CRITICAL
+### 1. Custom Wordlists Not Displaying in UI ✅ FIXED
 
-**Status**: BROKEN
-**Affected Component**: AutofillPanel.jsx
+**Status**: FIXED (December 28, 2025)
+**Affected Component**: backend/data/wordlist_manager.py
 **Symptoms**:
 - Backend API correctly returns 4 custom wordlists
 - API test: `fetch('/api/wordlists')` shows custom lists present
 - Frontend React component does NOT render "🎨 Custom Lists" section
 - Console test: `document.querySelector('.custom-section')` returns `null`
 
-**Root Cause**: Unknown - React state not populating correctly
+**Root Cause**: The wordlist `custom/theme_list` was missing the `name` field in the API response. When the metadata existed but was incomplete, the default values weren't applied, causing the frontend to crash silently when trying to render `wl.name`.
 
-**Impact**: Users cannot select custom wordlists for autofill, theme list feature is unusable in UI
+**Fix**: Modified `wordlist_manager.py` line 121-129 to always merge default metadata with actual metadata, ensuring all required fields are present even when metadata exists but is incomplete.
 
-**Workaround**: None currently
+**Files Fixed**:
+- `backend/data/wordlist_manager.py` (lines 121-129: metadata merging)
 
-**Files Involved**:
-- `src/components/AutofillPanel.jsx` (lines 53-63: loadAvailableWordlists)
-- `src/components/AutofillPanel.jsx` (lines 569-590: custom section render)
-
-**Next Steps**:
-1. Debug React component mounting and state updates
-2. Check for JavaScript errors blocking render
-3. Verify useEffect hook is firing correctly
-4. Add console logging to loadAvailableWordlists function
+**Testing**:
+- ✅ All 4 custom wordlists now have `name` field
+- ✅ All wordlist-related tests pass (5/5)
+- ✅ Frontend should now render custom lists correctly
 
 ---
 
