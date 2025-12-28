@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossword Helper - Architecture Diagrams Preview</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .info-card {
+            background: #f5f7fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-card strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .diagram-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .diagram-title {
+            font-size: 24px;
+            color: #667eea;
+            margin-bottom: 10px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .diagram-description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .diagram-container {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f7fa;
+            border-radius: 6px;
+        }
+
+        .legend-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .footer {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin-top: 30px;
+        }
+
+        .navigation {
+            background: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .nav-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .nav-button.active {
+            background: #667eea;
+            color: white;
+        }
+
+        code {
+            background: #f5f7fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: #d63384;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 24px;
+            }
+
+            .diagram-section {
+                padding: 20px;
+            }
+
+            .diagram-container {
+                padding: 10px;
+            }
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 1px solid #28a745;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Crossword Helper Architecture</h1>
+            <p class="subtitle">Professional Mermaid Diagrams</p>
+            <div class="info-grid">
+                <div class="info-card">
+                    <strong>Total Diagrams:</strong> 3
+                </div>
+                <div class="info-card">
+                    <strong>Format:</strong> Mermaid
+                </div>
+                <div class="info-card">
+                    <strong>Status:</strong> Production Ready
+                </div>
+                <div class="info-card">
+                    <strong>Created:</strong> 2025-12-27
+                </div>
+            </div>
+            <div class="success">
+                <strong>All diagrams are ready for integration into ARCHITECTURE.md</strong><br>
+                See INTEGRATION_GUIDE.md for step-by-step instructions.
+            </div>
+        </header>
+
+        <nav class="navigation">
+            <a href="#diagram-1" class="nav-button">Diagram 1: System Components</a>
+            <a href="#diagram-2" class="nav-button">Diagram 2: Data Flow</a>
+            <a href="#diagram-3" class="nav-button">Diagram 3: Backend API</a>
+            <a href="#references" class="nav-button">Documentation</a>
+        </nav>
+
+        <!-- Diagram 1: System Components -->
+        <section class="diagram-section" id="diagram-1">
+            <h2 class="diagram-title">1. System Component Diagram</h2>
+
+            <p class="diagram-description">
+                <strong>Shows:</strong> High-level three-tier architecture with Frontend, Backend, CLI Tool, and External Resources.<br>
+                <strong>Location:</strong> ARCHITECTURE.md Section 2 (System Overview)<br>
+                <strong>Replaces:</strong> ASCII diagram at lines 66-122<br>
+                <strong>Use Case:</strong> Understand overall system structure and integration points
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+graph TB
+    subgraph Browser["User's Browser"]
+        React["<b>React Frontend</b><br/>Vite + React 18<br/>- Grid Editor<br/>- Autofill Panel<br/>- Wordlist Manager<br/>- Pattern Matcher"]
+    end
+
+    subgraph Backend["Flask Backend<br/>localhost:5000"]
+        API["<b>API Layer</b><br/>6 blueprints<br/>20+ endpoints<br/>Request validation<br/>SSE streaming"]
+        Adapter["<b>CLIAdapter</b><br/>Subprocess Manager<br/>JSON communication<br/>100-300ms overhead"]
+    end
+
+    subgraph CLI["CLI Tool<br/>Single Source of Truth"]
+        Commands["<b>CLI Commands</b><br/>Click framework<br/>8 commands"]
+        Core["<b>Core Modules</b><br/>Grid Engine<br/>Autofill Engine<br/>Pattern Matcher<br/>Word List Manager<br/>Export Engine"]
+    end
+
+    subgraph Data["External Resources"]
+        Wordlists["Word Lists<br/>454k+ words"]
+        State["State Files<br/>Pause/Resume"]
+        Progress["Progress Files<br/>Real-time status"]
+    end
+
+    React -->|HTTP + SSE<br/>REST API & Progress| API
+    API -->|delegates to| Adapter
+    Adapter -->|subprocess.run<br/>stdin/stdout JSON| Commands
+    Commands --> Core
+    Core -->|reads/writes| Wordlists
+    Core -->|serializes| State
+    Core -->|updates| Progress
+
+    style React fill:#e1f5ff
+    style API fill:#fff3e0
+    style Adapter fill:#fff3e0
+    style Commands fill:#f3e5f5
+    style Core fill:#f3e5f5
+    style Wordlists fill:#e8f5e9
+    style State fill:#e8f5e9
+    style Progress fill:#e8f5e9
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Legend</div>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #e1f5ff;"></div>
+                        Frontend/User
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #fff3e0;"></div>
+                        Backend/API
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #f3e5f5;"></div>
+                        Core Logic/CLI
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #e8f5e9;"></div>
+                        Data/Storage
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diagram 2: Autofill Data Flow -->
+        <section class="diagram-section" id="diagram-2">
+            <h2 class="diagram-title">2. Autofill Data Flow Diagram</h2>
+
+            <p class="diagram-description">
+                <strong>Shows:</strong> Complete sequence from user click through autofill completion with real-time progress monitoring.<br>
+                <strong>Location:</strong> ARCHITECTURE.md Section 5.2 (Autofill Process)<br>
+                <strong>Replaces:</strong> Numbered list flow at lines 586-643<br>
+                <strong>Use Case:</strong> Debug autofill issues, understand timing, test end-to-end flows
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+sequenceDiagram
+    actor User
+    participant Frontend as React Frontend
+    participant Backend as Flask Backend
+    participant CLI as CLI Process
+    participant Files as Filesystem
+
+    User->>Frontend: Click "Start Autofill"<br/>Select algorithm, wordlists
+    Frontend->>Backend: POST /api/fill<br/>(grid, params, theme entries)
+    Backend->>Backend: Validate request<br/>Resolve wordlist paths
+
+    Backend->>CLI: subprocess.run()<br/>crossword fill --algorithm hybrid
+    CLI->>Files: Load grid from JSON
+    CLI->>Files: Load wordlists (454k words)
+    CLI->>CLI: Initialize Beam Search
+
+    par Autofill Loop
+        CLI->>CLI: Select empty slot (MCV)
+        CLI->>CLI: Pattern match → candidates
+        CLI->>CLI: Score candidates (LCV)
+        CLI->>CLI: Try top candidate
+        CLI->>CLI: Check constraints (AC-3)
+        CLI->>Files: Write progress (every 100 iter)
+        CLI->>Files: Check pause signal
+    end
+
+    Backend->>Files: Monitor progress file<br/>(every 500ms)
+    Backend->>Frontend: SSE: {"status":"running",<br/>"iteration":5432}
+    Frontend->>Frontend: Update progress bar<br/>Show stats
+
+    alt Success
+        CLI->>Files: Write filled grid
+        Backend->>Frontend: SSE: {"status":"complete"}
+        Frontend->>User: Display filled grid
+    else Timeout/Failure
+        CLI->>Files: Write problematic slots
+        Backend->>Frontend: SSE: {"status":"error"}
+        Frontend->>User: Highlight unfillable regions
+    end
+
+    style User fill:#e1f5ff
+    style Frontend fill:#e1f5ff
+    style Backend fill:#fff3e0
+    style CLI fill:#f3e5f5
+    style Files fill:#e8f5e9
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Sequence Details</div>
+                <p style="margin: 10px 0; font-size: 13px; color: #666;">
+                    <strong>Phase 1:</strong> User initiates with parameters<br>
+                    <strong>Phase 2:</strong> Backend validates and spawns CLI<br>
+                    <strong>Phase 3:</strong> CLI loads data and begins filling<br>
+                    <strong>Phase 4:</strong> Progress monitored in parallel via file I/O<br>
+                    <strong>Phase 5:</strong> Completion: Success returns grid, Failure returns problematic slots
+                </p>
+            </div>
+        </section>
+
+        <!-- Diagram 3: Backend Architecture -->
+        <section class="diagram-section" id="diagram-3">
+            <h2 class="diagram-title">3. Backend Architecture Diagram</h2>
+
+            <p class="diagram-description">
+                <strong>Shows:</strong> Flask API structure with 6 blueprints, core layer modules, and dependencies.<br>
+                <strong>Location:</strong> ARCHITECTURE.md Section 4.2 (Backend API)<br>
+                <strong>Insert:</strong> New subsection after API Endpoints list<br>
+                <strong>Use Case:</strong> Understand API structure, plan features, design tests
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+graph LR
+    subgraph APILayer["API Layer<br/>6 Blueprints"]
+        Routes["routes.py<br/>Core endpoints<br/>- pattern<br/>- number<br/>- normalize<br/>- fill"]
+        Grid["grid_routes.py<br/>Grid endpoints<br/>- update<br/>- suggest-black<br/>- validate"]
+        Theme["theme_routes.py<br/>Theme endpoints<br/>- place<br/>- lock<br/>- analyze"]
+        PauseResume["pause_resume_routes.py<br/>Pause/Resume<br/>- pause<br/>- resume<br/>- list states"]
+        Wordlist["wordlist_routes.py<br/>Wordlist endpoints<br/>- list<br/>- upload<br/>- stats<br/>- add-word"]
+        Progress["progress_routes.py<br/>Progress stream<br/>- SSE endpoint"]
+    end
+
+    subgraph CoreLayer["Core Layer<br/>Business Logic"]
+        Adapter["<b>CLIAdapter</b><br/>Subprocess manager<br/>- pattern()<br/>- number()<br/>- fill()<br/>- fill_with_resume()"]
+        Merger["EditMerger<br/>Grid edit validation<br/>AC-3 constraint check"]
+        Placer["ThemePlacer<br/>Theme placement<br/>Optimal positioning"]
+        Suggester["BlackSquareSuggester<br/>Strategic suggestions<br/>Symmetry validation"]
+        Resolver["WordlistResolver<br/>Path resolution<br/>Validation"]
+    end
+
+    subgraph DataLayer["Data Layer<br/>I/O"]
+        FileIO["File I/O<br/>- Wordlist loading<br/>- Progress streaming<br/>- State persistence"]
+    end
+
+    Routes --> Adapter
+    Grid --> Adapter
+    Grid --> Suggester
+    Theme --> Placer
+    Theme --> Adapter
+    PauseResume --> Adapter
+    PauseResume --> Merger
+    Wordlist --> Resolver
+    Wordlist --> FileIO
+    Progress --> FileIO
+
+    Adapter --> FileIO
+    Merger --> FileIO
+    Placer --> Resolver
+    Suggester --> FileIO
+
+    style APILayer fill:#fff3e0
+    style CoreLayer fill:#f3e5f5
+    style DataLayer fill:#e8f5e9
+    style Adapter fill:#ffccbc
+    style Merger fill:#f3e5f5
+    style Placer fill:#f3e5f5
+    style Suggester fill:#f3e5f5
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Architecture Notes</div>
+                <p style="margin: 10px 0; font-size: 13px; color: #666;">
+                    <strong>CLIAdapter:</strong> Central integration point used by most API routes<br>
+                    <strong>EditMerger:</strong> Handles pause/resume with constraint validation<br>
+                    <strong>ThemePlacer:</strong> Works with WordlistResolver for placements<br>
+                    <strong>All modules:</strong> Ultimately interact with Data Layer for persistence
+                </p>
+            </div>
+        </section>
+
+        <!-- Documentation References -->
+        <section class="diagram-section" id="references">
+            <h2 class="diagram-title">Documentation & Integration</h2>
+
+            <p class="diagram-description">
+                These diagrams are fully documented with integration guides and detailed explanations.
+            </p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                <div style="background: #f5f7fa; padding: 20px; border-radius: 6px; border-left: 4px solid #667eea;">
+                    <strong>MERMAID_DIAGRAMS.md</strong><br>
+                    Raw diagram code ready for copy/paste. Contains complete Mermaid syntax for all three diagrams.
+                </div>
+
+                <div style="background: #f5f7fa; padding: 20px; border-radius: 6px; border-left: 4px solid #667eea;">
+                    <strong>INTEGRATION_GUIDE.md</strong><br>
+                    Step-by-step instructions for updating ARCHITECTURE.md with exact line numbers and content to replace.
+                </div>
+
+                <div style="background: #f5f7fa; padding: 20px; border-radius: 6px; border-left: 4px solid #667eea;">
+                    <strong>DIAGRAM_REFERENCE.md</strong><br>
+                    Detailed explanation of each diagram, what it shows, use cases, and customization guide.
+                </div>
+
+                <div style="background: #f5f7fa; padding: 20px; border-radius: 6px; border-left: 4px solid #667eea;">
+                    <strong>DIAGRAMS_SUMMARY.md</strong><br>
+                    Quick overview of all diagrams with benefits and file structure information.
+                </div>
+            </div>
+
+            <div class="warning" style="margin-top: 20px;">
+                <strong>Next Steps:</strong>
+                <ol style="margin: 10px 0 0 20px;">
+                    <li>Review all three diagrams above</li>
+                    <li>Read INTEGRATION_GUIDE.md for detailed instructions</li>
+                    <li>Update ARCHITECTURE.md with diagram code from MERMAID_DIAGRAMS.md</li>
+                    <li>Test rendering in GitHub and local markdown viewer</li>
+                    <li>Commit changes with git</li>
+                </ol>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>
+                <strong>Crossword Helper - Architecture Diagrams</strong><br>
+                Created: 2025-12-27 | Format: Mermaid 10.6+ | Status: Production Ready<br>
+                For integration instructions, see INTEGRATION_GUIDE.md in the docs folder
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        mermaid.contentLoaded();
+    </script>
+</body>
+</html>

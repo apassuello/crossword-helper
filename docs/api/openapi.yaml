@@ -1,0 +1,1752 @@
+openapi: 3.1.0
+
+info:
+  title: Crossword Helper API
+  version: 2.0.0
+  description: |
+    REST API for crossword construction assistance tools including pattern matching,
+    grid autofill, theme word placement, and wordlist management.
+
+    **Architecture**: Flask backend delegating to CLI via subprocess for single source of truth.
+
+    **Features**:
+    - Pattern search across wordlists
+    - Grid numbering and validation
+    - Entry normalization (crossword conventions)
+    - CSP-based autofill with progress tracking
+    - Theme word placement suggestions
+    - Strategic black square placement
+    - Pause/resume autofill with user edits
+    - Wordlist management and import
+
+  contact:
+    name: Crossword Helper Support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000/api
+    description: Development server
+  - url: https://api.crosswordhelper.example.com/api
+    description: Production server (TBD)
+
+tags:
+  - name: Core Operations
+    description: Pattern search, numbering, normalization, autofill
+  - name: Grid Helpers
+    description: Grid validation and black square suggestions
+  - name: Theme Management
+    description: Theme word upload, placement, and application
+  - name: Pause/Resume
+    description: Pause autofill and resume with user edits
+  - name: Progress Tracking
+    description: Real-time SSE progress updates
+  - name: Wordlist Management
+    description: CRUD operations for wordlists
+
+paths:
+  # ============================================================================
+  # Core Operations
+  # ============================================================================
+
+  /health:
+    get:
+      tags:
+        - Core Operations
+      summary: Health check
+      description: Check API and CLI backend health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: API degraded (CLI backend unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /pattern:
+    post:
+      tags:
+        - Core Operations
+      summary: Pattern search
+      description: |
+        Search for words matching a pattern using wildcard matching.
+        Supports `?` for any letter and specific letters for exact matches.
+
+        **Examples**:
+        - `?A?E` - 4-letter words with A as 2nd letter, E as 4th
+        - `CAT` - Exact match
+        - `????` - Any 4-letter word
+      operationId: patternSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatternRequest'
+      responses:
+        '200':
+          description: Successful pattern search
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatternResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '505':
+          description: Pattern search timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /number:
+    post:
+      tags:
+        - Core Operations
+      summary: Grid numbering
+      description: |
+        Auto-number crossword grid cells according to standard conventions.
+        Numbers cells that start across or down words.
+      operationId: numberGrid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GridRequest'
+      responses:
+        '200':
+          description: Successfully numbered grid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumberingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '504':
+          description: Grid numbering timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /normalize:
+    post:
+      tags:
+        - Core Operations
+      summary: Entry normalization
+      description: |
+        Normalize entry text according to crossword conventions.
+
+        **Examples**:
+        - "Tina Fey" → "TINAFEY" (remove spaces in names)
+        - "50/50" → "FIFTYFIFTY" (spell out fractions)
+        - "X-ray" → "XRAY" (remove hyphens)
+      operationId: normalizeEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NormalizeRequest'
+      responses:
+        '200':
+          description: Successfully normalized entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '506':
+          description: Normalization timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill:
+    post:
+      tags:
+        - Core Operations
+      summary: Autofill grid
+      description: |
+        Fill crossword grid using CSP-based autofill algorithm.
+        Synchronous endpoint - returns when fill is complete.
+
+        For real-time progress updates, use `/fill/with-progress` instead.
+      operationId: fillGrid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutofillRequest'
+      responses:
+        '200':
+          description: Grid filled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutofillResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '507':
+          description: Grid fill timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/with-progress:
+    post:
+      tags:
+        - Core Operations
+        - Progress Tracking
+      summary: Autofill grid with SSE progress
+      description: |
+        Fill crossword grid with real-time progress updates via Server-Sent Events.
+        Returns task ID immediately; connect to `/progress/{task_id}` for updates.
+      operationId: fillGridWithProgress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutofillRequest'
+      responses:
+        '202':
+          description: Autofill task started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # Grid Helpers
+  # ============================================================================
+
+  /grid/suggest-black-square:
+    post:
+      tags:
+        - Grid Helpers
+      summary: Suggest black square placements
+      description: |
+        Suggest optimal black square placements to split problematic slots.
+        All suggestions maintain rotational symmetry and standard word counts.
+      operationId: suggestBlackSquare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlackSquareRequest'
+      responses:
+        '200':
+          description: Suggestions generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlackSquareResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /grid/apply-black-squares:
+    post:
+      tags:
+        - Grid Helpers
+      summary: Apply black square pair
+      description: |
+        Apply a symmetric black square pair to the grid.
+        Both positions are updated simultaneously to maintain symmetry.
+      operationId: applyBlackSquares
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+                - primary
+                - symmetric
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                primary:
+                  $ref: '#/components/schemas/Position'
+                symmetric:
+                  $ref: '#/components/schemas/Position'
+      responses:
+        '200':
+          description: Black squares applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grid:
+                    $ref: '#/components/schemas/Grid'
+                  applied:
+                    type: boolean
+                  positions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Position'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /grid/validate:
+    post:
+      tags:
+        - Grid Helpers
+      summary: Validate grid quality
+      description: |
+        Validate grid quality metrics including word count, black square percentage,
+        and symmetry. Provides suggestions for improvement.
+      operationId: validateGrid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                grid_size:
+                  type: integer
+                  default: 15
+      responses:
+        '200':
+          description: Grid validation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridValidationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # Theme Management
+  # ============================================================================
+
+  /theme/upload:
+    post:
+      tags:
+        - Theme Management
+      summary: Upload and validate theme words
+      description: |
+        Parse and validate theme words from file content.
+        Checks word length, character validity, and duplicates.
+      operationId: uploadThemeWords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: Newline-separated theme words
+                  example: "PARTNERNAME\nANNIVERSARY\nFAVORITEPLACE"
+                grid_size:
+                  type: integer
+                  default: 15
+      responses:
+        '200':
+          description: Theme words uploaded and validated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemeUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /theme/suggest-placements:
+    post:
+      tags:
+        - Theme Management
+      summary: Suggest theme word placements
+      description: |
+        Generate optimal placement suggestions for theme words.
+        Considers symmetry, position, intersections, and spacing.
+      operationId: suggestThemePlacements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThemePlacementRequest'
+      responses:
+        '200':
+          description: Placement suggestions generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemePlacementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /theme/apply-placement:
+    post:
+      tags:
+        - Theme Management
+      summary: Apply theme word to grid
+      description: |
+        Apply a theme word placement to the grid and mark cells as theme-locked.
+        Theme-locked cells cannot be modified by autofill.
+      operationId: applyThemePlacement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+                - placement
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                placement:
+                  $ref: '#/components/schemas/ThemePlacement'
+      responses:
+        '200':
+          description: Theme word applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grid:
+                    $ref: '#/components/schemas/Grid'
+                  applied:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # Pause/Resume
+  # ============================================================================
+
+  /fill/pause/{task_id}:
+    post:
+      tags:
+        - Pause/Resume
+      summary: Pause autofill task
+      description: |
+        Request an active autofill task to pause and save state.
+        State can be resumed later with optional user edits.
+      operationId: pauseAutofill
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique task identifier
+      responses:
+        '200':
+          description: Pause requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  task_id:
+                    type: string
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/resume:
+    post:
+      tags:
+        - Pause/Resume
+      summary: Resume paused autofill
+      description: |
+        Resume a paused autofill task with optional user edits.
+        User edits are merged into saved state before resuming.
+      operationId: resumeAutofill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeRequest'
+      responses:
+        '200':
+          description: Resume state prepared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Saved state not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User edits create unsolvable state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/state/{task_id}:
+    get:
+      tags:
+        - Pause/Resume
+      summary: Get saved state info
+      description: Get metadata and grid preview for a saved state
+      operationId: getSavedState
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: State info retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedStateInfo'
+        '404':
+          description: State not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Pause/Resume
+      summary: Delete saved state
+      description: Delete a saved state file
+      operationId: deleteSavedState
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: State deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: State not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/states:
+    get:
+      tags:
+        - Pause/Resume
+      summary: List saved states
+      description: List all saved autofill states with optional age filter
+      operationId: listSavedStates
+      parameters:
+        - name: max_age_days
+          in: query
+          schema:
+            type: integer
+          description: Only return states newer than this (in days)
+      responses:
+        '200':
+          description: List of saved states
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  states:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SavedStateInfo'
+                  count:
+                    type: integer
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/states/cleanup:
+    post:
+      tags:
+        - Pause/Resume
+      summary: Cleanup old states
+      description: Delete state files older than specified age
+      operationId: cleanupOldStates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_age_days:
+                  type: integer
+                  default: 7
+      responses:
+        '200':
+          description: Cleanup completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  deleted_count:
+                    type: integer
+                  message:
+                    type: string
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/edit-summary:
+    post:
+      tags:
+        - Pause/Resume
+      summary: Preview edit summary
+      description: |
+        Get summary of user edits without performing full merge.
+        Useful for showing user what changes will be applied.
+      operationId: getEditSummary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - task_id
+                - edited_grid
+              properties:
+                task_id:
+                  type: string
+                edited_grid:
+                  $ref: '#/components/schemas/Grid'
+      responses:
+        '200':
+          description: Edit summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: State not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # Progress Tracking
+  # ============================================================================
+
+  /progress/{task_id}:
+    get:
+      tags:
+        - Progress Tracking
+      summary: Stream progress updates
+      description: |
+        Server-Sent Events (SSE) endpoint for real-time progress updates.
+        Connect to this endpoint after starting a long-running operation.
+
+        **Event Format**:
+        ```
+        data: {"progress": 45, "message": "Processing...", "status": "running"}
+        ```
+      operationId: streamProgress
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream of progress events
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/ProgressEvent'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # Wordlist Management
+  # ============================================================================
+
+  /wordlists:
+    get:
+      tags:
+        - Wordlist Management
+      summary: List wordlists
+      description: List all available wordlists with metadata and categories
+      operationId: listWordlists
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category (core, themed, custom, etc.)
+      responses:
+        '200':
+          description: Wordlist metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordlistListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wordlists/{name}:
+    get:
+      tags:
+        - Wordlist Management
+      summary: Get wordlist
+      description: Get specific wordlist content and metadata
+      operationId: getWordlist
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Wordlist name (can include category path, e.g., "core/common_3_letter")
+        - name: stats
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include word statistics
+      responses:
+        '200':
+          description: Wordlist content and metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordlistResponse'
+        '404':
+          description: Wordlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Wordlist Management
+      summary: Create wordlist
+      description: Create a new wordlist with words and metadata
+      operationId: createWordlist
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - words
+              properties:
+                words:
+                  type: array
+                  items:
+                    type: string
+                metadata:
+                  $ref: '#/components/schemas/WordlistMetadata'
+      responses:
+        '201':
+          description: Wordlist created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  word_count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Wordlist Management
+      summary: Update wordlist
+      description: Update existing wordlist (replace, add, or remove words)
+      operationId: updateWordlist
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                words:
+                  type: array
+                  items:
+                    type: string
+                  description: Replace all words
+                add_words:
+                  type: array
+                  items:
+                    type: string
+                  description: Add specific words
+                remove_words:
+                  type: array
+                  items:
+                    type: string
+                  description: Remove specific words
+                metadata:
+                  $ref: '#/components/schemas/WordlistMetadata'
+      responses:
+        '200':
+          description: Wordlist updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Wordlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags:
+        - Wordlist Management
+      summary: Delete wordlist
+      description: Delete a wordlist file
+      operationId: deleteWordlist
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Wordlist deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Wordlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wordlists/{name}/stats:
+    get:
+      tags:
+        - Wordlist Management
+      summary: Get wordlist statistics
+      description: Get detailed statistics for a wordlist
+      operationId: getWordlistStats
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Wordlist statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordlistStats'
+        '404':
+          description: Wordlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /wordlists/import:
+    post:
+      tags:
+        - Wordlist Management
+      summary: Import wordlist
+      description: Import wordlist from text content or URL
+      operationId: importWordlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                content:
+                  type: string
+                  description: Newline-separated words
+                url:
+                  type: string
+                  format: uri
+                  description: URL to fetch wordlist from
+                category:
+                  type: string
+                  default: imports
+                metadata:
+                  $ref: '#/components/schemas/WordlistMetadata'
+      responses:
+        '201':
+          description: Wordlist imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  name:
+                    type: string
+                  word_count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '501':
+          description: URL import not implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  schemas:
+    # ============================================================================
+    # Core Data Types
+    # ============================================================================
+
+    Cell:
+      type: object
+      description: Single grid cell
+      properties:
+        letter:
+          type: string
+          pattern: '^[A-Z]?$'
+          description: Letter (A-Z) or empty
+        isBlack:
+          type: boolean
+          description: Whether cell is a black square
+        number:
+          type: integer
+          nullable: true
+          description: Clue number (1, 2, 3, ...) or null
+        isError:
+          type: boolean
+          description: Validation error indicator
+        isHighlighted:
+          type: boolean
+          description: UI highlight state
+        isThemeLocked:
+          type: boolean
+          description: Theme-locked cell (cannot be modified by autofill)
+
+    Grid:
+      type: array
+      description: 2D array of cells (rows × columns)
+      items:
+        type: array
+        items:
+          $ref: '#/components/schemas/Cell'
+
+    Position:
+      type: object
+      description: Grid position (row, col)
+      required:
+        - row
+        - col
+      properties:
+        row:
+          type: integer
+          minimum: 0
+        col:
+          type: integer
+          minimum: 0
+
+    Slot:
+      type: object
+      description: Word slot in grid
+      required:
+        - row
+        - col
+        - direction
+        - length
+      properties:
+        row:
+          type: integer
+          description: Starting row
+        col:
+          type: integer
+          description: Starting column
+        direction:
+          type: string
+          enum: [across, down]
+        length:
+          type: integer
+          minimum: 3
+        pattern:
+          type: string
+          description: Current pattern (e.g., "A??LE")
+        candidate_count:
+          type: integer
+          description: Number of valid words
+
+    # ============================================================================
+    # Request/Response Schemas
+    # ============================================================================
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        version:
+          type: string
+          example: "2.0.0"
+        architecture:
+          type: string
+          example: "cli-backend"
+        components:
+          type: object
+          properties:
+            cli_adapter:
+              type: string
+              enum: [ok, error]
+            api_server:
+              type: string
+              enum: [ok, error]
+
+    PatternRequest:
+      type: object
+      required:
+        - pattern
+      properties:
+        pattern:
+          type: string
+          description: Pattern with ? for wildcards
+          example: "?A?E"
+        wordlists:
+          type: array
+          items:
+            type: string
+          default: ["comprehensive"]
+          description: Wordlist names to search
+        max_results:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+        algorithm:
+          type: string
+          enum: [regex, trie]
+          default: regex
+
+    PatternResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              word:
+                type: string
+              score:
+                type: integer
+                description: Word quality score (0-100)
+              source:
+                type: string
+                description: Source wordlist
+        meta:
+          type: object
+          properties:
+            total_found:
+              type: integer
+            query_time_ms:
+              type: integer
+
+    GridRequest:
+      type: object
+      required:
+        - grid
+      properties:
+        grid:
+          $ref: '#/components/schemas/Grid'
+        size:
+          type: integer
+          enum: [11, 13, 15, 17, 21]
+          default: 15
+
+    NumberingResponse:
+      type: object
+      properties:
+        numbering:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of "(row,col)" → number
+        validation:
+          type: object
+          properties:
+            is_valid:
+              type: boolean
+            errors:
+              type: array
+              items:
+                type: string
+        grid_info:
+          type: object
+          properties:
+            size:
+              type: array
+              items:
+                type: integer
+              minItems: 2
+              maxItems: 2
+            word_count:
+              type: integer
+
+    NormalizeRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Entry text to normalize
+          example: "Tina Fey"
+
+    NormalizeResponse:
+      type: object
+      properties:
+        normalized:
+          type: string
+          description: Normalized entry
+          example: "TINAFEY"
+        rule:
+          type: object
+          properties:
+            type:
+              type: string
+            description:
+              type: string
+        examples:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+            minItems: 2
+            maxItems: 2
+
+    AutofillRequest:
+      type: object
+      required:
+        - grid
+        - size
+      properties:
+        grid:
+          $ref: '#/components/schemas/Grid'
+        size:
+          type: integer
+          enum: [11, 13, 15, 17, 21]
+        wordlists:
+          type: array
+          items:
+            type: string
+          default: ["comprehensive"]
+        timeout:
+          type: integer
+          default: 300
+          description: Timeout in seconds
+        min_score:
+          type: integer
+          default: 30
+          minimum: 0
+          maximum: 100
+          description: Minimum word quality score
+        algorithm:
+          type: string
+          enum: [regex, trie, beam]
+          default: trie
+        theme_entries:
+          type: object
+          description: Theme words to preserve
+          additionalProperties:
+            type: string
+          example:
+            "(0,0,across)": "PARTNERNAME"
+            "(7,5,down)": "ANNIVERSARY"
+        adaptive_mode:
+          type: boolean
+          default: false
+          description: Enable automatic black square placement
+        max_adaptations:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 5
+          description: Maximum adaptive black squares
+
+    AutofillResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        grid:
+          $ref: '#/components/schemas/Grid'
+        slots_filled:
+          type: integer
+        total_slots:
+          type: integer
+        adaptations_applied:
+          type: integer
+          description: Number of adaptive black squares added
+        message:
+          type: string
+
+    ProgressTaskResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        progress_url:
+          type: string
+          format: uri
+          example: "/api/progress/abc123-def456"
+
+    ProgressEvent:
+      type: object
+      description: SSE progress event
+      properties:
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Progress percentage
+        message:
+          type: string
+          description: Human-readable progress message
+        status:
+          type: string
+          enum: [running, complete, error]
+        timestamp:
+          type: number
+          format: float
+          description: Unix timestamp
+        data:
+          type: object
+          description: Optional result data (e.g., filled grid)
+
+    BlackSquareRequest:
+      type: object
+      required:
+        - grid
+        - problematic_slot
+      properties:
+        grid:
+          $ref: '#/components/schemas/Grid'
+        grid_size:
+          type: integer
+          default: 15
+        problematic_slot:
+          $ref: '#/components/schemas/Slot'
+        max_suggestions:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 10
+
+    BlackSquareResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              position:
+                type: integer
+                description: Position within slot (0-indexed)
+              row:
+                type: integer
+              col:
+                type: integer
+              score:
+                type: integer
+                minimum: 0
+                maximum: 1000
+              reasoning:
+                type: string
+              left_length:
+                type: integer
+              right_length:
+                type: integer
+              symmetric_position:
+                $ref: '#/components/schemas/Position'
+              new_word_count:
+                type: integer
+              constraint_reduction:
+                type: integer
+                minimum: 0
+                maximum: 5
+        slot_info:
+          $ref: '#/components/schemas/Slot'
+        grid_size:
+          type: integer
+        validation:
+          $ref: '#/components/schemas/ValidationResult'
+
+    GridValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        word_count:
+          type: integer
+        black_square_count:
+          type: integer
+        black_square_percentage:
+          type: number
+          format: float
+        word_count_range:
+          type: array
+          items:
+            type: integer
+          minItems: 2
+          maxItems: 2
+        warnings:
+          type: array
+          items:
+            type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    ThemeUploadResponse:
+      type: object
+      properties:
+        words:
+          type: array
+          items:
+            type: string
+        count:
+          type: integer
+        validation:
+          $ref: '#/components/schemas/ValidationResult'
+
+    ThemePlacementRequest:
+      type: object
+      required:
+        - theme_words
+      properties:
+        theme_words:
+          type: array
+          items:
+            type: string
+        grid_size:
+          type: integer
+          default: 15
+        existing_grid:
+          $ref: '#/components/schemas/Grid'
+        max_suggestions:
+          type: integer
+          default: 3
+
+    ThemePlacementResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              word:
+                type: string
+              length:
+                type: integer
+              suggestions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    row:
+                      type: integer
+                    col:
+                      type: integer
+                    direction:
+                      type: string
+                      enum: [across, down]
+                    score:
+                      type: integer
+                      minimum: 0
+                      maximum: 100
+                    reasoning:
+                      type: string
+        grid_size:
+          type: integer
+
+    ThemePlacement:
+      type: object
+      required:
+        - word
+        - row
+        - col
+        - direction
+      properties:
+        word:
+          type: string
+        row:
+          type: integer
+        col:
+          type: integer
+        direction:
+          type: string
+          enum: [across, down]
+
+    ResumeRequest:
+      type: object
+      required:
+        - task_id
+      properties:
+        task_id:
+          type: string
+        edited_grid:
+          $ref: '#/components/schemas/Grid'
+        options:
+          type: object
+          description: Same as AutofillRequest options
+          properties:
+            min_score:
+              type: integer
+            timeout:
+              type: integer
+            wordlists:
+              type: array
+              items:
+                type: string
+            algorithm:
+              type: string
+
+    ResumeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        new_task_id:
+          type: string
+        original_task_id:
+          type: string
+        message:
+          type: string
+        slots_filled:
+          type: integer
+        total_slots:
+          type: integer
+
+    SavedStateInfo:
+      type: object
+      properties:
+        task_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        algorithm:
+          type: string
+        slots_filled:
+          type: integer
+        total_slots:
+          type: integer
+        grid_size:
+          type: array
+          items:
+            type: integer
+          minItems: 2
+          maxItems: 2
+        iteration_count:
+          type: integer
+        grid_preview:
+          $ref: '#/components/schemas/Grid'
+
+    EditSummary:
+      type: object
+      properties:
+        filled_count:
+          type: integer
+          description: Number of cells filled by user
+        emptied_count:
+          type: integer
+          description: Number of cells emptied by user
+        modified_count:
+          type: integer
+          description: Number of cells changed by user
+        new_words:
+          type: array
+          items:
+            type: string
+          description: Complete words added by user
+        removed_words:
+          type: array
+          items:
+            type: string
+          description: Complete words removed by user
+
+    WordlistListResponse:
+      type: object
+      properties:
+        wordlists:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              category:
+                type: string
+              word_count:
+                type: integer
+              metadata:
+                $ref: '#/components/schemas/WordlistMetadata'
+        categories:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of category → count
+        tags:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of tag → count
+
+    WordlistResponse:
+      type: object
+      properties:
+        metadata:
+          $ref: '#/components/schemas/WordlistMetadata'
+        words:
+          type: array
+          items:
+            type: string
+        stats:
+          $ref: '#/components/schemas/WordlistStats'
+
+    WordlistMetadata:
+      type: object
+      properties:
+        description:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        source:
+          type: string
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+
+    WordlistStats:
+      type: object
+      properties:
+        total_words:
+          type: integer
+        length_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of length → count
+        avg_length:
+          type: number
+          format: float
+        min_length:
+          type: integer
+        max_length:
+          type: integer
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Detailed error information
+        code:
+          type: string
+          description: Error code
+        validation:
+          $ref: '#/components/schemas/ValidationResult'
+
+  responses:
+    BadRequest:
+      description: Bad request (validation error)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    # Currently no authentication required (local-only tool)
+    # Future: Add API key or OAuth2 for production deployment
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (not yet implemented)
+
+security: []  # No security required for local development

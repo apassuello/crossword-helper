@@ -1,0 +1,33 @@
+# Coverage.py configuration for Crossword Helper
+# Ensures tests are excluded from coverage calculations
+
+[run]
+source = backend
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+    */.venv/*
+
+[report]
+# Exclude common patterns from coverage reports
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+
+# Show missing lines in reports
+show_missing = True
+
+# Precision for coverage percentage
+precision = 2
+
+[html]
+directory = htmlcov

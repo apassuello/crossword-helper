@@ -1,249 +1,281 @@
-# Crossword Helper - Documentation Index
+# Crossword Helper Documentation
 
-**Last Updated:** December 26, 2025
+**Welcome to the Crossword Helper documentation!** This guide helps you find the right documentation for your needs.
 
-This directory contains all project documentation organized by category.
-
----
-
-## Quick Links
-
-- **[Implementation Plan](../IMPLEMENTATION_PLAN.md)** - Overall project roadmap and timeline
-- **[Deployment Guide](../DEPLOYMENT.md)** - How to deploy and run the application
-- **[README](../README.md)** - Main project README
+**Version**: 2.0.0
+**Last Updated**: December 27, 2025
 
 ---
 
-## Directory Structure
+## 🚀 Quick Start
+
+### New to the Project?
+**Start here →** [ARCHITECTURE.md](./ARCHITECTURE.md)
+Get a high-level understanding of the system architecture, components, and data flow.
+
+**Time**: 15-20 minutes
+**Next**: [DEVELOPMENT.md](./dev/DEVELOPMENT.md) to set up your environment
+
+### Want to Contribute?
+**Start here →** [DEVELOPMENT.md](./dev/DEVELOPMENT.md)
+Complete setup guide with prerequisites, installation, and your first code change.
+
+**Time**: 30 minutes to set up, <1 hour to first contribution
+**Next**: [CONTRIBUTING.md](./dev/CONTRIBUTING.md) for coding standards
+
+### Using the API?
+**Start here →** [API_REFERENCE.md](./api/API_REFERENCE.md)
+Human-readable API documentation with curl examples and workflows.
+
+**Time**: 5 minutes for quick start
+**Next**: [openapi.yaml](./api/openapi.yaml) for machine-readable spec
+
+### Writing Tests?
+**Start here →** [TESTING.md](./ops/TESTING.md)
+Comprehensive testing guide with examples and best practices.
+
+**Time**: 10 minutes to understand, 2+ hours to write tests
+**Next**: Run `pytest` and start testing!
+
+---
+
+## 📚 Documentation Structure
 
 ```
 docs/
-├── README.md                    # This file - documentation index
-├── progress/                    # Implementation progress tracking
-├── archive/                     # Historical docs and old reports
-├── phase1-webapp/              # Phase 1: Web Application specs
-├── phase2-cli/                 # Phase 2: CLI Tool specs
-└── phase3-integration/         # Phase 3: Integration specs
+├── README.md                    # This file - Documentation navigation
+├── ARCHITECTURE.md              # System architecture (start here!)
+├── ROADMAP.md                   # Development roadmap and status
+│
+├── specs/                       # Component Specifications
+│   ├── CLI_SPEC.md             # CLI tool specification (3,257 lines)
+│   ├── BACKEND_SPEC.md         # Backend API specification (3,800+ lines)
+│   └── FRONTEND_SPEC.md        # Frontend React app specification (3,045 lines)
+│
+├── api/                         # API Documentation
+│   ├── openapi.yaml            # OpenAPI 3.1.0 spec (26 endpoints)
+│   └── API_REFERENCE.md        # Human-readable API reference (2,386 lines)
+│
+├── ops/                         # Operational Documentation
+│   └── TESTING.md              # Testing guide (2,617 lines, 55+ examples)
+│
+├── dev/                         # Developer Documentation
+│   ├── DEVELOPMENT.md          # Development guide (4,439 lines)
+│   └── CONTRIBUTING.md         # Contribution guidelines
+│
+└── archive/                     # Archived Documentation
+    ├── README.md               # Archive index
+    ├── analysis/               # Technical analysis (15 docs)
+    ├── legacy-phases/          # Historical phase docs (11 docs)
+    ├── legacy-specs/           # Old specifications (15 docs)
+    ├── progress/               # Progress reports (15 docs)
+    └── validation-reports/     # Validation reports (3 docs)
 ```
 
 ---
 
-## Current Implementation Progress
+## 🎯 Find Documentation By Need
 
-### ✅ Completed Phases
+### "I want to understand the system"
+- **Overview**: [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture and design
+- **Deep Dive**: [specs/](./specs/) - Detailed component specifications
+- **Visual**: [ARCHITECTURE.md#diagrams](./ARCHITECTURE.md) - System diagrams
 
-**Phase 1: Web Application (Completed)**
-- Basic Flask backend with 3 helper tools
-- Pattern matching, grid numbering, convention normalization
-- See: `phase1-webapp/`
+### "I want to set up my development environment"
+1. [DEVELOPMENT.md#getting-started](./dev/DEVELOPMENT.md#getting-started) - Prerequisites and installation
+2. [DEVELOPMENT.md#verification](./dev/DEVELOPMENT.md#verification) - Verify your setup
+3. [CONTRIBUTING.md](./dev/CONTRIBUTING.md) - Coding standards
 
-**Phase 2: CLI Tool (Completed)**
-- Comprehensive command-line interface
-- CSP-based autofill with beam search + iterative repair
-- See: `phase2-cli/`
+### "I want to use the API"
+- **Quick Start**: [API_REFERENCE.md#quick-start](./api/API_REFERENCE.md#quick-start) - Your first API call
+- **All Endpoints**: [API_REFERENCE.md](./api/API_REFERENCE.md) - Complete API reference
+- **OpenAPI Spec**: [openapi.yaml](./api/openapi.yaml) - Machine-readable specification
+- **Workflows**: [API_REFERENCE.md#complete-workflows](./api/API_REFERENCE.md#complete-workflows) - End-to-end examples
 
-**Phase 3: Integration (Completed)**
-- Web app refactored to use CLI backend
-- Single source of truth architecture
-- See: `phase3-integration/`
+### "I want to understand the CLI tool"
+- **Overview**: [specs/CLI_SPEC.md](./specs/CLI_SPEC.md) - Complete CLI documentation
+- **Commands**: [specs/CLI_SPEC.md#command-reference](./specs/CLI_SPEC.md#command-reference) - All 8 commands
+- **Algorithms**: [specs/CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) - CSP, Beam Search, etc.
 
-**Recent Web Interface Enhancements (Completed Dec 2025):**
-- ✅ Grid import/export functionality
-- ✅ Theme entry locking (preserve specific words during autofill)
-- ✅ Wordlist upload UI
-- ✅ Autofill cancel functionality
-- ✅ All backend tests passing (37/37)
+### "I want to work on the backend"
+- **Architecture**: [specs/BACKEND_SPEC.md](./specs/BACKEND_SPEC.md) - Backend design
+- **API Endpoints**: [specs/BACKEND_SPEC.md#api-routes](./specs/BACKEND_SPEC.md#api-routes) - All 26 endpoints
+- **CLI Integration**: [specs/BACKEND_SPEC.md#cli-adapter](./specs/BACKEND_SPEC.md#cli-adapter) - CLIAdapter pattern
 
-### 📋 Current Status
+### "I want to work on the frontend"
+- **Architecture**: [specs/FRONTEND_SPEC.md](./specs/FRONTEND_SPEC.md) - React app design
+- **Components**: [specs/FRONTEND_SPEC.md#component-hierarchy](./specs/FRONTEND_SPEC.md#component-hierarchy) - All components
+- **State Management**: [specs/FRONTEND_SPEC.md#state-management](./specs/FRONTEND_SPEC.md#state-management) - State patterns
 
-**Working Features:**
-- Grid editor with keyboard shortcuts
-- Pattern matcher with multiple algorithms (regex, trie)
-- Auto-numbering and validation
-- Autofill with progress tracking
-- Theme entry support
-- Grid import/export (JSON format)
-- Custom wordlist upload
-- Real-time cancellation
+### "I want to write tests"
+- **Overview**: [TESTING.md](./ops/TESTING.md) - Testing strategy
+- **Examples**: [TESTING.md#unit-testing](./ops/TESTING.md#unit-testing) - 55+ test examples
+- **Running Tests**: [TESTING.md#running-tests](./ops/TESTING.md#running-tests) - Command reference
+- **Coverage**: [TESTING.md#code-coverage](./ops/TESTING.md#code-coverage) - Coverage goals
 
-**Test Coverage:**
-- Backend API: 37/37 tests passing
-- CLI Unit Tests: Extensive coverage
-- Frontend Tests: Pending (Phase 5)
+### "I want to add a new feature"
+1. [DEVELOPMENT.md#adding-new-features](./dev/DEVELOPMENT.md#adding-new-features) - Feature checklist
+2. [CONTRIBUTING.md](./dev/CONTRIBUTING.md) - Coding standards
+3. [TESTING.md](./ops/TESTING.md) - Write tests
+4. Follow the contribution workflow
 
----
-
-## Documentation by Category
-
-### Implementation Progress (`progress/`)
-
-**Recent Implementation Docs:**
-- `PHASE3_COMPLETE.md` - Theme entry support implementation
-- `PHASE3_TEST_RESULTS.md` - Comprehensive test results
-- `PHASE4_COMPLETE.md` - Wordlist upload + cancel functionality
-- `BACKEND_TEST_FIXES.md` - Backend test fixes (2 failures resolved)
-- `SESSION_WORK_SUMMARY.md` - Latest work session summary
-- `TEST_REPORT.md` - Overall test status
-
-**Key Documents:**
-- [PHASE3_COMPLETE.md](progress/PHASE3_COMPLETE.md) - Full theme entry implementation details
-- [PHASE4_COMPLETE.md](progress/PHASE4_COMPLETE.md) - Upload & cancel features
-- [BACKEND_TEST_FIXES.md](progress/BACKEND_TEST_FIXES.md) - How tests were fixed
-
-### Phase Specifications
-
-**Phase 1: Web Application**
-- [README](phase1-webapp/README.md) - Phase 1 overview
-- [Architecture](phase1-webapp/01-architecture.md) - System design
-- [API Specification](phase1-webapp/02-api-specification.md) - Endpoint contracts
-- [Implementation Guide](phase1-webapp/03-implementation-guide.md) - Code patterns
-- [Implementation Prompts](phase1-webapp/04-implementation-prompts.md) - Step-by-step guide
-
-**Phase 2: CLI Tool**
-- [README](phase2-cli/README.md) - Phase 2 overview
-- [Architecture](phase2-cli/01-architecture.md) - CLI design
-- [Specifications](phase2-cli/02-specifications.md) - Detailed specs
-- [Implementation Prompts](phase2-cli/03-implementation-prompts.md) - Execution guide
-
-**Phase 3: Integration**
-- [README](phase3-integration/README.md) - Integration overview
-- [Refactoring Plan](phase3-integration/01-refactoring-plan.md) - Migration strategy
-
-### Research & Analysis (`archive/`)
-
-**Algorithm Research:**
-- `CSP_Algorithms_for_Crossword_Autofill_Definitive_Research_Report.md`
-- `Crossword_autofill_techniques_Validating_shuffling_repair_and_interleaving.md`
-- `BEAM_SEARCH_ITERATIVE_REPAIR_SPEC.md`
-- `BEAM_SEARCH_GIBBERISH_ROOT_CAUSE.md`
-- `AUTOFILL_OPTIMIZATION_ANALYSIS.md`
-
-**Audit Reports:**
-- `COMPREHENSIVE_ARCHITECTURE_AUDIT_REPORT.md`
-- `CROSSWORD_BACKEND_AUDIT_REPORT.md`
-- `CODE_AUDIT_REPORT.md`
-- `ALGORITHM_AUDIT_SUMMARY.md`
-
-**Historical Progress:**
-- Various PHASE3_* and PHASE4_* reports
-- Test results and demonstrations
-- Bug fix guides
+### "I need historical context"
+- **Archive**: [archive/README.md](./archive/README.md) - Historical documentation
+- **Analysis**: [archive/analysis/](./archive/analysis/) - Technical research
+- **Progress**: [archive/progress/](./archive/progress/) - Development history
 
 ---
 
-## How to Navigate This Documentation
+## 📖 Documentation Types
 
-### For New Team Members
+### 🏗️ Architecture Documentation
+**Purpose**: Understand how the system works at a high level
 
-1. Start with [../README.md](../README.md) - Project overview
-2. Read [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) - Understand the roadmap
-3. Review phase specifications in order (phase1 → phase2 → phase3)
-4. Check [progress/](progress/) for latest implementation status
+| Document | What It Covers | Read Time | Best For |
+|----------|---------------|-----------|----------|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System design, components, data flow | 15-20 min | New developers, architects |
+| [ROADMAP.md](./ROADMAP.md) | Development plan and status | 5-10 min | Understanding project direction |
 
-### For Developers
+### 📋 Specification Documentation
+**Purpose**: Detailed component-level documentation
 
-1. **Frontend development:** See `phase1-webapp/` for API contracts
-2. **Backend development:** See `phase2-cli/` for CLI architecture
-3. **Testing:** See `progress/TEST_REPORT.md` for test status
-4. **Recent changes:** Check `progress/PHASE4_COMPLETE.md`
+| Document | What It Covers | Read Time | Best For |
+|----------|---------------|-----------|----------|
+| [CLI_SPEC.md](./specs/CLI_SPEC.md) | CLI commands, algorithms, data structures | 30-40 min | CLI development, algorithm work |
+| [BACKEND_SPEC.md](./specs/BACKEND_SPEC.md) | API routes, CLIAdapter, error handling | 30-40 min | Backend development |
+| [FRONTEND_SPEC.md](./specs/FRONTEND_SPEC.md) | React components, state, API integration | 25-35 min | Frontend development |
 
-### For Project Managers
+### 🔌 API Documentation
+**Purpose**: Use or integrate with the API
 
-1. **Current status:** See [progress/](progress/) directory
-2. **Timeline:** See [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)
-3. **Test coverage:** See `progress/TEST_REPORT.md`
-4. **Feature list:** See phase README files
+| Document | What It Covers | Read Time | Best For |
+|----------|---------------|-----------|----------|
+| [API_REFERENCE.md](./api/API_REFERENCE.md) | All endpoints with examples | 20-30 min | API consumers, integration |
+| [openapi.yaml](./api/openapi.yaml) | Machine-readable API spec | N/A | Tool integration, SDK generation |
 
----
+### 🛠️ Operational Documentation
+**Purpose**: Run, test, and maintain the system
 
-## Key Features Documentation
+| Document | What It Covers | Read Time | Best For |
+|----------|---------------|-----------|----------|
+| [TESTING.md](./ops/TESTING.md) | Test strategy, examples, coverage | 20-30 min | Writing tests, QA |
 
-### Grid Editor
-- Keyboard shortcuts for navigation
-- Theme entry locking (right-click or Ctrl/Cmd+L)
-- Symmetry indicators
-- Auto-numbering
+### 👨‍💻 Developer Documentation
+**Purpose**: Set up and contribute to the project
 
-### Pattern Matcher
-- Regex-based search
-- Trie-based search (10-50x faster)
-- Multiple wordlist support
-- OneLook API integration
-
-### Autofill Engine
-- CSP with backtracking
-- Beam search for global optimization
-- Iterative repair for partial solutions
-- Theme entry preservation
-- Real-time progress tracking
-- Cancellable operations
-
-### Wordlist Management
-- Browse built-in wordlists
-- Upload custom wordlists (.txt files)
-- View statistics and distributions
-- Add words to existing lists
-
-### Import/Export
-- JSON grid format
-- Preserve theme entries
-- Auto-numbering on import
+| Document | What It Covers | Read Time | Best For |
+|----------|---------------|-----------|----------|
+| [DEVELOPMENT.md](./dev/DEVELOPMENT.md) | Setup, workflow, debugging | 30-40 min | New developers, onboarding |
+| [CONTRIBUTING.md](./dev/CONTRIBUTING.md) | Coding standards, PR process | 10-15 min | Contributors |
 
 ---
 
-## Testing Documentation
+## 🎓 Learning Paths
 
-### Backend Tests
-- Location: `backend/tests/`
-- Status: 37/37 passing ✅
-- Coverage: ~46%
-- See: `progress/BACKEND_TEST_FIXES.md`
+### Path 1: New Developer (Total: 2-3 hours)
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) - 15 min
+2. Follow [DEVELOPMENT.md#getting-started](./dev/DEVELOPMENT.md#getting-started) - 30 min
+3. Read [CONTRIBUTING.md](./dev/CONTRIBUTING.md) - 10 min
+4. Try [DEVELOPMENT.md#common-tasks](./dev/DEVELOPMENT.md#common-tasks) - 30 min
+5. Write your first test using [TESTING.md](./ops/TESTING.md) - 1 hour
 
-### CLI Tests
-- Location: `cli/tests/`
-- Extensive unit test coverage
-- Integration tests for algorithms
+**Goal**: Make your first contribution
 
-### Frontend Tests (Pending)
-- Planned: Jest + React Testing Library
-- Component tests for GridEditor, AutofillPanel, etc.
-- Integration tests for App
+### Path 2: Backend Developer (Total: 1.5-2 hours)
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) - 15 min
+2. Read [BACKEND_SPEC.md](./specs/BACKEND_SPEC.md) - 30 min
+3. Read [CLI_SPEC.md](./specs/CLI_SPEC.md) algorithms section - 15 min
+4. Review [API_REFERENCE.md](./api/API_REFERENCE.md) - 20 min
+5. Study [TESTING.md#backend-tests](./ops/TESTING.md) - 20 min
 
----
+**Goal**: Understand backend architecture and add an endpoint
 
-## Contributing
+### Path 3: Frontend Developer (Total: 1.5-2 hours)
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) - 15 min
+2. Read [FRONTEND_SPEC.md](./specs/FRONTEND_SPEC.md) - 30 min
+3. Review [API_REFERENCE.md](./api/API_REFERENCE.md) for API integration - 20 min
+4. Study component examples - 20 min
+5. Set up dev environment - 15 min
 
-When adding new documentation:
+**Goal**: Understand React app and add a component
 
-1. **Progress tracking:** Add to `progress/` with date in filename
-2. **Specifications:** Add to appropriate phase directory
-3. **Research:** Add to root `docs/` or `archive/`
-4. **Update this index:** Keep README.md current
+### Path 4: API Consumer (Total: 45 min - 1 hour)
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) overview - 5 min
+2. Follow [API_REFERENCE.md#quick-start](./api/API_REFERENCE.md#quick-start) - 10 min
+3. Review [API_REFERENCE.md#core-operations](./api/API_REFERENCE.md#core-operations) - 15 min
+4. Try [API_REFERENCE.md#complete-workflows](./api/API_REFERENCE.md#complete-workflows) - 15-30 min
 
----
+**Goal**: Make successful API calls
 
-## Archived Documentation
+### Path 5: Algorithm Developer (Total: 1-1.5 hours)
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) - 15 min
+2. Read [CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) - 30 min
+3. Review [CLI_SPEC.md#performance](./specs/CLI_SPEC.md#performance-characteristics) - 15 min
+4. Study test examples in [TESTING.md](./ops/TESTING.md) - 20 min
 
-The `archive/` directory contains historical documents that are no longer actively used but may be valuable for reference:
-
-- Old phase reports and demonstrations
-- Historical audit reports
-- Previous algorithm analyses
-- Bug fix guides from earlier phases
-
-These are kept for historical reference and context.
-
----
-
-## Questions or Issues?
-
-- Check the relevant phase README first
-- Review implementation progress docs
-- See the main project [DEPLOYMENT.md](../DEPLOYMENT.md) for setup issues
-- Check [progress/](progress/) for recent changes
+**Goal**: Understand CSP/Beam Search and optimize
 
 ---
 
-**Documentation maintained by:** Development Team
-**Project:** Crossword Construction Helper
-**Status:** Active Development - Web Interface Complete, Testing Phase Next
+## 🔍 Search Tips
+
+### Finding Information Quickly
+
+**By Keyword**:
+- Use GitHub search: `"keyword" in:docs path:docs/`
+- Use grep: `grep -r "keyword" docs/`
+
+**By Concept**:
+| Looking for... | Check... |
+|----------------|----------|
+| Algorithms | [CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) |
+| API endpoints | [API_REFERENCE.md](./api/API_REFERENCE.md) or [openapi.yaml](./api/openapi.yaml) |
+| Data structures | Any SPEC.md file, search for "Data Structures" |
+| Performance | [CLI_SPEC.md#performance](./specs/CLI_SPEC.md#performance-characteristics) |
+| Testing | [TESTING.md](./ops/TESTING.md) |
+| Code examples | Any SPEC.md file, search for code blocks |
+
+---
+
+## 📊 Documentation Statistics
+
+- **Total Active Documentation**: ~20,000 lines across 8 files
+- **Archive**: 87 files preserved for historical reference
+- **Code Examples**: 200+ across all documents
+- **API Endpoints Documented**: 26
+- **Test Examples**: 55+
+- **CLI Commands**: 8
+- **React Components**: 10 major components
+
+---
+
+## 🤝 Contributing to Documentation
+
+Found an error or want to improve the documentation?
+
+1. Check [CONTRIBUTING.md](./dev/CONTRIBUTING.md) for guidelines
+2. Make your changes
+3. Update relevant cross-references
+4. Submit a pull request
+
+**Documentation Standards**:
+- Use Markdown with code syntax highlighting
+- Include practical examples
+- Cross-reference related sections
+- Keep Table of Contents updated
+- Add to this README if creating new docs
+
+---
+
+## ❓ Still Can't Find What You Need?
+
+1. **Search the archive**: [archive/README.md](./archive/README.md) - Historical docs
+2. **Check validation reports**: [archive/validation-reports/](./archive/validation-reports/) - Known gaps
+3. **Ask the team**: Open an issue on GitHub
+4. **Contribute**: Add missing documentation and submit a PR!
+
+---
+
+**Happy coding! 🎉**
+
+For questions about specific files, see the individual README files in each directory.
