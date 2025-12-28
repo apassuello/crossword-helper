@@ -899,5 +899,334 @@ def build_cache(wordlist: str, output: Optional[str]):
         sys.exit(1)
 
 
+@cli.command()
+@click.argument("task_id")
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format (for API compatibility)",
+)
+def pause(task_id: str, json_output: bool):
+    """
+    Pause a running autofill task.
+
+    Sends a pause signal to the specified task. The task will save its
+    current state and exit gracefully at the next checkpoint.
+
+    Examples:
+        crossword pause task_abc123
+        crossword pause task_abc123 --json-output
+    """
+    try:
+        from .fill.pause_controller import PauseController
+
+        controller = PauseController(task_id=task_id)
+        controller.request_pause()
+
+        if json_output:
+            output = {
+                "success": True,
+                "task_id": task_id,
+                "message": f"Pause requested for task {task_id}"
+            }
+            click.echo(json.dumps(output))
+        else:
+            click.echo(click.style(f"✓ Pause requested for task: {task_id}", fg="green"))
+            click.echo("The task will save its state and exit at the next checkpoint.")
+
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("state_file", type=click.Path(exists=True))
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file (defaults to overwriting state file)"
+)
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format (for API compatibility)",
+)
+@click.option(
+    "--algorithm",
+    "-a",
+    type=click.Choice(["regex", "trie", "beam", "repair", "hybrid"]),
+    default="hybrid",
+    help="Fill algorithm to use for resumption",
+)
+@click.option(
+    "--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling"
+)
+@click.option(
+    "--min-score", type=int, default=30, help="Minimum word quality score (1-100)"
+)
+def resume(
+    state_file: str,
+    output: Optional[str],
+    json_output: bool,
+    algorithm: str,
+    timeout: int,
+    min_score: int,
+):
+    """
+    Resume autofill from a saved state file.
+
+    Loads a previously saved autofill state and continues filling from
+    where it left off. The state file preserves all progress, assignments,
+    and constraints.
+
+    Examples:
+        crossword resume autofill_state_task_abc123.json
+        crossword resume state.json -o completed.json
+        crossword resume state.json --algorithm hybrid --timeout 600
+    """
+    try:
+        from .fill.state_manager import StateManager
+        from .fill.pattern_matcher import PatternMatcher
+        from .fill.trie_pattern_matcher import TriePatternMatcher
+        from .fill.beam_search_autofill import BeamSearchAutofill
+        from .fill.iterative_repair import IterativeRepair
+        from .fill.hybrid_autofill import HybridAutofill
+        from .core.progress import ProgressReporter
+
+        # Initialize progress reporter
+        progress = ProgressReporter(enabled=json_output)
+        progress.start(f"Resuming from {Path(state_file).name}")
+
+        # Load state
+        if not json_output:
+            click.echo(f"Loading saved state from {state_file}...")
+
+        state_manager = StateManager()
+
+        # Extract task_id from filename (format: autofill_state_<task_id>.json)
+        task_id = Path(state_file).stem.replace("autofill_state_", "")
+
+        try:
+            csp_state, metadata = state_manager.load_csp_state(task_id)
+        except FileNotFoundError:
+            # Try loading directly by path
+            with open(state_file, "r") as f:
+                state_data = json.load(f)
+                csp_state = state_data["csp_state"]
+                metadata = state_data.get("metadata", {})
+
+        progress.update(20, "State loaded successfully")
+
+        # Reconstruct grid and wordlist
+        grid = Grid.from_dict(csp_state.grid_dict)
+
+        # Load word list (use same as original if available)
+        original_wordlists = metadata.get("wordlists", [])
+        all_words = []
+
+        if original_wordlists:
+            for wl_file in original_wordlists:
+                try:
+                    with open(wl_file, "r") as f:
+                        words = [line.strip().upper() for line in f if line.strip()]
+                        all_words.extend(words)
+                except FileNotFoundError:
+                    if not json_output:
+                        click.echo(
+                            click.style(
+                                f"Warning: Original wordlist {wl_file} not found, using default",
+                                fg="yellow",
+                            )
+                        )
+
+        if not all_words:
+            # Fallback to default wordlist
+            default_wl = Path(__file__).parent.parent / "data" / "wordlists" / "comprehensive.txt"
+            if default_wl.exists():
+                with open(default_wl, "r") as f:
+                    all_words = [line.strip().upper() for line in f if line.strip()]
+
+        word_list = WordList(all_words)
+
+        progress.update(40, f"Loaded {len(word_list)} words")
+
+        # Create pattern matcher
+        use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
+        pattern_matcher = (
+            TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
+        )
+
+        # Create autofill instance
+        if algorithm == "beam":
+            autofill = BeamSearchAutofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                beam_width=5,
+                min_score=min_score,
+                progress_reporter=progress,
+            )
+        elif algorithm == "repair":
+            autofill = IterativeRepair(
+                grid,
+                word_list,
+                pattern_matcher,
+                min_score=min_score,
+                progress_reporter=progress,
+            )
+        elif algorithm == "hybrid":
+            autofill = HybridAutofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                beam_width=5,
+                min_score=min_score,
+                progress_reporter=progress,
+            )
+        else:
+            autofill = Autofill(
+                grid, word_list, None, timeout, min_score, algorithm, progress
+            )
+
+        # Restore CSP state
+        autofill.csp = csp_state
+
+        if not json_output:
+            click.echo(f"\nResuming autofill...")
+            click.echo(f"  Previously filled: {metadata.get('slots_filled', 0)} slots")
+            click.echo(f"  Algorithm: {algorithm}")
+            click.echo(f"  Timeout: {timeout}s\n")
+
+        progress.update(60, "Starting autofill from saved state")
+
+        # Continue filling
+        result = autofill.fill(timeout=timeout)
+
+        # Save result
+        output_file = output or state_file
+        with open(output_file, "w") as f:
+            json.dump(result.grid.to_dict(), f, indent=2)
+
+        if json_output:
+            output_data = {
+                "success": result.success,
+                "grid": result.grid.to_dict()["grid"],
+                "slots_filled": result.slots_filled,
+                "total_slots": result.total_slots,
+                "time_elapsed": result.time_elapsed,
+                "output_file": output_file,
+            }
+            progress.complete("Resume complete")
+            click.echo(json.dumps(output_data))
+        else:
+            click.echo(f"\n{'='*60}")
+            click.echo("Resume Results")
+            click.echo(f"{'='*60}\n")
+
+            if result.success:
+                click.echo(click.style("✓ SUCCESS - Grid completed!", fg="green", bold=True))
+            else:
+                click.echo(
+                    click.style("✗ PARTIAL - Could not complete grid", fg="yellow", bold=True)
+                )
+
+            click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
+            click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
+            click.echo(f"\n✓ Saved to: {output_file}")
+            click.echo(f"{'='*60}\n")
+
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
+@cli.command("list-states")
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format (for API compatibility)",
+)
+@click.option(
+    "--sort-by",
+    type=click.Choice(["timestamp", "progress", "size"]),
+    default="timestamp",
+    help="Sort states by timestamp, progress, or grid size",
+)
+@click.option(
+    "--max-age-days",
+    type=int,
+    help="Only show states newer than this many days",
+)
+def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int]):
+    """
+    List all saved autofill states.
+
+    Shows information about paused/saved autofill tasks that can be resumed.
+
+    Examples:
+        crossword list-states
+        crossword list-states --sort-by progress
+        crossword list-states --max-age-days 7
+        crossword list-states --json-output
+    """
+    try:
+        from .fill.state_manager import StateManager
+
+        state_manager = StateManager()
+        states = state_manager.list_states(max_age_days=max_age_days)
+
+        # Sort states
+        if sort_by == "timestamp":
+            states.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
+        elif sort_by == "progress":
+            states.sort(
+                key=lambda s: s.get("slots_filled", 0) / max(s.get("total_slots", 1), 1),
+                reverse=True,
+            )
+        elif sort_by == "size":
+            states.sort(key=lambda s: s.get("grid_size", [0, 0])[0], reverse=True)
+
+        if json_output:
+            output = {"states": states, "count": len(states)}
+            click.echo(json.dumps(output, indent=2))
+        else:
+            click.echo(f"\n{'='*60}")
+            click.echo(f"Saved Autofill States ({len(states)} total)")
+            click.echo(f"{'='*60}\n")
+
+            if not states:
+                click.echo("No saved states found.")
+            else:
+                for state in states:
+                    task_id = state.get("task_id", "unknown")
+                    timestamp = state.get("timestamp", "unknown")
+                    grid_size = state.get("grid_size", [0, 0])
+                    filled = state.get("slots_filled", 0)
+                    total = state.get("total_slots", 0)
+                    progress_pct = (filled / total * 100) if total > 0 else 0
+
+                    click.echo(f"Task ID: {task_id}")
+                    click.echo(f"  Timestamp: {timestamp}")
+                    click.echo(f"  Grid size: {grid_size[0]}×{grid_size[1]}")
+                    click.echo(f"  Progress: {filled}/{total} slots ({progress_pct:.1f}%)")
+                    click.echo()
+
+            click.echo(f"{'='*60}\n")
+
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(click.style(f"✗ Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
