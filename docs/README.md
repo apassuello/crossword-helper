@@ -3,7 +3,9 @@
 **Welcome to the Crossword Helper documentation!** This guide helps you find the right documentation for your needs.
 
 **Version**: 2.0.0
-**Last Updated**: December 27, 2025
+**Last Updated**: December 28, 2025
+
+> 📚 **New to the project?** Check out [../READING_LIST.md](../READING_LIST.md) for guided reading paths based on your role (user, developer, contributor).
 
 ---
 

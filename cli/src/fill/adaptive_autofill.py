@@ -11,7 +11,7 @@ This wrapper monitors autofill progress and intervenes when:
 import logging
 from typing import Dict, List, Optional, Tuple
 from cli.src.fill.autofill import Autofill
-from cli.src.fill.grid import Grid
+from cli.src.core.grid import Grid
 
 # Import backend suggester if available
 try:

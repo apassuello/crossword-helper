@@ -6,6 +6,40 @@ A comprehensive crossword puzzle construction toolkit with web interface and pow
 
 ---
 
+## 📚 New Here? Start With The Reading List
+**→ [READING_LIST.md](READING_LIST.md)** - Choose your path and read only what you need
+
+---
+
+## 🚀 Getting Started - Choose Your Path
+
+### New to Crossword Construction?
+**→ Start Here**: [USER_GUIDE_COMPLETE_WORKFLOW.md](USER_GUIDE_COMPLETE_WORKFLOW.md)
+
+This guide walks you through the COMPLETE process:
+- Starting with grid size (15x15, 21x21) + theme words
+- Step-by-step to a finished, filled puzzle
+- Two approaches: **Web Interface** (recommended for themes) or **CLI Only**
+- Actual tested commands with expected results
+
+### Want to See Proof It Works?
+**→ Check**:
+- **[COMPLETE_TESTING_REPORT.md](COMPLETE_TESTING_REPORT.md)** - Comprehensive testing of both 15×15 and 21×21
+- [ACTUAL_DEMONSTRATION_RESULTS.md](ACTUAL_DEMONSTRATION_RESULTS.md) - 15×15 grid with custom wordlists
+- [ACTUAL_DEMONSTRATION_21X21.md](ACTUAL_DEMONSTRATION_21X21.md) - 21×21 grid complete workflow
+
+Real terminal output showing:
+- ✅ Custom wordlist integration (VERIFIED with 18 custom words)
+- ✅ Multiple wordlist support (VERIFIED with 44,032 words)
+- ✅ Complete 15×15 and 21×21 workflows (TESTED with real output)
+- ✅ Performance testing (0.01s for 15×15, 0.02s for 21×21)
+- ❌ What's broken and why (HONEST assessment with workarounds)
+
+### Need Quick Reference?
+**→ See**: Quick Start section below
+
+---
+
 ## Features
 
 ### Grid Editor
@@ -82,10 +116,57 @@ npm run dev
 
 ### Create Your First Puzzle
 
-1. **Set up the grid**: Click cells to add letters, Shift+Click to toggle black squares
-2. **Lock theme entries**: Right-click cells to lock words you want to preserve
-3. **Autofill**: Go to "Autofill" tab, configure options, click "Start Autofill"
-4. **Export**: Save your completed grid as JSON
+#### For Puzzles WITH Theme Words (Recommended: Web Interface)
+1. **Start backend**: `python run.py` → `http://localhost:5000`
+2. **Create grid**: Select size, create new grid
+3. **Add theme words**: Type them into specific positions
+4. **Lock theme words**: Mark them to preserve during autofill
+5. **Add black squares**: Use optimizer or click manually
+6. **Autofill**: Configure and run (theme words preserved)
+7. **Export**: Download as PDF or .puz
+
+#### For Puzzles WITHOUT Theme Words (CLI Works Great)
+```bash
+# 1. Create grid
+python -m cli.src.cli new --size 15 -o puzzle.json
+
+# 2. Add black squares (manual JSON editing or script)
+
+# 3. Validate
+python -m cli.src.cli validate puzzle.json
+
+# 4. Fill
+python -m cli.src.cli fill puzzle.json \
+  -w data/wordlists/comprehensive.txt \
+  -t 180 --min-score 30 -o filled.json
+
+# 5. Export
+python -m cli.src.cli export filled.json --format pdf -o puzzle.pdf
+```
+
+---
+
+## ⚠️ Reality Check: What Actually Works
+
+Based on comprehensive testing (see [ACTUAL_DEMONSTRATION_RESULTS.md](ACTUAL_DEMONSTRATION_RESULTS.md)):
+
+### ✅ Fully Working Features
+- ✅ **Custom wordlists** - Create and use your own word lists
+- ✅ **Multiple wordlists** - Combine comprehensive + custom + themed lists
+- ✅ **Pattern matching** - Find words by pattern (C?T → CAT, COT, CUT)
+- ✅ **Grid validation** - Check symmetry, connectivity, NYT standards
+- ✅ **Autofill (no themes)** - Fill entire grids with quality words
+- ✅ **Pause/resume** - Pause long-running fills, resume later
+- ✅ **Export** - PDF, .puz, JSON formats all work
+- ✅ **Web interface** - All features work including theme preservation
+
+### ⚠️ Known Issues
+- ❌ **CLI `--theme-entries` flag** - Does NOT preserve theme words
+  - **Workaround**: Use web interface for themed puzzles
+- ❌ **CLI `--adaptive` flag** - Does NOT auto-add black squares
+  - **Workaround**: Use web interface black square optimizer
+
+**Bottom Line**: Web interface works perfectly. CLI works great for non-themed puzzles. For themed puzzles, use the web interface.
 
 ---
 
