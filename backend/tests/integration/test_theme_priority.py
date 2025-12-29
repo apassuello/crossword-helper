@@ -177,12 +177,12 @@ class TestThemeWordCLIIntegration:
                     str(grid_file),
                     '--wordlists', 'data/wordlists/comprehensive.txt',
                     '--theme-wordlist', theme_file,
-                    '--timeout', '10',
+                    '--timeout', '30',  # Increased for slower CI environments (Python 3.10)
                     '--allow-nonstandard'
                 ],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=45  # Increased for slower CI environments
             )
 
             # Check that CLI loaded theme words
@@ -221,12 +221,12 @@ class TestThemeWordCLIIntegration:
                     str(grid_file),
                     '--wordlists', 'data/wordlists/comprehensive.txt',
                     '--theme-wordlist', str(demo_wordlist),
-                    '--timeout', '10',
+                    '--timeout', '30',  # Increased for slower CI environments (Python 3.10)
                     '--allow-nonstandard'
                 ],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=45  # Increased for slower CI environments
             )
 
             # Verify theme word loading message appears
