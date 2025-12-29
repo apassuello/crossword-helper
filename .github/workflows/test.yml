@@ -48,15 +48,18 @@ jobs:
       run: |
         ls -lh coverage.xml
         echo "Coverage file size: $(wc -c < coverage.xml) bytes"
+        head -20 coverage.xml
 
     - name: Upload coverage to Codecov
+      # Only upload from Python 3.12 to avoid duplicate uploads
+      if: matrix.python-version == '3.12'
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage.xml
+        files: ./coverage.xml
         flags: unittests
-        name: codecov-${{ matrix.python-version }}
-        fail_ci_if_error: false
+        name: codecov-upload
+        fail_ci_if_error: true
         verbose: true
 
     - name: Generate coverage HTML report
