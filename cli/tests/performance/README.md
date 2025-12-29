@@ -1,13 +1,15 @@
 # Performance & Benchmark Tests
 
-This directory contains performance benchmarks and stress tests for the crossword autofill system.
+This directory contains **manual performance benchmarks** for the crossword autofill system.
+
+⚠️ **Note:** These are standalone Python scripts, **not automated CI tests**. They must be run manually when needed.
 
 ## Files
 
 - **benchmark_algorithms.py** - Algorithm performance benchmarks
-  - Tests beam search performance on various grid sizes
+  - Compares Regex vs Trie pattern matching
   - Measures time and memory usage
-  - Validates performance targets
+  - Generates detailed performance reports
 
 - **benchmark_memory_optimization.py** - Memory optimization benchmarks
   - Tests memory usage during autofill
@@ -16,18 +18,17 @@ This directory contains performance benchmarks and stress tests for the crosswor
 
 ## Running Benchmarks
 
-These tests are marked as `slow` and are skipped by default during regular test runs.
+These are **standalone scripts** that should be run directly with Python:
 
 ```bash
-# Run all benchmarks
-pytest cli/tests/performance/ -v
+# Run algorithm benchmarks
+python cli/tests/performance/benchmark_algorithms.py
 
-# Run specific benchmark
-pytest cli/tests/performance/benchmark_algorithms.py -v
-
-# Include benchmarks in full test run
-pytest -m slow
+# Run memory benchmarks
+python cli/tests/performance/benchmark_memory_optimization.py
 ```
+
+**Note:** Do NOT run with pytest - these are not pytest tests.
 
 ## Performance Targets
 

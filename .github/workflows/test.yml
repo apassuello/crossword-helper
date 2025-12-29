@@ -93,32 +93,6 @@ jobs:
       run: |
         isort --check-only backend/ cli/ || true
 
-  performance:
-    runs-on: ubuntu-latest
-    # Only run performance tests on main branch or manual trigger
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest
-
-    - name: Run performance benchmarks
-      run: |
-        pytest cli/tests/performance/ -v --tb=short
-
-    - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results
-        path: benchmark-results/
+  # Performance job removed - benchmarks are manual scripts, not automated tests
+  # Run manually when needed: python cli/tests/performance/benchmark_algorithms.py
+  # See cli/tests/performance/README.md for details
