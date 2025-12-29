@@ -61,7 +61,8 @@ class WordList:
             progress_callback: Optional callback(current, total) for progress updates
         """
         total = len(words)
-        seen = set()  # O(1) duplicate checking
+        # Start with existing words to prevent duplicates
+        seen = {sw.text for sw in self.words}
 
         for idx, word in enumerate(words):
             word = word.upper().strip()
