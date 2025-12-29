@@ -73,3 +73,30 @@ demo_theme_entries.py
 test_theme_entries.py
 test_grid.json
 archive/
+
+# Test artifacts and results
+test_results/
+test_*.json
+*_test_result*.json
+*_test_summary*.md
+ENDPOINT_COVERAGE_VISUAL.txt
+DIAGRAM_PACKAGE_MANIFEST.txt
+
+# Temporary documentation
+START_HERE.md
+DOCUMENTATION_INDEX.md
+*_TEMP.md
+*_WIP.md
+
+# Test data (if moved to tests/fixtures)
+test_data/
+test_grids/
+
+# Utility scripts output
+*.log
+*.tmp
+*.temp
+
+# Coverage reports
+coverage.xml
+.coverage.*

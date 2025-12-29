@@ -55,11 +55,11 @@ def frontend_to_cli_grid(frontend_grid: List[List[Dict[str, Any]]]) -> List[List
 
 # Load actual test grids from project
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-TEST_GRIDS_DIR = PROJECT_ROOT / "test_data" / "grids"
+TEST_GRIDS_DIR = PROJECT_ROOT / "tests" / "fixtures" / "test_data" / "grids"
 
 
 def load_cli_grid(filename: str) -> Dict[str, Any]:
-    """Load a grid in CLI format from test_data/grids/."""
+    """Load a grid in CLI format from tests/fixtures/test_data/grids/."""
     filepath = TEST_GRIDS_DIR / filename
     with open(filepath) as f:
         data = json.load(f)

@@ -8,7 +8,7 @@ visualization of results.
 
 Usage:
     # Basic demo
-    python scripts/demo_phase5.py test_data/grids/demo_11x11_EMPTY.json
+    python scripts/demo_phase5.py tests/fixtures/test_data/grids/demo_11x11_EMPTY.json
 
     # Custom parameters
     python scripts/demo_phase5.py grid.json --timeout 60 --min-score 40
@@ -192,7 +192,7 @@ def main():
         epilog='''
 Examples:
   # Basic demo
-  python scripts/demo_phase5.py test_data/grids/demo_11x11_EMPTY.json
+  python scripts/demo_phase5.py tests/fixtures/test_data/grids/demo_11x11_EMPTY.json
 
   # Custom timeout and score
   python scripts/demo_phase5.py grid.json --timeout 60 --min-score 40
@@ -267,7 +267,7 @@ Examples:
             # Auto-generate output filename
             input_stem = Path(args.grid_file).stem
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_file = f"test_data/grids/{input_stem}_PHASE5_{timestamp}"
+            output_file = f"tests/fixtures/test_data/grids/{input_stem}_PHASE5_{timestamp}"
             if args.runs > 1:
                 output_file += f"_run{run+1}"
             output_file += ".json"

@@ -41,7 +41,7 @@ def test_integration():
     print("   Pattern matcher created")
 
     # Load test grid
-    grid_path = Path(__file__).parent / 'test_data' / 'grids' / 'demo_11x11_EMPTY.json'
+    grid_path = Path(__file__).parent.parent / 'fixtures' / 'test_data' / 'grids' / 'demo_11x11_EMPTY.json'
     if not grid_path.exists():
         print(f"\nWARNING: Test grid not found at {grid_path}")
         print("Creating simple test grid instead")

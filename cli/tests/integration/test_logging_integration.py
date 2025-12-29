@@ -32,7 +32,7 @@ class TestLoggingIntegration:
         # The constructor should not raise any NameError for print
         assert autofill is not None
 
-    @patch('cli.src.fill.beam_search_autofill.logger')
+    @patch('src.fill.beam_search_autofill.logger')
     def test_debug_logging_works(self, mock_logger):
         """Test that debug messages are logged correctly."""
         grid = Grid(11)
