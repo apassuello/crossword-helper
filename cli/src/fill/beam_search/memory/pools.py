@@ -5,9 +5,14 @@ This module provides object pooling to minimize GC pressure during beam search.
 Instead of creating/destroying thousands of objects, we reuse them from a pool.
 """
 
-from typing import List, Optional, Set, Dict, Tuple
+from __future__ import annotations
+from typing import List, Optional, Set, Dict, Tuple, TYPE_CHECKING
 from collections import deque
 import logging
+
+if TYPE_CHECKING:
+    from ....core.grid import Grid
+    from ..state import BeamState
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +59,7 @@ class GridPool:
         self._total_created = 0  # Statistics
         self._total_reused = 0  # Statistics
 
-    def acquire(self) -> 'Grid':
+    def acquire(self) -> Grid:
         """
         Acquire a grid from the pool.
 
@@ -89,7 +94,7 @@ class GridPool:
 
         return grid
 
-    def release(self, grid: 'Grid') -> None:
+    def release(self, grid: Grid) -> None:
         """
         Release a grid back to the pool.
 
@@ -121,7 +126,7 @@ class GridPool:
 
         self._in_use.discard(grid_id)
 
-    def _reset_grid(self, grid: 'Grid') -> None:
+    def _reset_grid(self, grid: Grid) -> None:
         """
         Reset grid to empty state.
 
@@ -222,7 +227,7 @@ class StatePool:
         self._total_created = 0
         self._total_reused = 0
 
-    def acquire(self) -> 'BeamState':
+    def acquire(self) -> BeamState:
         """
         Acquire a blank BeamState from the pool.
 
@@ -255,7 +260,7 @@ class StatePool:
 
         return state
 
-    def acquire_from_template(self, template: 'BeamState') -> 'BeamState':
+    def acquire_from_template(self, template: BeamState) -> BeamState:
         """
         Acquire a state pre-initialized from a template.
 
@@ -292,7 +297,7 @@ class StatePool:
 
         return state
 
-    def release(self, state: 'BeamState') -> None:
+    def release(self, state: BeamState) -> None:
         """
         Release a state back to the pool.
 
@@ -316,7 +321,7 @@ class StatePool:
 
         self._in_use.discard(state_id)
 
-    def _reset_state(self, state: 'BeamState') -> None:
+    def _reset_state(self, state: BeamState) -> None:
         """
         Reset state to blank.
 

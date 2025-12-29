@@ -5,10 +5,15 @@ Maintains multiple parallel solutions (beam) to explore diverse search paths
 and avoid local optima that plague single-path backtracking approaches.
 """
 
-from typing import List, Tuple, Dict, Optional, Set
+from __future__ import annotations
+from typing import List, Tuple, Dict, Optional, Set, TYPE_CHECKING
 from dataclasses import dataclass, field
 import time
 import logging
+
+if TYPE_CHECKING:
+    from ..autofill import FillResult
+
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
@@ -165,7 +170,7 @@ class BeamSearchAutofill:
         self.start_time = 0.0
         self.iterations = 0
 
-    def fill(self, timeout: int = 300) -> 'FillResult':
+    def fill(self, timeout: int = 300) -> FillResult:
         """
         Fill grid using beam search.
 

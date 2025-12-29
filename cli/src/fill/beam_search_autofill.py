@@ -7,6 +7,7 @@ The original 1,989-line god class has been refactored into focused components.
 This wrapper maintains the original API for backward compatibility.
 """
 
+import logging
 from typing import Dict, Optional, Tuple
 
 from ..core.grid import Grid
@@ -14,6 +15,9 @@ from .word_list import WordList
 from .pattern_matcher import PatternMatcher
 from .beam_search.orchestrator import BeamSearchOrchestrator
 from .beam_search.state import BeamState
+
+# Module-level logger for backward compatibility with tests
+logger = logging.getLogger(__name__)
 
 # Re-export BeamState for backward compatibility
 __all__ = ['BeamSearchAutofill', 'BeamState']
@@ -150,3 +154,53 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
                 state.score += avg_bonus
 
         return beam
+
+    def _is_gibberish_pattern(self, word: str) -> bool:
+        """
+        Proxy to StateEvaluator.is_gibberish_pattern() for backward compatibility.
+
+        Check if a pattern contains obvious gibberish (repeated letters, impossible clusters).
+
+        Args:
+            word: Word or pattern to check (may contain '?' wildcards)
+
+        Returns:
+            True if pattern appears to be gibberish
+
+        Examples:
+            AAAAA -> True (all same letter)
+            III -> True (all same letter)
+            NNN -> True (all same letter)
+            AAA?? -> True (repeated letters)
+            HELLO -> False (valid word pattern)
+            VISA -> False (valid word pattern)
+        """
+        return self.state_evaluator.is_gibberish_pattern(word)
+
+    def _is_quality_word(self, word: str) -> bool:
+        """
+        Proxy to StateEvaluator.is_quality_word() for backward compatibility.
+
+        Check if word is likely real (not gibberish).
+
+        Uses linguistic heuristics to filter obvious gibberish:
+        1. Vowel ratio (~40% in English)
+        2. No excessive letter repetition
+        3. No excessive consonant clusters
+        4. Q followed by U (standard pattern)
+
+        Args:
+            word: Word to check (uppercase)
+
+        Returns:
+            True if word passes quality checks, False if likely gibberish
+
+        Examples:
+            QZXRTPL -> False (no vowels)
+            AAAAAN -> False (repeated letters)
+            NNRRRN -> False (excessive repetition)
+            HELLO -> True (valid word)
+            WORLD -> True (valid word)
+            PYTHON -> True (valid word)
+        """
+        return self.state_evaluator.is_quality_word(word)

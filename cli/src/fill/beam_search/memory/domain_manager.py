@@ -6,8 +6,12 @@ satisfaction problems. For small domains (<= 64 words), uses bitsets instead
 of sets for 70-90% memory reduction.
 """
 
-from typing import Dict, Set, Tuple, Optional, List
+from __future__ import annotations
+from typing import Dict, Set, Tuple, Optional, List, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from ...word_list import WordList
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +42,7 @@ class DomainManager:
     # Bitset threshold: domains with <= 64 words use bitsets
     BITSET_THRESHOLD = 64
 
-    def __init__(self, word_list: 'WordList'):
+    def __init__(self, word_list: WordList):
         """
         Initialize domain manager.
 

@@ -12,9 +12,14 @@ Algorithm:
 5. Repeat until no conflicts or no improvement
 """
 
-from typing import List, Tuple, Dict, Optional, Set
+from __future__ import annotations
+from typing import List, Tuple, Dict, Optional, Set, TYPE_CHECKING
 from dataclasses import dataclass
 import time
+
+if TYPE_CHECKING:
+    from .autofill import FillResult
+
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
@@ -133,7 +138,7 @@ class IterativeRepair:
         self.start_time = 0.0
         self.iterations = 0
 
-    def fill(self, timeout: int = 300) -> 'FillResult':
+    def fill(self, timeout: int = 300) -> FillResult:
         """
         Repair grid by fixing conflicts.
 

@@ -9,8 +9,13 @@ Combines strengths of both algorithms to achieve higher completion rates
 than either algorithm alone.
 """
 
-from typing import Optional
+from __future__ import annotations
+from typing import Optional, TYPE_CHECKING
 import time
+
+if TYPE_CHECKING:
+    from .autofill import FillResult
+
 from ..core.grid import Grid
 from .word_list import WordList
 from .pattern_matcher import PatternMatcher
@@ -69,7 +74,7 @@ class HybridAutofill:
         timeout: int = 300,
         beam_timeout_ratio: float = 0.7,
         repair_timeout_ratio: float = 0.3
-    ) -> 'FillResult':
+    ) -> FillResult:
         """
         Fill grid using hybrid approach.
 
