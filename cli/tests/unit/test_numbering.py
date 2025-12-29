@@ -2,7 +2,6 @@
 Unit tests for GridNumbering class.
 """
 
-import pytest
 from src.core.grid import Grid
 from src.core.numbering import GridNumbering
 

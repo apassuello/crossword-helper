@@ -2,7 +2,6 @@
 Unit tests for GridValidator class.
 """
 
-import pytest
 from src.core.grid import Grid
 from src.core.validator import GridValidator
 

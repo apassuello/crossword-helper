@@ -3,7 +3,6 @@
 Crossword Builder CLI entry point.
 """
 
-import sys
 from src.cli import cli
 
 if __name__ == '__main__':

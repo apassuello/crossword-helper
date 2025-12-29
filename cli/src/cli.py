@@ -27,7 +27,6 @@ def cli():
 
     Phase 2: Advanced CLI tool with autofill engine.
     """
-    pass
 
 
 @cli.command()
@@ -58,8 +57,8 @@ def new(size: str, output: str):
 
     click.echo(f"✓ Created {size}×{size} grid: {output}")
     click.echo(f"  Size: {size_int}×{size_int}")
-    click.echo(f"  Black squares: 0")
-    click.echo(f"  Ready to fill!")
+    click.echo("  Black squares: 0")
+    click.echo("  Ready to fill!")
 
 
 @cli.command()
@@ -79,7 +78,7 @@ def validate(grid_file: str):
     stats = GridValidator.get_grid_stats(grid)
 
     click.echo(f"\n{'='*60}")
-    click.echo(f"Grid Validation Report")
+    click.echo("Grid Validation Report")
     click.echo(f"{'='*60}\n")
 
     click.echo(f"File: {grid_file}")
@@ -220,7 +219,7 @@ def fill(
 
     # Load word lists
     if not json_output:
-        click.echo(f"Loading word lists...")
+        click.echo("Loading word lists...")
 
     all_words = []
     for idx, wordlist_file in enumerate(wordlists):
@@ -465,7 +464,7 @@ def fill(
     else:
         # Human-readable output for CLI
         click.echo(f"\n{'='*60}")
-        click.echo(f"Autofill Results")
+        click.echo("Autofill Results")
         click.echo(f"{'='*60}\n")
 
         if result.success:
@@ -505,7 +504,7 @@ def fill(
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-f",
+    "-",
     type=click.Choice(["text", "json", "grid"]),
     default="grid",
     help="Display format",
@@ -551,7 +550,7 @@ def show(grid_file: str, format: str):
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-f",
+    "-",
     type=click.Choice(["html"]),
     default="html",
     help="Export format (html)",
@@ -776,12 +775,12 @@ def normalize(text: str, json_output: bool):
         click.echo(f"{rule_info['explanation']}")
 
         if rule_info.get("examples"):
-            click.echo(f"\nExamples:")
+            click.echo("\nExamples:")
             for example_in, example_out in rule_info["examples"][:3]:
                 click.echo(f"  {example_in:20} → {example_out}")
 
         if alternatives:
-            click.echo(f"\nAlternatives:")
+            click.echo("\nAlternatives:")
             for alt in alternatives:
                 click.echo(f"  {alt['form']:20} ({alt['note']})")
 
@@ -839,14 +838,14 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
         click.echo(json.dumps(output, indent=2))
     else:
         click.echo(f"\n{'='*60}")
-        click.echo(f"Grid Numbering")
+        click.echo("Grid Numbering")
         click.echo(f"{'='*60}\n")
 
         click.echo(f"File: {grid_file}")
         click.echo(f"Size: {stats['size']}×{stats['size']}")
         click.echo(f"Numbered squares: {len(numbering)}")
 
-        click.echo(f"\nNumbering:")
+        click.echo("\nNumbering:")
         for (row, col), num in sorted(numbering.items(), key=lambda x: x[1]):
             click.echo(f"  {num:3d}: row {row}, col {col}")
 
@@ -905,7 +904,7 @@ def build_cache(wordlist: str, output: Optional[str]):
         # Verify cache works
         click.echo("Verifying cache...")
         verify_start = time.time()
-        cached_list = WordList.from_cache(str(cache_path))
+        WordList.from_cache(str(cache_path))
         verify_time = time.time() - verify_start
 
         click.echo(f"✓ Cache loads in {verify_time:.2f}s ({load_time/verify_time:.1f}x faster!)")
@@ -1114,7 +1113,7 @@ def resume(
         autofill.csp = csp_state
 
         if not json_output:
-            click.echo(f"\nResuming autofill...")
+            click.echo("\nResuming autofill...")
             click.echo(f"  Previously filled: {metadata.get('slots_filled', 0)} slots")
             click.echo(f"  Algorithm: {algorithm}")
             click.echo(f"  Timeout: {timeout}s\n")

@@ -26,7 +26,6 @@ class ConstraintPropagationStrategy(ABC):
         Returns:
             Tuple of (success, reductions, conflicts)
         """
-        pass
 
 
 class MACConstraintEngine(ConstraintPropagationStrategy):
@@ -67,7 +66,7 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
         """
         reductions = []
         conflicts = set()
-        slot_id = (slot['row'], slot['col'], slot['direction'])
+        (slot['row'], slot['col'], slot['direction'])
 
         # Get all crossing slots
         crossing_slots = self._get_crossing_slots(slot, state.grid)

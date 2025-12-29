@@ -8,7 +8,7 @@ Validates crossword grids against NYT-style construction rules:
 - Symmetry (180° rotational)
 """
 
-from typing import List, Tuple, Set
+from typing import List, Tuple
 from .grid import Grid
 
 

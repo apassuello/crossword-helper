@@ -5,13 +5,12 @@ This module implements strategies for evaluating beam states,
 including viability assessment, quality checks, and score computation.
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional
 from abc import ABC, abstractmethod
 import logging
 import itertools
 
 from ..state import BeamState
-from ....core.grid import Grid
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,6 @@ class StateEvaluationStrategy(ABC):
         Returns:
             Tuple of (is_viable, risk_penalty)
         """
-        pass
 
     @abstractmethod
     def compute_score(self, state: BeamState, word_score: int) -> float:
@@ -41,7 +39,6 @@ class StateEvaluationStrategy(ABC):
         Returns:
             Score in range 0.0-100.0
         """
-        pass
 
 
 class StateEvaluator(StateEvaluationStrategy):

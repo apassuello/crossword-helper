@@ -10,7 +10,7 @@ than either algorithm alone.
 """
 
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import time
 
 if TYPE_CHECKING:
@@ -102,12 +102,12 @@ class HybridAutofill:
             raise ValueError(f"timeout must be ≥30 seconds for hybrid, got {timeout}")
         if beam_timeout_ratio + repair_timeout_ratio > 1.0:
             raise ValueError(
-                f"beam_timeout_ratio + repair_timeout_ratio must be ≤1.0, "
+                "beam_timeout_ratio + repair_timeout_ratio must be ≤1.0, "
                 f"got {beam_timeout_ratio} + {repair_timeout_ratio} = "
                 f"{beam_timeout_ratio + repair_timeout_ratio}"
             )
 
-        start_time = time.time()
+        time.time()
 
         # Calculate timeouts (ensure minimum 10s for each phase)
         beam_timeout = max(10, int(timeout * beam_timeout_ratio))

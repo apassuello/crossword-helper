@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 import logging
 
 from ..state import BeamState
-from ....core.grid import Grid
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,6 @@ class DiversityStrategy(ABC):
         Returns:
             Diverse subset of beam_width states
         """
-        pass
 
     @abstractmethod
     def apply_diversity_bonus(self, beam: List[BeamState], diversity_bonus: float) -> List[BeamState]:
@@ -54,7 +52,6 @@ class DiversityStrategy(ABC):
         Returns:
             Beam with updated scores (modified in-place)
         """
-        pass
 
 
 class DiversityManager(DiversityStrategy):
@@ -69,7 +66,6 @@ class DiversityManager(DiversityStrategy):
 
     def __init__(self):
         """Initialize diversity manager."""
-        pass
 
     def diverse_beam_prune(
         self,

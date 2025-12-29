@@ -5,7 +5,7 @@ Merges user edits into saved autofill state while maintaining consistency
 and detecting unsolvable configurations.
 """
 
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Set
 from dataclasses import dataclass
 import logging
 
@@ -118,7 +118,7 @@ class EditMerger:
 
             if not validation_result['is_valid']:
                 error_msg = (
-                    f"User edits create unsolvable configuration: "
+                    "User edits create unsolvable configuration: "
                     f"{validation_result['reason']}"
                 )
                 self.logger.error(error_msg)

@@ -299,7 +299,7 @@ class Grid:
         if strict_size and size not in [11, 15, 21]:
             raise ValueError(
                 f"Grid size must be 11, 15, or 21 for standard crosswords, got {size}. "
-                f"Set strict_size=False to allow non-standard sizes."
+                "Set strict_size=False to allow non-standard sizes."
             )
 
         grid = cls.__new__(cls)

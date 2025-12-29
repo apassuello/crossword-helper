@@ -11,8 +11,6 @@ Tests the full pause/resume workflow including:
 import pytest
 import json
 import time
-from pathlib import Path
-from flask import Flask
 
 from backend.app import create_app
 from cli.src.fill.state_manager import StateManager, CSPState
@@ -436,7 +434,6 @@ class TestEditMerger:
         assert 0 in updated_state.locked_slots
         # WORD should be in used_words
         assert 'WORD' in updated_state.used_words
-
 
     def test_get_edit_summary(self, simple_grid_state):
         """Test getting summary of edits."""

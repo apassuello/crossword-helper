@@ -113,7 +113,7 @@ def stream_progress(task_id: str):
 
                 except queue.Empty:
                     # Send heartbeat to keep connection alive
-                    yield f": heartbeat\n\n"
+                    yield ": heartbeat\n\n"
 
         finally:
             # Clean up when client disconnects

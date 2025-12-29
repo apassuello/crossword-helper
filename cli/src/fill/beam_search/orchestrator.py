@@ -268,7 +268,7 @@ class BeamSearchOrchestrator:
         )
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
-        logger.debug(f"\nDEBUG: Using DYNAMIC MRV variable ordering")
+        logger.debug("\nDEBUG: Using DYNAMIC MRV variable ordering")
         logger.debug(f"Total slots to fill: {total_slots}")
 
         # Main beam search loop
@@ -356,18 +356,18 @@ class BeamSearchOrchestrator:
                     continue
 
                 # Attempts exhausted for this (beam, slot) - need proper backtracking
-                logger.debug(f"  Max attempts reached for this slot, attempting backtracking...")
+                logger.debug("  Max attempts reached for this slot, attempting backtracking...")
 
                 # If no filled slots to backtrack from, we're stuck
                 if len(filled_slots) == 0:
-                    logger.debug(f"  No slots to backtrack from, grid may be impossible")
+                    logger.debug("  No slots to backtrack from, grid may be impossible")
                     break
 
                 # Proper CSP backtracking: undo last assignment(s)
                 backtracked_beam = self._backtrack_beam_states(beam, depth=1)
 
                 if not backtracked_beam:
-                    logger.debug(f"  Backtracking failed, grid may be impossible")
+                    logger.debug("  Backtracking failed, grid may be impossible")
                     break
 
                 # Update beam to backtracked state
@@ -598,34 +598,34 @@ class BeamSearchOrchestrator:
         Returns:
             Expanded beam or empty list if all strategies fail
         """
-        logger.debug(f"\nDEBUG: Trying backtracking strategies...")
+        logger.debug("\nDEBUG: Trying backtracking strategies...")
 
         # Try 1: More candidates (2x)
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
         if expanded:
-            logger.debug(f"  ✓ Success with 2x candidates")
+            logger.debug("  ✓ Success with 2x candidates")
             return expanded
 
         # Try 2: Even more candidates (5x)
-        logger.debug(f"  Trying 5x candidates...")
+        logger.debug("  Trying 5x candidates...")
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
         if expanded:
-            logger.debug(f"  ✓ Success with 5x candidates")
+            logger.debug("  ✓ Success with 5x candidates")
             return expanded
 
         # Try 3: No score filter (accept any quality words)
-        logger.debug(f"  Trying min_score=0...")
+        logger.debug("  Trying min_score=0...")
         old_min_score = self.min_score
         self.min_score = 0
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
         self.min_score = old_min_score
         if expanded:
-            logger.debug(f"  ✓ Success with no score filter")
+            logger.debug("  ✓ Success with no score filter")
             return expanded
 
         # Try 4: CONFLICT-DIRECTED BACKJUMPING (intelligent)
         # Analyze which filled slots are causing this failure and undo them
-        logger.debug(f"  Analyzing conflicts for intelligent backjumping...")
+        logger.debug("  Analyzing conflicts for intelligent backjumping...")
         conflicts = self._analyze_slot_conflicts(beam[0], slot)
 
         if conflicts:
@@ -658,37 +658,37 @@ class BeamSearchOrchestrator:
             # Try expanding from backjumped state
             expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10)
             if expanded:
-                logger.debug(f"  ✓ Success with conflict-directed backjumping")
+                logger.debug("  ✓ Success with conflict-directed backjumping")
                 return expanded
 
         # Try 5: CHRONOLOGICAL BACKTRACKING - undo last assignment
-        logger.debug(f"  Trying chronological backtracking (depth=1)...")
+        logger.debug("  Trying chronological backtracking (depth=1)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
         if backtracked_beam:
             expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10)
             if expanded:
-                logger.debug(f"  ✓ Success with chronological backtracking (depth=1)")
+                logger.debug("  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
 
         # Try 6: DEEPER CHRONOLOGICAL BACKTRACKING
-        logger.debug(f"  Trying deeper chronological backtracking (depth=2)...")
+        logger.debug("  Trying deeper chronological backtracking (depth=2)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=2)
         if backtracked_beam:
             expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
             if expanded:
-                logger.debug(f"  ✓ Success with chronological backtracking (depth=2)")
+                logger.debug("  ✓ Success with chronological backtracking (depth=2)")
                 return expanded
 
         # Try 7: VERY DEEP BACKTRACKING (last resort)
-        logger.debug(f"  Trying very deep backtracking (depth=3)...")
+        logger.debug("  Trying very deep backtracking (depth=3)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=3)
         if backtracked_beam:
             expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20)
             if expanded:
-                logger.debug(f"  ✓ Success with deep backtracking (depth=3)")
+                logger.debug("  ✓ Success with deep backtracking (depth=3)")
                 return expanded
 
-        logger.debug(f"  ✗ All backtracking strategies failed")
+        logger.debug("  ✗ All backtracking strategies failed")
         return []  # All backtracking strategies failed
 
     def _resume_fill(self, resume_state, timeout: int):
@@ -702,7 +702,6 @@ class BeamSearchOrchestrator:
         Returns:
             FillResult with best solution found
         """
-        from ..autofill import FillResult
         from ..state_manager import StateManager
 
         logger.info(f"Resuming beam search from iteration {resume_state.iterations}")
@@ -831,18 +830,18 @@ class BeamSearchOrchestrator:
                     continue
 
                 # Attempts exhausted for this (beam, slot) - need proper backtracking
-                logger.debug(f"  Max attempts reached for this slot, attempting backtracking...")
+                logger.debug("  Max attempts reached for this slot, attempting backtracking...")
 
                 # If no filled slots to backtrack from, we're stuck
                 if len(filled_slots) == 0:
-                    logger.debug(f"  No slots to backtrack from, grid may be impossible")
+                    logger.debug("  No slots to backtrack from, grid may be impossible")
                     break
 
                 # Proper CSP backtracking: undo last assignment(s)
                 backtracked_beam = self._backtrack_beam_states(beam, depth=1)
 
                 if not backtracked_beam:
-                    logger.debug(f"  Backtracking failed, grid may be impossible")
+                    logger.debug("  Backtracking failed, grid may be impossible")
                     break
 
                 # Update beam to backtracked state

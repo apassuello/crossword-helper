@@ -10,8 +10,7 @@ Key optimizations:
 - Wildcard support with early termination
 """
 
-from typing import List, Dict, Optional, Set
-from dataclasses import dataclass
+from typing import List, Dict, Optional
 from .word_list import ScoredWord
 
 

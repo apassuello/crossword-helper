@@ -17,7 +17,7 @@ For crossword patterns with wildcards, we use pyahocorasick's built-in
 wildcard support with the MATCH_EXACT_LENGTH flag.
 """
 
-from typing import List, Tuple, Dict, Optional, Set
+from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 import time
 
@@ -386,11 +386,11 @@ class AhoCorasickMatcher:
         """String representation."""
         stats = self.get_stats()
         return (
-            f"AhoCorasickMatcher("
+            "AhoCorasickMatcher("
             f"words={stats.total_words:,}, "
             f"automata={stats.automaton_count}, "
             f"build_time={stats.build_time_ms:.0f}ms"
-            f")"
+            ")"
         )
 
 

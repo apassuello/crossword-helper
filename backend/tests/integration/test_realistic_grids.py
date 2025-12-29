@@ -8,7 +8,6 @@ works correctly with actual crossword-sized grids, not just toy 3x3 grids.
 import pytest
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 
 # Import fixtures
@@ -17,11 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fixtures.realistic_grid_fixtures import (
     get_11x11_empty_frontend, get_11x11_empty_cli,
     get_11x11_filled_frontend, get_11x11_filled_cli,
-    get_11x11_test_frontend, get_11x11_test_cli,
-    get_15x15_empty_frontend, get_15x15_empty_cli,
-    get_15x15_my_puzzle_frontend, get_15x15_my_puzzle_cli,
-    get_21x21_empty_frontend, get_21x21_empty_cli,
-    frontend_to_cli_grid, validate_transformation
+    get_11x11_test_cli, get_15x15_empty_frontend,
+    get_15x15_empty_cli, get_15x15_my_puzzle_frontend,
+    get_15x15_my_puzzle_cli, get_21x21_empty_frontend,
+    get_21x21_empty_cli, frontend_to_cli_grid,
+    validate_transformation
 )
 
 # Paths

@@ -5,8 +5,7 @@ Analyzes problematic slots and suggests optimal black square placements
 to resolve stuck autofill situations while maintaining grid quality.
 """
 
-from typing import List, Dict, Optional, Tuple
-import json
+from typing import List, Dict
 
 
 class BlackSquareSuggestion:
@@ -456,7 +455,7 @@ def validate_grid_for_black_squares(grid: List[List], grid_size: int) -> Dict:
     if black_count > max_black:
         warnings.append(
             f"High black square count ({black_count}). "
-            f"Adding more may reduce grid quality."
+            "Adding more may reduce grid quality."
         )
 
     return {

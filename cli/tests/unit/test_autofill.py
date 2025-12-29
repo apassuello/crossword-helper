@@ -461,7 +461,7 @@ class TestAutofillIntegration:
         grid.place_word('CAT', 0, 0, 'across')
 
         autofill = Autofill(grid, large_word_list, timeout=5)
-        result = autofill.fill()
+        autofill.fill()
 
         # CAT should still be there
         assert grid.get_cell(0, 0) == 'C'

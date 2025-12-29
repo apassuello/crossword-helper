@@ -5,12 +5,11 @@ This module implements strategies for beam expansion, pruning,
 and adaptive width adjustment.
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import List, Dict
 from abc import ABC, abstractmethod
 import logging
 
 from ..state import BeamState
-from ....core.grid import Grid
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,6 @@ class BeamManagementStrategy(ABC):
         Returns:
             Expanded beam
         """
-        pass
 
     @abstractmethod
     def prune_beam(
@@ -45,7 +43,6 @@ class BeamManagementStrategy(ABC):
         Returns:
             Pruned beam
         """
-        pass
 
     @abstractmethod
     def get_adaptive_beam_width(
@@ -61,7 +58,6 @@ class BeamManagementStrategy(ABC):
         Returns:
             Adaptive beam width
         """
-        pass
 
 
 class BeamManager(BeamManagementStrategy):
@@ -261,7 +257,7 @@ class BeamManager(BeamManagementStrategy):
 
         # DEBUG: Show why expansion might have failed
         if not expanded:
-            logger.debug(f"\nDEBUG: Expansion failed!")
+            logger.debug("\nDEBUG: Expansion failed!")
             logger.debug(f"  Skipped (duplicate): {total_skipped_duplicate}")
             logger.debug(f"  Skipped (viability): {total_skipped_viability}")
             logger.debug(f"  Added: {total_added}")

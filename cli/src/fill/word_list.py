@@ -5,10 +5,8 @@ Manages word lists, scores words based on letter frequency and commonality,
 and provides efficient lookup operations for autofill.
 """
 
-from typing import List, Tuple, Dict, Set
+from typing import List, Dict
 from dataclasses import dataclass
-import re
-import os
 import pickle
 from pathlib import Path
 

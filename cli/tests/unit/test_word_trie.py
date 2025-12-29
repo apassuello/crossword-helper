@@ -2,7 +2,6 @@
 Unit tests for WordTrie data structure.
 """
 
-import pytest
 import sys
 from pathlib import Path
 
@@ -18,7 +17,7 @@ def test_trie_node_creation():
     node = TrieNode()
     assert node.children == {}
     assert node.words == []
-    assert node.is_end_of_word == False
+    assert node.is_end_of_word  is False
     assert node.min_score == 0
     assert node.max_score == 0
 
@@ -146,9 +145,9 @@ def test_has_matches():
     trie = WordTrie()
     trie.add_word(ScoredWord("CAT", 85, 3))
 
-    assert trie.has_matches("CAT") == True
-    assert trie.has_matches("DOG") == False
-    assert trie.has_matches("C?T") == True
+    assert trie.has_matches("CAT")
+    assert trie.has_matches("DOG")  is False
+    assert trie.has_matches("C?T")
 
 
 def test_get_stats():

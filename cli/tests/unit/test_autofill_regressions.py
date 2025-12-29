@@ -6,8 +6,6 @@ Each test corresponds to a specific "FIX #N" comment in the codebase.
 """
 
 import pytest
-import copy
-from typing import List, Dict
 
 from src.core.grid import Grid
 from src.fill.beam_search_autofill import BeamState
@@ -70,7 +68,7 @@ class TestPhase4Regressions:
         FIX #3 (Phase 4.1/4.2): Fix pattern restoration bug.
         Previous bug: Pattern restoration could crash on certain inputs.
         """
-        grid = Grid(11)
+        Grid(11)
 
         # Test various patterns can be restored without crashing
         test_cases = [
@@ -123,7 +121,7 @@ class TestPhase4Regressions:
         test_cases = [
             ("STONE", 5, True),   # Exact match
             ("CAT", 5, False),    # Too short
-            ("STONES", 5, False), # Too long
+            ("STONES", 5, False),  # Too long
             ("DOG", 3, True),     # Exact match
         ]
 
@@ -219,7 +217,7 @@ class TestPerformanceRegression:
 
         # Create word list with alphabetic words only
         # WordList validates with isalpha(), so can't use digits
-        words = [f"WORD{'ABCD'[i%4]}{'EFGH'[i%4]}{chr(65+i%26)}{chr(65+(i//26)%26)}"
+        words = [f"WORD{'ABCD'[i %4]}{'EFGH'[i %4]}{chr(65+i %26)}{chr(65+(i//26) %26)}"
                  for i in range(1000)]
         word_list = WordList(words)
         pm = PatternMatcher(word_list)

@@ -4,7 +4,7 @@ Unit tests for Grid class.
 
 import pytest
 import numpy as np
-from src.core.grid import Grid, BLACK_SQUARE, EMPTY_CELL
+from src.core.grid import Grid, EMPTY_CELL
 
 
 class TestGridInitialization:

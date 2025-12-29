@@ -32,7 +32,6 @@ class ValueOrderingStrategy(ABC):
         Returns:
             Ordered list of (word, score) tuples
         """
-        pass
 
 
 class LCVValueOrdering(ValueOrderingStrategy):

@@ -6,7 +6,6 @@ import pytest
 import time
 from src.core.grid import Grid
 from src.fill.word_list import WordList
-from src.fill.pattern_matcher import PatternMatcher
 from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.hybrid_autofill import HybridAutofill
 from src.fill.beam_search_autofill import BeamSearchAutofill

@@ -11,7 +11,6 @@ Created: 2025-12-28
 Purpose: Comprehensive testing of OneLook API integration
 """
 
-import pytest
 from unittest.mock import Mock, patch
 import requests
 

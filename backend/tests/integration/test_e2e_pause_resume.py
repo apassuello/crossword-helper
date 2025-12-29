@@ -11,10 +11,8 @@ This test demonstrates the complete pause/resume workflow:
 """
 
 import pytest
-import json
 import time
 import threading
-from pathlib import Path
 
 from cli.src.core.grid import Grid
 from cli.src.fill.word_list import WordList
@@ -152,7 +150,7 @@ class TestEndToEndPauseResume:
         assert loaded_state.beam_width == 5
         assert loaded_state.min_score == 30
 
-        print(f"✓ State loaded successfully")
+        print("✓ State loaded successfully")
         print(f"  Iterations: {loaded_state.iterations}")
         print(f"  Beam states: {len(loaded_state.beam)}")
 
@@ -173,7 +171,7 @@ class TestEndToEndPauseResume:
         # Step 6: Verify resume worked
         assert result2.iterations >= result1.iterations, "Should continue from previous iteration count"
 
-        print(f"✓ Resumed successfully")
+        print("✓ Resumed successfully")
         print(f"  Total iterations: {result2.iterations}")
         print(f"  Final slots filled: {result2.slots_filled}/{result2.total_slots}")
 
@@ -268,7 +266,7 @@ class TestEndToEndPauseResume:
             slot_id_map=loaded_state.slot_id_map if hasattr(loaded_state, 'slot_id_map') else {}
         )
 
-        print(f"✓ Edit summary:")
+        print("✓ Edit summary:")
         print(f"  New words: {edit_summary.get('new_words', [])}")
         print(f"  Filled count: {edit_summary.get('filled_count', 0)}")
 
@@ -387,7 +385,7 @@ class TestEndToEndPauseResume:
 
         pause_thread.join()
 
-        print(f"\n✓ Performance Metrics:")
+        print("\n✓ Performance Metrics:")
         print(f"  Time until pause: {fill_elapsed:.2f}s")
         print(f"  Iterations before pause: {result.iterations}")
 

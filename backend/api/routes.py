@@ -18,8 +18,7 @@ from backend.api.validators import (
     validate_fill_request,
 )
 from backend.api.errors import handle_error
-from backend.api.progress_routes import create_progress_tracker, send_progress, cleanup_progress_tracker
-from pathlib import Path
+from backend.api.progress_routes import create_progress_tracker, send_progress
 import subprocess
 import threading
 import json
@@ -253,7 +252,6 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
         cmd_args: CLI command arguments
         timeout: Command timeout in seconds
     """
-    import sys
 
     try:
         # Build full command

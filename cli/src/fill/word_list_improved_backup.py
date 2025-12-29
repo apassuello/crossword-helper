@@ -10,10 +10,8 @@ Key improvements:
 - Quality filtering to exclude low-quality fills
 """
 
-from typing import List, Tuple, Dict, Set
+from typing import List, Dict
 from dataclasses import dataclass
-import re
-import os
 import pickle
 from pathlib import Path
 

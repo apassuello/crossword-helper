@@ -6,7 +6,7 @@ Efficiently finds words matching wildcard patterns using regex and indexing.
 
 from typing import List, Tuple, Pattern, Dict
 import re
-from .word_list import WordList, ScoredWord
+from .word_list import WordList
 
 
 class PatternMatcher:

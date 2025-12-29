@@ -5,8 +5,7 @@ Analyzes theme words and suggests optimal placements in the grid
 with symmetry, balance, and intersection considerations.
 """
 
-from typing import List, Dict, Tuple, Optional, Set
-import json
+from typing import List, Dict, Optional
 
 
 class ThemePlacementSuggestion:

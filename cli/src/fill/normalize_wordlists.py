@@ -14,9 +14,8 @@ Output formats:
 """
 
 import re
-import os
 from pathlib import Path
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional
 
 
 def parse_line(line: str) -> Tuple[Optional[str], Optional[int]]:

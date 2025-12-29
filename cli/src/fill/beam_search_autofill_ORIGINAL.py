@@ -221,7 +221,7 @@ class BeamSearchAutofill:
         if self.theme_entries:
             sorted_slots, theme_words = self._prioritize_theme_entries(all_slots)
         else:
-            sorted_slots = self._sort_slots_by_constraint(all_slots)
+            self._sort_slots_by_constraint(all_slots)
             theme_words = set()
 
         # Pre-fill theme entries in grid (if any)
@@ -306,12 +306,12 @@ class BeamSearchAutofill:
 
                 # If still failing, try 5x more candidates
                 if not expanded_beam:
-                    logger.debug(f"  Retry with 5x candidates...")
+                    logger.debug("  Retry with 5x candidates...")
                     expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 5)
 
                 # If still failing, try with NO score filter (min_score=0 temporarily)
                 if not expanded_beam:
-                    logger.debug(f"  Retry with min_score=0...")
+                    logger.debug("  Retry with min_score=0...")
                     old_min_score = self.min_score
                     self.min_score = 0
                     expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 10)
@@ -738,7 +738,7 @@ class BeamSearchAutofill:
             c['domain_size'],
             -c['degree'],
             -c['length'],
-            0 if (last_direction is None and c['direction'] == 'down') or \
+            0 if (last_direction is None and c['direction'] == 'down') or
                  (last_direction is not None and c['direction'] != last_direction) else 1
         ))
 
@@ -1578,7 +1578,7 @@ class BeamSearchAutofill:
 
         # DEBUG: Show why expansion might have failed
         if not expanded:
-            logger.debug(f"\nDEBUG: Expansion failed!")
+            logger.debug("\nDEBUG: Expansion failed!")
             logger.debug(f"  Skipped (duplicate): {total_skipped_duplicate}")
             logger.debug(f"  Skipped (viability): {total_skipped_viability}")
             logger.debug(f"  Added: {total_added}")

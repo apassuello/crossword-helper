@@ -43,21 +43,26 @@ PatternChar = Union[Literal['?'], str]  # '?' or any letter A-Z
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 def is_empty(cell: str) -> bool:
     """Check if a cell is empty (no letter placed)."""
     return cell == EMPTY_CELL
+
 
 def is_black(cell: str) -> bool:
     """Check if a cell is a black square."""
     return cell == BLACK_CELL
 
+
 def is_letter(cell: str) -> bool:
     """Check if a cell contains a letter."""
     return cell in LETTERS
 
+
 def is_filled(cell: str) -> bool:
     """Check if a cell is filled with a letter (not empty or black)."""
     return is_letter(cell)
+
 
 def grid_to_pattern(cell: str) -> str:
     """
@@ -84,13 +89,16 @@ def grid_to_pattern(cell: str) -> str:
     else:
         raise ValueError(f"Invalid cell value: {cell}")
 
+
 def pattern_has_wildcards(pattern: str) -> bool:
     """Check if a pattern contains any wildcards."""
     return WILDCARD in pattern
 
+
 def pattern_is_complete(pattern: str) -> bool:
     """Check if a pattern is completely filled (no wildcards)."""
     return WILDCARD not in pattern
+
 
 def validate_grid_cell(cell: str) -> bool:
     """
@@ -103,6 +111,7 @@ def validate_grid_cell(cell: str) -> bool:
         return False  # '?' is for patterns, not grid state!
     return is_empty(cell) or is_black(cell) or is_letter(cell)
 
+
 def validate_pattern_char(char: str) -> bool:
     """
     Validate that a character is valid for a pattern.
@@ -114,9 +123,11 @@ def validate_pattern_char(char: str) -> bool:
         return False  # These are grid state, not pattern chars!
     return char == WILDCARD or is_letter(char)
 
+
 def count_empty_cells(row: list) -> int:
     """Count the number of empty cells in a grid row."""
     return sum(1 for cell in row if is_empty(cell))
+
 
 def count_filled_cells(row: list) -> int:
     """Count the number of filled cells (letters) in a grid row."""
@@ -125,6 +136,7 @@ def count_filled_cells(row: list) -> int:
 # ============================================================================
 # ASSERTIONS FOR DEBUGGING
 # ============================================================================
+
 
 def assert_valid_grid(grid: list) -> None:
     """Assert that all cells in a grid are valid."""
@@ -135,6 +147,7 @@ def assert_valid_grid(grid: list) -> None:
                     f"Invalid grid cell at ({row_idx}, {col_idx}): '{cell}'. "
                     f"Found '?' in grid - use '{EMPTY_CELL}' for empty cells!"
                 )
+
 
 def assert_valid_pattern(pattern: str) -> None:
     """Assert that all characters in a pattern are valid."""

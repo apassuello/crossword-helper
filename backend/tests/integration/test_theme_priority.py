@@ -15,7 +15,6 @@ import pytest
 from pathlib import Path
 import tempfile
 import json
-import subprocess
 
 
 class TestThemeWordPriorityOrdering:
@@ -134,7 +133,7 @@ class TestThemeWordPriorityOrdering:
         # All theme words should have +50 bonus and come first
         for i, word in enumerate(['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE']):
             assert ordered[i][0] in theme_words, f"Position {i} should be a theme word"
-            assert ordered[i][1] == 100, f"Theme word should have +50 bonus (50 + 50 = 100)"
+            assert ordered[i][1] == 100, "Theme word should have +50 bonus (50 + 50 = 100)"
 
         # Non-theme word should be last with original score
         assert ordered[5][0] == 'NOTTHEME'

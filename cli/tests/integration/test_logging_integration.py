@@ -8,7 +8,6 @@ Tests:
 - Gibberish filtering
 """
 
-import logging
 import pytest
 from unittest.mock import Mock, patch
 from src.core.grid import Grid
@@ -150,9 +149,9 @@ class TestGibberishFiltering:
         autofill = BeamSearchAutofill(grid, word_list, pattern_matcher)
 
         # Test gibberish patterns
-        assert autofill._is_gibberish_pattern('AAAAA') == True
-        assert autofill._is_gibberish_pattern('III') == True
-        assert autofill._is_gibberish_pattern('NNN') == True
+        assert autofill._is_gibberish_pattern('AAAAA')
+        assert autofill._is_gibberish_pattern('III')
+        assert autofill._is_gibberish_pattern('NNN')
 
         # Test valid patterns
         assert autofill._is_gibberish_pattern('HELLO') == False
@@ -160,7 +159,7 @@ class TestGibberishFiltering:
         assert autofill._is_gibberish_pattern('AREA') == False
 
         # Test patterns with wildcards
-        assert autofill._is_gibberish_pattern('AAA??') == True
+        assert autofill._is_gibberish_pattern('AAA??')
         assert autofill._is_gibberish_pattern('HE??O') == False
 
     def test_is_quality_word(self):
@@ -177,9 +176,9 @@ class TestGibberishFiltering:
         assert autofill._is_quality_word('NNRRRN') == False   # Excessive repetition
 
         # Test valid words
-        assert autofill._is_quality_word('HELLO') == True
-        assert autofill._is_quality_word('WORLD') == True
-        assert autofill._is_quality_word('PYTHON') == True
+        assert autofill._is_quality_word('HELLO')
+        assert autofill._is_quality_word('WORLD')
+        assert autofill._is_quality_word('PYTHON')
 
 
 class TestMACIntegration:

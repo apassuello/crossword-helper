@@ -10,8 +10,7 @@ Current Bug: Gibberish like 'AAAAA' scores 40 points, passing quality filters.
 Goal: Ensure real words score significantly higher than gibberish patterns.
 """
 
-import pytest
-from src.fill.word_list_improved import WordList, ScoredWord
+from src.fill.word_list_improved import WordList
 
 
 class TestGibberishDetection:
@@ -89,7 +88,7 @@ class TestGibberishDetection:
             'SPEED': 45,   # Double E, good word
             'LETTER': 35,  # Double T and E, but real
             'COFFEE': 35,  # Double F and E, real word
-            'BALLOON': 30, # Double L and O, real word
+            'BALLOON': 30,  # Double L and O, real word
         }
 
         for word, min_score in double_letter_words.items():

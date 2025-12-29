@@ -393,7 +393,7 @@ class TestCORS:
         # Check for CORS headers (if CORS is configured)
         # Note: This depends on whether CORS is enabled in the app
         # If CORS is not configured, this test can be skipped
-        headers = response.headers
+        response.headers
         # Just verify response is valid
         assert response.status_code == 200
 

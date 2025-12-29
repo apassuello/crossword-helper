@@ -95,7 +95,7 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
     """Run comprehensive benchmark suite."""
 
     print(f"\n{'='*90}")
-    print(f"BENCHMARK: Pattern Matching Performance Comparison")
+    print("BENCHMARK: Pattern Matching Performance Comparison")
     print(f"{'='*90}")
 
     # Load wordlist
@@ -140,7 +140,7 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
     ]
 
     print(f"\n{'='*90}")
-    print(f"Running Benchmarks (10 iterations per pattern)...")
+    print("Running Benchmarks (10 iterations per pattern)...")
     print(f"{'='*90}")
     print(f"{'Pattern':<40} | {'Regex':<12} | {'Trie':<12} | {'Speedup':<8} | {'Results'}")
     print(f"{'-'*90}")
@@ -161,7 +161,7 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
 
     # Summary statistics
     print(f"\n{'='*90}")
-    print(f"Summary Statistics")
+    print("Summary Statistics")
     print(f"{'='*90}")
 
     avg_speedup = sum(r.speedup for r in results) / len(results)
@@ -171,36 +171,36 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
     total_regex_time = sum(r.regex_time for r in results)
     total_trie_time = sum(r.trie_time for r in results)
 
-    print(f"\nSpeedup Statistics:")
+    print("\nSpeedup Statistics:")
     print(f"  Average: {avg_speedup:.1f}x faster")
     print(f"  Minimum: {min_speedup:.1f}x faster")
     print(f"  Maximum: {max_speedup:.1f}x faster")
 
-    print(f"\nTotal Time (all patterns):")
+    print("\nTotal Time (all patterns):")
     print(f"  Regex: {total_regex_time*1000:.2f}ms")
     print(f"  Trie:  {total_trie_time*1000:.2f}ms")
     print(f"  Savings: {(total_regex_time - total_trie_time)*1000:.2f}ms ({(1 - total_trie_time/total_regex_time)*100:.1f}% faster)")
 
     # Cache statistics
     print(f"\n{'='*90}")
-    print(f"Cache Performance")
+    print("Cache Performance")
     print(f"{'='*90}")
 
     regex_cache_stats = regex_matcher.get_cache_stats() if hasattr(regex_matcher, 'get_cache_stats') else None
     trie_cache_stats = trie_matcher.get_cache_stats()
 
     if regex_cache_stats:
-        print(f"\nRegex Cache:")
+        print("\nRegex Cache:")
         print(f"  Hit rate: {regex_cache_stats['hit_rate']}")
         print(f"  Cache size: {regex_cache_stats['cache_size']}")
 
-    print(f"\nTrie Cache:")
+    print("\nTrie Cache:")
     print(f"  Hit rate: {trie_cache_stats['hit_rate']}")
     print(f"  Cache size: {trie_cache_stats['cache_size']}")
 
     # Trie statistics
     trie_stats = trie_matcher.get_trie_stats()
-    print(f"\nTrie Structure:")
+    print("\nTrie Structure:")
     print(f"  Total words: {trie_stats['total_words']:,}")
     print(f"  Total nodes: {trie_stats['total_nodes']:,}")
     print(f"  Avg nodes/word: {trie_stats['avg_nodes_per_word']:.1f}")
@@ -249,7 +249,7 @@ def main():
         time.sleep(1)
 
     print(f"\n\n{'='*90}")
-    print(f"BENCHMARK COMPLETE")
+    print("BENCHMARK COMPLETE")
     print(f"{'='*90}\n")
 
 

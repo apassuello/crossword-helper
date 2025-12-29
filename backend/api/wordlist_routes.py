@@ -5,10 +5,8 @@ This module provides endpoints for listing, viewing, creating, updating,
 and analyzing wordlists.
 """
 
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify
 from backend.data.wordlist_manager import WordListManager
-from pathlib import Path
-import json
 
 wordlist_api = Blueprint('wordlist_api', __name__)
 

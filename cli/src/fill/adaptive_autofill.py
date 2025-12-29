@@ -9,7 +9,7 @@ This wrapper monitors autofill progress and intervenes when:
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from cli.src.fill.autofill import Autofill
 from cli.src.core.grid import Grid
 

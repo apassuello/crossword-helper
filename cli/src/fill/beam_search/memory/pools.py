@@ -6,7 +6,7 @@ Instead of creating/destroying thousands of objects, we reuse them from a pool.
 """
 
 from __future__ import annotations
-from typing import List, Optional, Set, Dict, Tuple, TYPE_CHECKING
+from typing import Set, Dict, TYPE_CHECKING
 from collections import deque
 import logging
 

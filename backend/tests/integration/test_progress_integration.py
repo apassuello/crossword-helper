@@ -8,12 +8,10 @@ that use Server-Sent Events for real-time progress updates.
 import pytest
 import json
 import time
-import threading
 from backend.app import create_app
 from backend.tests.fixtures import (
     EMPTY_3X3_FRONTEND,
     PATTERN_3X3_FRONTEND,
-    VALID_FILL_REQUEST_WITH_PATTERN,
 )
 
 

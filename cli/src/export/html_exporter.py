@@ -4,7 +4,6 @@ HTML export for crossword grids.
 Generates clean, printable HTML output for crossword puzzles.
 """
 
-from typing import Dict
 from ..core.grid import Grid
 from ..core.numbering import GridNumbering
 
@@ -27,7 +26,7 @@ class HTMLExporter:
         numbering = GridNumbering.auto_number(grid)
         clue_positions = GridNumbering.get_clue_positions(grid)
 
-        html = f"""<!DOCTYPE html>
+        html = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">

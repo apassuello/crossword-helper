@@ -10,7 +10,7 @@ from datetime import datetime
 import tempfile
 import shutil
 
-from cli.src.fill.state_manager import StateManager, CSPState, SerializedState
+from cli.src.fill.state_manager import StateManager, CSPState
 from cli.src.core.grid import Grid
 from cli.src.fill.word_list import WordList
 from cli.src.fill.autofill import Autofill

@@ -239,7 +239,7 @@ INVALID_GRID_MALFORMED_CELLS = {
     "size": 3,
     "grid": [
         ["not", "a", "dict"],  # Should be objects with letter/isBlack
-        ["array", "of", "strings"],
+        ["array", "o", "strings"],
         [".", ".", "."]
     ]
 }

@@ -8,8 +8,8 @@ API-compatible with pattern_matcher.PatternMatcher for easy switching.
 """
 
 from typing import List, Tuple, Dict, Optional
-from .word_list import WordList, ScoredWord
-from .word_trie import WordTrie, build_trie_from_wordlist
+from .word_list import WordList
+from .word_trie import build_trie_from_wordlist
 
 
 class TriePatternMatcher:
@@ -229,9 +229,9 @@ class TriePatternMatcher:
         """String representation."""
         cache_stats = self.get_cache_stats()
         return (
-            f"TriePatternMatcher("
+            "TriePatternMatcher("
             f"words={len(self.word_list)}, "
             f"cache_size={cache_stats['cache_size']}, "
             f"hit_rate={cache_stats['hit_rate']}"
-            f")"
+            ")"
         )

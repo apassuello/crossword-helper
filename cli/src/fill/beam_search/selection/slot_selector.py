@@ -22,12 +22,10 @@ class SlotSelectionStrategy(ABC):
     @abstractmethod
     def select_next_slot(self, unfilled_slots: List[Dict], state: BeamState) -> Optional[Dict]:
         """Select the next slot to fill."""
-        pass
 
     @abstractmethod
     def order_slots(self, slots: List[Dict], grid: Grid) -> List[Dict]:
         """Order slots by filling difficulty."""
-        pass
 
 
 class MRVSlotSelector(SlotSelectionStrategy):

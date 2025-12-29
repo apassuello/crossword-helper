@@ -15,21 +15,17 @@ Usage:
 import sys
 import time
 import gc
-from typing import List, Tuple
 import tracemalloc
 
 # Add project root to path
 sys.path.insert(0, '/Users/apa/projects/untitled_project/crossword-helper')
 
-from cli.src.core.grid import Grid
 from cli.src.fill.beam_search.state import BeamState
 from cli.src.fill.beam_search.memory import (
     GridSnapshot,
     GridPool,
     StatePool,
-    DomainManager,
-    SetDomain,
-    BitsetDomain
+    DomainManager
 )
 
 
@@ -245,7 +241,7 @@ def benchmark_domain_manager(results: BenchmarkResults):
     Args:
         results: BenchmarkResults to update
     """
-    print(f"\n[4/5] Benchmarking domain manager (bitset vs set)...")
+    print("\n[4/5] Benchmarking domain manager (bitset vs set)...")
 
     # Mock word list for testing
     class MockWordList:
@@ -302,7 +298,7 @@ def benchmark_overall_memory_impact(results: BenchmarkResults):
     Args:
         results: BenchmarkResults to update
     """
-    print(f"\n[5/5] Benchmarking overall memory impact...")
+    print("\n[5/5] Benchmarking overall memory impact...")
 
     # Simulate realistic beam search scenario
     grid_size = 15

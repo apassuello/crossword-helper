@@ -3,7 +3,6 @@ Unit tests for iterative repair autofill module.
 """
 
 import pytest
-import time
 from src.core.grid import Grid
 from src.fill.word_list import WordList
 from src.fill.pattern_matcher import PatternMatcher

@@ -9,7 +9,6 @@ Tests the complete pause/resume workflow for beam search algorithm including:
 """
 
 import pytest
-import json
 import time
 from pathlib import Path
 
@@ -223,6 +222,7 @@ class TestBeamSearchPauseResume:
 
         # Request pause after short delay
         import threading
+
         def request_pause_after_delay():
             time.sleep(0.2)  # Let it run for 200ms
             pause_controller.request_pause()
@@ -244,8 +244,8 @@ class TestBeamSearchPauseResume:
 
         # Verify state was saved if it paused
         if hasattr(result, 'paused') and result.paused:
-            state_manager = StateManager()
-            state_files = list(Path('/tmp/crossword_states').glob(f'{task_id}*'))
+            StateManager()
+            list(Path('/tmp/crossword_states').glob(f'{task_id}*'))
             # State might have been saved
             # (not critical if puzzle completed before pause took effect)
 

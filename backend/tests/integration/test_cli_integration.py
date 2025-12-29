@@ -14,23 +14,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 from backend.app import create_app
-from backend.core.cli_adapter import CLIAdapter, get_adapter
+from backend.core.cli_adapter import get_adapter
 from backend.tests.fixtures import (
     EMPTY_3X3_FRONTEND,
     PARTIALLY_FILLED_3X3_FRONTEND,
     PATTERN_3X3_FRONTEND,
-    MIXED_3X3_FRONTEND,
-    EMPTY_5X5_FRONTEND,
-    PATTERN_5X5_FRONTEND,
-    LOWERCASE_3X3_FRONTEND,
     EMPTY_3X3_CLI,
-    PARTIALLY_FILLED_3X3_CLI,
     PATTERN_3X3_CLI,
-    MIXED_3X3_CLI,
-    LOWERCASE_3X3_CLI,
     TRANSFORMATION_TEST_CASES,
-    VALID_FILL_REQUEST_3X3,
-    VALID_FILL_REQUEST_WITH_PATTERN,
 )
 
 

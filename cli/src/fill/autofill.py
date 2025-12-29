@@ -1112,7 +1112,7 @@ class Autofill:
         crossing = []
 
         row, col = slot["row"], slot["col"]
-        length = slot["length"]
+        slot["length"]
         direction = slot["direction"]
 
         for other_slot in all_slots:

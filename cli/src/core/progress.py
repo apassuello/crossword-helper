@@ -6,7 +6,6 @@ Outputs progress updates to stderr in JSON format for consumption by web API.
 
 import json
 import sys
-from typing import Optional
 
 
 class ProgressReporter:

@@ -5,7 +5,7 @@ This module contains the BeamState dataclass which represents one partial
 solution in the beam search algorithm.
 """
 
-from typing import Dict, Set, Tuple, List, Optional
+from typing import Dict, Set, Tuple, List
 from dataclasses import dataclass, field
 from ...core.grid import Grid
 

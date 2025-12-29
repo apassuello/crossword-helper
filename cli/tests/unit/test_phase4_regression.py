@@ -20,14 +20,13 @@ Original purpose: Tests for Phase 4 quality fixes
 
 import pytest
 import copy
-from typing import List, Set, Dict, Tuple
 
 # Mark all tests in this module as skipped
 pytestmark = pytest.mark.skip(reason="Deprecated: Uses outdated API signatures. "
                                       "Behaviors covered by newer integration tests.")
 
 from cli.src.core.grid import Grid
-from cli.src.fill.beam_search_autofill import BeamState, BeamSearchAutofill
+from cli.src.fill.beam_search_autofill import BeamState
 from cli.src.fill.iterative_repair import IterativeRepair
 from cli.src.fill.word_list import WordList
 from cli.src.fill.pattern_matcher import PatternMatcher
@@ -93,7 +92,7 @@ class TestFix1SlotCompletionCounting:
         """Test correct counting with a mix of partial and complete fills."""
         # This simulates a realistic scenario where some slots get fully filled
         # while others remain partially filled
-        grid = Grid(11)
+        Grid(11)
 
         # Simulate a crossword state with various fills
         test_cases = [
@@ -139,7 +138,7 @@ class TestFix2GibberishRemoval:
         grid.place_word("III", 1, 0, 'across')
         grid.place_word("NNN", 2, 0, 'across')
 
-        filler = IterativeRepair(grid)
+        IterativeRepair(grid)
 
         # Simulate the repair process finding no candidates for these slots
         gibberish_patterns = ["AAAAA", "III", "NNN", "ZZZZZ", "XXXXX"]
@@ -172,7 +171,7 @@ class TestFix2GibberishRemoval:
             grid.place_word(word, row, col, 'across')
 
         # These should NOT be cleared as gibberish
-        filler = IterativeRepair(grid)
+        IterativeRepair(grid)
 
         # Check that valid words remain
         for word, row, col in valid_words:
@@ -193,7 +192,7 @@ class TestFix3PatternRestoration:
 
     def test_pattern_restoration_with_wildcards(self):
         """Test restoring patterns that contain wildcards."""
-        grid = Grid(11)
+        Grid(11)
 
         # Test various pattern restoration scenarios
         test_patterns = [
@@ -217,7 +216,7 @@ class TestFix3PatternRestoration:
             restored = test_grid.get_pattern_for_slot({'row': 0, 'col': 0, 'direction': 'across', 'length': 5})
 
             # Verify restoration is correct
-            assert len(restored) == 5, f"Restored pattern should be correct length"
+            assert len(restored) == 5, "Restored pattern should be correct length"
             if '?' not in pattern:
                 # Full word should restore exactly
                 assert restored == pattern, f"Full word {pattern} should restore exactly"
@@ -259,7 +258,7 @@ class TestFix4GridCompletionValidation:
         """Test that completion is validated by checking actual grid state."""
         grid = Grid(11)
         word_list = WordList(['STONE', 'ARENA', 'RATES'])
-        pattern_matcher = PatternMatcher(word_list)
+        PatternMatcher(word_list)
 
         # Create a state that claims to be complete but isn't
         fake_complete_state = BeamState(
@@ -310,13 +309,13 @@ class TestFix5WordLengthValidation:
 
     def test_word_length_must_match_slot(self):
         """Test that words must exactly match slot length."""
-        grid = Grid(11)
+        Grid(11)
 
         # Test cases: (word, slot_length, should_fit)
         test_cases = [
             ("STONE", 5, True),   # Exact match
             ("CAT", 5, False),    # Too short
-            ("STONES", 5, False), # Too long
+            ("STONES", 5, False),  # Too long
             ("ARENA", 5, True),   # Exact match
             ("DO", 3, False),     # Too short
             ("DOG", 3, True),     # Exact match
@@ -509,7 +508,7 @@ class TestIntegrationScenarios:
 
     def test_full_autofill_prevents_gibberish(self):
         """Integration test: autofill should never produce gibberish."""
-        grid = Grid(11)
+        Grid(11)
         # Start with empty grid
 
         # Add quality word list (no gibberish)
@@ -568,7 +567,7 @@ class TestIntegrationScenarios:
         # Verify cleared
         for slot in problematic_patterns:
             pattern = grid.get_pattern_for_slot(slot)
-            assert '?' in pattern, f"Slot should be cleared to wildcards"
+            assert '?' in pattern, "Slot should be cleared to wildcards"
 
 
 # Performance and stress tests

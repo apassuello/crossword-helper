@@ -14,7 +14,6 @@ Purpose: Regression protection for wordlist metadata (commit 9976d3b)
 
 import pytest
 from pathlib import Path
-import tempfile
 import json
 
 
@@ -216,7 +215,7 @@ class TestWordlistAPIMetadata:
         # Cleanup: Delete the test wordlist
         try:
             app_client.delete(f'/api/wordlists/{test_name}')
-        except:
+        except BaseException:
             pass  # Cleanup is best-effort
 
     def test_wordlist_list_includes_display_names(self, app_client):

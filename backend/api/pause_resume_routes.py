@@ -287,7 +287,7 @@ def get_saved_state(task_id: str):
 
             # Load full state to get grid preview
             saved_state, metadata = state_manager.load_csp_state(task_id)
-            grid = Grid.from_dict(saved_state.grid_dict)
+            Grid.from_dict(saved_state.grid_dict)
 
             # Return info with grid preview
             return jsonify({
