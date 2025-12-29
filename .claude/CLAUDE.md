@@ -1,547 +1,462 @@
-# Crossword Construction Helper - Claude Code Guide
+# CLAUDE.md
 
-**Project Type:** Progressive enhancement crossword toolkit
-**Current Phase:** Phase 3 Complete - Full implementation with comprehensive documentation
-**Total Timeline:** 5-6 weeks across 3 phases (completed)
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+# Crossword Construction Helper
 
-## Project Overview
+A comprehensive crossword puzzle construction toolkit with web interface and CLI tools, implementing a **CLI-as-single-source-of-truth architecture**.
 
-Building a comprehensive crossword construction system in three progressive phases:
-
-### Phase 1: Web Application (3-5 days) - COMPLETED
-Simple Flask web app with 3 helper tools for immediate value.
-
-### Phase 2: CLI Tool (3-4 weeks) - COMPLETED
-Comprehensive command-line tool with CSP-based autofill (main feature).
-
-### Phase 3: Integration (1 week) - COMPLETED
-Refactor web app to use CLI backend for shared implementation + autofill in web UI.
-
-**See:** `docs/ROADMAP.md` for complete development plan
+**Current Status:** All 3 development phases complete (165/165 tests passing)
 
 ---
 
-## Quick Reference
+## Quick Start
+
+### Development Setup
+
+```bash
+# Install backend dependencies
+pip install -r requirements.txt
+
+# Install frontend dependencies
+npm install
+
+# Run development servers
+# Terminal 1: Flask backend
+python run.py                    # → http://localhost:5000
+
+# Terminal 2: Vite dev server (hot reload)
+npm run dev                      # → http://localhost:3000
+```
+
+### Production Build
+
+```bash
+# Build frontend once
+npm run build
+
+# Run Flask (serves built frontend)
+python run.py                    # → http://localhost:5000
+```
+
+### Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=backend --cov=cli --cov-report=html
+
+# Run specific test suite
+pytest backend/tests/unit/ -v
+pytest backend/tests/integration/ -v
+pytest cli/tests/ -v
+
+# Run single test
+pytest backend/tests/unit/test_cli_adapter.py::test_pattern -vv
+```
+
+### CLI Usage
+
+```bash
+# Create new grid
+python -m cli.src.cli new --size 15 -o puzzle.json
+
+# Validate grid
+python -m cli.src.cli validate puzzle.json
+
+# Fill grid with autofill
+python -m cli.src.cli fill puzzle.json \
+  -w data/wordlists/comprehensive.txt \
+  -t 180 --min-score 30 -o filled.json
+
+# Pattern search
+python -m cli.src.cli pattern "C?T" \
+  -w data/wordlists/comprehensive.txt \
+  --algorithm trie --json-output
+
+# Export to PDF or HTML
+python -m cli.src.cli export filled.json --format html -o puzzle.html
+```
+
+---
+
+## Architecture Overview
+
+### CLI as Single Source of Truth
+
+The key architectural principle is that **all business logic lives in the CLI tool**. The web backend is a thin HTTP wrapper that executes CLI commands via subprocess.
+
+```
+React Frontend (src/)
+    ↓ HTTP + Server-Sent Events
+Flask Backend (backend/)
+    ↓ subprocess.run()
+CLI Tool (cli/src/)
+    ↓ Core algorithms
+NumPy + Pattern Matching + CSP Autofill
+```
+
+**Why this works:**
+- No code duplication (one implementation, two interfaces)
+- Easy testing (test logic once, both interfaces benefit)
+- Clear separation (HTTP concerns vs. crossword logic)
+- ~100-300ms subprocess overhead is negligible for operations that take 30s-5min
 
 ### Technology Stack
 
-**Phase 1 (Web App):**
-- Backend: Flask 3.0+, Python 3.9+
-- Frontend: Vanilla HTML/CSS/JavaScript
-- Data: File-based wordlists
-- Testing: pytest
+**Backend:**
+- Flask 3.0 (web framework)
+- Python 3.9+ (all backend code)
+- CLIAdapter pattern (subprocess execution)
+- Server-Sent Events (real-time progress)
 
-**Phase 2 (CLI Tool):**
-- Language: Python 3.9+
-- CLI: Click + Rich
-- Algorithms: NumPy
-- Export: reportlab, pypuz
-- Data: JSON, SQLite
+**Frontend:**
+- React 18 (UI framework)
+- Vite 5 (build tool with hot reload)
+- SCSS (styling)
+- Axios (HTTP client)
 
-**Phase 3 (Integration):**
-- Refactored Phase 1 calling Phase 2 as subprocess
-- Single codebase for all logic
+**CLI:**
+- Click (CLI framework)
+- NumPy (grid operations)
+- CSP + Beam Search + Hybrid (autofill algorithms)
+- Trie-based pattern matching (10-50x faster than regex)
 
-### Build Commands
-
-```bash
-# Phase 1: Web App
-pip install -r requirements.txt
-python run.py                  # → http://localhost:5000
-
-# Testing
-pytest                         # All tests
-pytest --cov=backend          # With coverage
-pytest tests/unit/ -v         # Unit tests only
-
-# Phase 2: CLI Tool (not yet implemented)
-crossword new --size 15
-crossword fill puzzle.json
-crossword export puzzle.json --format pdf
-```
+**Data:**
+- 454k+ words across multiple wordlists
+- JSON for grid state
+- Gzipped JSON for pause/resume state
+- File-based progress tracking
 
 ---
 
-## Documentation Structure
-
-```
-docs/
-├── README.md                       # Documentation navigation guide
-├── ARCHITECTURE.md                 # Master system architecture
-├── ROADMAP.md                      # Development roadmap and status
-├── specs/                          # Component Specifications
-│   ├── CLI_SPEC.md                # CLI tool specification (3,257 lines)
-│   ├── BACKEND_SPEC.md            # Backend API specification (3,800+ lines)
-│   └── FRONTEND_SPEC.md           # Frontend React app specification (3,045 lines)
-├── api/                            # API Documentation
-│   ├── openapi.yaml               # OpenAPI 3.1.0 spec (26 endpoints)
-│   └── API_REFERENCE.md           # Human-readable API reference (2,386 lines)
-├── ops/                            # Operational Documentation
-│   └── TESTING.md                 # Testing guide (2,617 lines)
-├── dev/                            # Developer Documentation
-│   ├── DEVELOPMENT.md             # Development guide (4,439 lines)
-│   └── CONTRIBUTING.md            # Contribution guidelines
-└── archive/                        # Archived Documentation
-    ├── README.md                  # Archive index
-    ├── analysis/                  # Technical analysis (15 docs)
-    ├── legacy-phases/             # Historical phase docs (11 docs)
-    ├── legacy-specs/              # Old specifications (15 docs)
-    ├── progress/                  # Progress reports (15 docs)
-    └── validation-reports/        # Validation reports (3 docs)
-```
-
----
-
-## File Structure
+## Project Structure
 
 ```
 crossword-helper/
-├── backend/                    # Phase 1 backend
-│   ├── app.py                  # Flask application
-│   ├── core/                   # Business logic (pure functions)
-│   │   ├── pattern_matcher.py # Pattern search + scoring
-│   │   ├── numbering.py        # Grid numbering logic
-│   │   ├── conventions.py      # Entry normalization
-│   │   └── scoring.py          # Word scoring algorithms
-│   ├── api/                    # API layer (thin wrappers)
-│   │   ├── routes.py           # Endpoint definitions
-│   │   ├── validators.py       # Request validation
-│   │   └── errors.py           # Error handling
-│   └── data/                   # Data access layer
-│       ├── onelook_client.py   # OneLook API client
-│       └── wordlist_manager.py # Wordlist file management
-├── frontend/                   # Phase 1 frontend
-│   ├── static/
-│   │   ├── css/main.css        # Styles (mobile-first)
-│   │   └── js/                 # Frontend logic
-│   │       ├── app.js          # Main application
-│   │       ├── pattern.js      # Pattern matcher UI
-│   │       ├── numbering.js    # Numbering validator UI
-│   │       └── conventions.js  # Convention helper UI
-│   └── templates/
-│       └── index.html          # Single page app
-├── data/
-│   └── wordlists/              # Word list files
-│       ├── standard.txt        # Common crossword fill
-│       └── personal.txt        # Custom words
-├── tests/
-│   ├── unit/                   # Fast, isolated tests
-│   ├── integration/            # API endpoint tests
-│   └── fixtures/               # Test data
-├── docs/                       # All documentation
-├── .claude/                    # Claude Code config
-│   ├── CLAUDE.md               # This file
-│   └── commands/               # Custom commands
-├── run.py                      # Development server launcher
+├── backend/                    # Flask API (thin wrapper around CLI)
+│   ├── api/                    # API routes (6 blueprints, 20+ endpoints)
+│   │   ├── routes.py           # Core endpoints (pattern, number, fill)
+│   │   ├── grid_routes.py      # Grid operations
+│   │   ├── theme_routes.py     # Theme entry management
+│   │   ├── pause_resume_routes.py  # Pause/resume autofill
+│   │   ├── wordlist_routes.py  # Wordlist management
+│   │   └── progress_routes.py  # SSE progress streaming
+│   ├── core/                   # Backend logic
+│   │   ├── cli_adapter.py      # Subprocess execution (THE INTEGRATION POINT)
+│   │   ├── edit_merger.py      # Grid edit validation
+│   │   ├── theme_placer.py     # Theme word suggestions
+│   │   ├── black_square_suggester.py  # Strategic black square placement
+│   │   └── wordlist_resolver.py  # Wordlist path resolution
+│   ├── data/                   # Data access layer
+│   ├── tests/                  # Backend tests (165 passing)
+│   └── app.py                  # Flask app factory
+│
+├── cli/                        # CLI tool (SINGLE SOURCE OF TRUTH)
+│   └── src/
+│       ├── cli.py              # Click commands (8 commands)
+│       ├── core/               # Grid, numbering, validation, scoring
+│       │   ├── grid.py         # Grid data structure (NumPy)
+│       │   ├── numbering.py    # Auto-numbering algorithm
+│       │   ├── validator.py    # Constraint validation
+│       │   ├── conventions.py  # Entry normalization
+│       │   ├── scoring.py      # Word quality scoring
+│       │   └── progress.py     # Progress tracking
+│       ├── fill/               # Autofill algorithms
+│       │   ├── autofill.py     # CSP with backtracking + AC-3
+│       │   ├── beam_search/    # Beam search orchestrator
+│       │   ├── pattern_matcher.py  # Regex pattern matching
+│       │   ├── trie_matcher.py # Trie-based (10-50x faster)
+│       │   ├── word_list.py    # Wordlist management
+│       │   ├── state_manager.py  # Pause/resume state
+│       │   └── pause_controller.py  # File-based IPC
+│       └── export/             # Export formats (HTML, JSON)
+│
+├── src/                        # React frontend
+│   ├── App.jsx                 # Main app component
+│   ├── components/             # React components (20+)
+│   │   ├── GridEditor.jsx      # Interactive crossword grid
+│   │   ├── AutofillPanel.jsx   # Autofill controls + progress
+│   │   ├── PatternMatcher.jsx  # Pattern search UI
+│   │   ├── WordlistPanel.jsx   # Wordlist management
+│   │   └── ThemePlacer.jsx     # Theme word placement
+│   ├── hooks/                  # Custom React hooks
+│   └── styles/                 # SCSS styles
+│
+├── data/wordlists/             # 454k+ words
+│   ├── comprehensive.txt       # All words
+│   ├── core/                   # Curated core lists
+│   └── themed/                 # Specialty lists
+│
+├── docs/                       # Comprehensive documentation
+│   ├── README.md               # Documentation navigation
+│   ├── ARCHITECTURE.md         # System architecture (1,842 lines)
+│   ├── ROADMAP.md              # Development history
+│   ├── specs/                  # Component specifications
+│   │   ├── CLI_SPEC.md         # CLI specification
+│   │   ├── BACKEND_SPEC.md     # Backend API specification
+│   │   └── FRONTEND_SPEC.md    # Frontend specification
+│   └── api/                    # API documentation
+│       ├── openapi.yaml        # OpenAPI 3.1.0 spec
+│       └── API_REFERENCE.md    # Human-readable API reference
+│
+├── run.py                      # Flask dev server launcher
 ├── requirements.txt            # Python dependencies
-└── pytest.ini                  # Test configuration
+├── package.json                # Node dependencies
+├── pytest.ini                  # Test configuration
+└── vite.config.js              # Vite build config
 ```
 
 ---
 
-## Development Workflow
+## Key Components
 
-### For Phase 1 Implementation
+### CLIAdapter: The Integration Bridge
 
-**Step 1: Understand the Design**
-```bash
-# Read in this order:
-docs/phase1-webapp/01-architecture.md      # Understand "what" and "why"
-docs/phase1-webapp/02-api-specification.md # Know exact API contracts
-docs/phase1-webapp/03-implementation-guide.md # See code patterns
-```
+**Location:** `backend/core/cli_adapter.py`
 
-**Step 2: Execute Implementation**
-```bash
-# Follow step-by-step:
-docs/phase1-webapp/04-implementation-prompts.md
-```
+This is the **critical integration point** between web and CLI. It executes CLI commands via subprocess and parses JSON output.
 
-The prompts guide you through:
-1. Backend core (services layer) - 2-3 hours
-2. API layer (Flask routes) - 1-2 hours
-3. Frontend (HTML/CSS/JS) - 2-3 hours
-4. Testing & polish - 1-2 hours
+**Key methods:**
+- `pattern()` - Execute pattern search
+- `number()` - Auto-number grid
+- `fill()` - Start autofill (async)
+- `fill_with_resume()` - Resume paused autofill with edits
 
-**Step 3: Test Thoroughly**
-```bash
-pytest tests/                    # All tests pass
-pytest --cov=backend            # >85% coverage
-python run.py                    # Manual testing
-# Test in browser at localhost:5000
-# Test mobile view (360px width)
-```
-
-**Step 4: Validate Success**
-- [ ] All 3 tools functional in browser
-- [ ] Tests pass with >85% coverage
-- [ ] Response times meet targets
-- [ ] Mobile responsive
-- [ ] Error handling works
-
-### For Phase 2 Implementation
-
-Will begin after Phase 1 is complete. See `docs/phase2-cli/03-implementation-prompts.md` for detailed execution guide (10 sequential prompts).
-
-### For Phase 3 Implementation
-
-Will begin after Phase 2 is complete. Documentation will be created after Phase 2.
-
----
-
-## Architecture Principles
-
-### Phase 1 Architecture
-
-**Three Layers:**
-```
-API Layer (routes.py)
-    ↓ delegates to
-Service Layer (core/*.py)
-    ↓ uses
-Data Layer (data/*.py)
-```
-
-**Why Layered:**
-- Service layer = pure logic (testable in isolation)
-- API layer = thin HTTP wrapper (< 20 lines per endpoint)
-- Data layer = external integrations (OneLook, files)
-
-**Key Decisions:**
-- **Flask over FastAPI:** Simpler for synchronous I/O-bound work
-- **Vanilla JS over React:** Only 3 components, no build step needed
-- **File-based over DB:** Local tool, no server required
-- **Thin API layer:** Enables CLI reuse in Phase 3
-
-### Phase 2 Architecture
-
-**Core Algorithm: CSP with Backtracking**
-```
-1. Find empty cell with minimum remaining values (MRV)
-2. Get candidate words sorted by value (LCV)
-3. Try word, check constraints (arc consistency)
-4. If valid → recurse
-5. If invalid → backtrack
-```
-
-**Performance Targets:**
-- 11×11: <30 seconds
-- 15×15: <5 minutes
-- 21×21: <30 minutes
-
-### Phase 3 Architecture
-
-**Integration Strategy:**
-- Web app routes call CLI tool via subprocess
-- Keep API contracts identical (backward compatible)
-- Add new `/api/fill` endpoint for autofill
-- Use caching to minimize subprocess overhead
-
----
-
-## Testing Strategy
-
-### Unit Tests (`tests/unit/`)
-- Test each method independently
-- Mock external dependencies (OneLook API, file I/O)
-- Fast (<1s for entire suite)
-- **Target:** >90% coverage of service layer
-
-### Integration Tests (`tests/integration/`)
-- Test API endpoints end-to-end
-- Use test client (Flask test fixture)
-- Include error scenarios
-- **Target:** >80% coverage of API layer
-
-### Manual Testing
-- Browser testing (all features work)
-- Mobile testing (360px width)
-- Error handling (invalid input, timeouts)
-- Performance (response times meet targets)
-
-**Test-Driven Development:**
-- Write tests alongside code
-- Run tests after each change
-- Don't proceed until tests pass
-
----
-
-## API Contracts (Phase 1)
-
-### Pattern Search
-```bash
-POST /api/pattern
-{"pattern": "?I?A", "wordlists": ["personal", "standard"]}
-
-→ 200 OK
-{
-  "results": [{"word": "VISA", "score": 85, "source": "onelook"}],
-  "meta": {"total_found": 127, "query_time_ms": 245}
-}
-```
-
-### Grid Numbering
-```bash
-POST /api/number
-{"grid": [["R","A","S",...], ...]}
-
-→ 200 OK
-{
-  "numbering": {"(0,0)": 1, "(0,5)": 2},
-  "validation": {"is_valid": true, "errors": []},
-  "grid_info": {"size": [15,15], "word_count": 76}
-}
-```
-
-### Convention Normalization
-```bash
-POST /api/normalize
-{"text": "Tina Fey"}
-
-→ 200 OK
-{
-  "normalized": "TINAFEY",
-  "rule": {"type": "two_word_names", "description": "..."},
-  "examples": [["Tracy Jordan", "TRACYJORDAN"]]
-}
-```
-
----
-
-## Key Patterns & Anti-Patterns
-
-### ✅ Good: Service Layer (Pure Logic)
+**Example:**
 ```python
-class PatternMatcher:
-    def search(self, pattern: str, wordlists: List[str]) -> List[Tuple[str, int]]:
-        """Pure business logic, no HTTP concerns."""
-        api_results = self._search_onelook(pattern)
-        local_results = self._search_local(pattern, wordlists)
-        return self._merge_and_score(api_results, local_results)
+from backend.core.cli_adapter import CLIAdapter
+
+adapter = CLIAdapter()
+result = adapter.pattern("C?T", wordlist_paths=["comprehensive.txt"])
+# Internally: subprocess.run(['crossword', 'pattern', 'C?T', '--json-output'])
 ```
 
-### ✅ Good: API Layer (Thin Wrapper)
+### Grid Autofill Algorithms
+
+**Location:** `cli/src/fill/`
+
+Three algorithms with different trade-offs:
+
+1. **CSP with Backtracking** (`autofill.py`)
+   - Constraint Satisfaction with AC-3 arc consistency
+   - Guaranteed to find solution if one exists
+   - Best for: Small grids (11×11)
+   - Performance: <30s for 11×11
+
+2. **Beam Search** (`beam_search/orchestrator.py`)
+   - Global optimization, maintains top-k solutions
+   - Better word quality than CSP
+   - Best for: Medium grids (15×15)
+   - Performance: 1-5min for 15×15
+
+3. **Hybrid** (default)
+   - Starts with Beam Search, falls back to CSP
+   - Best all-around performance
+   - Best for: All grid sizes
+   - Performance: 1-5min for 15×15, 5-30min for 21×21
+
+### Pause/Resume System
+
+**How it works:**
+1. User pauses autofill → backend writes pause signal file
+2. CLI detects signal → serializes complete algorithm state to gzipped JSON
+3. User manually edits grid (add/remove/change letters)
+4. User resumes → backend validates edits, CLI loads state + applies edits
+5. Autofill continues from exact position with edited cells locked
+
+**State includes:**
+- Grid state (partially filled)
+- Algorithm position (backtrack stack or beam)
+- Candidate lists for each slot
+- Constraint propagation state
+- Iteration count
+
+### Pattern Matching
+
+**Location:** `cli/src/fill/`
+
+Three implementations:
+
+1. **Regex** (`pattern_matcher.py`) - Simple, ~100ms for 454k words
+2. **Trie** (`trie_matcher.py`) - 10-50x faster, ~10ms for 454k words (default)
+3. **Aho-Corasick** (`ahocorasick_matcher.py`) - Fastest for batch operations
+
+---
+
+## Development Patterns
+
+### Adding a New API Endpoint
+
+1. **Add CLI command** (if new functionality)
+   ```python
+   # cli/src/cli.py
+   @click.command()
+   @click.argument('grid_file')
+   def my_command(grid_file):
+       # Business logic here
+       result = do_work(grid_file)
+       click.echo(json.dumps(result))
+   ```
+
+2. **Add CLIAdapter method**
+   ```python
+   # backend/core/cli_adapter.py
+   def my_operation(self, grid_data):
+       cmd = ['crossword', 'my-command', grid_file]
+       result = subprocess.run(cmd, capture_output=True, text=True)
+       return json.loads(result.stdout)
+   ```
+
+3. **Add Flask route**
+   ```python
+   # backend/api/routes.py
+   @api.route('/my-endpoint', methods=['POST'])
+   def my_endpoint():
+       data = request.json
+       result = cli_adapter.my_operation(data)
+       return jsonify(result)
+   ```
+
+4. **Add frontend integration**
+   ```javascript
+   // src/components/MyComponent.jsx
+   const handleClick = async () => {
+       const response = await axios.post('/api/my-endpoint', data);
+       setResult(response.data);
+   };
+   ```
+
+### Testing Best Practices
+
+**Unit tests:**
+- Mock subprocess calls (fast tests)
+- Test business logic in isolation
+- Use pytest fixtures for common data
+
+**Integration tests:**
+- Use Flask test client (no actual HTTP)
+- Test real CLI subprocess execution
+- Verify JSON output formats
+
+**Example:**
 ```python
-@app.route('/api/pattern', methods=['POST'])
-def pattern_search():
-    data = request.json
-    if not data.get('pattern'):
-        return jsonify({'error': 'Pattern required'}), 400
+def test_pattern_search(cli_adapter, mocker):
+    # Mock subprocess
+    mock_run = mocker.patch('subprocess.run')
+    mock_run.return_value.stdout = '{"results": [{"word": "CAT", "score": 90}]}'
 
-    results = pattern_matcher.search(
-        pattern=data['pattern'],
-        wordlists=data.get('wordlists', ['standard'])
-    )
-    return jsonify({'results': results})
+    # Test
+    result = cli_adapter.pattern("C?T", ["comprehensive.txt"])
+
+    # Assert
+    assert result['results'][0]['word'] == 'CAT'
+    mock_run.assert_called_once()
 ```
 
-### ❌ Bad: Logic in Routes
-```python
-@app.route('/api/pattern')
-def pattern_search():
-    # ❌ BAD: Business logic in route
-    pattern = request.json['pattern']
-    url = f"https://api.onelook.com/words?sp={pattern}"
-    response = requests.get(url)
-    # ... processing ...
-    return jsonify(results)
-```
+### Performance Considerations
 
-### ✅ Good: Error Handling
-```python
-try:
-    response = requests.get(url, timeout=5)
-    response.raise_for_status()
-    data = response.json()
-except (requests.Timeout, requests.RequestException) as e:
-    logger.warning(f"OneLook API failed: {e}")
-    # Fallback to local word lists
-    data = []
-```
+**API Response Times:**
+- `/api/health`: ~30ms (no CLI call)
+- `/api/pattern`: 150-300ms (CLI overhead + trie search)
+- `/api/number`: 120-180ms (CLI overhead + numbering)
+- `/api/fill` (start): 200-400ms (spawns subprocess, returns task ID)
+- `/api/fill` (complete): 30s-5min (actual autofill time)
+
+**Subprocess overhead:** 100-280ms average (acceptable for this use case)
+
+**Memory usage:**
+- Backend: ~50-100MB
+- CLI process: ~100-500MB (depends on grid size and beam width)
+- Frontend: ~10MB
 
 ---
 
-## Performance Considerations
+## Common Development Tasks
 
-### Phase 1 Targets
-| Endpoint | Target | Why |
-|----------|--------|-----|
-| POST /api/pattern | <1s | OneLook API + local search |
-| POST /api/number | <100ms | Pure computation, small grids |
-| POST /api/normalize | <50ms | Simple string operations |
+### Running Tests During Development
 
-### Optimization Strategies
-1. **OneLook API:** Timeout after 5s, fallback to local
-2. **Local search:** Pre-load wordlists on startup (cache)
-3. **Grid numbering:** O(n) scan, very fast
-4. **Convention detection:** Regex patterns, pre-compiled
-
----
-
-## Common Issues & Solutions
-
-### Issue: OneLook API Timeout
-**Solution:** Automatic fallback to local wordlists. User sees results from local sources only.
-
-### Issue: CORS Errors
-**Solution:** Flask-CORS configured for localhost. No action needed.
-
-### Issue: Pattern Returns No Results
-**Solution:** UI suggests broadening pattern (more `?` wildcards).
-
-### Issue: Mobile Layout Broken
-**Solution:** Use mobile-first CSS with media queries. Test at 360px.
-
-### Issue: Tests Fail After Changes
-**Solution:** Run `pytest -vv` for detailed output. Fix issues before proceeding.
-
----
-
-## Integration with Claude.ai
-
-**Tool Separation:**
-- **Claude.ai Project:** Strategy, themes, clue writing (creative work)
-- **Claude Code:** Implementation, algorithms, testing (technical work)
-
-**See:** `docs/guides/claude-ai-setup.md` for Claude.ai project configuration
-
-**Workflow:**
-1. Brainstorm themes → Claude.ai
-2. Build grid/tools → Claude Code (this project)
-3. Write clues → Claude.ai
-4. Export → This project (Phase 2)
-
----
-
-## Debugging
-
-### Backend Issues
 ```bash
-# Run with debug mode
+# Fast: Unit tests only
+pytest backend/tests/unit/ -v
+
+# Quick integration check
+pytest backend/tests/integration/test_api.py -v
+
+# Full suite before commit
+pytest --cov=backend --cov=cli
+```
+
+### Debugging Subprocess Issues
+
+```bash
+# Test CLI command directly
+python -m cli.src.cli pattern "C?T" --json-output
+
+# Enable subprocess debug logging
 FLASK_DEBUG=1 python run.py
 
-# Run specific test with verbose output
-pytest tests/unit/test_pattern_matcher.py::test_name -vv -s
-
-# Check for syntax errors
-python -m py_compile backend/core/pattern_matcher.py
+# Check specific test with output
+pytest backend/tests/integration/test_cli_integration.py::test_pattern -vv -s
 ```
 
-### Frontend Issues
-- Open browser DevTools (F12)
-- Check Network tab (API calls succeeding?)
-- Check Console tab (JavaScript errors?)
-- Check Response tab (JSON valid?)
-
-### Common Fixes
-- OneLook timeout: Check internet, verify fallback works
-- Grid numbering wrong: Test with simple 3×3 grid first
-- CORS errors: Verify Flask-CORS installed and configured
-
----
-
-## Implementation Checklist
-
-### Before Starting Phase 1:
-- [ ] Read `docs/ROADMAP.md` (understand big picture)
-- [ ] Read `docs/phase1-webapp/README.md` (understand phase)
-- [ ] Read architecture docs (01 → 02 → 03)
-- [ ] Review implementation prompts (04)
-
-### During Phase 1:
-- [ ] Follow prompts sequentially
-- [ ] Test after each step
-- [ ] Don't proceed until tests pass
-- [ ] Commit regularly
-
-### After Phase 1:
-- [ ] All success criteria met
-- [ ] Manual testing complete
-- [ ] Documentation updated
-- [ ] Ready for Phase 2
-
----
-
-## Git Workflow
+### Frontend Development
 
 ```bash
-# Feature branches
-git checkout -b feature/pattern-matcher
-git commit -m "Implement pattern matcher service"
-git push origin feature/pattern-matcher
+# Terminal 1: Flask backend
+python run.py
 
-# Testing before commit
-pytest tests/                    # All tests pass
-pytest --cov=backend            # Coverage acceptable
+# Terminal 2: Vite dev server (hot reload)
+npm run dev
 
-# Commit messages
-# Good: "Add pattern matcher with OneLook integration"
-# Good: "Fix numbering validation for edge cases"
-# Bad: "Update stuff"
-# Bad: "WIP"
+# Open http://localhost:3000 (proxies to Flask backend)
 ```
 
----
+**Note:** In development mode, Vite proxies API requests from port 3000 to Flask on port 5000 automatically.
 
-## Help & Resources
+### Adding New Wordlists
 
-### For Implementation Questions:
-1. Check relevant phase README
-2. Review architecture document
-3. Search implementation guide
-4. Check analysis docs (`docs/CONSISTENCY_ANALYSIS.md`)
-
-### For Architecture Questions:
-1. See `docs/ROADMAP.md` for high-level plan
-2. See phase-specific `01-architecture.md` for detailed design
-3. See API spec for exact contracts
-
-### For Testing Questions:
-1. Check `pytest.ini` for configuration
-2. See `tests/conftest.py` for shared fixtures
-3. Review existing test examples
+1. Place `.txt` file in `data/wordlists/` (one word per line, uppercase)
+2. Backend automatically discovers new wordlists
+3. Frontend wordlist selector updates automatically
 
 ---
 
-## Status & Next Steps
+## Documentation
 
-**Current Status:** ✅ All 3 phases complete with comprehensive documentation
+For comprehensive information, see:
 
-**Latest Achievement:** Documentation consolidation (89 files → 8 active docs)
-
-**System Status:**
-- Phase 1: Web Application - ✅ Complete
-- Phase 2: CLI Tool - ✅ Complete
-- Phase 3: Integration - ✅ Complete
-- Test Suite: 165/165 tests passing (100%)
-- Documentation: Consolidated and validated
+- **[docs/README.md](../docs/README.md)** - Documentation navigation guide
+- **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)** - Complete system architecture (1,842 lines)
+- **[docs/api/API_REFERENCE.md](../docs/api/API_REFERENCE.md)** - API reference (26 endpoints)
+- **[docs/specs/](../docs/specs/)** - CLI, Backend, Frontend specifications
+- **[docs/ops/TESTING.md](../docs/ops/TESTING.md)** - Testing strategies
+- **[docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md)** - Developer onboarding
 
 ---
 
-## Success Metrics
+## Known Issues & Limitations
 
-### Phase 1 Success:
-- ✅ All 3 tools work in browser
-- ✅ Tests pass (>85% coverage)
-- ✅ Performance targets met
-- ✅ Mobile responsive
-- ✅ Error handling robust
+### Working Features ✅
+- Custom wordlists
+- Multiple wordlist support
+- Pattern matching (all algorithms)
+- Grid validation
+- Autofill (all algorithms)
+- Pause/resume autofill
+- Theme entry locking (web UI)
+- Export (PDF, HTML, JSON)
+- Real-time progress tracking
 
-### Phase 2 Success:
-- ✅ CLI commands functional
-- ✅ Autofill meets performance targets
-- ✅ Export formats work correctly
-- ✅ Tests pass (>90% coverage)
-
-### Phase 3 Success:
-- ✅ Integration complete
-- ✅ No regressions
-- ✅ Autofill in web UI
-- ✅ Single codebase maintained
+### Known Issues ⚠️
+- CLI `--theme-entries` flag does NOT preserve theme words
+  - **Workaround:** Use web interface for themed puzzles
+- CLI `--adaptive` flag does NOT auto-add black squares
+  - **Workaround:** Use web interface black square optimizer
 
 ---
 
-**Last Updated:** Documentation reorganization complete
-**Version:** 2.0.0 (Phase 3 complete)
+**Version:** 2.0.0 (All phases complete)
+**Last Updated:** December 2025

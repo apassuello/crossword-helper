@@ -165,6 +165,35 @@ class PatternMatcher:
         """
         return self.count_matches(pattern, min_score) > 0
 
+    def matches_pattern(self, word: str, pattern: str) -> bool:
+        """
+        Check if a specific word matches a pattern.
+
+        Args:
+            word: Word to check (will be uppercased)
+            pattern: Pattern string (e.g., "?I?A" or ".I.A")
+
+        Returns:
+            True if word matches pattern
+
+        Example:
+            >>> matcher.matches_pattern("VISA", "?I?A")
+            True
+            >>> matcher.matches_pattern("VISA", "?I??A")
+            False
+        """
+        # Normalize both word and pattern
+        word = word.upper()
+        pattern = pattern.upper().replace('.', '?')
+
+        # Check length first (quick rejection)
+        if len(word) != len(pattern):
+            return False
+
+        # Convert pattern to regex and check match
+        regex = self._pattern_to_regex(pattern)
+        return regex.match(word) is not None
+
     def clear_cache(self) -> None:
         """Clear pattern cache."""
         self._pattern_cache.clear()

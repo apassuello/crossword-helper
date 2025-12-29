@@ -11,10 +11,10 @@ Tests:
 import logging
 import pytest
 from unittest.mock import Mock, patch
-from cli.src.core.grid import Grid
-from cli.src.fill.beam_search_autofill import BeamSearchAutofill, BeamState
-from cli.src.fill.word_list import WordList
-from cli.src.fill.pattern_matcher import PatternMatcher
+from src.core.grid import Grid
+from src.fill.beam_search_autofill import BeamSearchAutofill, BeamState
+from src.fill.word_list import WordList
+from src.fill.pattern_matcher import PatternMatcher
 
 
 class TestLoggingIntegration:

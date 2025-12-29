@@ -7,6 +7,7 @@ import time
 from src.core.grid import Grid
 from src.fill.word_list import WordList
 from src.fill.pattern_matcher import PatternMatcher
+from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.autofill import Autofill, FillResult
 
 
@@ -45,7 +46,7 @@ class TestAutofill:
         assert autofill.grid == small_grid
         assert autofill.word_list == word_list
         assert autofill.timeout == 300
-        assert autofill.min_score == 30
+        assert autofill.min_score == 0  # Default changed to 0 to allow full search space
 
     def test_init_with_custom_params(self, small_grid, word_list):
         """Test creating autofill with custom parameters."""
@@ -55,8 +56,13 @@ class TestAutofill:
 
     def test_init_creates_pattern_matcher(self, small_grid, word_list):
         """Test that pattern matcher is created if not provided."""
+        # Default algorithm is 'trie', so should create TriePatternMatcher
         autofill = Autofill(small_grid, word_list)
-        assert isinstance(autofill.pattern_matcher, PatternMatcher)
+        assert isinstance(autofill.pattern_matcher, TriePatternMatcher)
+
+        # Test with explicit regex algorithm
+        autofill_regex = Autofill(small_grid, word_list, algorithm="regex")
+        assert isinstance(autofill_regex.pattern_matcher, PatternMatcher)
 
     def test_fill_empty_grid_returns_success(self, word_list):
         """Test filling an already filled grid."""

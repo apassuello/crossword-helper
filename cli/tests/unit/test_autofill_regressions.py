@@ -217,15 +217,18 @@ class TestPerformanceRegression:
         """Test pattern matching remains fast with validation."""
         import time
 
-        # Create word list
-        words = [f"WORD{i:04d}" for i in range(1000)]
+        # Create word list with alphabetic words only
+        # WordList validates with isalpha(), so can't use digits
+        words = [f"WORD{'ABCD'[i%4]}{'EFGH'[i%4]}{chr(65+i%26)}{chr(65+(i//26)%26)}"
+                 for i in range(1000)]
         word_list = WordList(words)
         pm = PatternMatcher(word_list)
 
         # Time pattern matching
         start = time.time()
         # Use the actual method name from PatternMatcher
-        pattern = "W????"
+        # Pattern must match word length: WORDAAEA = 8 letters
+        pattern = "WORD????"
         candidates = [(w.text, w.score) for w in word_list.words
                       if pm.matches_pattern(w.text, pattern)]
         end = time.time()
