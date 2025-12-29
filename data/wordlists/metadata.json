@@ -364,6 +364,7 @@
       "filepath": "data/wordlists/external/normalized/spreadthewordlist.txt"
     },
     "custom/theme_list": {
+      "name": "Theme List",
       "category": "custom",
       "description": "Uploaded from theme_list.txt",
       "tags": [

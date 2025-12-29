@@ -9,13 +9,13 @@ import sys
 import json
 from pathlib import Path
 
-# Add cli/src to path
-sys.path.insert(0, str(Path(__file__).parent / 'cli' / 'src'))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent))
 
-from core.grid import Grid
-from fill.word_list import WordList
-from fill.pattern_matcher import PatternMatcher
-from fill.beam_search_autofill import BeamSearchAutofill
+from cli.src.core.grid import Grid
+from cli.src.fill.word_list import WordList
+from cli.src.fill.pattern_matcher import PatternMatcher
+from cli.src.fill.beam_search_autofill import BeamSearchAutofill
 
 def test_integration():
     """Test basic integration - components work together."""

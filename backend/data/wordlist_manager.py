@@ -164,6 +164,15 @@ class WordListManager:
         info = self._metadata['wordlists'].get(name, {})
         info['key'] = name
         info['word_count'] = len(self.load(name))
+
+        # Ensure 'name' field exists (generate from key if missing)
+        if 'name' not in info:
+            # Generate human-readable name from key
+            # e.g., "top_200k" -> "Top 200k", "core/standard" -> "Standard"
+            display_name = name.split('/')[-1]  # Remove path prefix
+            display_name = display_name.replace('_', ' ').title()
+            info['name'] = display_name
+
         return info
 
     def analyze_words(self, name: str) -> Dict[str, Any]:
