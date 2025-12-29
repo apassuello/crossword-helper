@@ -1,5 +1,10 @@
 # Crossword Construction Helper
 
+[![Tests & Coverage](https://github.com/apassuello/crossword-helper/actions/workflows/test.yml/badge.svg)](https://github.com/apassuello/crossword-helper/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/apassuello/crossword-helper/branch/main/graph/badge.svg)](https://codecov.io/gh/apassuello/crossword-helper)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A comprehensive crossword puzzle construction toolkit with web interface and powerful CLI tools.
 
 **Current Status:** ✅ **Phase 3 Complete** - Full System Operational with Comprehensive Documentation
