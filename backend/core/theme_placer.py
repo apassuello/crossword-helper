@@ -65,7 +65,16 @@ class ThemePlacer:
         """
         # Initialize grid from existing if provided
         if existing_grid:
-            self.grid = [row[:] for row in existing_grid]
+            # Normalize the grid: convert '.' to empty string for consistency
+            self.grid = []
+            for row in existing_grid:
+                normalized_row = []
+                for cell in row:
+                    if cell == '.':
+                        normalized_row.append('')
+                    else:
+                        normalized_row.append(cell)
+                self.grid.append(normalized_row)
 
         # Sort words by length (longest first)
         words_sorted = sorted(
@@ -76,14 +85,31 @@ class ThemePlacer:
 
         results = []
 
-        for word, word_len in words_sorted:
+        # Track which cells are occupied to avoid overlaps
+        occupied_cells = set()
+        for row_idx, row in enumerate(self.grid):
+            for col_idx, cell in enumerate(row):
+                if cell and cell not in ('', '.', None):
+                    occupied_cells.add((row_idx, col_idx))
+
+        for idx, (word, word_len) in enumerate(words_sorted):
             # Generate all possible placements
             placements = self._generate_placements(word)
 
-            # Score each placement
+            # Filter out placements that overlap with already placed words (except valid intersections)
+            valid_placements = []
+            for p in placements:
+                if not self._has_invalid_overlap(p, word, occupied_cells):
+                    valid_placements.append(p)
+
+            # If no valid placements due to overlaps, include all and note in reasoning
+            if not valid_placements:
+                valid_placements = placements
+
+            # Score each placement with diversity factor based on word index
             scored_placements = [
-                (p, self._score_placement(p, word))
-                for p in placements
+                (p, self._score_placement_with_diversity(p, word, idx))
+                for p in valid_placements
             ]
 
             # Sort by score and take top N
@@ -92,8 +118,16 @@ class ThemePlacer:
 
             # Convert to suggestion objects
             suggestions = []
+            best_placement = None
+
             for placement, score in top_placements:
+                # Check if this placement overlaps with already placed words
+                has_overlap = self._has_invalid_overlap(placement, word, occupied_cells)
+
                 reasoning = self._generate_reasoning(placement, score, word)
+                if has_overlap:
+                    reasoning = f"WARNING: Overlaps with placed words. {reasoning}"
+
                 suggestions.append(
                     ThemePlacementSuggestion(
                         word=word,
@@ -105,11 +139,29 @@ class ThemePlacer:
                     ).to_dict()
                 )
 
+                # Track the best non-overlapping placement
+                if not has_overlap and best_placement is None:
+                    best_placement = placement
+
             results.append({
                 'word': word,
                 'length': word_len,
                 'suggestions': suggestions
             })
+
+            # Apply the best placement to the grid to avoid future overlaps
+            # Only apply if we have a valid non-overlapping placement
+            if best_placement:
+                self.apply_placement(best_placement)
+                # Update occupied cells
+                row = best_placement['row']
+                col = best_placement['col']
+                direction = best_placement['direction']
+                for i in range(word_len):
+                    if direction == 'across':
+                        occupied_cells.add((row, col + i))
+                    else:
+                        occupied_cells.add((row + i, col))
 
         return results
 
@@ -154,10 +206,81 @@ class ThemePlacer:
                 cell = self.grid[row + i][col]
 
             # Check for conflicts
-            if cell and cell != word[i]:
+            # Empty cells can be '', '.', or None
+            if cell and cell not in ('', '.', None) and cell != word[i]:
                 return False
 
         return True
+
+    def _has_invalid_overlap(self, placement: Dict, word: str, occupied_cells: set) -> bool:
+        """
+        Check if placement has invalid overlap with occupied cells.
+        Valid overlaps are when the same letter appears at the intersection.
+        """
+        row = placement['row']
+        col = placement['col']
+        direction = placement['direction']
+        word_len = len(word)
+
+        for i in range(word_len):
+            if direction == 'across':
+                cell_pos = (row, col + i)
+            else:
+                cell_pos = (row + i, col)
+
+            if cell_pos in occupied_cells:
+                # Check if it's a valid intersection (same letter)
+                r, c = cell_pos
+                existing_letter = self.grid[r][c]
+                if existing_letter != word[i]:
+                    return True  # Invalid overlap - different letters
+        return False  # No invalid overlap
+
+    def _score_placement_with_diversity(self, placement: Dict, word: str, word_index: int) -> int:
+        """
+        Score a placement with diversity factor to spread words across the grid.
+
+        Args:
+            placement: The placement to score
+            word: The word being placed
+            word_index: Index of this word in the sorted list (0 = longest)
+        """
+        # Start with base scoring
+        base_score = self._score_placement(placement, word)
+
+        # Add diversity bonus based on word index and position
+        diversity_score = 0
+        row = placement['row']
+        col = placement['col']
+        direction = placement['direction']
+
+        # Divide grid into regions (quadrants + center)
+        third = self.grid_size // 3
+
+        # First word (longest) prefers center
+        if word_index == 0:
+            if third <= row < 2 * third and third <= col < 2 * third:
+                diversity_score = 20
+        # Second word prefers top/bottom thirds
+        elif word_index == 1:
+            if row < third or row >= 2 * third:
+                diversity_score = 15
+        # Third word prefers left/right thirds
+        elif word_index == 2:
+            if col < third or col >= 2 * third:
+                diversity_score = 15
+        # Subsequent words get bonus for being away from center
+        else:
+            distance_from_center = max(abs(row - self.grid_size // 2), abs(col - self.grid_size // 2))
+            diversity_score = min(15, distance_from_center)
+
+        # Alternate between horizontal and vertical preferences
+        if word_index % 2 == 0 and direction == 'across':
+            diversity_score += 5
+        elif word_index % 2 == 1 and direction == 'down':
+            diversity_score += 5
+
+        return base_score + diversity_score
 
     def _score_placement(self, placement: Dict, word: str) -> int:
         """
@@ -173,12 +296,12 @@ class ThemePlacer:
         word_len = len(word)
 
         # ===============================
-        # FACTOR 1: Symmetry (0-30 points)
+        # FACTOR 1: Symmetry (0-20 points) - Reduced from 30
         # ===============================
         if self._is_centered(row, col, word_len, direction):
-            score += 30
+            score += 20
         elif self._is_symmetric(row, col, word_len, direction):
-            score += 15
+            score += 10
 
         # ===============================
         # FACTOR 2: Intersections (0-20 points)
@@ -187,18 +310,18 @@ class ThemePlacer:
         score += min(20, intersections * 10)
 
         # ===============================
-        # FACTOR 3: Position Preference (0-20 points)
+        # FACTOR 3: Position Preference (0-15 points) - Reduced from 20
         # ===============================
-        # Prefer middle rows for across, middle cols for down
+        # Moderate preference for middle positions (not too strong)
         if direction == 'across':
-            # Prefer rows near middle (0, 7, 14 for 15x15)
+            # Prefer rows near middle but with gentler gradient
             distance_from_middle = abs(row - self.grid_size // 2)
-            position_score = 20 - (distance_from_middle * 2)
+            position_score = 15 - (distance_from_middle * 1.5)
             score += max(0, position_score)
         else:  # down
-            # Prefer cols near middle
+            # Prefer cols near middle but with gentler gradient
             distance_from_middle = abs(col - self.grid_size // 2)
-            position_score = 20 - (distance_from_middle * 2)
+            position_score = 15 - (distance_from_middle * 1.5)
             score += max(0, position_score)
 
         # ===============================

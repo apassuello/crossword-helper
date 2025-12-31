@@ -45,6 +45,8 @@ class Grid:
         # Initialize with all empty cells
         self.cells = np.zeros((size, size), dtype=np.int8)
         self._numbering: Optional[Dict[Tuple[int, int], int]] = None
+        # Track locked cells (theme word cells that cannot be overwritten)
+        self.locked_cells: Set[Tuple[int, int]] = set()
 
     def set_black_square(self, row: int, col: int, enforce_symmetry: bool = True):
         """
@@ -71,7 +73,7 @@ class Grid:
         # Invalidate cached numbering
         self._numbering = None
 
-    def set_letter(self, row: int, col: int, letter: str):
+    def set_letter(self, row: int, col: int, letter: str, lock: bool = False):
         """
         Set a letter at position.
 
@@ -79,6 +81,7 @@ class Grid:
             row: Row index (0-based)
             col: Column index (0-based)
             letter: Single letter A-Z
+            lock: If True, lock this cell so it cannot be overwritten
 
         Raises:
             ValueError: If position is out of bounds or letter invalid
@@ -90,6 +93,10 @@ class Grid:
 
         # Encode: A=1, B=2, ..., Z=26
         self.cells[row, col] = ord(letter.upper()) - ord('A') + 1
+
+        # Lock cell if requested (theme words)
+        if lock:
+            self.locked_cells.add((row, col))
 
         # Invalidate cached numbering
         self._numbering = None
@@ -130,6 +137,19 @@ class Grid:
     def has_letter(self, row: int, col: int) -> bool:
         """Check if position has a letter."""
         return self.cells[row, col] > 0
+
+    def is_locked(self, row: int, col: int) -> bool:
+        """
+        Check if position is locked (theme word cell).
+
+        Args:
+            row: Row index (0-based)
+            col: Column index (0-based)
+
+        Returns:
+            True if cell is locked, False otherwise
+        """
+        return (row, col) in self.locked_cells
 
     def get_black_squares(self) -> Set[Tuple[int, int]]:
         """Get all black square positions."""
@@ -306,6 +326,7 @@ class Grid:
         grid.size = size
         grid.cells = np.zeros((size, size), dtype=np.int8)
         grid._numbering = None
+        grid.locked_cells = set()  # Initialize empty locked cells
 
         # Populate cells
         for row in range(size):
@@ -365,7 +386,7 @@ class Grid:
 
         return ''.join(pattern)
 
-    def place_word(self, word: str, row: int, col: int, direction: str) -> None:
+    def place_word(self, word: str, row: int, col: int, direction: str, lock: bool = False) -> None:
         """
         Place word in grid.
 
@@ -374,9 +395,10 @@ class Grid:
             row: Starting row
             col: Starting column
             direction: 'across' or 'down'
+            lock: If True, lock all cells of this word (theme words)
 
         Raises:
-            ValueError: If word doesn't fit in grid or direction is invalid
+            ValueError: If word doesn't fit in grid, direction is invalid, or would overwrite locked cells
         """
         word = word.upper()
 
@@ -410,12 +432,30 @@ class Grid:
                 )
             self._validate_position(row, col)  # Validate start position
 
+        # THEME PRESERVATION: Check if any cell is locked
+        for i in range(len(word)):
+            if direction == 'across':
+                cell_pos = (row, col + i)
+            else:  # down
+                cell_pos = (row + i, col)
+
+            if cell_pos in self.locked_cells:
+                # Get existing letter
+                existing_letter = self.get_cell(cell_pos[0], cell_pos[1])
+                # Allow if same letter (crossing theme words)
+                if word[i] != existing_letter:
+                    raise ValueError(
+                        f"Cannot place '{word}' at ({row},{col}) {direction}: "
+                        f"would overwrite locked cell at {cell_pos} "
+                        f"('{existing_letter}' != '{word[i]}')"
+                    )
+
         # Place word (now safe)
         for i, letter in enumerate(word):
             if direction == 'across':
-                self.set_letter(row, col + i, letter)
+                self.set_letter(row, col + i, letter, lock=lock)
             else:  # down
-                self.set_letter(row + i, col, letter)
+                self.set_letter(row + i, col, letter, lock=lock)
 
     def remove_word(self, row: int, col: int, length: int, direction: str) -> None:
         """
@@ -452,12 +492,16 @@ class Grid:
                 )
             self._validate_position(row, col)  # Validate start position
 
-        # Remove word (now safe)
+        # THEME PRESERVATION: Remove word (but skip locked cells)
         for i in range(length):
             if direction == 'across':
-                self.cells[row, col + i] = EMPTY_CELL
+                cell_pos = (row, col + i)
             else:  # down
-                self.cells[row + i, col] = EMPTY_CELL
+                cell_pos = (row + i, col)
+
+            # Skip locked cells (theme words)
+            if cell_pos not in self.locked_cells:
+                self.cells[cell_pos] = EMPTY_CELL
 
         # Invalidate cached numbering
         self._numbering = None
@@ -507,7 +551,29 @@ class Grid:
         """
         new_grid = Grid(self.size)
         new_grid.cells = self.cells.copy()
+        new_grid.locked_cells = self.locked_cells.copy()
         return new_grid
+
+    def clear_unlocked(self) -> None:
+        """
+        Clear all unlocked cells (set to empty).
+
+        This preserves locked cells (theme words) while clearing
+        all other letter cells. Black squares are not affected.
+        """
+        for row in range(self.size):
+            for col in range(self.size):
+                # Skip black squares
+                if self.cells[row, col] == BLACK_SQUARE:
+                    continue
+                # Skip locked cells (theme words)
+                if (row, col) in self.locked_cells:
+                    continue
+                # Clear unlocked cells
+                self.cells[row, col] = EMPTY_CELL
+
+        # Invalidate cached numbering
+        self._numbering = None
 
     def __str__(self) -> str:
         """String representation of grid."""

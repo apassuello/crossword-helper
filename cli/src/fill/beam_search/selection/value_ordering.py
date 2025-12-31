@@ -94,10 +94,17 @@ class LCVValueOrdering(ValueOrderingStrategy):
                 if crossing_id in state.slot_assignments:
                     continue
 
-                # Temporarily place word and get pattern
-                state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
-                pattern = state.grid.get_pattern_for_slot(crossing)
-                state.grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
+                # THEME PRESERVATION: Temporarily place word and get pattern
+                # This may fail if word conflicts with locked cells (theme words)
+                try:
+                    state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    pattern = state.grid.get_pattern_for_slot(crossing)
+                    state.grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
+                except ValueError:
+                    # Word conflicts with locked cells - skip it entirely
+                    # This word cannot be placed, so give it very low score
+                    total_remaining = -999999
+                    break
 
                 # Count how many words would be eliminated
                 min_score = self.get_min_score(crossing['length'])

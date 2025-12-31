@@ -10,6 +10,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [selectedWord, setSelectedWord] = useState(null);
+  const [applyingAll, setApplyingAll] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileSelect = (e) => {
@@ -86,17 +87,48 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
   const analyzePlacements = async (words) => {
     setLoading(true);
 
+    // Convert frontend grid format to backend format if needed
+    const convertGrid = (frontendGrid) => {
+      if (!frontendGrid) return null;
+
+      // If grid is already in the right format (array of arrays of strings), use it
+      if (Array.isArray(frontendGrid) && Array.isArray(frontendGrid[0])) {
+        if (typeof frontendGrid[0][0] === 'string') {
+          return frontendGrid;
+        }
+
+        // Convert from object format to string format
+        return frontendGrid.map(row =>
+          row.map(cell => {
+            if (!cell) return '.';
+            if (cell === '#' || cell.isBlack) return '#';
+            if (cell.letter) return cell.letter;
+            return '.';
+          })
+        );
+      }
+      return frontendGrid;
+    };
+
     try {
       const response = await axios.post('/api/theme/suggest-placements', {
         theme_words: words || themeWords,
         grid_size: gridSize,
-        existing_grid: grid,
+        existing_grid: convertGrid(grid),
         max_suggestions: 3
       });
 
       const data = response.data;
-      setSuggestions(data.suggestions);
-      toast.success('Found placement suggestions!');
+      console.log('Placement suggestions received:', data.suggestions);
+
+      // Ensure suggestions are in correct format
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        setSuggestions(data.suggestions);
+        toast.success(`Found placement suggestions for ${data.suggestions.length} words!`);
+      } else {
+        console.error('Invalid suggestions format:', data.suggestions);
+        toast.error('Received invalid placement data');
+      }
 
     } catch (error) {
       console.error('Error analyzing placements:', error);
@@ -134,6 +166,86 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
     } catch (error) {
       console.error('Error applying placement:', error);
       toast.error('Failed to apply placement');
+    }
+  };
+
+  // Apply all best placements at once
+  const handleApplyAllPlacements = async () => {
+    console.log('Apply All clicked. Suggestions:', suggestions);
+
+    if (!suggestions || suggestions.length === 0) {
+      toast.error('No placement suggestions available. Please analyze placements first.');
+      return;
+    }
+
+    setApplyingAll(true);
+    let successCount = 0;
+    let skipCount = 0;
+    let currentGrid = grid; // Track grid state through applications
+
+    toast.loading('Applying all theme words...', { id: 'apply-all' });
+
+    for (const wordData of suggestions) {
+      console.log(`Processing word: ${wordData.word}`);
+
+      // Skip words with no valid placements
+      if (!wordData.suggestions || wordData.suggestions.length === 0) {
+        skipCount++;
+        console.log(`Skipping ${wordData.word}: No valid placements`);
+        continue;
+      }
+
+      // Get the best (first) suggestion
+      const bestSuggestion = wordData.suggestions[0];
+      console.log(`Best suggestion for ${wordData.word}:`, bestSuggestion);
+
+      // Skip if it has conflicts (WARNING in reasoning)
+      if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
+        skipCount++;
+        console.log(`Skipping ${wordData.word}: Has conflicts - ${bestSuggestion.reasoning}`);
+        continue;
+      }
+
+      try {
+        // Apply this placement (word comes from wordData, not suggestion)
+        const response = await axios.post('/api/theme/apply-placement', {
+          grid: currentGrid,
+          placement: {
+            word: wordData.word,  // Use the actual word
+            row: bestSuggestion.row,
+            col: bestSuggestion.col,
+            direction: bestSuggestion.direction
+          }
+        });
+
+        if (response.data && response.data.grid) {
+          successCount++;
+          console.log(`Successfully placed ${wordData.word}`);
+          currentGrid = response.data.grid; // Update grid for next placement
+
+          // Update parent grid
+          if (onApplyPlacement) {
+            onApplyPlacement(currentGrid, bestSuggestion);
+          }
+        } else {
+          console.log(`No grid returned for ${wordData.word}`);
+        }
+      } catch (error) {
+        skipCount++;
+        console.log(`Failed to place ${wordData.word}:`, error.message);
+      }
+    }
+
+    setApplyingAll(false);
+
+    // Show results
+    if (successCount > 0) {
+      toast.success(
+        `Applied ${successCount} theme words successfully!${skipCount > 0 ? ` (${skipCount} skipped due to conflicts)` : ''}`,
+        { id: 'apply-all' }
+      );
+    } else {
+      toast.error('Could not apply any theme words', { id: 'apply-all' });
     }
   };
 
@@ -198,6 +310,17 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
                 </span>
               ))}
             </div>
+            {/* Manual analyze button if no suggestions yet */}
+            {!suggestions && (
+              <button
+                className="analyze-btn"
+                onClick={() => analyzePlacements(themeWords)}
+                disabled={loading}
+                style={{ marginTop: '10px', padding: '8px 16px' }}
+              >
+                📍 Analyze Placements
+              </button>
+            )}
           </div>
         )}
 
@@ -208,6 +331,20 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
             <p className="help-text">
               Hover over suggestions to preview on grid. Click "Apply" to lock the word.
             </p>
+
+            {/* Apply All Button */}
+            <div className="apply-all-section">
+              <button
+                className="apply-all-btn"
+                onClick={handleApplyAllPlacements}
+                disabled={applyingAll || loading}
+              >
+                {applyingAll ? '⏳ Applying...' : '🚀 Apply All Best Placements'}
+              </button>
+              <p className="apply-all-hint">
+                Automatically place all theme words with their best non-conflicting positions
+              </p>
+            </div>
 
             {suggestions.map((wordData, wordIdx) => (
               <div key={wordIdx} className="word-suggestions">

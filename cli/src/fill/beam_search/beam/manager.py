@@ -140,6 +140,14 @@ class BeamManager(BeamManagementStrategy):
         offset_per_beam = 2  # Tunable: increase for more diversity, decrease for more quality overlap
 
         for beam_idx, state in enumerate(beam):
+            # THEME PRESERVATION FIX: Check if slot already has an assigned word
+            # This prevents theme words from being overwritten during expansion
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            if slot_id in state.slot_assignments:
+                # Slot already filled (e.g., theme word) - don't try to fill it again
+                expanded.append(state)
+                continue
+
             # Get pattern for this slot in current state
             pattern = state.grid.get_pattern_for_slot(slot)
 
@@ -215,13 +223,17 @@ class BeamManager(BeamManagementStrategy):
                 # Create new state
                 new_state = state.clone()
 
-                # Place word
-                new_state.grid.place_word(
-                    word,
-                    slot['row'],
-                    slot['col'],
-                    slot['direction']
-                )
+                # THEME PRESERVATION: Place word (may fail if conflicts with locked cells)
+                try:
+                    new_state.grid.place_word(
+                        word,
+                        slot['row'],
+                        slot['col'],
+                        slot['direction']
+                    )
+                except ValueError:
+                    # Word conflicts with locked cells (theme words) - skip it
+                    continue
 
                 # Update metadata
                 new_state.used_words.add(word)

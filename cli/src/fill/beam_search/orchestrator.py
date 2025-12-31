@@ -433,11 +433,43 @@ class BeamSearchOrchestrator:
 
         for slot_id, word in self.theme_entries.items():
             row, col, direction = slot_id
-            initial_grid.place_word(word.upper(), row, col, direction)
+            # THEME PRESERVATION FIX: Lock theme word cells to prevent overwriting
+            initial_grid.place_word(word.upper(), row, col, direction, lock=True)
             theme_slot_assignments[slot_id] = word.upper()
             theme_slot_count += 1
 
+            # THEME PRESERVATION FIX: Log theme entry placement
+            logger.debug(f"Theme entry placed and LOCKED: {word.upper()} at {slot_id}")
+
         return initial_grid, theme_slot_count, theme_slot_assignments, theme_words, sorted_slots
+
+    def _slot_overlaps_with_theme(self, slot: Dict) -> bool:
+        """
+        Check if a slot overlaps with any theme entry slots.
+
+        This prevents the slot selector from choosing theme slots that
+        should remain untouched.
+
+        Args:
+            slot: Slot to check {'row': int, 'col': int, 'direction': str, 'length': int}
+
+        Returns:
+            True if slot overlaps with any theme entry, False otherwise
+        """
+        slot_id = (slot['row'], slot['col'], slot['direction'])
+
+        # Exact match
+        if slot_id in self.theme_entries:
+            return True
+
+        # Check for partial overlaps (same position but different detected length)
+        # This can happen if grid.get_empty_slots() splits a theme slot
+        for theme_slot_id in self.theme_entries.keys():
+            theme_row, theme_col, theme_dir = theme_slot_id
+            if slot['row'] == theme_row and slot['col'] == theme_col and slot['direction'] == theme_dir:
+                return True
+
+        return False
 
     def _analyze_slot_conflicts(self, state: BeamState, slot: Dict) -> Set[Tuple[int, int, str]]:
         """
