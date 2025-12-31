@@ -238,31 +238,89 @@ def apply_placement():
         col = placement['col']
         direction = placement['direction']
 
-        # Apply word to grid
+        # CRITICAL FIX: Validate intersections BEFORE applying any changes
+        # Check all cells the word will occupy to ensure no conflicts
+        conflicts = []
         for i, letter in enumerate(word):
             if direction == 'across':
+                target_row = row
+                target_col = col + i
+                if target_col >= len(grid[row]):
+                    conflicts.append(f"Position ({target_row}, {target_col}) out of bounds")
+                    continue
+            else:  # down
+                target_row = row + i
+                target_col = col
+                if target_row >= len(grid):
+                    conflicts.append(f"Position ({target_row}, {target_col}) out of bounds")
+                    continue
+
+            cell = grid[target_row][target_col]
+
+            # Extract existing letter from cell (handle both dict and string formats)
+            existing_letter = None
+            is_black = False
+
+            if isinstance(cell, dict):
+                letter_value = cell.get('letter', '').strip()
+                if letter_value and letter_value != '.':
+                    existing_letter = letter_value.upper()
+                else:
+                    existing_letter = None  # Empty cell
+                is_black = cell.get('isBlack', False)
+            elif isinstance(cell, str):
+                if cell == '#':
+                    is_black = True
+                elif cell == '.' or cell == '':
+                    # Empty cell - no existing letter
+                    existing_letter = None
+                else:
+                    existing_letter = cell.strip().upper()
+
+            # Check for conflicts
+            if is_black:
+                conflicts.append(f"Cannot place '{letter}' at ({target_row}, {target_col}): cell is black")
+            elif existing_letter and existing_letter != letter:
+                # Only report conflict if letters DON'T match
+                conflicts.append(
+                    f"Letter conflict at ({target_row}, {target_col}): "
+                    f"trying to place '{letter}' but cell already contains '{existing_letter}'"
+                )
+            # If existing_letter matches letter, that's a valid intersection - allow it
+
+        # If there are conflicts, return error with details
+        if conflicts:
+            return jsonify({
+                'error': 'Placement conflicts detected',
+                'conflicts': conflicts,
+                'applied': False
+            }), 400
+
+        # No conflicts - safe to apply word to grid
+        for i, letter in enumerate(word):
+            if direction == 'across':
+                target_row = row
                 target_col = col + i
                 if target_col >= len(grid[row]):
                     continue
-
-                cell = grid[row][target_col]
-                if isinstance(cell, dict):
-                    cell['letter'] = letter
-                    cell['isThemeLocked'] = True
-                else:
-                    grid[row][target_col] = letter
-
             else:  # down
                 target_row = row + i
+                target_col = col
                 if target_row >= len(grid):
                     continue
 
-                cell = grid[target_row][col]
-                if isinstance(cell, dict):
-                    cell['letter'] = letter
-                    cell['isThemeLocked'] = True
-                else:
-                    grid[target_row][col] = letter
+            cell = grid[target_row][target_col]
+
+            if isinstance(cell, dict):
+                cell['letter'] = letter
+                cell['isThemeLocked'] = True
+            else:
+                # Handle string format (convert to dict for theme locking)
+                grid[target_row][target_col] = {
+                    'letter': letter,
+                    'isBlack': False,
+                    'isThemeLocked': True
+                }
 
         return jsonify({
             'grid': grid,

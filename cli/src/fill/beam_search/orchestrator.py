@@ -238,6 +238,23 @@ class BeamSearchOrchestrator:
 
         # Get all empty slots
         all_slots = self.grid.get_empty_slots()
+
+        # FIX: Filter out slots that overlap with theme entries BEFORE counting
+        # Theme entries may not fill entire detected slots (e.g., "HAPPY" in a 7-letter slot creates "HAPPY??")
+        # These partially-filled slots with locked prefixes cannot be filled and should be excluded
+        if self.theme_entries:
+            filtered_slots = []
+            for slot in all_slots:
+                slot_id = (slot['row'], slot['col'], slot['direction'])
+                # Check if this exact slot is a theme entry
+                if slot_id in self.theme_entries:
+                    continue  # Skip theme slots entirely
+                # Check if slot overlaps with any theme entry (shares starting position)
+                if self._slot_overlaps_with_theme(slot):
+                    continue  # Skip overlapping slots
+                filtered_slots.append(slot)
+            all_slots = filtered_slots
+
         total_slots = len(all_slots)
 
         # Early exit if already complete
