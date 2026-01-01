@@ -34,6 +34,8 @@ class FillResult:
     iterations: int
     paused: bool = False  # NEW: True if autofill was paused
     state_path: Optional[str] = None  # NEW: Path to saved state file if paused
+    adaptations_applied: int = 0  # NEW: Number of adaptive black squares added
+    message: Optional[str] = None  # NEW: Additional message (e.g., for adaptive mode)
 
 
 class Autofill:
@@ -112,6 +114,7 @@ class Autofill:
 
     def fill(
         self,
+        timeout: Optional[int] = None,  # NEW: For interface compatibility with AdaptiveAutofill
         interactive: bool = False,
         use_mac: bool = True,
         random_seed: int = None,
@@ -122,6 +125,7 @@ class Autofill:
         Fill grid using backtracking CSP.
 
         Args:
+            timeout: Time limit in seconds (CSP doesn't enforce timeout but accepts for interface compatibility)
             interactive: If True, prompt user before each placement (not implemented)
             use_mac: If True, use MAC (Maintaining Arc Consistency) for better pruning (Phase 2)
             random_seed: If provided, shuffle candidates randomly for restart strategy (Phase 3.2)
@@ -130,6 +134,11 @@ class Autofill:
 
         Returns:
             FillResult with success status and filled grid
+
+        Note:
+            The CSP implementation doesn't enforce the timeout parameter (it runs until completion),
+            but accepts it for interface compatibility with AdaptiveAutofill, which wraps both CSP
+            and Beam Search autofill implementations.
         """
         self.start_time = time.time()
 

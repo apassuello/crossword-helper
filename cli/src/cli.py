@@ -334,7 +334,9 @@ def fill(
         progress.update(35, f'Adaptive mode enabled (max {max_adaptations} adaptations)')
 
         # Wrap the base autofill with adaptive wrapper
-        # Note: AdaptiveAutofill needs wordlists as list, not WordList object
+        # IMPORTANT: Store the original autofill (BeamSearch/Hybrid/etc.) to pass as base
+        base_autofill_instance = autofill
+
         adaptive_options = {
             'min_score': min_score,
             'timeout': timeout,
@@ -345,7 +347,8 @@ def fill(
             grid=grid,
             wordlists=[word_list],  # Wrap in list
             options=adaptive_options,
-            progress_reporter=progress
+            progress_reporter=progress,
+            base_autofill=base_autofill_instance  # Pass the original autofill to preserve algorithm
         )
 
     # Get empty slots

@@ -322,6 +322,60 @@ def apply_placement():
                     'isThemeLocked': True
                 }
 
+        # Add black cell boundaries if needed (NO SYMMETRY)
+        # Check cell before the word
+        if direction == 'across':
+            # Check cell before (left)
+            if col > 0:
+                prev_cell = grid[row][col - 1]
+                # Add black cell if the cell is empty
+                if isinstance(prev_cell, str) and (prev_cell == '.' or prev_cell == ''):
+                    grid[row][col - 1] = '#'
+                elif isinstance(prev_cell, dict) and not prev_cell.get('isBlack', False):
+                    letter_val = prev_cell.get('letter', '').strip()
+                    if not letter_val or letter_val == '.':
+                        # Convert to black cell (no symmetry)
+                        grid[row][col - 1] = {'letter': '', 'isBlack': True}
+
+            # Check cell after (right)
+            end_col = col + len(word)
+            if end_col < len(grid[row]):
+                next_cell = grid[row][end_col]
+                # Add black cell if the cell is empty
+                if isinstance(next_cell, str) and (next_cell == '.' or next_cell == ''):
+                    grid[row][end_col] = '#'
+                elif isinstance(next_cell, dict) and not next_cell.get('isBlack', False):
+                    letter_val = next_cell.get('letter', '').strip()
+                    if not letter_val or letter_val == '.':
+                        # Convert to black cell (no symmetry)
+                        grid[row][end_col] = {'letter': '', 'isBlack': True}
+
+        else:  # down
+            # Check cell above
+            if row > 0:
+                prev_cell = grid[row - 1][col]
+                # Add black cell if the cell is empty
+                if isinstance(prev_cell, str) and (prev_cell == '.' or prev_cell == ''):
+                    grid[row - 1][col] = '#'
+                elif isinstance(prev_cell, dict) and not prev_cell.get('isBlack', False):
+                    letter_val = prev_cell.get('letter', '').strip()
+                    if not letter_val or letter_val == '.':
+                        # Convert to black cell (no symmetry)
+                        grid[row - 1][col] = {'letter': '', 'isBlack': True}
+
+            # Check cell below
+            end_row = row + len(word)
+            if end_row < len(grid):
+                next_cell = grid[end_row][col]
+                # Add black cell if the cell is empty
+                if isinstance(next_cell, str) and (next_cell == '.' or next_cell == ''):
+                    grid[end_row][col] = '#'
+                elif isinstance(next_cell, dict) and not next_cell.get('isBlack', False):
+                    letter_val = next_cell.get('letter', '').strip()
+                    if not letter_val or letter_val == '.':
+                        # Convert to black cell (no symmetry)
+                        grid[end_row][col] = {'letter': '', 'isBlack': True}
+
         return jsonify({
             'grid': grid,
             'applied': True

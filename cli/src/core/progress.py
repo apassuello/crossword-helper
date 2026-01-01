@@ -23,6 +23,7 @@ class ProgressReporter:
             enabled: Whether to output progress (disabled for non-JSON output)
         """
         self.enabled = enabled
+        self.max_progress = 0  # Track maximum progress for monotonicity
 
     def report(self, progress: int, message: str, status: str = 'running', data: dict = None):
         """
@@ -36,6 +37,16 @@ class ProgressReporter:
         """
         if not self.enabled:
             return
+
+        # Enforce monotonicity: progress should never decrease
+        # This handles backtracking scenarios where filled slots may temporarily decrease
+        if status == 'running':
+            progress = max(progress, self.max_progress)
+            self.max_progress = progress
+        elif status == 'complete':
+            # Always allow completion at 100%
+            progress = 100
+            self.max_progress = 100
 
         event = {
             'type': 'progress',
@@ -58,6 +69,7 @@ class ProgressReporter:
         Args:
             message: Start message
         """
+        self.max_progress = 0  # Reset max progress for new operation
         self.report(0, message, 'running')
 
     def update(self, progress: int, message: str, status: str = 'running', data: dict = None):

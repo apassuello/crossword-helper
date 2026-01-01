@@ -53,7 +53,8 @@ class AdaptiveAutofill:
         grid: Grid,
         wordlists: List,
         options: Dict,
-        progress_reporter=None
+        progress_reporter=None,
+        base_autofill=None
     ):
         """
         Initialize adaptive autofill.
@@ -63,11 +64,14 @@ class AdaptiveAutofill:
             wordlists: List of word list objects
             options: Autofill options (min_score, timeout, etc.)
             progress_reporter: Optional progress reporter for SSE
+            base_autofill: Pre-created autofill instance (BeamSearch, Hybrid, etc.)
+                          If provided, this instance will be reused instead of creating new one
         """
         self.grid = grid
         self.wordlists = wordlists
         self.options = options
         self.progress_reporter = progress_reporter
+        self.base_autofill = base_autofill  # Store for reuse
 
         # Adaptive behavior settings
         self.max_adaptations = options.get('max_adaptations', 3)
@@ -85,20 +89,30 @@ class AdaptiveAutofill:
         else:
             self.suggester = None
 
-        # Create autofill instance
-        self.autofill = None
-        self._create_autofill()
+        # Use base autofill if provided, otherwise create new one
+        if base_autofill:
+            self.autofill = base_autofill
+        else:
+            self.autofill = None
+            self._create_autofill()
 
     def _create_autofill(self):
         """Create or recreate autofill instance with current grid."""
-        self.autofill = Autofill(
-            grid=self.grid,
-            wordlists=self.wordlists,
-            min_score=self.options.get('min_score', 30),
-            timeout=self.options.get('timeout', 300),
-            progress_reporter=self.progress_reporter,
-            theme_entries=self.options.get('theme_entries', {})
-        )
+        # If we have a base autofill (BeamSearch, Hybrid, etc.), reuse it
+        if self.base_autofill:
+            # Just update the grid on the existing instance
+            self.base_autofill.grid = self.grid
+            self.autofill = self.base_autofill
+        else:
+            # Create new standard autofill
+            self.autofill = Autofill(
+                grid=self.grid,
+                wordlists=self.wordlists,
+                min_score=self.options.get('min_score', 30),
+                timeout=self.options.get('timeout', 300),
+                progress_reporter=self.progress_reporter,
+                theme_entries=self.options.get('theme_entries', {})
+            )
 
         # Hook into autofill's backtrack callback
         if hasattr(self.autofill, 'on_backtrack'):
@@ -120,9 +134,12 @@ class AdaptiveAutofill:
             # Mark for adaptation
             self.slot_backtrack_counts[slot_key] = -1  # Prevent repeated triggers
 
-    def fill(self) -> Dict:
+    def fill(self, timeout: int = 300) -> Dict:
         """
         Run adaptive autofill with automatic black square placement.
+
+        Args:
+            timeout: Maximum time in seconds for autofill
 
         Returns:
             Same result format as standard Autofill.fill()
@@ -130,7 +147,7 @@ class AdaptiveAutofill:
         if not SUGGESTER_AVAILABLE:
             # Fallback to standard autofill
             logger.warning("Adaptive mode disabled, running standard autofill")
-            return self.autofill.fill()
+            return self.autofill.fill(timeout=timeout)
 
         # Report adaptive mode enabled
         if self.progress_reporter:
@@ -145,21 +162,22 @@ class AdaptiveAutofill:
         while attempt <= self.max_adaptations:
             logger.info(f"Autofill attempt {attempt + 1}/{self.max_adaptations + 1}")
 
-            # Run autofill
-            result = self.autofill.fill()
+            # Run autofill (returns FillResult dataclass)
+            result = self.autofill.fill(timeout=timeout)
 
             # If successful, return immediately
-            if result.get('success', False):
+            if result.success:
+                # Add adaptation info to FillResult
                 if self.adaptation_count > 0:
-                    result['adaptations_applied'] = self.adaptation_count
-                    result['message'] = f"Success with {self.adaptation_count} adaptive black square(s)"
+                    result.adaptations_applied = self.adaptation_count
+                    result.message = f"Success with {self.adaptation_count} adaptive black square(s)"
                 return result
 
             # If we've exhausted adaptations, return partial result
             if attempt >= self.max_adaptations:
                 logger.info(f"Max adaptations ({self.max_adaptations}) reached, returning partial result")
-                result['adaptations_applied'] = self.adaptation_count
-                result['message'] = f"Partial fill after {self.adaptation_count} adaptations"
+                result.adaptations_applied = self.adaptation_count
+                result.message = f"Partial fill after {self.adaptation_count} adaptations"
                 return result
 
             # Try to adapt the grid
@@ -178,18 +196,21 @@ class AdaptiveAutofill:
 
                 # Report adaptation
                 if self.progress_reporter:
+                    # Calculate progress percentage from fill result
+                    progress = int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0
                     self.progress_reporter.update(
-                        result.get('progress', 0),
+                        progress,
                         f"Applied adaptive black square #{self.adaptation_count}, retrying...",
                         'running'
                     )
             else:
                 # Can't adapt, return partial result
                 logger.info("Cannot adapt further, returning partial result")
-                result['adaptations_applied'] = self.adaptation_count
+                result.adaptations_applied = self.adaptation_count
                 return result
 
         # Should not reach here
+        result.adaptations_applied = self.adaptation_count
         return result
 
     def _try_adapt(self) -> bool:
@@ -381,12 +402,14 @@ class AdaptiveAutofill:
         Args:
             suggestion: Suggestion dict from BlackSquareSuggester
         """
-        # Apply primary black square
-        self.grid.grid[suggestion['row']][suggestion['col']] = '#'
+        # Apply primary black square (with symmetry handled automatically by Grid class)
+        self.grid.set_black_square(
+            suggestion['row'],
+            suggestion['col'],
+            enforce_symmetry=True  # Grid class will handle symmetric position
+        )
 
-        # Apply symmetric black square
         sym_row = suggestion['symmetric_position']['row']
         sym_col = suggestion['symmetric_position']['col']
-        self.grid.grid[sym_row][sym_col] = '#'
 
         logger.info(f"Applied black squares at ({suggestion['row']}, {suggestion['col']}) and ({sym_row}, {sym_col})")

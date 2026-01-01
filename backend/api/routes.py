@@ -22,6 +22,9 @@ from backend.api.progress_routes import create_progress_tracker, send_progress
 import subprocess
 import threading
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
 
@@ -258,6 +261,10 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
         cli_path = cli_adapter.cli_path
         cmd = [str(cli_path)] + cmd_args
 
+        # Log the full CLI command for debugging
+        logger.info(f"Executing CLI command: {' '.join(cmd)}")
+        logger.debug(f"CLI working directory: {cli_path.parent}")
+
         send_progress(task_id, 5, 'Starting CLI process...', 'running')
 
         # Start process with stderr capture
@@ -305,7 +312,19 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
             except (json.JSONDecodeError, Exception) as e:
                 send_progress(task_id, 100, 'Complete', 'complete')
         else:
-            send_progress(task_id, 0, f'Error: {stderr[:200]}', 'error')
+            # Log full error for debugging
+            logger.error(f"CLI process failed with return code {process.returncode}")
+            logger.error(f"CLI command: {' '.join(cmd)}")
+            logger.error(f"STDOUT (first 200 lines):")
+            for i, line in enumerate(stdout.split('\n')[:200]):
+                logger.error(f"  {i+1}: {line}")
+            logger.error(f"STDERR (first 200 lines):")
+            for i, line in enumerate(stderr.split('\n')[:200]):
+                logger.error(f"  {i+1}: {line}")
+
+            # Send user-friendly error message
+            error_preview = stderr[:500] if stderr else stdout[:500] if stdout else "Unknown error"
+            send_progress(task_id, 0, f'CLI Error (code {process.returncode}): {error_preview}', 'error')
 
     except subprocess.TimeoutExpired:
         send_progress(task_id, 0, 'Operation timed out', 'error')

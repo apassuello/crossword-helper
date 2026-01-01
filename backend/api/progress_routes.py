@@ -19,6 +19,9 @@ progress_api = Blueprint('progress_api', __name__)
 progress_queues: Dict[str, queue.Queue] = {}
 progress_queues_lock = threading.Lock()
 
+# Track maximum progress per task for monotonicity enforcement
+max_progress_per_task: Dict[str, int] = {}
+
 
 def create_progress_tracker() -> str:
     """
@@ -31,6 +34,7 @@ def create_progress_tracker() -> str:
 
     with progress_queues_lock:
         progress_queues[task_id] = queue.Queue()
+        max_progress_per_task[task_id] = 0  # Initialize max progress tracking
 
     return task_id
 
@@ -48,6 +52,18 @@ def send_progress(task_id: str, progress: int, message: str, status: str = 'runn
     """
     if task_id not in progress_queues:
         return
+
+    # Enforce monotonicity: progress should never decrease during backtracking
+    # This handles scenarios where beam search backtracks and reduces filled slots
+    with progress_queues_lock:
+        if status == 'running':
+            current_max = max_progress_per_task.get(task_id, 0)
+            progress = max(progress, current_max)
+            max_progress_per_task[task_id] = progress
+        elif status == 'complete':
+            # Always allow completion at 100%
+            progress = 100
+            max_progress_per_task[task_id] = 100
 
     event = {
         'progress': progress,
@@ -76,6 +92,8 @@ def cleanup_progress_tracker(task_id: str):
     with progress_queues_lock:
         if task_id in progress_queues:
             del progress_queues[task_id]
+        if task_id in max_progress_per_task:
+            del max_progress_per_task[task_id]
 
 
 @progress_api.route('/progress/<task_id>', methods=['GET'])

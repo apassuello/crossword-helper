@@ -341,8 +341,8 @@ class BeamSearchOrchestrator:
             # Expand beam
             expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
 
-            # Backtracking if needed
-            if not expanded_beam and slot_idx > 0:
+            # Backtracking if needed (only if we have successfully filled slots to backtrack from)
+            if not expanded_beam and len(filled_slots) > 0:
                 expanded_beam = self._try_backtracking(beam, slot)
 
             if not expanded_beam:
@@ -847,8 +847,8 @@ class BeamSearchOrchestrator:
             # Expand beam
             expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
 
-            # Backtracking if needed
-            if not expanded_beam and slot_idx > 0:
+            # Backtracking if needed (only if we have successfully filled slots to backtrack from)
+            if not expanded_beam and len(filled_slots) > 0:
                 expanded_beam = self._try_backtracking(beam, slot)
 
             if not expanded_beam:

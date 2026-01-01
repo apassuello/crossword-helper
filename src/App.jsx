@@ -21,12 +21,26 @@ function App() {
   const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
   const [currentTaskId, setCurrentTaskId] = useState(null);
   const [showThemePanel, setShowThemePanel] = useState(false);
+  const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
   const eventSourceRef = React.useRef(null);
 
   // Initialize empty grid
   useEffect(() => {
     initializeGrid(gridSize);
   }, [gridSize]);
+
+  // Persist symmetry state to localStorage
+  useEffect(() => {
+    localStorage.setItem('crossword_symmetry_enabled', JSON.stringify(symmetryEnabled));
+  }, [symmetryEnabled]);
+
+  // Load symmetry state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('crossword_symmetry_enabled');
+    if (saved !== null) {
+      setSymmetryEnabled(JSON.parse(saved));
+    }
+  }, []);
 
   const initializeGrid = (size) => {
     const newGrid = Array(size).fill(null).map(() =>
@@ -94,16 +108,18 @@ function App() {
     cell.isBlack = !cell.isBlack;
     cell.letter = cell.isBlack ? '' : cell.letter;
 
-    // Apply symmetry
-    const symRow = gridSize - 1 - row;
-    const symCol = gridSize - 1 - col;
-    newGrid[symRow][symCol].isBlack = cell.isBlack;
-    newGrid[symRow][symCol].letter = cell.isBlack ? '' : newGrid[symRow][symCol].letter;
+    // Apply symmetry only if enabled
+    if (symmetryEnabled) {
+      const symRow = gridSize - 1 - row;
+      const symCol = gridSize - 1 - col;
+      newGrid[symRow][symCol].isBlack = cell.isBlack;
+      newGrid[symRow][symCol].letter = cell.isBlack ? '' : newGrid[symRow][symCol].letter;
+    }
 
     setGrid(newGrid);
     updateNumbering(newGrid);
     validateGrid(newGrid);
-  }, [grid, gridSize]);
+  }, [grid, gridSize, symmetryEnabled]);
 
   const toggleThemeLock = useCallback((row, col) => {
     if (!grid || grid[row][col].isBlack) return;
@@ -175,6 +191,7 @@ function App() {
           number: cell.number || null
         }))),
         numbering: numbering,
+        symmetryEnabled: symmetryEnabled,
         timestamp: new Date().toISOString()
       };
 
@@ -184,7 +201,7 @@ function App() {
       console.error('Failed to save grid:', err);
       toast.error('Failed to save grid: ' + err.message);
     }
-  }, [grid, gridSize, numbering]);
+  }, [grid, gridSize, numbering, symmetryEnabled]);
 
   const handleAutofill = useCallback(async (options = {}) => {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
@@ -346,6 +363,24 @@ function App() {
     }
   }, [currentTaskId, autofillProgress]);
 
+  const handleResetAutofill = useCallback(() => {
+    // Close SSE connection if active
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Clear all autofill state
+    setAutofillProgress(null);
+    setCurrentTaskId(null);
+
+    // Clear localStorage autofill state
+    localStorage.removeItem('current_autofill_task');
+    localStorage.removeItem('paused_autofill_task');
+
+    toast.success('Autofill state reset - ready to start fresh!');
+  }, []);
+
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     // Update grid with the applied theme word
     setGrid(updatedGrid);
@@ -355,7 +390,7 @@ function App() {
   }, [updateNumbering]);
 
   const handleGridImport = useCallback((importedData) => {
-    const { grid: importedGrid, size, numbering: importedNumbering } = importedData;
+    const { grid: importedGrid, size, numbering: importedNumbering, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different
     if (size !== gridSize) {
@@ -364,6 +399,11 @@ function App() {
 
     // Update grid state
     setGrid(importedGrid);
+
+    // Update symmetry setting if provided
+    if (importedSymmetry !== undefined) {
+      setSymmetryEnabled(importedSymmetry);
+    }
 
     // Update numbering (or recalculate if not provided)
     if (importedNumbering && Object.keys(importedNumbering).length > 0) {
@@ -488,6 +528,8 @@ function App() {
               onSaveGrid={handleSaveGrid}
               validationErrors={validationErrors}
               gridStats={grid ? calculateGridStats(grid) : null}
+              symmetryEnabled={symmetryEnabled}
+              onSymmetryToggle={() => setSymmetryEnabled(!symmetryEnabled)}
             />
           )}
 
@@ -502,6 +544,7 @@ function App() {
             <AutofillPanel
               onStartAutofill={handleAutofill}
               onCancelAutofill={handleCancelAutofill}
+              onResetAutofill={handleResetAutofill}
               progress={autofillProgress}
               grid={grid}
               currentTaskId={currentTaskId}

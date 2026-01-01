@@ -1,7 +1,7 @@
 import React from 'react';
 import './ToolPanel.scss';
 
-function ToolPanel({ gridSize, onSizeChange, onClearGrid, onLoadGrid, onSaveGrid, validationErrors, gridStats }) {
+function ToolPanel({ gridSize, onSizeChange, onClearGrid, onLoadGrid, onSaveGrid, validationErrors, gridStats, symmetryEnabled, onSymmetryToggle }) {
   return (
     <div className="tool-panel">
       <h2>Grid Tools</h2>
@@ -22,6 +22,23 @@ function ToolPanel({ gridSize, onSizeChange, onClearGrid, onLoadGrid, onSaveGrid
         <p className="help-text">
           Standard crossword sizes: 11×11 (easy), 15×15 (standard), 21×21 (Sunday)
         </p>
+      </div>
+
+      <div className="tool-section">
+        <h3>Black Square Settings</h3>
+        <div className="symmetry-toggle">
+          <button
+            className={`toggle-btn ${symmetryEnabled ? 'active' : ''}`}
+            onClick={onSymmetryToggle}
+          >
+            {symmetryEnabled ? '✓ Symmetry: ON' : '✗ Symmetry: OFF'}
+          </button>
+        </div>
+        {!symmetryEnabled && (
+          <p className="warning-text">
+            ⚠️ Asymmetric grids may not meet NYT standards
+          </p>
+        )}
       </div>
 
       {gridStats && (
@@ -83,7 +100,9 @@ function ToolPanel({ gridSize, onSizeChange, onClearGrid, onLoadGrid, onSaveGrid
       <div className="tool-section">
         <h3>NYT Standards</h3>
         <ul className="standards-list">
-          <li>180° rotational symmetry required</li>
+          <li className={symmetryEnabled ? '' : 'disabled'}>
+            180° rotational symmetry {symmetryEnabled ? 'required' : 'disabled'}
+          </li>
           <li>All letters must be checked (in both across and down)</li>
           <li>Minimum word length: 3 letters</li>
           <li>Black squares: typically 15-17% for 15×15</li>

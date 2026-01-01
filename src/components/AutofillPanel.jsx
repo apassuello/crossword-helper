@@ -5,7 +5,7 @@ import './AutofillPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 import BlackSquareSuggestions from './BlackSquareSuggestions';
 
-function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, currentTaskId }) {
+function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, progress, grid, currentTaskId }) {
   const [options, setOptions] = useState({
     minScore: 50,
     preferPersonalWords: true,
@@ -224,62 +224,93 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
     if (!grid) return {};
 
     const themeEntries = {};
+    const visited = new Set();
 
-    // Helper to extract word from grid
-    const extractWord = (row, col, direction) => {
+    // Helper to extract contiguous theme-locked cells
+    const extractThemeWord = (startRow, startCol, direction) => {
       let word = '';
+      let positions = [];
+
       if (direction === 'across') {
-        let c = col;
-        while (c < grid[row].length && !grid[row][c].isBlack) {
-          word += grid[row][c].letter || '.';
+        let c = startCol;
+        while (c < grid[startRow].length &&
+               !grid[startRow][c].isBlack &&
+               grid[startRow][c].isThemeLocked &&
+               grid[startRow][c].letter) {
+          word += grid[startRow][c].letter;
+          positions.push(`${startRow},${c}`);
+          visited.add(`${startRow},${c},across`);
           c++;
         }
       } else {
-        let r = row;
-        while (r < grid.length && !grid[r][col].isBlack) {
-          word += grid[r][col].letter || '.';
+        let r = startRow;
+        while (r < grid.length &&
+               !grid[r][startCol].isBlack &&
+               grid[r][startCol].isThemeLocked &&
+               grid[r][startCol].letter) {
+          word += grid[r][startCol].letter;
+          positions.push(`${r},${startCol}`);
+          visited.add(`${r},${startCol},down`);
           r++;
         }
       }
-      return word;
+
+      return { word, positions };
     };
 
-    // Find all theme-locked words
-    const processedSlots = new Set();
-
+    // Find all contiguous theme-locked sequences (across)
     for (let row = 0; row < grid.length; row++) {
-      for (let col = 0; col < grid[row].length; col++) {
+      let col = 0;
+      while (col < grid[row].length) {
         const cell = grid[row][col];
 
         if (cell.isThemeLocked && !cell.isBlack && cell.letter) {
-          // Check if this is the start of an across word
-          const isStartAcross = col === 0 || grid[row][col - 1].isBlack;
-          if (isStartAcross) {
-            const slotKey = `${row},${col},across`;
-            if (!processedSlots.has(slotKey)) {
-              const word = extractWord(row, col, 'across');
-              // Only add if word is complete (no dots) and length > 1
-              if (!word.includes('.') && word.length > 1) {
-                themeEntries[`(${slotKey})`] = word;
-                processedSlots.add(slotKey);
-              }
-            }
-          }
+          // Check if this is the start of a new theme word (not visited)
+          const cellKey = `${row},${col},across`;
+          if (!visited.has(cellKey)) {
+            // Check if previous cell is NOT theme-locked (or we're at start)
+            const isThemeStart = col === 0 ||
+                                !grid[row][col - 1].isThemeLocked ||
+                                grid[row][col - 1].isBlack;
 
-          // Check if this is the start of a down word
-          const isStartDown = row === 0 || grid[row - 1][col].isBlack;
-          if (isStartDown) {
-            const slotKey = `${row},${col},down`;
-            if (!processedSlots.has(slotKey)) {
-              const word = extractWord(row, col, 'down');
-              // Only add if word is complete (no dots) and length > 1
-              if (!word.includes('.') && word.length > 1) {
+            if (isThemeStart) {
+              const { word, positions } = extractThemeWord(row, col, 'across');
+              if (word.length > 1) {
+                const slotKey = `${row},${col},across`;
                 themeEntries[`(${slotKey})`] = word;
-                processedSlots.add(slotKey);
               }
             }
           }
         }
+        col++;
+      }
+    }
+
+    // Find all contiguous theme-locked sequences (down)
+    for (let col = 0; col < grid[0].length; col++) {
+      let row = 0;
+      while (row < grid.length) {
+        const cell = grid[row][col];
+
+        if (cell.isThemeLocked && !cell.isBlack && cell.letter) {
+          // Check if this is the start of a new theme word (not visited)
+          const cellKey = `${row},${col},down`;
+          if (!visited.has(cellKey)) {
+            // Check if previous cell is NOT theme-locked (or we're at start)
+            const isThemeStart = row === 0 ||
+                                !grid[row - 1][col].isThemeLocked ||
+                                grid[row - 1][col].isBlack;
+
+            if (isThemeStart) {
+              const { word, positions } = extractThemeWord(row, col, 'down');
+              if (word.length > 1) {
+                const slotKey = `${row},${col},down`;
+                themeEntries[`(${slotKey})`] = word;
+              }
+            }
+          }
+        }
+        row++;
       }
     }
 
@@ -410,9 +441,22 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
         </div>
         {Object.keys(getThemeEntries()).length > 0 && (
           <div className="theme-entries" style={{marginTop: '0.5rem', color: '#7b1fa2', fontWeight: '500'}}>
-            Theme entries locked: <strong>{Object.keys(getThemeEntries()).length}</strong>
+            Theme words placed: <strong>{Object.keys(getThemeEntries()).length}</strong>
             <small style={{display: 'block', fontSize: '0.85rem', fontWeight: 'normal', color: '#666', marginTop: '0.25rem'}}>
-              Right-click cells to lock/unlock theme words
+              {(() => {
+                // Count theme cells
+                let themeCellCount = 0;
+                if (grid) {
+                  for (let row = 0; row < grid.length; row++) {
+                    for (let col = 0; col < grid[row].length; col++) {
+                      if (grid[row][col].isThemeLocked && !grid[row][col].isBlack) {
+                        themeCellCount++;
+                      }
+                    }
+                  }
+                }
+                return `${themeCellCount} cells locked • Right-click to lock/unlock`;
+              })()}
             </small>
           </div>
         )}
@@ -688,6 +732,13 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, progress, grid, curr
               </button>
               <button className="suggest-black-btn" onClick={handleSuggestBlackSquares}>
                 ⬛ Suggest Black Square
+              </button>
+            </div>
+          )}
+          {(progress.status === 'error' || progress.status === 'complete' || progress.status === 'warning') && (
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap'}}>
+              <button className="reset-btn" onClick={onResetAutofill}>
+                🔄 Reset Autofill
               </button>
             </div>
           )}
