@@ -10,8 +10,8 @@ This wrapper monitors autofill progress and intervenes when:
 
 import logging
 from typing import Dict, List, Optional
-from cli.src.fill.autofill import Autofill
-from cli.src.core.grid import Grid
+from .autofill import Autofill
+from ..core.grid import Grid
 
 # Import backend suggester if available
 try:

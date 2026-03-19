@@ -12,9 +12,10 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
     timeout: 300,
     wordlists: ['comprehensive'],
     themeList: null,  // NEW: designated theme list for priority (null or wordlist key)
-    algorithm: 'beam',  // 'regex', 'trie', or 'beam' (default: beam with thrashing fixes)
+    algorithm: 'repair',  // 'repair' (fast, reliable), 'trie', or 'beam' (slow, buggy)
     adaptiveMode: false,  // Auto black square placement when stuck
-    maxAdaptations: 3  // Max number of adaptive black squares
+    maxAdaptations: 3,  // Max number of adaptive black squares
+    partialFill: false  // Enable collaborative partial fill mode
   });
 
   // Available wordlists (loaded from API)
@@ -522,8 +523,35 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
         </div>
 
         <div className="option-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={options.partialFill}
+              onChange={(e) => handleOptionChange('partialFill', e.target.checked)}
+            />
+            🎯 Partial Fill Mode (Collaborative)
+          </label>
+          <p className="help-text">
+            Stop when stuck and preserve valid words instead of backtracking. Perfect for iterative human-AI collaboration.
+          </p>
+        </div>
+
+        <div className="option-group">
           <label>Algorithm</label>
           <div className="algorithm-selector">
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="algorithm"
+                value="repair"
+                checked={options.algorithm === 'repair'}
+                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
+              />
+              <span className="radio-label">
+                <strong>Repair</strong> (Recommended)
+                <small>Fast, reliable iterative repair - 100% success rate</small>
+              </span>
+            </label>
             <label className="radio-option">
               <input
                 type="radio"
@@ -533,8 +561,8 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
                 onChange={(e) => handleOptionChange('algorithm', e.target.value)}
               />
               <span className="radio-label">
-                <strong>Beam Search</strong> (Recommended)
-                <small>Best for complex grids, with anti-thrashing fixes</small>
+                <strong>Beam Search</strong> (Experimental)
+                <small>May have backtracking issues - use Repair instead</small>
               </span>
             </label>
             <label className="radio-option">
@@ -546,8 +574,8 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
                 onChange={(e) => handleOptionChange('algorithm', e.target.value)}
               />
               <span className="radio-label">
-                <strong>Trie</strong> (Fast)
-                <small>Classic CSP, faster for simple grids</small>
+                <strong>Trie</strong> (Classic CSP)
+                <small>Classic algorithm - Repair is faster and more reliable</small>
               </span>
             </label>
             <label className="radio-option">

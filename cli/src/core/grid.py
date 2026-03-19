@@ -28,17 +28,18 @@ EMPTY_CELL = 0     # Internal encoding for empty cells
 class Grid:
     """Crossword grid with NumPy backing and constraint enforcement."""
 
-    def __init__(self, size: int):
+    def __init__(self, size: int, validate_size: bool = True):
         """
         Initialize empty grid.
 
         Args:
-            size: Grid dimension (11, 15, or 21)
+            size: Grid dimension (11, 15, or 21 for standard grids)
+            validate_size: If True, enforce standard sizes (default: True)
 
         Raises:
-            ValueError: If size is not valid
+            ValueError: If size is not valid and validate_size is True
         """
-        if size not in [11, 15, 21]:
+        if validate_size and size not in [11, 15, 21]:
             raise ValueError(f"Grid size must be 11, 15, or 21, got {size}")
 
         self.size = size
@@ -461,6 +462,16 @@ class Grid:
         """
         Remove word from grid (set cells to empty).
 
+        CRITICAL FIX FOR BEAM SEARCH BACKTRACKING:
+        Only removes cells that are NOT shared with other filled perpendicular slots.
+        This prevents grid corruption during backtracking when a word is removed but
+        its cells are still needed by intersecting words that were placed later.
+
+        Example:
+            1. Place "CAT" across at (0,0) → (0,0)='C', (0,1)='A', (0,2)='T'
+            2. Place "DOG" down at (0,2) → (0,2)='D', (1,2)='O', (2,2)='G' (shares (0,2))
+            3. Remove "CAT" → Only clear (0,0), (0,1); preserve (0,2) used by "DOG"
+
         Args:
             row: Starting row
             col: Starting column
@@ -492,7 +503,10 @@ class Grid:
                 )
             self._validate_position(row, col)  # Validate start position
 
-        # THEME PRESERVATION: Remove word (but skip locked cells)
+        # THEME PRESERVATION + INTERSECTION PRESERVATION:
+        # Remove word but preserve:
+        # 1. Locked cells (theme words)
+        # 2. Cells shared with filled perpendicular slots
         for i in range(length):
             if direction == 'across':
                 cell_pos = (row, col + i)
@@ -501,10 +515,73 @@ class Grid:
 
             # Skip locked cells (theme words)
             if cell_pos not in self.locked_cells:
-                self.cells[cell_pos] = EMPTY_CELL
+                # Check if this cell is used by a filled perpendicular slot
+                if not self._is_cell_in_filled_perpendicular_slot(cell_pos[0], cell_pos[1], direction):
+                    self.cells[cell_pos] = EMPTY_CELL
 
         # Invalidate cached numbering
         self._numbering = None
+
+    def _is_cell_in_filled_perpendicular_slot(self, row: int, col: int, original_direction: str) -> bool:
+        """
+        Check if a cell is part of a completely filled perpendicular slot.
+
+        This is used during word removal to determine if a cell should be preserved
+        because it's shared with an intersecting word.
+
+        Args:
+            row: Cell row position
+            col: Cell column position
+            original_direction: Direction of the word being removed ('across' or 'down')
+
+        Returns:
+            True if the cell is part of a filled perpendicular slot, False otherwise
+        """
+        # Determine perpendicular direction
+        perpendicular_direction = 'down' if original_direction == 'across' else 'across'
+
+        # Get all slots in the perpendicular direction
+        all_slots = self.get_word_slots()
+
+        for slot in all_slots:
+            if slot['direction'] != perpendicular_direction:
+                continue
+
+            slot_row = slot['row']
+            slot_col = slot['col']
+            slot_length = slot['length']
+
+            # Check if this cell is part of this slot
+            is_in_slot = False
+            if perpendicular_direction == 'across':
+                if slot_row == row and slot_col <= col < slot_col + slot_length:
+                    is_in_slot = True
+            else:  # down
+                if slot_col == col and slot_row <= row < slot_row + slot_length:
+                    is_in_slot = True
+
+            if not is_in_slot:
+                continue
+
+            # Check if this slot is completely filled
+            is_filled = True
+            for i in range(slot_length):
+                if perpendicular_direction == 'across':
+                    cell_value = self.cells[slot_row, slot_col + i]
+                else:  # down
+                    cell_value = self.cells[slot_row + i, slot_col]
+
+                # A cell is filled if it has a letter (value > 0)
+                # Black squares (-1) or empty cells (0) mean not filled
+                if cell_value <= 0:
+                    is_filled = False
+                    break
+
+            # If we found a filled perpendicular slot containing this cell, preserve it
+            if is_filled:
+                return True
+
+        return False
 
     def get_empty_slots(self) -> List[Dict]:
         """
@@ -549,7 +626,7 @@ class Grid:
         Returns:
             New Grid instance with same state
         """
-        new_grid = Grid(self.size)
+        new_grid = Grid(self.size, validate_size=False)  # Skip validation for cloning
         new_grid.cells = self.cells.copy()
         new_grid.locked_cells = self.locked_cells.copy()
         return new_grid

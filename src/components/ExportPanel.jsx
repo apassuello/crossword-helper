@@ -145,8 +145,12 @@ function ExportPanel({ grid, gridSize, numbering }) {
 
       <div className="export-options">
         <div className="format-selector">
-          <label>Export Format</label>
-          <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+          <label htmlFor="export-format">Export Format</label>
+          <select
+            id="export-format"
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value)}
+          >
             <option value="json">JSON (for reimport)</option>
             <option value="html">HTML (printable)</option>
             <option value="text">Text (simple)</option>
@@ -156,8 +160,9 @@ function ExportPanel({ grid, gridSize, numbering }) {
         </div>
 
         <div className="export-settings">
-          <label>
+          <label htmlFor="include-clues">
             <input
+              id="include-clues"
               type="checkbox"
               checked={includeClues}
               onChange={(e) => setIncludeClues(e.target.checked)}

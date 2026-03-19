@@ -23,6 +23,7 @@ import subprocess
 import threading
 import json
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +247,7 @@ def fill_grid():
 # SSE-enabled routes for real-time progress tracking
 # ==================================================
 
-def run_cli_with_progress(task_id, cmd_args, timeout=300):
+def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
     """
     Run CLI command and send progress updates via SSE.
 
@@ -254,6 +255,7 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
         task_id: Progress tracker task ID
         cmd_args: CLI command arguments
         timeout: Command timeout in seconds
+        temp_files: List of temp file paths to clean up when done
     """
 
     try:
@@ -277,39 +279,68 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
             bufsize=1,  # Line buffered
         )
 
+        # Register process for cleanup on client disconnect
+        from .progress_routes import register_process
+        register_process(task_id, process)
+
+        logger.info(f"[CLI DEBUG] PID={process.pid}, cmd={' '.join(cmd)}")
         send_progress(task_id, 10, 'CLI process running...', 'running')
 
         # Read stderr in real-time for progress updates
+        stderr_lines = []
         while True:
             line = process.stderr.readline()
             if not line:
                 break
 
+            stderr_lines.append(line.rstrip())
+            logger.info(f"[CLI STDERR] {line.rstrip()}")
+
             # Parse progress JSON from stderr
             try:
                 progress_data = json.loads(line.strip())
                 if progress_data.get('type') == 'progress':
+                    # CRITICAL: Never forward 'complete'/'error' from stderr.
+                    # The CLI sends a 'complete' progress event to stderr BEFORE
+                    # writing the actual result (with grid data) to stdout.
+                    # If we forward 'complete' here, the SSE generator breaks
+                    # before the real result arrives, causing "No solution found".
+                    stderr_status = progress_data.get('status', 'running')
+                    if stderr_status in ('complete', 'error'):
+                        stderr_status = 'running'
+
                     send_progress(
                         task_id,
                         progress_data.get('progress', 0),
                         progress_data.get('message', 'Processing...'),
-                        progress_data.get('status', 'running'),
-                        progress_data.get('data')  # Forward grid data if present
+                        stderr_status,
+                        progress_data.get('data')
                     )
             except json.JSONDecodeError:
-                # Not a progress update, ignore
                 pass
 
         # Wait for completion
         stdout, stderr = process.communicate(timeout=timeout)
 
+        logger.info(f"[CLI DEBUG] Process exited with code {process.returncode}")
+        logger.info(f"[CLI DEBUG] stdout length: {len(stdout)} chars")
+        logger.info(f"[CLI DEBUG] remaining stderr length: {len(stderr)} chars")
+        if stdout:
+            logger.info(f"[CLI STDOUT] {stdout[:1000]}")
+        if stderr:
+            logger.info(f"[CLI STDERR remaining] {stderr[:500]}")
+
         if process.returncode == 0:
             # Parse filled grid from stdout JSON
             try:
                 result_data = json.loads(stdout.strip())
+                logger.info(f"[CLI DEBUG] Parsed result: success={result_data.get('success')}, "
+                           f"filled={result_data.get('slots_filled')}/{result_data.get('total_slots')}")
                 # Send completion with grid data
                 send_progress(task_id, 100, 'Complete', 'complete', result_data)
             except (json.JSONDecodeError, Exception) as e:
+                logger.error(f"[CLI DEBUG] Failed to parse stdout JSON: {e}")
+                logger.error(f"[CLI DEBUG] Raw stdout: {repr(stdout[:500])}")
                 send_progress(task_id, 100, 'Complete', 'complete')
         else:
             # Log full error for debugging
@@ -327,11 +358,24 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300):
             send_progress(task_id, 0, f'CLI Error (code {process.returncode}): {error_preview}', 'error')
 
     except subprocess.TimeoutExpired:
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            process.kill()
         send_progress(task_id, 0, 'Operation timed out', 'error')
     except Exception as e:
         import traceback
         traceback.print_exc()
         send_progress(task_id, 0, f'Error: {str(e)}', 'error')
+    finally:
+        # Clean up temp files
+        if temp_files:
+            for temp_file in temp_files:
+                try:
+                    Path(temp_file).unlink(missing_ok=True)
+                except Exception:
+                    pass
 
 
 @api.route("/pattern/with-progress", methods=["POST"])
@@ -434,13 +478,29 @@ def fill_with_progress():
                 json.dump(data["theme_entries"], f)
                 theme_entries_file = f.name
 
+        # Debug: log what we're sending to CLI
+        logger.info(f"[AUTOFILL DEBUG] Grid size: {data['size']}x{data['size']}")
+        logger.info(f"[AUTOFILL DEBUG] Grid file: {grid_file}")
+        logger.info(f"[AUTOFILL DEBUG] Wordlist names requested: {wordlist_names}")
+        logger.info(f"[AUTOFILL DEBUG] Wordlist paths resolved: {wordlist_paths}")
+        logger.info(f"[AUTOFILL DEBUG] Algorithm: {data.get('algorithm', 'repair')}")
+        logger.info(f"[AUTOFILL DEBUG] Timeout: {data.get('timeout', 300)}")
+        logger.info(f"[AUTOFILL DEBUG] Min score: {data.get('min_score', 30)}")
+        logger.info(f"[AUTOFILL DEBUG] Theme entries: {bool(data.get('theme_entries'))}")
+
+        # Count non-empty cells in grid
+        filled_cells = sum(1 for row in cli_grid for c in row if c not in ('.', '#', ''))
+        black_cells = sum(1 for row in cli_grid for c in row if c == '#')
+        total_cells = data['size'] * data['size']
+        logger.info(f"[AUTOFILL DEBUG] Grid cells: {filled_cells} filled, {black_cells} black, {total_cells - filled_cells - black_cells} empty")
+
         # Build CLI command
         cmd_args = [
             "fill",
             grid_file,
             "--timeout", str(data.get("timeout", 300)),
             "--min-score", str(data.get("min_score", 30)),
-            "--algorithm", data.get("algorithm", "trie"),
+            "--algorithm", data.get("algorithm", "repair"),
             "--allow-nonstandard",
             "--json-output"  # Enable progress reporting via stderr
         ]
@@ -462,10 +522,18 @@ def fill_with_progress():
             if "max_adaptations" in data:
                 cmd_args.extend(["--max-adaptations", str(data["max_adaptations"])])
 
+        # Add partial fill flag if enabled (collaborative mode)
+        if data.get("partial_fill", False):
+            cmd_args.append("--partial-fill")
+
         # Start background task
+        temp_files = [grid_file]
+        if theme_entries_file:
+            temp_files.append(theme_entries_file)
+
         thread = threading.Thread(
             target=run_cli_with_progress,
-            args=(task_id, cmd_args, data.get("timeout", 300) + 10),
+            args=(task_id, cmd_args, data.get("timeout", 300) + 10, temp_files),
             daemon=True
         )
         thread.start()

@@ -219,7 +219,8 @@ function App() {
         algorithm: options.algorithm || 'regex',
         theme_entries: options.theme_entries || {},
         adaptive_mode: options.adaptiveMode || false,
-        max_adaptations: options.maxAdaptations || 3
+        max_adaptations: options.maxAdaptations || 3,
+        partial_fill: options.partialFill || false
       });
 
       const { task_id } = initResponse.data;
@@ -241,7 +242,7 @@ function App() {
           // Apply incremental grid updates if present
           if (data.data && data.data.grid && data.status === 'running') {
             // Create deep copy with new objects (not shallow copy)
-            const newGrid = grid.map((row, r) =>
+            setGrid(prevGrid => prevGrid.map((row, r) =>
               row.map((cell, c) => {
                 const cliCell = data.data.grid[r][c];
                 if (cliCell === '#') {
@@ -251,8 +252,7 @@ function App() {
                 }
                 return { ...cell };
               })
-            );
-            setGrid(newGrid);
+            ));
           }
 
           // When complete, update grid with results from event data
@@ -264,7 +264,7 @@ function App() {
             // Check if result grid is included in the event
             if (data.data && data.data.grid) {
               // Update grid with filled results (full or partial) - create deep copy with new objects
-              const newGrid = grid.map((row, r) =>
+              setGrid(prevGrid => prevGrid.map((row, r) =>
                 row.map((cell, c) => {
                   const cliCell = data.data.grid[r][c];
                   if (cliCell === '#') {
@@ -274,8 +274,7 @@ function App() {
                   }
                   return { ...cell };
                 })
-              );
-              setGrid(newGrid);
+              ));
 
               // Show appropriate message based on success
               if (data.data.success) {
@@ -339,6 +338,9 @@ function App() {
   }, [grid, gridSize]);
 
   const handleCancelAutofill = useCallback(() => {
+    // Capture task ID before clearing state
+    const taskId = currentTaskId;
+
     // Close SSE connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -356,8 +358,8 @@ function App() {
     setCurrentTaskId(null);
 
     // Call backend to cancel the task
-    if (currentTaskId) {
-      axios.post(`/api/fill/cancel/${currentTaskId}`).catch(err => {
+    if (taskId) {
+      axios.post(`/api/fill/cancel/${taskId}`).catch(err => {
         console.warn('Failed to cancel autofill task:', err);
       });
     }

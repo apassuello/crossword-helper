@@ -202,7 +202,7 @@ class StateEvaluator(StateEvaluationStrategy):
 
         return total
 
-    def is_quality_word(self, word: str) -> bool:
+    def is_quality_word(self, word: str, strict: bool = False) -> bool:
         """
         Check if word is likely real (not gibberish).
 
@@ -211,9 +211,12 @@ class StateEvaluator(StateEvaluationStrategy):
         2. No excessive letter repetition
         3. No excessive consonant clusters
         4. Q followed by U (standard pattern)
+        5. Common bigram checking (strict mode)
+        6. Letter frequency analysis (strict mode)
 
         Args:
             word: Word to check (uppercase)
+            strict: Enable stricter checks for partial fill mode
 
         Returns:
             True if word passes quality checks, False if likely gibberish
@@ -262,28 +265,67 @@ class StateEvaluator(StateEvaluationStrategy):
                 # QI, QAT are valid short words, but QZXR... is not
                 return False
 
+        # Additional strict checks for partial fill mode
+        if strict:
+            # Heuristic 5: Check for impossible bigrams
+            impossible_bigrams = [
+                'QX', 'QZ', 'QJ', 'QK', 'QV', 'QW', 'QY',
+                'JX', 'JZ', 'JQ', 'VX', 'XZ', 'ZX', 'ZJ',
+                'VQ', 'VJ', 'WQ', 'WX', 'WZ', 'YQ', 'YZ',
+                'XQ', 'XJ', 'BX', 'CX', 'DX', 'FX', 'GX',
+                'HX', 'KX', 'MX', 'NX', 'PX', 'QP', 'QB',
+                'XF', 'XG', 'XH', 'XK', 'XN', 'XV', 'XW'
+            ]
+            for bigram in impossible_bigrams:
+                if bigram in word:
+                    return False
+
+            # Heuristic 6: Check for uncommon letter patterns
+            # Too many rare letters (J, Q, X, Z) together
+            rare_letters = sum(1 for c in word if c in 'JQXZ')
+            if rare_letters > 1 and length <= 5:
+                return False  # Short words rarely have multiple rare letters
+            if rare_letters >= 2 and rare_letters / length > 0.33:
+                return False  # Too high concentration of rare letters
+
+            # Heuristic 7: Triple consonants (very rare in English)
+            for i in range(len(word) - 2):
+                if all(c not in 'AEIOUY' for c in word[i:i+3]):
+                    # Check if it's the same consonant repeated (like SSS, LLL)
+                    if word[i] == word[i+1] == word[i+2]:
+                        return False  # Triple consonants are very rare
+                    # Check for unlikely triple consonant combinations
+                    triple = word[i:i+3]
+                    # Some triples are ok (STR, SCR, SPL, etc.)
+                    ok_triples = ['STR', 'SCR', 'SPL', 'SPR', 'SHR', 'THR', 'CHR', 'SCH']
+                    if triple not in ok_triples and not triple.startswith('S'):
+                        # Most valid triple consonants start with S
+                        return False
+
         return True
 
-    def is_gibberish_pattern(self, pattern: str) -> bool:
+    def is_gibberish_pattern(self, pattern: str, strict: bool = False) -> bool:
         """
         Check if a pattern contains obvious gibberish (repeated letters, impossible clusters).
 
         Args:
             pattern: Word or pattern to check (may contain '?' wildcards)
+            strict: Enable stricter checks for partial fill mode
 
         Returns:
             True if pattern appears to be gibberish
 
         Examples:
-            AAAAA x True (all same letter)
-            AAA x True (all same letter)
-            NNN x True (all same letter)
-            BRNNN x True (impossible consonant cluster + repeated N)
-            DRAMA x False (valid word pattern)
-            D?AMA x False (partial valid pattern)
+            AAAAA → True (all same letter)
+            AAA → True (all same letter)
+            NNN → True (all same letter)
+            BRNNN → True (impossible consonant cluster + repeated N)
+            QXZJ → True (impossible bigrams in strict mode)
+            DRAMA → False (valid word pattern)
+            D?AMA → False (partial valid pattern)
         """
         # Remove wildcards for checking
-        letters_only = pattern.replace('?', '')
+        letters_only = pattern.replace('?', '').upper()
 
         if not letters_only or len(letters_only) < 3:
             return False  # Too short to be obviously gibberish
@@ -300,12 +342,36 @@ class StateEvaluator(StateEvaluationStrategy):
         # Check for impossible consonant clusters (4+ consonants)
         vowels = set('AEIOUY')
         consonant_run = 0
+        max_consonant_run = 0
         for char in letters_only:
             if char not in vowels:
                 consonant_run += 1
-                if consonant_run >= 4:
-                    return True  # BRNNN, STRNG, etc.
+                max_consonant_run = max(max_consonant_run, consonant_run)
             else:
                 consonant_run = 0
+
+        if max_consonant_run >= 4:
+            return True  # BRNNN, STRNG, etc.
+
+        # Additional strict checks for partial fill mode
+        if strict and len(letters_only) >= 2:
+            # Check for impossible bigrams
+            impossible_bigrams = [
+                'QX', 'QZ', 'QJ', 'QK', 'QV', 'QW', 'QY',
+                'JX', 'JZ', 'JQ', 'VX', 'XZ', 'ZX', 'ZJ',
+                'VQ', 'VJ', 'WQ', 'WX', 'WZ', 'YQ', 'YZ',
+                'XQ', 'XJ', 'BQ', 'CQ', 'DQ', 'FQ', 'GQ'
+            ]
+            for i in range(len(letters_only) - 1):
+                bigram = letters_only[i:i+2]
+                if bigram in impossible_bigrams:
+                    return True
+
+            # Check for too many rare letters
+            rare_count = sum(1 for c in letters_only if c in 'JQXZ')
+            if rare_count >= 2 and len(letters_only) <= 5:
+                return True  # Short words rarely have multiple rare letters
+            if rare_count >= 3:
+                return True  # Too many rare letters overall
 
         return False

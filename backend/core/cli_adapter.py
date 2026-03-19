@@ -225,6 +225,7 @@ class CLIAdapter:
         min_score: int = 30,
         algorithm: str = "trie",
         allow_nonstandard: bool = None,
+        partial_fill: bool = False,
     ) -> Dict[str, Any]:
         """
         Auto-fill a crossword grid using CSP solver.
@@ -236,6 +237,7 @@ class CLIAdapter:
             min_score: Minimum word quality score
             algorithm: Pattern matching algorithm ('regex' or 'trie')
             allow_nonstandard: Allow non-standard grid sizes (auto-detected if None)
+            partial_fill: Enable collaborative partial fill mode (stops when stuck, preserves valid words)
 
         Returns:
             Dict with filled grid and metadata
@@ -284,6 +286,9 @@ class CLIAdapter:
             if allow_nonstandard:
                 args.append("--allow-nonstandard")
 
+            if partial_fill:
+                args.append("--partial-fill")
+
             for wordlist_path in wordlist_paths:
                 args.extend(["--wordlists", wordlist_path])
 
@@ -295,8 +300,14 @@ class CLIAdapter:
             )
 
             # Read filled grid from output file
-            with open(output_path, "r") as f:
-                result = json.load(f)
+            if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
+                return {"success": False, "error": "CLI produced no output"}
+
+            try:
+                with open(output_path, "r") as f:
+                    result = json.load(f)
+            except json.JSONDecodeError as e:
+                return {"success": False, "error": f"CLI produced invalid JSON: {e}"}
 
             return result
         finally:

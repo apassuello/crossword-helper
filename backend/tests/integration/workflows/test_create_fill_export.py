@@ -83,13 +83,20 @@ class TestCreateFillExportWorkflow:
         """
         grid = create_empty_grid(11)
 
-        # Get black square suggestions
+        # Get black square suggestions for a problematic slot
         response = client.post(
             "/api/grid/suggest-black-square",
             data=json.dumps({
                 "grid": grid,
-                "size": 11,
-                "target_word_count": 40
+                "grid_size": 11,
+                "problematic_slot": {
+                    "row": 0,
+                    "col": 0,
+                    "direction": "across",
+                    "length": 11,
+                    "pattern": "???????????"
+                },
+                "max_suggestions": 3
             }),
             content_type="application/json"
         )
@@ -98,16 +105,15 @@ class TestCreateFillExportWorkflow:
         suggestions = response.json.get("suggestions", [])
 
         if suggestions:
-            # Apply first suggestion
+            # Apply first suggestion (with symmetric pair)
             suggestion = suggestions[0]
+            sym = suggestion.get("symmetric_position", {"row": 10 - suggestion["row"], "col": 10 - suggestion["col"]})
             response = client.post(
                 "/api/grid/apply-black-squares",
                 data=json.dumps({
                     "grid": grid,
-                    "size": 11,
-                    "positions": [
-                        (suggestion["row"], suggestion["col"])
-                    ]
+                    "primary": {"row": suggestion["row"], "col": suggestion["col"]},
+                    "symmetric": sym
                 }),
                 content_type="application/json"
             )

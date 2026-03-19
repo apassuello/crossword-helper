@@ -364,14 +364,24 @@
       "filepath": "data/wordlists/external/normalized/spreadthewordlist.txt"
     },
     "custom/theme_list": {
-      "name": "Theme List",
       "category": "custom",
       "description": "Uploaded from theme_list.txt",
       "tags": [
         "custom",
         "uploaded"
       ],
-      "source": "direct_import"
+      "source": "direct_import",
+      "name": "Theme List"
+    },
+    "custom/comprehensive_scored": {
+      "category": "custom",
+      "description": "Uploaded from comprehensive_scored.txt",
+      "tags": [
+        "custom",
+        "uploaded"
+      ],
+      "source": "direct_import",
+      "name": "Comprehensive Scored"
     }
   },
   "categories": {

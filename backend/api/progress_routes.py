@@ -8,6 +8,7 @@ like pattern search, autofill, and export.
 from flask import Blueprint, Response, request, jsonify
 import json
 import queue
+import subprocess
 import threading
 import time
 from typing import Dict, Any
@@ -21,6 +22,10 @@ progress_queues_lock = threading.Lock()
 
 # Track maximum progress per task for monotonicity enforcement
 max_progress_per_task: Dict[str, int] = {}
+
+# Track running subprocesses for cleanup
+running_processes: Dict[str, 'subprocess.Popen'] = {}
+running_processes_lock = threading.Lock()
 
 
 def create_progress_tracker() -> str:
@@ -83,17 +88,33 @@ def send_progress(task_id: str, progress: int, message: str, status: str = 'runn
 
 
 def cleanup_progress_tracker(task_id: str):
-    """
-    Remove a progress tracker.
-
-    Args:
-        task_id: Task ID
-    """
+    """Remove a progress tracker (does NOT kill subprocess — that's handled by cancel/timeout)."""
     with progress_queues_lock:
         if task_id in progress_queues:
             del progress_queues[task_id]
         if task_id in max_progress_per_task:
             del max_progress_per_task[task_id]
+
+
+def register_process(task_id: str, process):
+    """Register a subprocess for a task (for cleanup on disconnect)."""
+    with running_processes_lock:
+        running_processes[task_id] = process
+
+
+def cleanup_process(task_id: str):
+    """Terminate subprocess if still running."""
+    with running_processes_lock:
+        process = running_processes.pop(task_id, None)
+    if process and process.poll() is None:
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            try:
+                process.kill()
+            except OSError:
+                pass
 
 
 @progress_api.route('/progress/<task_id>', methods=['GET'])

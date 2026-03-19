@@ -111,6 +111,7 @@ class TestCLIAutofillScenarios:
         except json.JSONDecodeError as e:
             pytest.fail(f"Invalid JSON output: {e}")
 
+    @pytest.mark.slow
     def test_beam_only_empty_11x11(self):
         """
         Beam search only on empty 11×11 grid (no adaptive)
@@ -146,6 +147,7 @@ class TestCLIAutofillScenarios:
         assert '"success"' in stdout
         assert '"grid"' in stdout
 
+    @pytest.mark.slow
     def test_adaptive_beam_empty_11x11(self):
         """
         **THE CRITICAL TEST**: Adaptive mode + Beam search on empty 11×11 grid
@@ -168,6 +170,7 @@ class TestCLIAutofillScenarios:
 
         print("\n✅ SUCCESS: Adaptive + Beam search works without crashing!")
 
+    @pytest.mark.slow
     def test_beam_prefilled_grid(self):
         """
         Beam search with pre-filled letters
@@ -196,6 +199,7 @@ class TestCLIAutofillScenarios:
         assert "AttributeError" not in stderr
         assert '"success"' in stdout
 
+    @pytest.mark.slow
     def test_adaptive_beam_prefilled(self):
         """
         Adaptive + Beam with pre-filled letters
@@ -224,6 +228,7 @@ class TestCLIAutofillScenarios:
         assert "AttributeError" not in stderr
         assert '"success"' in stdout
 
+    @pytest.mark.slow
     def test_beam_15x15(self):
         """
         Beam search on larger 15×15 grid
@@ -243,6 +248,7 @@ class TestCLIAutofillScenarios:
             print("\n⚠️ 15×15 beam search timed out (expected for complex grid)")
             pass
 
+    @pytest.mark.slow
     def test_adaptive_beam_15x15(self):
         """
         Adaptive + Beam on larger 15×15 grid

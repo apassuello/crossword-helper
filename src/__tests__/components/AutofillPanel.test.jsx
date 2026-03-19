@@ -1,6 +1,6 @@
 /**
  * Tests for AutofillPanel - the core autofill UI component
- * Tests algorithm selection, SSE progress, pause/resume, adaptive mode
+ * Tests algorithm selection, start button, adaptive mode, pause button
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -8,33 +8,50 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AutofillPanel from '../../components/AutofillPanel';
 import { emptyGrid15x15 } from '../fixtures/gridFixtures';
-import { mockApiEndpoint } from '../fixtures/apiMocks';
 
-vi.mock('../../hooks/useSSEProgress', () => ({
-  useSSEProgress: () => ({
-    status: 'idle',
-    progress: 0,
-    message: '',
-    data: null,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
+// Mock react-hot-toast to avoid side effects
+vi.mock('react-hot-toast', () => ({
+  default: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    loading: vi.fn(),
   }),
+}));
+
+// Mock ProgressIndicator to simplify DOM
+vi.mock('../../components/ProgressIndicator', () => ({
+  default: ({ message }) => <div data-testid="progress-indicator">{message}</div>,
+}));
+
+// Mock BlackSquareSuggestions
+vi.mock('../../components/BlackSquareSuggestions', () => ({
+  default: () => <div data-testid="black-square-suggestions" />,
 }));
 
 describe('AutofillPanel Component', () => {
   const defaultProps = {
+    onStartAutofill: vi.fn(),
+    onCancelAutofill: vi.fn(),
+    onResetAutofill: vi.fn(),
+    progress: null,
     grid: emptyGrid15x15,
-    onGridUpdate: vi.fn(),
-    size: 15,
+    currentTaskId: null,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders algorithm selector', () => {
+  it('renders algorithm radio buttons', () => {
     render(<AutofillPanel {...defaultProps} />);
-    expect(screen.getByLabelText(/algorithm/i)).toBeInTheDocument();
+    // The component uses radio buttons for algorithm selection
+    expect(screen.getByText('Algorithm')).toBeInTheDocument();
+    // Check that radio inputs for each algorithm exist
+    const radioButtons = document.querySelectorAll('input[type="radio"][name="algorithm"]');
+    expect(radioButtons.length).toBe(4); // repair, beam, trie, regex
+    // Check repair is selected by default
+    const repairRadio = document.querySelector('input[type="radio"][value="repair"]');
+    expect(repairRadio.checked).toBe(true);
   });
 
   it('renders start autofill button', () => {
@@ -42,28 +59,20 @@ describe('AutofillPanel Component', () => {
     expect(screen.getByRole('button', { name: /start autofill/i })).toBeInTheDocument();
   });
 
-  it('starts autofill with selected parameters', async () => {
+  it('calls onStartAutofill when start button is clicked', async () => {
     const user = userEvent.setup();
-    let capturedRequest;
+    const onStartAutofill = vi.fn();
 
-    mockApiEndpoint('post', '/fill/with-progress', (req) => {
-      capturedRequest = req.body;
-      return {
-        task_id: 'test-123',
-        progress_url: '/api/progress/test-123',
-      };
-    });
-
-    render(<AutofillPanel {...defaultProps} />);
+    render(<AutofillPanel {...defaultProps} onStartAutofill={onStartAutofill} />);
 
     const startButton = screen.getByRole('button', { name: /start autofill/i });
     await user.click(startButton);
 
-    await waitFor(() => {
-      expect(capturedRequest).toBeDefined();
-      expect(capturedRequest.algorithm).toBe('beam');
-      expect(capturedRequest.size).toBe(15);
-    });
+    expect(onStartAutofill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        algorithm: 'repair', // default algorithm
+      })
+    );
   });
 
   it('shows adaptive mode toggle', () => {
@@ -71,15 +80,15 @@ describe('AutofillPanel Component', () => {
     expect(screen.getByLabelText(/adaptive mode/i)).toBeInTheDocument();
   });
 
-  it('enables pause button during autofill', async () => {
-    const user = userEvent.setup();
-    render(<AutofillPanel {...defaultProps} />);
+  it('shows pause button when progress status is running', () => {
+    render(
+      <AutofillPanel
+        {...defaultProps}
+        progress={{ status: 'running', progress: 50, message: 'Filling...' }}
+        currentTaskId="test-123"
+      />
+    );
 
-    const startButton = screen.getByRole('button', { name: /start autofill/i });
-    await user.click(startButton);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /pause/i })).toBeEnabled();
-    });
+    expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
   });
 });

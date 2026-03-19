@@ -51,7 +51,8 @@ class BeamSearchOrchestrator:
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
         theme_words=None,
         pause_controller=None,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        partial_fill_mode: bool = False
     ):
         """
         Initialize beam search orchestrator.
@@ -69,6 +70,7 @@ class BeamSearchOrchestrator:
             theme_words: Set of words from theme wordlist to prioritize (optional)
             pause_controller: Optional PauseController for pause/resume
             task_id: Optional task identifier for pause/resume
+            partial_fill_mode: Enable partial fill mode - stops when stuck instead of aggressive backtracking
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -95,6 +97,7 @@ class BeamSearchOrchestrator:
         self.theme_words = theme_words or set()
         self.pause_controller = pause_controller
         self.task_id = task_id
+        self.partial_fill_mode = partial_fill_mode
 
         # State tracking
         self.start_time = 0.0
@@ -372,8 +375,33 @@ class BeamSearchOrchestrator:
                     filled_slots.discard(slot_id)
                     continue
 
-                # Attempts exhausted for this (beam, slot) - need proper backtracking
-                logger.debug("  Max attempts reached for this slot, attempting backtracking...")
+                # Attempts exhausted for this (beam, slot) - check partial fill mode
+                logger.debug("  Max attempts reached for this slot")
+
+                # In partial fill mode, stop when stuck if we have a reasonable fill
+                if self.partial_fill_mode:
+                    filled_ratio = len(filled_slots) / total_slots if total_slots > 0 else 0
+                    if filled_ratio >= 0.8:  # 80% filled is a good partial solution
+                        logger.debug(f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled")
+                        break
+                    elif filled_ratio >= 0.5:
+                        # Try gentler backtracking (only 1 level deep)
+                        logger.debug(f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled")
+                        backtracked_beam = self._backtrack_beam_states(beam, depth=1)
+                        if not backtracked_beam:
+                            logger.debug("  Gentle backtracking failed, stopping here")
+                            break
+                        beam = backtracked_beam
+                        # Update filled_slots to match beam state
+                        beam_filled_slots = set(beam[0].slot_assignments.keys())
+                        removed_slots = filled_slots - beam_filled_slots
+                        for removed_slot in removed_slots:
+                            filled_slots.discard(removed_slot)
+                        filled_slots.discard(slot_id)
+                        continue
+
+                # Standard mode: aggressive backtracking
+                logger.debug("  Standard mode: attempting aggressive backtracking...")
 
                 # If no filled slots to backtrack from, we're stuck
                 if len(filled_slots) == 0:
@@ -641,13 +669,17 @@ class BeamSearchOrchestrator:
         Strategy progression:
         1. Try more candidates (relaxed constraints)
         2. Try with no score filter
-        3. Conflict-directed backjumping (undo problematic assignments)
-        4. Chronological backtracking (undo recent assignments)
+        3. Conflict-directed backjumping (undo problematic assignments) - skipped in partial fill mode
+        4. Chronological backtracking (undo recent assignments) - limited in partial fill mode
 
         Returns:
             Expanded beam or empty list if all strategies fail
         """
         logger.debug("\nDEBUG: Trying backtracking strategies...")
+
+        # In partial fill mode, use gentler strategies
+        if self.partial_fill_mode:
+            logger.debug("  (Partial fill mode: using gentle strategies)")
 
         # Try 1: More candidates (2x)
         expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
@@ -673,11 +705,15 @@ class BeamSearchOrchestrator:
             return expanded
 
         # Try 4: CONFLICT-DIRECTED BACKJUMPING (intelligent)
-        # Analyze which filled slots are causing this failure and undo them
-        logger.debug("  Analyzing conflicts for intelligent backjumping...")
-        conflicts = self._analyze_slot_conflicts(beam[0], slot)
+        # Skip in partial fill mode - too aggressive
+        if self.partial_fill_mode:
+            logger.debug("  Skipping conflict-directed backjumping (partial fill mode)")
+        else:
+            # Analyze which filled slots are causing this failure and undo them
+            logger.debug("  Analyzing conflicts for intelligent backjumping...")
+            conflicts = self._analyze_slot_conflicts(beam[0], slot)
 
-        if conflicts:
+        if not self.partial_fill_mode and conflicts:
             logger.debug(f"  Found {len(conflicts)} conflicting slots, attempting backjump...")
 
             # Create backjumped beam by removing conflicting assignments
@@ -718,6 +754,11 @@ class BeamSearchOrchestrator:
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
+
+        # In partial fill mode, stop after shallow backtracking
+        if self.partial_fill_mode:
+            logger.debug("  Limiting backtracking depth (partial fill mode)")
+            return []
 
         # Try 6: DEEPER CHRONOLOGICAL BACKTRACKING
         logger.debug("  Trying deeper chronological backtracking (depth=2)...")
@@ -878,8 +919,33 @@ class BeamSearchOrchestrator:
                     filled_slots.discard(slot_id)
                     continue
 
-                # Attempts exhausted for this (beam, slot) - need proper backtracking
-                logger.debug("  Max attempts reached for this slot, attempting backtracking...")
+                # Attempts exhausted for this (beam, slot) - check partial fill mode
+                logger.debug("  Max attempts reached for this slot")
+
+                # In partial fill mode, stop when stuck if we have a reasonable fill
+                if self.partial_fill_mode:
+                    filled_ratio = len(filled_slots) / total_slots if total_slots > 0 else 0
+                    if filled_ratio >= 0.8:  # 80% filled is a good partial solution
+                        logger.debug(f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled")
+                        break
+                    elif filled_ratio >= 0.5:
+                        # Try gentler backtracking (only 1 level deep)
+                        logger.debug(f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled")
+                        backtracked_beam = self._backtrack_beam_states(beam, depth=1)
+                        if not backtracked_beam:
+                            logger.debug("  Gentle backtracking failed, stopping here")
+                            break
+                        beam = backtracked_beam
+                        # Update filled_slots to match beam state
+                        beam_filled_slots = set(beam[0].slot_assignments.keys())
+                        removed_slots = filled_slots - beam_filled_slots
+                        for removed_slot in removed_slots:
+                            filled_slots.discard(removed_slot)
+                        filled_slots.discard(slot_id)
+                        continue
+
+                # Standard mode: aggressive backtracking
+                logger.debug("  Standard mode: attempting aggressive backtracking...")
 
                 # If no filled slots to backtrack from, we're stuck
                 if len(filled_slots) == 0:
@@ -1011,9 +1077,9 @@ class BeamSearchOrchestrator:
             for slot in all_slots:
                 slot_id = (slot['row'], slot['col'], slot['direction'])
                 if slot_id not in best_state.slot_assignments:
-                    # Clear gibberish from unfilled slots
+                    # Clear gibberish from unfilled slots (stricter in partial fill mode)
                     pattern = best_state.grid.get_pattern_for_slot(slot)
-                    if self.state_evaluator.is_gibberish_pattern(pattern):
+                    if self.state_evaluator.is_gibberish_pattern(pattern, strict=self.partial_fill_mode):
                         best_state.grid.remove_word(
                             slot['row'], slot['col'], slot['length'], slot['direction']
                         )

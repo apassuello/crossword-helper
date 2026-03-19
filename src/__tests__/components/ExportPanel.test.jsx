@@ -1,6 +1,6 @@
 /**
  * Tests for ExportPanel - grid export functionality
- * Tests format selection (JSON, HTML, Text), preview, download
+ * Tests format selection (JSON, HTML, Text), preview, export button
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -9,10 +9,16 @@ import userEvent from '@testing-library/user-event';
 import ExportPanel from '../../components/ExportPanel';
 import { completedGrid } from '../fixtures/gridFixtures';
 
+// Mock ProgressIndicator
+vi.mock('../../components/ProgressIndicator', () => ({
+  default: ({ message }) => <div data-testid="progress-indicator">{message}</div>,
+}));
+
 describe('ExportPanel Component', () => {
   const defaultProps = {
     grid: completedGrid,
-    size: 11,
+    gridSize: 11,
+    numbering: {},
   };
 
   beforeEach(() => {
@@ -42,43 +48,60 @@ describe('ExportPanel Component', () => {
     expect(formatSelect).toHaveTextContent(/Text/i);
   });
 
-  it('generates preview when format selected', async () => {
+  it('generates preview when Preview button is clicked', async () => {
     const user = userEvent.setup();
     render(<ExportPanel {...defaultProps} />);
 
-    const formatSelect = screen.getByLabelText(/export format/i);
-    await user.selectOptions(formatSelect, 'json');
+    // Click the Preview button
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    await user.click(previewButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/preview/i)).toBeInTheDocument();
+      // A <pre> with preview content should appear
+      const previewContent = document.querySelector('.preview-content');
+      expect(previewContent).toBeTruthy();
+      expect(previewContent.textContent.length).toBeGreaterThan(0);
     });
   });
 
-  it('enables download button after preview generation', async () => {
-    const user = userEvent.setup();
+  it('has an enabled Export button', () => {
     render(<ExportPanel {...defaultProps} />);
-
-    const formatSelect = screen.getByLabelText(/export format/i);
-    await user.selectOptions(formatSelect, 'json');
-
-    await waitFor(() => {
-      const downloadButton = screen.getByRole('button', { name: /download/i });
-      expect(downloadButton).toBeEnabled();
-    });
+    const exportButton = screen.getByRole('button', { name: /^export$/i });
+    expect(exportButton).toBeEnabled();
   });
 
-  it('triggers download on button click', async () => {
+  it('triggers export on Export button click', async () => {
     const user = userEvent.setup();
+
+    // Mock URL.createObjectURL and URL.revokeObjectURL (not available in jsdom)
+    const mockUrl = 'blob:http://localhost/fake-blob-url';
+    global.URL.createObjectURL = vi.fn(() => mockUrl);
+    global.URL.revokeObjectURL = vi.fn();
+
+    // Spy on link click — use the native prototype method to avoid recursion
+    const clickSpy = vi.fn();
+    const realCreateElement = Document.prototype.createElement.bind(document);
     const createElementSpy = vi.spyOn(document, 'createElement');
+    createElementSpy.mockImplementation((tag, options) => {
+      const el = realCreateElement(tag, options);
+      if (tag === 'a') {
+        el.click = clickSpy;
+      }
+      return el;
+    });
 
     render(<ExportPanel {...defaultProps} />);
 
-    const formatSelect = screen.getByLabelText(/export format/i);
-    await user.selectOptions(formatSelect, 'json');
+    const exportButton = screen.getByRole('button', { name: /^export$/i });
+    await user.click(exportButton);
 
-    const downloadButton = screen.getByRole('button', { name: /download/i });
-    await user.click(downloadButton);
+    // The component uses setTimeout(500ms) before downloading
+    await waitFor(() => {
+      expect(clickSpy).toHaveBeenCalled();
+    }, { timeout: 2000 });
 
-    expect(createElementSpy).toHaveBeenCalledWith('a');
+    createElementSpy.mockRestore();
+    delete global.URL.createObjectURL;
+    delete global.URL.revokeObjectURL;
   });
 });

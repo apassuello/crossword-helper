@@ -9,8 +9,8 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { gridToCliFormat } from './gridFixtures';
 
-// Base API URL
-const API_BASE = 'http://localhost:5000/api';
+// Base API URL — relative paths to match jsdom URL resolution
+const API_BASE = '/api';
 
 /**
  * Mock API handlers

@@ -106,6 +106,10 @@ def cancel_autofill(task_id: str):
         # The CLI will save state and exit. Frontend marks this as "cancelled"
         pause_controller.request_pause()
 
+        # Also terminate the subprocess directly as a fallback
+        from .progress_routes import cleanup_process
+        cleanup_process(task_id)
+
         logger.info(f"Cancel requested for task: {task_id}")
 
         return jsonify({

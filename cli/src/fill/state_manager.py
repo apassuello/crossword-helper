@@ -632,7 +632,7 @@ class StateManager:
         Returns:
             BeamState instance
         """
-        from cli.src.fill.beam_search.state import BeamState
+        from .beam_search.state import BeamState
 
         # Restore grid
         grid = Grid.from_dict(beam_state_dict['grid_dict'])

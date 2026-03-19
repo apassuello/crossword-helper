@@ -73,10 +73,18 @@ function GridEditor({
     } else if (e.key === 'ArrowRight' && col < gridSize - 1) {
       setFocusedCell({ row, col: col + 1 });
     } else if (e.key === ' ' || e.key === '.') {
-      // Toggle black square
+      // Toggle black square - but not on theme-locked cells
+      if (grid[row][col].isThemeLocked) {
+        e.preventDefault();
+        return; // Cannot toggle black on locked cells
+      }
       onToggleBlack(row, col);
     } else if (e.key === 'Backspace' || e.key === 'Delete') {
-      // Clear cell
+      // Clear cell - but not theme-locked cells
+      if (grid[row][col].isThemeLocked) {
+        e.preventDefault();
+        return; // Cannot clear locked cells
+      }
       onSetLetter(row, col, '');
       // Move to previous cell if backspace
       if (e.key === 'Backspace') {
@@ -87,7 +95,11 @@ function GridEditor({
         }
       }
     } else if (/^[A-Za-z]$/.test(e.key)) {
-      // Set letter and advance
+      // Set letter and advance - but not on theme-locked cells
+      if (grid[row][col].isThemeLocked) {
+        e.preventDefault();
+        return; // Cannot edit locked cells
+      }
       onSetLetter(row, col, e.key);
       // Auto-advance to next cell
       if (col < gridSize - 1) {

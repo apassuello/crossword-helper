@@ -131,7 +131,7 @@ def validate(grid_file: str):
     "--algorithm",
     "-a",
     type=click.Choice(["regex", "trie", "beam", "repair", "hybrid"]),
-    default="hybrid",
+    default="repair",
     help="Fill algorithm (regex/trie=classic CSP, beam=beam search, repair=iterative repair, hybrid=beam+repair)",
 )
 @click.option(
@@ -186,6 +186,12 @@ def validate(grid_file: str):
     default=3,
     help="Maximum number of adaptive black square placements (default: 3)",
 )
+@click.option(
+    "--partial-fill",
+    is_flag=True,
+    default=False,
+    help="Enable partial fill mode: stops when stuck instead of aggressive backtracking, keeping ≥80% valid words",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -201,6 +207,7 @@ def fill(
     theme_wordlist: Optional[str],
     adaptive: bool,
     max_adaptations: int,
+    partial_fill: bool,
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -255,18 +262,32 @@ def fill(
         if not json_output:
             click.echo(f"Loading theme entries from {theme_entries}...")
 
-        with open(theme_entries, "r") as f:
-            theme_data = json.load(f)
+        try:
+            with open(theme_entries, "r") as f:
+                theme_data = json.load(f)
+        except json.JSONDecodeError as e:
+            if json_output:
+                click.echo(json.dumps({"success": False, "error": f"Invalid theme entries JSON: {e}"}))
+            else:
+                click.echo(f"Error: Invalid JSON in theme entries file: {e}", err=True)
+            return
 
         # Convert JSON format {"(row,col,direction)": "WORD"} to Python format {(row, col, direction): "WORD"}
         theme_entries_dict = {}
         for key_str, word in theme_data.items():
-            # Parse key like "(0,1,across)" or "(0, 1, across)"
-            key_str = key_str.strip("()")
-            parts = [p.strip().strip("'\"") for p in key_str.split(",")]
-            if len(parts) == 3:
+            try:
+                # Parse key like "(0,1,across)" or "(0, 1, across)"
+                clean_key = key_str.strip("()")
+                parts = [p.strip().strip("'\"") for p in clean_key.split(",")]
+                if len(parts) != 3:
+                    if not json_output:
+                        click.echo(f"Warning: Skipping malformed theme entry key: {key_str}", err=True)
+                    continue
                 row, col, direction = int(parts[0]), int(parts[1]), parts[2]
                 theme_entries_dict[(row, col, direction)] = word.upper()
+            except (ValueError, IndexError) as e:
+                if not json_output:
+                    click.echo(f"Warning: Skipping invalid theme entry '{key_str}': {e}", err=True)
 
         if not json_output:
             click.echo(f"  Loaded {len(theme_entries_dict)} theme entries")
@@ -302,7 +323,8 @@ def fill(
         autofill = BeamSearchAutofill(
             grid, word_list, pattern_matcher,
             beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words
+            theme_entries=theme_entries_dict, theme_words=theme_words,
+            partial_fill_mode=partial_fill
         )
     elif algorithm == 'repair':
         autofill = IterativeRepair(
@@ -354,7 +376,20 @@ def fill(
     # Get empty slots
     empty_slots = grid.get_empty_slots()
     if not empty_slots:
-        if not json_output:
+        if json_output:
+            all_slots = grid.get_word_slots()
+            click.echo(json.dumps({
+                "success": True,
+                "grid": grid.to_dict()["grid"],
+                "slots_filled": len(all_slots),
+                "total_slots": len(all_slots),
+                "fill_percentage": 100,
+                "time_elapsed": 0.0,
+                "iterations": 0,
+                "problematic_slots_count": 0,
+                "message": "Grid was already completely filled"
+            }))
+        else:
             click.echo(click.style("\n✓ Grid is already completely filled!", fg="green"))
         return
 
