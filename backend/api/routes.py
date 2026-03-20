@@ -730,3 +730,142 @@ def verify_words():
     except Exception as e:
         logger.error(f"Error verifying words: {e}")
         return handle_error("INTERNAL_ERROR", str(e), 500)
+
+
+@api.route("/grid/clean", methods=["POST"])
+def clean_grid():
+    """POST /api/grid/clean - Remove invalid words, keep valid ones intact.
+
+    For each filled word slot:
+    - If the word is valid (exists in any wordlist): keep all letters
+    - If invalid: clear letters UNLESS they belong to a valid crossing word
+
+    Returns the cleaned grid with only valid words preserved.
+    """
+    try:
+        data = request.get_json()
+        if not data or "grid" not in data:
+            return handle_error("INVALID_REQUEST", "Missing 'grid' field", 400)
+
+        grid_data = data["grid"]
+        size = data.get("size", len(grid_data))
+
+        # Load all wordlists
+        words_set = set()
+        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
+        for wp in wordlist_dir.rglob("*.txt"):
+            if "archive" in wp.parts:
+                continue
+            try:
+                with open(wp, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        w = line.split(";")[0].strip().upper()
+                        if w and w.isalpha() and 3 <= len(w) <= 21:
+                            words_set.add(w)
+            except Exception:
+                pass
+
+        def get_letter(r, c):
+            """Extract letter from cell at (r,c). Returns None for black, '' for empty."""
+            cell = grid_data[r][c]
+            if isinstance(cell, dict):
+                if cell.get("isBlack"):
+                    return None  # black square
+                return (cell.get("letter") or "").strip().upper() or ""
+            if cell == "#":
+                return None
+            if not cell or cell == ".":
+                return ""
+            return cell.upper()
+
+        def set_letter(r, c, letter):
+            """Set letter in grid cell, preserving format."""
+            if isinstance(grid_data[r][c], dict):
+                grid_data[r][c] = {**grid_data[r][c], "letter": letter}
+            else:
+                grid_data[r][c] = letter if letter else "."
+
+        # Step 1: Extract all slots and their words
+        slots = []  # [(cells_list, direction, word)]
+
+        # Across slots
+        for r in range(size):
+            c = 0
+            while c < size:
+                if get_letter(r, c) is None:
+                    c += 1
+                    continue
+                slot_cells = []
+                while c < size and get_letter(r, c) is not None:
+                    slot_cells.append((r, c))
+                    c += 1
+                if len(slot_cells) >= 3:
+                    word = "".join(get_letter(r2, c2) for r2, c2 in slot_cells)
+                    slots.append((slot_cells, "across", word))
+
+        # Down slots
+        for c in range(size):
+            r = 0
+            while r < size:
+                if get_letter(r, c) is None:
+                    r += 1
+                    continue
+                slot_cells = []
+                while r < size and get_letter(r, c) is not None:
+                    slot_cells.append((r, c))
+                    r += 1
+                if len(slot_cells) >= 3:
+                    word = "".join(get_letter(r2, c2) for r2, c2 in slot_cells)
+                    slots.append((slot_cells, "down", word))
+
+        # Step 2: Classify each slot
+        valid_slots = set()    # indices into slots[]
+        invalid_slots = set()
+
+        for i, (cells, direction, word) in enumerate(slots):
+            # Skip slots that aren't fully filled with letters
+            if len(word) != len(cells) or not word.isalpha():
+                continue
+            if word in words_set:
+                valid_slots.add(i)
+            else:
+                invalid_slots.add(i)
+
+        if not invalid_slots:
+            return jsonify({
+                "grid": grid_data,
+                "removed_count": 0,
+                "valid_count": len(valid_slots),
+                "message": "All words are valid, nothing to clean"
+            }), 200
+
+        # Step 3: Build set of cells protected by valid words
+        protected_cells = set()
+        for i in valid_slots:
+            cells, _, _ = slots[i]
+            for r, c in cells:
+                protected_cells.add((r, c))
+
+        # Step 4: Clear letters in invalid words (except protected cells)
+        cleared_cells = 0
+        for i in invalid_slots:
+            cells, _, word = slots[i]
+            for r, c in cells:
+                if (r, c) not in protected_cells:
+                    set_letter(r, c, "")
+                    cleared_cells += 1
+
+        return jsonify({
+            "grid": grid_data,
+            "removed_count": len(invalid_slots),
+            "valid_count": len(valid_slots),
+            "cleared_cells": cleared_cells,
+            "message": f"Removed {len(invalid_slots)} invalid words ({cleared_cells} cells cleared), kept {len(valid_slots)} valid words"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error cleaning grid: {e}")
+        return handle_error("INTERNAL_ERROR", str(e), 500)

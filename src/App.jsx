@@ -439,6 +439,51 @@ function App() {
     }
   }, [grid, gridSize]);
 
+  const handleCleanGrid = useCallback(async () => {
+    if (!grid) return;
+
+    try {
+      const response = await axios.post('/api/grid/clean', {
+        size: gridSize,
+        grid: grid.map(row => row.map(cell => ({
+          letter: cell.letter || '',
+          isBlack: cell.isBlack || false
+        })))
+      });
+
+      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = response.data;
+
+      if (removed_count === 0) {
+        toast.success('Grid is clean — all words are valid!');
+        return;
+      }
+
+      // Update grid with cleaned result
+      const newGrid = grid.map((row, r) =>
+        row.map((cell, c) => {
+          const cleanedCell = cleanedGrid[r][c];
+          const letter = typeof cleanedCell === 'object'
+            ? (cleanedCell.letter || '')
+            : (cleanedCell === '#' ? '' : (cleanedCell === '.' ? '' : cleanedCell));
+          const isBlack = typeof cleanedCell === 'object'
+            ? cleanedCell.isBlack
+            : cleanedCell === '#';
+          return {
+            ...cell,
+            letter: isBlack ? '' : letter,
+            isBlack,
+            isError: false
+          };
+        })
+      );
+      setGrid(newGrid);
+      toast.success(message, { duration: 5000 });
+    } catch (error) {
+      console.error('Clean grid failed:', error);
+      toast.error('Failed to clean grid: ' + (error.response?.data?.message || error.message));
+    }
+  }, [grid, gridSize]);
+
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     // Update grid with the applied theme word
     setGrid(updatedGrid);
@@ -560,6 +605,9 @@ function App() {
       <div className="grid-toolbar">
         <button className="verify-btn" onClick={handleVerifyWords}>
           Verify Words
+        </button>
+        <button className="clean-btn" onClick={handleCleanGrid}>
+          Clean Grid
         </button>
         <button className="save-btn" onClick={handleSaveGrid}>
           Save Grid
