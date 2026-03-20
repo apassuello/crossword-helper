@@ -1390,7 +1390,9 @@ class IterativeRepair:
                 else:
                     pos = (slot['row'] + i, slot['col'])
                 saved_cells[pos] = self.grid.cells[pos]
-                self.grid.cells[pos] = ord(word[i]) - ord('A') + 1
+                ch = word[i]
+                if 'A' <= ch <= 'Z':
+                    self.grid.cells[pos] = ord(ch) - ord('A') + 1
 
             # Check crossing slots
             for other_slot in all_slots:
@@ -1472,7 +1474,12 @@ class IterativeRepair:
                 pos = (slot['row'] + i, slot['col'])
 
             original_cells[pos] = self.grid.cells[pos]
-            self.grid.cells[pos] = ord(word[i]) - ord('A') + 1
+            ch = word[i]
+            if 'A' <= ch <= 'Z':
+                self.grid.cells[pos] = ord(ch) - ord('A') + 1
+            else:
+                # Non-ASCII character (accented, etc.) — skip placement
+                pass
 
         # Check all perpendicular slots for gibberish
         creates_gibberish = False

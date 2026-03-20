@@ -92,8 +92,12 @@ class Grid:
         if len(letter) != 1 or not letter.isalpha():
             raise ValueError(f"Letter must be single character A-Z, got '{letter}'")
 
+        upper = letter.upper()
+        if not ('A' <= upper <= 'Z'):
+            raise ValueError(f"Letter must be A-Z, got '{letter}' (non-ASCII)")
+
         # Encode: A=1, B=2, ..., Z=26
-        self.cells[row, col] = ord(letter.upper()) - ord('A') + 1
+        self.cells[row, col] = ord(upper) - ord('A') + 1
 
         # Lock cell if requested (theme words)
         if lock:
