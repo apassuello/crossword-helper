@@ -528,6 +528,10 @@ def fill_with_progress():
         if data.get("partial_fill", False):
             cmd_args.append("--partial-fill")
 
+        # Add cleanup flag (remove invalid words, keep valid crossing letters)
+        if data.get("cleanup", False):
+            cmd_args.append("--cleanup")
+
         # Start background task
         temp_files = [grid_file]
         if theme_entries_file:

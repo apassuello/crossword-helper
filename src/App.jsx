@@ -220,7 +220,8 @@ function App() {
         theme_entries: options.theme_entries || {},
         adaptive_mode: options.adaptiveMode || false,
         max_adaptations: options.maxAdaptations || 3,
-        partial_fill: options.partialFill || false
+        partial_fill: options.partialFill || false,
+        cleanup: options.cleanup || false
       });
 
       const { task_id } = initResponse.data;

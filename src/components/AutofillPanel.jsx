@@ -15,7 +15,8 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
     algorithm: 'repair',  // 'repair' (fast, reliable), 'trie', or 'beam' (slow, buggy)
     adaptiveMode: false,  // Auto black square placement when stuck
     maxAdaptations: 3,  // Max number of adaptive black squares
-    partialFill: false  // Enable collaborative partial fill mode
+    partialFill: false,  // Enable collaborative partial fill mode
+    cleanup: false  // Remove invalid words after fill, keep valid crossing letters
   });
 
   // Available wordlists (loaded from API)
@@ -569,6 +570,14 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
               onChange={(e) => handleOptionChange('partialFill', e.target.checked)}
             />
             Partial fill
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={options.cleanup}
+              onChange={(e) => handleOptionChange('cleanup', e.target.checked)}
+            />
+            Cleanup invalid words
           </label>
         </div>
 

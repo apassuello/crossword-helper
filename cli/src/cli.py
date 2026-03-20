@@ -192,6 +192,12 @@ def validate(grid_file: str):
     default=False,
     help="Enable partial fill mode: stops when stuck instead of aggressive backtracking, keeping ≥80% valid words",
 )
+@click.option(
+    "--cleanup",
+    is_flag=True,
+    default=False,
+    help="After autofill, remove invalid words while keeping letters shared with valid crossing words",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -208,6 +214,7 @@ def fill(
     adaptive: bool,
     max_adaptations: int,
     partial_fill: bool,
+    cleanup: bool,
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -474,6 +481,24 @@ def fill(
                     if result.total_slots > 0:
                         progress_pct = int((result.slots_filled / result.total_slots) * 100)
                         bar.update(progress_pct)
+
+    # Cleanup pass: remove invalid words, keep letters shared with valid crossings
+    if cleanup and algorithm in ['repair', 'hybrid']:
+        if not json_output:
+            click.echo("\nRunning cleanup pass...")
+        progress.update(95, 'Running cleanup pass: removing invalid words')
+
+        cleanup_engine = IterativeRepair(
+            result.grid, word_list, pattern_matcher,
+            min_score=min_score, progress_reporter=progress,
+            theme_entries=theme_entries_dict, theme_words=theme_words,
+            all_valid_words=all_valid_words
+        )
+        cleanup_result = cleanup_engine.cleanup_grid()
+        if not json_output:
+            removed = result.slots_filled - cleanup_result.slots_filled
+            click.echo(f"  Removed {removed} invalid words, {cleanup_result.slots_filled}/{cleanup_result.total_slots} valid words remain")
+        result = cleanup_result
 
     # Send completion status for API integration with diagnostic info
     if result.success:

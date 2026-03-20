@@ -1775,3 +1775,145 @@ class IterativeRepair:
             return (-slot['length'], domain_size, empty_count)
 
         return sorted(slots, key=constraint_key)
+
+    def cleanup_grid(self) -> 'FillResult':
+        """
+        Remove invalid words from the grid while preserving letters that
+        belong to valid crossing words.
+
+        For each filled slot:
+        1. Check if the word is valid (exists in any wordlist)
+        2. If invalid, check each letter position:
+           - If the crossing word at that position IS valid, keep the letter
+           - Otherwise, clear it to empty
+        3. Return a clean grid with only valid words + partial fills
+
+        This is meant to be called AFTER fill() completes (or partially completes).
+        """
+        from .autofill import FillResult
+
+        all_slots = self.grid.get_word_slots()
+        total_slots = len(all_slots)
+
+        # Build intersection cache if not already built
+        if not hasattr(self, '_intersection_cache') or not self._intersection_cache:
+            self._intersection_cache = {}
+            for i, s1 in enumerate(all_slots):
+                s1_id = (s1['row'], s1['col'], s1['direction'])
+                for j in range(i + 1, len(all_slots)):
+                    s2 = all_slots[j]
+                    s2_id = (s2['row'], s2['col'], s2['direction'])
+                    inter = self._get_intersection(s1, s2)
+                    if inter is not None:
+                        self._intersection_cache[(s1_id, s2_id)] = inter
+                        self._intersection_cache[(s2_id, s1_id)] = (inter[1], inter[0])
+
+        # Step 1: Identify valid and invalid words
+        valid_slots = set()   # slot_ids with valid words
+        invalid_slots = set() # slot_ids with invalid words
+
+        for slot in all_slots:
+            pattern = self.grid.get_pattern_for_slot(slot)
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            if '?' in pattern:
+                continue  # Not fully filled, skip
+            if self._is_valid_word(pattern):
+                valid_slots.add(slot_id)
+            else:
+                invalid_slots.add(slot_id)
+
+        if not invalid_slots:
+            # Nothing to clean up
+            if self.progress_reporter:
+                self.progress_reporter.update(100, "Cleanup: all words valid")
+            return self._build_cleanup_result(all_slots, total_slots, 0)
+
+        if self.progress_reporter:
+            self.progress_reporter.update(
+                90, f"Cleanup: removing {len(invalid_slots)} invalid words"
+            )
+
+        # Step 2: For each invalid slot, clear letters NOT shared with valid crossings
+        removed_count = 0
+        for slot_id in invalid_slots:
+            slot = self._get_slot_by_id(slot_id, all_slots)
+            if not slot:
+                continue
+
+            removed_count += 1
+            for i in range(slot['length']):
+                if slot['direction'] == 'across':
+                    pos = (slot['row'], slot['col'] + i)
+                else:
+                    pos = (slot['row'] + i, slot['col'])
+
+                # Don't clear locked cells (theme words)
+                if pos in self.grid.locked_cells:
+                    continue
+
+                # Check if this letter is part of a valid crossing word
+                keep_letter = False
+                for other_slot in all_slots:
+                    if other_slot['direction'] == slot['direction']:
+                        continue
+                    other_id = (other_slot['row'], other_slot['col'], other_slot['direction'])
+                    if other_id not in valid_slots:
+                        continue
+                    # Check if this position is in the crossing slot
+                    for j in range(other_slot['length']):
+                        if other_slot['direction'] == 'across':
+                            other_pos = (other_slot['row'], other_slot['col'] + j)
+                        else:
+                            other_pos = (other_slot['row'] + j, other_slot['col'])
+                        if other_pos == pos:
+                            keep_letter = True
+                            break
+                    if keep_letter:
+                        break
+
+                if not keep_letter:
+                    self.grid.cells[pos] = 0  # Clear to empty
+
+        if self.progress_reporter:
+            self._emit_grid_snapshot(
+                100,
+                f"Cleanup done: removed {removed_count} invalid words, "
+                f"kept {len(valid_slots)} valid words",
+                force=True
+            )
+
+        return self._build_cleanup_result(all_slots, total_slots, removed_count)
+
+    def _build_cleanup_result(
+        self, all_slots: List[Dict], total_slots: int, removed_count: int
+    ) -> 'FillResult':
+        """Build FillResult after cleanup pass."""
+        from .autofill import FillResult
+
+        filled_slots = sum(
+            1 for slot in all_slots
+            if '?' not in self.grid.get_pattern_for_slot(slot)
+        )
+
+        # After cleanup, remaining filled words should all be valid
+        problematic_slots = []
+        for slot in all_slots:
+            pattern = self.grid.get_pattern_for_slot(slot)
+            slot_id = (slot['row'], slot['col'], slot['direction'])
+            if '?' in pattern and pattern != '?' * len(pattern):
+                # Partially filled (leftover from cleanup)
+                problematic_slots.append({
+                    'slot': slot_id, 'pattern': pattern, 'reason': 'partial'
+                })
+
+        success = filled_slots == total_slots and len(problematic_slots) == 0
+
+        return FillResult(
+            success=success,
+            grid=self.grid,
+            time_elapsed=0.0,
+            slots_filled=filled_slots,
+            total_slots=total_slots,
+            problematic_slots=problematic_slots,
+            iterations=0
+        )
