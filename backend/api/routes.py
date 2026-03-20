@@ -355,8 +355,12 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             for i, line in enumerate(stderr.split('\n')[:200]):
                 logger.error(f"  {i+1}: {line}")
 
-            # Send user-friendly error message
-            error_preview = stderr[:500] if stderr else stdout[:500] if stdout else "Unknown error"
+            # Send user-friendly error message — combine all stderr sources
+            all_stderr = "\n".join(stderr_lines) + "\n" + stderr if stderr else "\n".join(stderr_lines)
+            all_stderr = all_stderr.strip()
+            # Filter out progress JSON lines to find actual errors
+            error_lines = [l for l in all_stderr.split('\n') if l and not l.startswith('{')]
+            error_preview = "\n".join(error_lines[-10:]) if error_lines else (stdout[:500] if stdout else "Unknown error")
             send_progress(task_id, 0, f'CLI Error (code {process.returncode}): {error_preview}', 'error')
 
     except subprocess.TimeoutExpired:

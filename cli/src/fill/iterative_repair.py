@@ -218,9 +218,18 @@ class IterativeRepair:
             if elapsed > timeout * 0.95:
                 break
 
-            # Restore original grid
-            self.grid.cells[:] = original_grid
-            self.grid.locked_cells = set(original_locked)
+            # On restart: if we have a good result (>80% filled), don't wipe —
+            # continue from best grid to preserve user-visible progress
+            if restart == 0:
+                pass  # First attempt: use grid as-is
+            elif best_result and best_result.slots_filled > total_slots * 0.8:
+                # Good progress — restart from best, don't wipe
+                self.grid.cells[:] = best_grid
+                self.grid.locked_cells = set(original_locked)
+            else:
+                # Poor progress — restart from scratch
+                self.grid.cells[:] = original_grid
+                self.grid.locked_cells = set(original_locked)
 
             if self.progress_reporter:
                 if restart == 0:

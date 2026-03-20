@@ -2,8 +2,12 @@
 """
 Crossword Builder CLI entry point.
 """
+import sys
+import traceback
 
-from src.cli import cli
-
-if __name__ == '__main__':
+try:
+    from src.cli import cli
     cli()
+except Exception as e:
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
