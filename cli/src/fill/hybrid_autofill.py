@@ -28,8 +28,8 @@ class HybridAutofill:
     Hybrid solver combining beam search and iterative repair.
 
     Strategy:
-    1. Phase 1 (70% of time): Beam search for global exploration
-    2. Phase 2 (30% of time): Repair for local optimization
+    1. Phase 1 (20% of time, max 60s): Beam search for global exploration
+    2. Phase 2 (80% of time): Repair for local optimization
     3. Return best result from either phase
     """
 
@@ -89,8 +89,8 @@ class HybridAutofill:
 
         Args:
             timeout: Total time budget in seconds
-            beam_timeout_ratio: Fraction of time for beam search (default: 0.7)
-            repair_timeout_ratio: Fraction of time for repair (default: 0.3)
+            beam_timeout_ratio: Fraction of time for beam search (default: 0.2, capped at 60s)
+            repair_timeout_ratio: Fraction of time for repair (default: 0.8)
 
         Returns:
             FillResult with best solution found

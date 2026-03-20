@@ -215,8 +215,8 @@ function App() {
         )),
         wordlists: options.wordlists || ['comprehensive'],
         timeout: options.timeout || 300,
-        min_score: options.minScore || 30,
-        algorithm: options.algorithm || 'regex',
+        min_score: options.minScore ?? 50,
+        algorithm: options.algorithm || 'repair',
         theme_entries: options.theme_entries || {},
         adaptive_mode: options.adaptiveMode || false,
         max_adaptations: options.maxAdaptations || 3,
@@ -248,10 +248,11 @@ function App() {
                 const cliCell = data.data.grid[r][c];
                 if (cliCell === '#') {
                   return { ...cell, isBlack: true };
-                } else if (cliCell !== '#' && cliCell !== '.' && cliCell !== '') {
+                } else if (cliCell === '.' || cliCell === '') {
+                  return { ...cell, letter: '' };
+                } else {
                   return { ...cell, letter: cliCell };
                 }
-                return { ...cell };
               })
             ));
           }
@@ -270,10 +271,11 @@ function App() {
                   const cliCell = data.data.grid[r][c];
                   if (cliCell === '#') {
                     return { ...cell, isBlack: true };
-                  } else if (cliCell !== '#' && cliCell !== '.' && cliCell !== '') {
+                  } else if (cliCell === '.' || cliCell === '') {
+                    return { ...cell, letter: '' };
+                  } else {
                     return { ...cell, letter: cliCell };
                   }
-                  return { ...cell };
                 })
               ));
 
