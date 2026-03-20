@@ -245,6 +245,8 @@ function App() {
             // Create deep copy with new objects (not shallow copy)
             setGrid(prevGrid => prevGrid.map((row, r) =>
               row.map((cell, c) => {
+                // Never overwrite theme-locked cells
+                if (cell.isThemeLocked) return cell;
                 const cliCell = data.data.grid[r][c];
                 if (cliCell === '#') {
                   return { ...cell, isBlack: true };
@@ -268,6 +270,8 @@ function App() {
               // Update grid with filled results (full or partial) - create deep copy with new objects
               setGrid(prevGrid => prevGrid.map((row, r) =>
                 row.map((cell, c) => {
+                  // Never overwrite theme-locked cells
+                  if (cell.isThemeLocked) return cell;
                   const cliCell = data.data.grid[r][c];
                   if (cliCell === '#') {
                     return { ...cell, isBlack: true };

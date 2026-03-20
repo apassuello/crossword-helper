@@ -193,7 +193,12 @@ class IterativeRepair:
         all_slots = self.grid.get_word_slots()
         total_slots = len(all_slots)
 
-        # Save original grid
+        # Place and lock theme entry cells before filling
+        if self.theme_entries:
+            for (row, col, direction), word in self.theme_entries.items():
+                self.grid.place_word(word.upper(), row, col, direction, lock=True)
+
+        # Save original grid (with theme entries locked)
         original_grid = self.grid.cells.copy()
         original_locked = set(self.grid.locked_cells)
 
