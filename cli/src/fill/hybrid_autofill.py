@@ -43,7 +43,8 @@ class HybridAutofill:
         max_repair_iterations: int = 500,
         progress_reporter=None,
         theme_entries=None,
-        theme_words=None
+        theme_words=None,
+        all_valid_words: set = None
     ):
         """
         Initialize hybrid autofill solver.
@@ -58,6 +59,7 @@ class HybridAutofill:
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
+            all_valid_words: Set of ALL valid words across all wordlists (for validation only)
         """
         self.grid = grid
         self.word_list = word_list
@@ -67,21 +69,22 @@ class HybridAutofill:
         self.max_repair_iterations = max_repair_iterations
         self.progress_reporter = progress_reporter
         self.theme_entries = theme_entries
+        self.all_valid_words = all_valid_words or set()
         self.theme_words = theme_words or set()
 
     def fill(
         self,
         timeout: int = 300,
-        beam_timeout_ratio: float = 0.7,
-        repair_timeout_ratio: float = 0.3
+        beam_timeout_ratio: float = 0.2,
+        repair_timeout_ratio: float = 0.8
     ) -> FillResult:
         """
         Fill grid using hybrid approach.
 
         Algorithm:
-        1. Run beam search with 70% of timeout
+        1. Run beam search with 20% of timeout (quick exploration)
         2. If perfect: return immediately
-        3. Run iterative repair on beam result with 30% of timeout
+        3. Run iterative repair on beam result with 80% of timeout
         4. Return best of (beam_result, repair_result)
 
         Args:
@@ -109,9 +112,9 @@ class HybridAutofill:
 
         time.time()
 
-        # Calculate timeouts (ensure minimum 10s for each phase)
-        beam_timeout = max(10, int(timeout * beam_timeout_ratio))
-        repair_timeout = max(10, int(timeout * repair_timeout_ratio))
+        # Calculate timeouts (beam capped at 60s — it's slow on large grids)
+        beam_timeout = min(60, max(10, int(timeout * beam_timeout_ratio)))
+        repair_timeout = max(10, timeout - beam_timeout)
 
         # Phase 1: Beam Search
         if self.progress_reporter:
@@ -155,7 +158,8 @@ class HybridAutofill:
             max_iterations=self.max_repair_iterations,
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
-            theme_words=self.theme_words
+            theme_words=self.theme_words,
+            all_valid_words=self.all_valid_words
         )
 
         repair_result = repair.fill(timeout=repair_timeout)

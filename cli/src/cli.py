@@ -234,8 +234,14 @@ def fill(
         if not json_output:
             click.echo(f"  • {wordlist_file}")
         with open(wordlist_file, "r") as f:
-            words = [line.strip().upper() for line in f if line.strip()]
-            all_words.extend(words)
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                # Support WORD;SCORE format (comprehensive_scored.txt)
+                word = line.split(';')[0].strip().upper()
+                if word:
+                    all_words.append(word)
 
     word_list = WordList(all_words)
 
@@ -318,6 +324,27 @@ def fill(
 
     progress.update(30, f'Loaded {len(word_list)} words, starting autofill')
 
+    # Load ALL available wordlists for validation (not just user-selected ones)
+    # This ensures words from any wordlist are recognized as valid
+    all_valid_words = set()
+    wordlist_dir = Path(__file__).parent.parent.parent / 'data' / 'wordlists'
+    if wordlist_dir.exists():
+        for wl_file in wordlist_dir.rglob('*.txt'):
+            # Skip archive and custom directories
+            if 'archive' in wl_file.parts or 'custom' in wl_file.parts:
+                continue
+            try:
+                with open(wl_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        word = line.split(';')[0].strip().upper()
+                        if word and word.isalpha() and 3 <= len(word) <= 21:
+                            all_valid_words.add(word)
+            except Exception:
+                pass  # Skip unreadable files
+
     # Create appropriate autofill instance based on algorithm
     if algorithm == 'beam':
         autofill = BeamSearchAutofill(
@@ -330,13 +357,15 @@ def fill(
         autofill = IterativeRepair(
             grid, word_list, pattern_matcher,
             min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words
+            theme_entries=theme_entries_dict, theme_words=theme_words,
+            all_valid_words=all_valid_words
         )
     elif algorithm == 'hybrid':
         autofill = HybridAutofill(
             grid, word_list, pattern_matcher,
             beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words
+            theme_entries=theme_entries_dict, theme_words=theme_words,
+            all_valid_words=all_valid_words
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'

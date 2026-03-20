@@ -100,9 +100,10 @@ class WordListManager:
 
         # Walk through directory structure
         for root, dirs, files in os.walk(self.wordlist_dir):
+            # Skip archive and external directories
+            dirs[:] = [d for d in dirs if d not in ('archive', 'external')]
             root_path = Path(root)
 
-            # Skip metadata.json
             txt_files = [f for f in files if f.endswith('.txt')]
 
             for filename in txt_files:

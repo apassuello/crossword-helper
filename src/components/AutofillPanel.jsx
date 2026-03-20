@@ -514,9 +514,9 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
             onChange={(e) => handleOptionChange('algorithm', e.target.value)}
           >
             <option value="repair">Repair (Recommended)</option>
-            <option value="beam">Beam Search (Experimental)</option>
+            <option value="hybrid">Hybrid (Beam + Repair)</option>
+            <option value="beam">Beam Search</option>
             <option value="trie">Trie (Classic CSP)</option>
-            <option value="regex">Regex (Legacy)</option>
           </select>
         </div>
 

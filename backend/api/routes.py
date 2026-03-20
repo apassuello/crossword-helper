@@ -10,7 +10,7 @@ single source of truth architecture.
 
 import re
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from backend.core.cli_adapter import get_adapter
 from backend.core.wordlist_resolver import resolve_wordlist_paths
 from backend.api.validators import (
@@ -571,16 +571,33 @@ def verify_words():
         wordlist_names = data.get("wordlists", ["comprehensive"])
         wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
-        # Load wordlist into a set for fast lookup, and index by length for pattern matching
+        # Load ALL available wordlists for validation (not just selected ones)
         words_set = set()
         words_by_length = {}  # length -> set of words
+        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
+        all_wl_paths = list(wordlist_dir.rglob("*.txt"))
+        # Filter out archive and custom
+        all_wl_paths = [p for p in all_wl_paths if "archive" not in p.parts and "custom" not in p.parts]
+        # Also include the explicitly requested wordlists (in case of custom paths)
         for wp in wordlist_paths:
-            with open(wp, "r") as f:
-                for line in f:
-                    w = line.strip().upper()
-                    if w:
-                        words_set.add(w)
-                        words_by_length.setdefault(len(w), set()).add(w)
+            wp_path = Path(wp)
+            if wp_path not in all_wl_paths:
+                all_wl_paths.append(wp_path)
+
+        for wp in all_wl_paths:
+            try:
+                with open(wp, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        # Support WORD;SCORE format
+                        w = line.split(";")[0].strip().upper()
+                        if w and w.isalpha() and 3 <= len(w) <= 21:
+                            words_set.add(w)
+                            words_by_length.setdefault(len(w), set()).add(w)
+            except Exception:
+                pass
 
         def get_cell(cell):
             """Returns (letter_or_empty, is_black)."""

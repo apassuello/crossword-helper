@@ -1,0 +1,496 @@
+{
+  "across": [
+    {
+      "word": "RATPACK",
+      "row": 0,
+      "col": 0,
+      "length": 7,
+      "number": 1
+    },
+    {
+      "word": "NBAJAM",
+      "row": 0,
+      "col": 9,
+      "length": 6,
+      "number": 8
+    },
+    {
+      "word": "EURASIAN",
+      "row": 1,
+      "col": 0,
+      "length": 8,
+      "number": 14
+    },
+    {
+      "word": "YESIDO",
+      "row": 1,
+      "col": 9,
+      "length": 6,
+      "number": 16
+    },
+    {
+      "word": "ABUDHABI",
+      "row": 2,
+      "col": 0,
+      "length": 8,
+      "number": 17
+    },
+    {
+      "word": "SEWNON",
+      "row": 2,
+      "col": 9,
+      "length": 6,
+      "number": 18
+    },
+    {
+      "word": "PAIR",
+      "row": 3,
+      "col": 0,
+      "length": 4,
+      "number": 19
+    },
+    {
+      "word": "OLGA",
+      "row": 3,
+      "col": 5,
+      "length": 4,
+      "number": 20
+    },
+    {
+      "word": "NAGAT",
+      "row": 3,
+      "col": 10,
+      "length": 5,
+      "number": 22
+    },
+    {
+      "word": "EDSEL",
+      "row": 4,
+      "col": 0,
+      "length": 5,
+      "number": 23
+    },
+    {
+      "word": "OHMS",
+      "row": 4,
+      "col": 6,
+      "length": 4,
+      "number": 25
+    },
+    {
+      "word": "NONA",
+      "row": 4,
+      "col": 11,
+      "length": 4,
+      "number": 27
+    },
+    {
+      "word": "REM",
+      "row": 5,
+      "col": 0,
+      "length": 3,
+      "number": 28
+    },
+    {
+      "word": "EXOTICA",
+      "row": 5,
+      "col": 4,
+      "length": 7,
+      "number": 29
+    },
+    {
+      "word": "INN",
+      "row": 5,
+      "col": 12,
+      "length": 3,
+      "number": 32
+    },
+    {
+      "word": "HAREM",
+      "row": 6,
+      "col": 3,
+      "length": 5,
+      "number": 33
+    },
+    {
+      "word": "RUSSIA",
+      "row": 6,
+      "col": 9,
+      "length": 6,
+      "number": 34
+    },
+    {
+      "word": "ONEDAYATATIME",
+      "row": 7,
+      "col": 1,
+      "length": 13,
+      "number": 36
+    },
+    {
+      "word": "GROMIT",
+      "row": 8,
+      "col": 0,
+      "length": 6,
+      "number": 39
+    },
+    {
+      "word": "RAPID",
+      "row": 8,
+      "col": 7,
+      "length": 5,
+      "number": 40
+    },
+    {
+      "word": "ADS",
+      "row": 9,
+      "col": 0,
+      "length": 3,
+      "number": 41
+    },
+    {
+      "word": "NEMESES",
+      "row": 9,
+      "col": 4,
+      "length": 7,
+      "number": 42
+    },
+    {
+      "word": "PAC",
+      "row": 9,
+      "col": 12,
+      "length": 3,
+      "number": 44
+    },
+    {
+      "word": "NELL",
+      "row": 10,
+      "col": 0,
+      "length": 4,
+      "number": 47
+    },
+    {
+      "word": "DAFT",
+      "row": 10,
+      "col": 5,
+      "length": 4,
+      "number": 49
+    },
+    {
+      "word": "MARSH",
+      "row": 10,
+      "col": 10,
+      "length": 5,
+      "number": 50
+    },
+    {
+      "word": "GROAN",
+      "row": 11,
+      "col": 0,
+      "length": 5,
+      "number": 52
+    },
+    {
+      "word": "SUEZ",
+      "row": 11,
+      "col": 6,
+      "length": 4,
+      "number": 54
+    },
+    {
+      "word": "ROSA",
+      "row": 11,
+      "col": 11,
+      "length": 4,
+      "number": 56
+    },
+    {
+      "word": "SOUPED",
+      "row": 12,
+      "col": 0,
+      "length": 6,
+      "number": 57
+    },
+    {
+      "word": "EBENEZER",
+      "row": 12,
+      "col": 7,
+      "length": 8,
+      "number": 59
+    },
+    {
+      "word": "TUCSON",
+      "row": 13,
+      "col": 0,
+      "length": 6,
+      "number": 61
+    },
+    {
+      "word": "LUKEWARM",
+      "row": 13,
+      "col": 7,
+      "length": 8,
+      "number": 62
+    },
+    {
+      "word": "ATHENA",
+      "row": 14,
+      "col": 0,
+      "length": 6,
+      "number": 63
+    },
+    {
+      "word": "DETECTS",
+      "row": 14,
+      "col": 8,
+      "length": 7,
+      "number": 64
+    }
+  ],
+  "down": [
+    {
+      "word": "REAPER",
+      "row": 0,
+      "col": 0,
+      "length": 6,
+      "number": 1
+    },
+    {
+      "word": "GANGSTA",
+      "row": 8,
+      "col": 0,
+      "length": 7,
+      "number": 39
+    },
+    {
+      "word": "AUBADE",
+      "row": 0,
+      "col": 1,
+      "length": 6,
+      "number": 2
+    },
+    {
+      "word": "ORDEROUT",
+      "row": 7,
+      "col": 1,
+      "length": 8,
+      "number": 36
+    },
+    {
+      "word": "TRUISM",
+      "row": 0,
+      "col": 2,
+      "length": 6,
+      "number": 3
+    },
+    {
+      "word": "NOSLOUCH",
+      "row": 7,
+      "col": 2,
+      "length": 8,
+      "number": 37
+    },
+    {
+      "word": "PADRE",
+      "row": 0,
+      "col": 3,
+      "length": 5,
+      "number": 4
+    },
+    {
+      "word": "HEM",
+      "row": 6,
+      "col": 3,
+      "length": 3,
+      "number": 33
+    },
+    {
+      "word": "LAPSE",
+      "row": 10,
+      "col": 3,
+      "length": 5,
+      "number": 48
+    },
+    {
+      "word": "ASH",
+      "row": 0,
+      "col": 4,
+      "length": 3,
+      "number": 5
+    },
+    {
+      "word": "LEADIN",
+      "row": 4,
+      "col": 4,
+      "length": 6,
+      "number": 24
+    },
+    {
+      "word": "NEON",
+      "row": 11,
+      "col": 4,
+      "length": 4,
+      "number": 53
+    },
+    {
+      "word": "CIAO",
+      "row": 0,
+      "col": 5,
+      "length": 4,
+      "number": 6
+    },
+    {
+      "word": "XRATED",
+      "row": 5,
+      "col": 5,
+      "length": 6,
+      "number": 30
+    },
+    {
+      "word": "DNA",
+      "row": 12,
+      "col": 5,
+      "length": 3,
+      "number": 58
+    },
+    {
+      "word": "KABLOOEY",
+      "row": 0,
+      "col": 6,
+      "length": 8,
+      "number": 7
+    },
+    {
+      "word": "MAS",
+      "row": 9,
+      "col": 6,
+      "length": 3,
+      "number": 43
+    },
+    {
+      "word": "NIGHTMAREFUEL",
+      "row": 1,
+      "col": 7,
+      "length": 13,
+      "number": 15
+    },
+    {
+      "word": "AMI",
+      "row": 3,
+      "col": 8,
+      "length": 3,
+      "number": 21
+    },
+    {
+      "word": "TASTEBUD",
+      "row": 7,
+      "col": 8,
+      "length": 8,
+      "number": 38
+    },
+    {
+      "word": "NYS",
+      "row": 0,
+      "col": 9,
+      "length": 3,
+      "number": 8
+    },
+    {
+      "word": "SCRAPE",
+      "row": 4,
+      "col": 9,
+      "length": 6,
+      "number": 26
+    },
+    {
+      "word": "ZEKE",
+      "row": 11,
+      "col": 9,
+      "length": 4,
+      "number": 55
+    },
+    {
+      "word": "BEEN",
+      "row": 0,
+      "col": 10,
+      "length": 4,
+      "number": 9
+    },
+    {
+      "word": "AUTISM",
+      "row": 5,
+      "col": 10,
+      "length": 6,
+      "number": 31
+    },
+    {
+      "word": "NET",
+      "row": 12,
+      "col": 10,
+      "length": 3,
+      "number": 60
+    },
+    {
+      "word": "ASWAN",
+      "row": 0,
+      "col": 11,
+      "length": 5,
+      "number": 10
+    },
+    {
+      "word": "SID",
+      "row": 6,
+      "col": 11,
+      "length": 3,
+      "number": 35
+    },
+    {
+      "word": "AREWE",
+      "row": 10,
+      "col": 11,
+      "length": 5,
+      "number": 51
+    },
+    {
+      "word": "JINGOISM",
+      "row": 0,
+      "col": 12,
+      "length": 8,
+      "number": 11
+    },
+    {
+      "word": "PROZAC",
+      "row": 9,
+      "col": 12,
+      "length": 6,
+      "number": 44
+    },
+    {
+      "word": "ADOANNIE",
+      "row": 0,
+      "col": 13,
+      "length": 8,
+      "number": 12
+    },
+    {
+      "word": "ASSERT",
+      "row": 9,
+      "col": 13,
+      "length": 6,
+      "number": 45
+    },
+    {
+      "word": "MONTANA",
+      "row": 0,
+      "col": 14,
+      "length": 7,
+      "number": 13
+    },
+    {
+      "word": "CHARMS",
+      "row": 9,
+      "col": 14,
+      "length": 6,
+      "number": 46
+    }
+  ]
+}
