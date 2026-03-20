@@ -522,10 +522,15 @@ def fill(
 
         if result.problematic_slots:
             click.echo(f"\nProblematic slots: {len(result.problematic_slots)}")
-            for slot in result.problematic_slots[:5]:  # Show first 5
-                pattern = grid.get_pattern_for_slot(slot)
+            for ps in result.problematic_slots[:5]:  # Show first 5
+                if isinstance(ps, dict) and 'slot' in ps:
+                    row, col, direction = ps['slot']
+                    pattern = ps.get('pattern', '?')
+                else:
+                    row, col, direction = ps.get('row', '?'), ps.get('col', '?'), ps.get('direction', '?')
+                    pattern = grid.get_pattern_for_slot(ps) if isinstance(ps, dict) and 'row' in ps else '?'
                 click.echo(
-                    f"  • {slot['direction'].capitalize()} {slot['row']},{slot['col']}: {pattern}"
+                    f"  • {direction.capitalize() if isinstance(direction, str) else direction} {row},{col}: {pattern}"
                 )
 
         click.echo(f"\n{'='*60}\n")

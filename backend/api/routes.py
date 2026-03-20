@@ -8,6 +8,8 @@ PHASE 3 REFACTORING: Routes now delegate to CLI via CLIAdapter for
 single source of truth architecture.
 """
 
+import re
+
 from flask import Blueprint, request, jsonify
 from backend.core.cli_adapter import get_adapter
 from backend.core.wordlist_resolver import resolve_wordlist_paths
@@ -547,4 +549,163 @@ def fill_with_progress():
     except ValueError as e:
         return handle_error("INVALID_REQUEST", str(e), 400)
     except Exception as e:
+        return handle_error("INTERNAL_ERROR", str(e), 500)
+
+
+@api.route("/grid/verify-words", methods=["POST"])
+def verify_words():
+    """POST /api/grid/verify-words - Check all slots against wordlist.
+
+    Fully-filled slots: checks exact word exists in wordlist.
+    Partially-filled slots (has letters + empty cells): checks if any matching
+    word exists using '?' wildcards for empty cells. If no match, slot is unfillable.
+    Fully-empty slots are skipped.
+    """
+    try:
+        data = request.get_json()
+        if not data or "grid" not in data:
+            return handle_error("INVALID_REQUEST", "Missing 'grid' field", 400)
+
+        grid_data = data["grid"]
+        size = data.get("size", len(grid_data))
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths = resolve_wordlist_paths(wordlist_names)
+
+        # Load wordlist into a set for fast lookup, and index by length for pattern matching
+        words_set = set()
+        words_by_length = {}  # length -> set of words
+        for wp in wordlist_paths:
+            with open(wp, "r") as f:
+                for line in f:
+                    w = line.strip().upper()
+                    if w:
+                        words_set.add(w)
+                        words_by_length.setdefault(len(w), set()).add(w)
+
+        def get_cell(cell):
+            """Returns (letter_or_empty, is_black)."""
+            if isinstance(cell, dict):
+                if cell.get("isBlack"):
+                    return "", True
+                letter = (cell.get("letter") or "").strip().upper()
+                return letter, False
+            if cell == "#":
+                return "", True
+            if not cell or cell == "." or cell == "":
+                return "", False
+            return cell.upper(), False
+
+        invalid_words = []
+        checked_count = [0]  # mutable for closure
+
+        def check_slot(cells_in_slot, direction):
+            """Check a slot against wordlist.
+
+            Fully filled: exact lookup.
+            Partially filled: pattern match with regex (? = any letter).
+            Fully empty: skip.
+            """
+            pattern = ""
+            positions = []
+            has_empty = False
+            has_letter = False
+            for r, c in cells_in_slot:
+                letter, is_black = get_cell(grid_data[r][c])
+                if is_black:
+                    return
+                positions.append([r, c])
+                if letter:
+                    pattern += letter
+                    has_letter = True
+                else:
+                    pattern += "?"
+                    has_empty = True
+
+            # Skip slots shorter than 3 (wordlist has no 2-letter words)
+            if len(pattern) < 3:
+                return
+
+            # Skip fully empty slots — nothing to validate
+            if not has_letter:
+                return
+
+            checked_count[0] += 1
+
+            if not has_empty:
+                # Fully filled — exact lookup
+                if pattern not in words_set:
+                    invalid_words.append({
+                        "word": pattern,
+                        "direction": direction,
+                        "cells": positions,
+                        "status": "invalid"
+                    })
+            else:
+                # Partially filled — check if any word matches the pattern
+                candidates = words_by_length.get(len(pattern))
+                if not candidates:
+                    # No words of this length at all
+                    invalid_words.append({
+                        "word": pattern,
+                        "direction": direction,
+                        "cells": positions,
+                        "status": "unfillable"
+                    })
+                    return
+                # Build regex: replace ? with [A-Z]
+                regex = re.compile("^" + pattern.replace("?", "[A-Z]") + "$")
+                if not any(regex.match(w) for w in candidates):
+                    invalid_words.append({
+                        "word": pattern,
+                        "direction": direction,
+                        "cells": positions,
+                        "status": "unfillable"
+                    })
+
+        # Find all across slots (boundary to boundary)
+        for r in range(size):
+            c = 0
+            while c < size:
+                _, is_black = get_cell(grid_data[r][c])
+                if is_black:
+                    c += 1
+                    continue
+                # Start of a slot — collect until next black/edge
+                slot_cells = []
+                while c < size:
+                    _, is_black = get_cell(grid_data[r][c])
+                    if is_black:
+                        break
+                    slot_cells.append((r, c))
+                    c += 1
+                if len(slot_cells) >= 3:
+                    check_slot(slot_cells, "across")
+
+        # Find all down slots (boundary to boundary)
+        for c in range(size):
+            r = 0
+            while r < size:
+                _, is_black = get_cell(grid_data[r][c])
+                if is_black:
+                    r += 1
+                    continue
+                slot_cells = []
+                while r < size:
+                    _, is_black = get_cell(grid_data[r][c])
+                    if is_black:
+                        break
+                    slot_cells.append((r, c))
+                    r += 1
+                if len(slot_cells) >= 3:
+                    check_slot(slot_cells, "down")
+
+        return jsonify({
+            "invalid_words": invalid_words,
+            "invalid_count": len(invalid_words),
+            "total_checked": checked_count[0],
+            "wordlist_size": len(words_set),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error verifying words: {e}")
         return handle_error("INTERNAL_ERROR", str(e), 500)

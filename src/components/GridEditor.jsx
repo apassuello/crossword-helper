@@ -213,6 +213,7 @@ function GridEditor({
                     height={CELL_SIZE}
                     fill={
                       cell.isBlack ? '#333' :
+                      cell.isError ? '#ffebee' :  // Light red for invalid words
                       cell.isThemeLocked ? '#e1bee7' :  // Light purple for theme-locked cells
                       isFocused ? '#ffd700' :
                       isHighlighted ? '#e3f2fd' :
@@ -220,12 +221,12 @@ function GridEditor({
                       'white'
                     }
                     stroke={
+                      cell.isError ? '#f44336' :  // Red border for invalid words
                       cell.isThemeLocked ? '#9c27b0' :  // Purple border for theme-locked
-                      cell.isError ? '#f44336' :
                       isFocused ? '#ffa500' :
                       '#ddd'
                     }
-                    strokeWidth={cell.isThemeLocked || isFocused ? 2 : 1}
+                    strokeWidth={cell.isError || cell.isThemeLocked || isFocused ? 2 : 1}
                     className="grid-cell"
                     onClick={(e) => handleCellClick(rowIdx, colIdx, e)}
                     onContextMenu={(e) => handleCellRightClick(rowIdx, colIdx, e)}

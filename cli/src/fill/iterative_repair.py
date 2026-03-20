@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import List, Tuple, Dict, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 import time
+import random
 
 if TYPE_CHECKING:
     from .autofill import FillResult
@@ -140,18 +141,14 @@ class IterativeRepair:
 
     def fill(self, timeout: int = 300) -> FillResult:
         """
-        Repair grid by fixing conflicts.
+        Repair grid by fixing conflicts using multi-restart strategy.
 
         Algorithm:
-        1. If grid incomplete: generate initial fill (greedy)
-        2. Find all conflicts (crossing mismatches)
-        3. While conflicts exist and time remains:
-            a. Identify slot with most conflicts
-            b. Try alternative words for that slot
-            c. Keep word that reduces conflicts most
-            d. Recompute conflicts
-            e. Stop if no improvement for 50 iterations
-        4. Return repaired grid
+        1. Generate initial fill (greedy, with gibberish checking)
+        2. Repair loop with tabu search
+        3. Focused CSP on remaining conflict regions
+        4. If conflicts remain and time allows, restart with randomized fill
+        5. Keep best result across all restarts
 
         Args:
             timeout: Maximum seconds to spend
@@ -167,12 +164,73 @@ class IterativeRepair:
         if timeout < 10:
             raise ValueError(f"timeout must be ≥10 seconds, got {timeout}")
 
-        self.start_time = time.time()
-        self.iterations = 0
+        overall_start = time.time()
 
         # Get all slots
         all_slots = self.grid.get_word_slots()
         total_slots = len(all_slots)
+
+        # Save original grid for restarts
+        original_grid = self.grid.cells.copy()
+        original_locked = set(self.grid.locked_cells)
+
+        best_result = None
+        best_grid = None
+        max_restarts = max(1, min(5, timeout // 15))  # Scale with timeout
+
+        for restart in range(max_restarts):
+            elapsed = time.time() - overall_start
+            if elapsed > timeout * 0.95:
+                break
+
+            # Restore original grid for restart
+            if restart > 0:
+                self.grid.cells[:] = original_grid
+                self.grid.locked_cells = set(original_locked)
+
+                if self.progress_reporter:
+                    best_p = len(best_result.problematic_slots) if best_result else '?'
+                    self.progress_reporter.update(
+                        5, f"Restart {restart+1}/{max_restarts} (best: {best_p} problems)"
+                    )
+
+            # Time budget for this attempt
+            remaining = timeout - (time.time() - overall_start)
+            attempts_left = max_restarts - restart
+            attempt_timeout = remaining / attempts_left
+
+            result = self._single_fill_attempt(
+                all_slots, total_slots, attempt_timeout, restart
+            )
+
+            # Track best result
+            if best_result is None or len(result.problematic_slots) < len(best_result.problematic_slots):
+                best_result = result
+                best_grid = self.grid.cells.copy()
+
+            # Perfect fill — stop
+            if result.success:
+                break
+
+        # Restore best grid
+        if best_result and best_grid is not None and not best_result.success:
+            self.grid.cells[:] = best_grid
+
+        return best_result
+
+    def _single_fill_attempt(
+        self,
+        all_slots: List[Dict],
+        total_slots: int,
+        timeout: float,
+        restart_num: int
+    ) -> 'FillResult':
+        """Run a single fill+repair+CSP attempt."""
+        from .autofill import FillResult
+
+        # Reset timing for this attempt
+        self.start_time = time.time()
+        self.iterations = 0
 
         # Step 1: Generate initial fill if grid incomplete
         empty_slots = self.grid.get_empty_slots()
@@ -180,9 +238,11 @@ class IterativeRepair:
             if self.progress_reporter:
                 self.progress_reporter.update(10, "Generating initial fill")
 
-            # Reserve 30% of time for initial fill
-            fill_timeout = timeout * 0.3
-            self._generate_initial_fill(empty_slots, fill_timeout)
+            # Reserve 25% of time for initial fill
+            fill_timeout = timeout * 0.25
+            self._generate_initial_fill(
+                empty_slots, fill_timeout, randomize=(restart_num > 0)
+            )
 
         # Step 2: Find all conflicts
         conflicts = self._find_conflicts(self.grid, all_slots)
@@ -192,34 +252,72 @@ class IterativeRepair:
         if self.progress_reporter:
             self.progress_reporter.update(30, f"Found {len(conflicts)} conflicts")
 
-        # Early exit if no conflicts
+        # Recount conflicts
+        best_conflict_count = len(conflicts)
+        no_improvement_count = 0
+
+        # Early exit if no conflicts remain
         if not conflicts:
+            filled_slots = sum(
+                1 for slot in all_slots
+                if '?' not in self.grid.get_pattern_for_slot(slot)
+            )
+            unfilled = [
+                {'slot': (s['row'], s['col'], s['direction']),
+                 'pattern': self.grid.get_pattern_for_slot(s),
+                 'reason': 'unfilled'}
+                for s in all_slots
+                if '?' in self.grid.get_pattern_for_slot(s)
+            ]
+            success = filled_slots == total_slots
+
+            if self.progress_reporter:
+                if success:
+                    self.progress_reporter.update(100, f"Complete! {filled_slots}/{total_slots} slots filled")
+                else:
+                    self.progress_reporter.update(90, f"Partial: {filled_slots}/{total_slots} slots filled")
+
             return FillResult(
-                success=True,
+                success=success,
                 grid=self.grid,
                 time_elapsed=time.time() - self.start_time,
-                slots_filled=total_slots,
+                slots_filled=filled_slots,
                 total_slots=total_slots,
-                problematic_slots=[],
+                problematic_slots=unfilled,
                 iterations=self.iterations
             )
 
-        # Step 3: Iterative repair loop
-        while self.iterations < self.max_iterations:
+        # Step 3: Iterative repair loop with tabu search + random restarts
+        # Use timeout as the real termination condition, not patience.
+        # When stuck, randomly perturb (strip a few slots) to escape local optima.
+        # Tabu list prevents oscillation (same slot→word swap cycling).
+        # Reserve 40% of time for focused CSP (Step 4)
+        repair_budget = timeout * 0.6
+        tried_slots = set()
+        stall_count = 0
+        restart_count = 0
+        max_restarts = 10
+        # Tabu list: maps (slot_id, word) → iteration when tabu expires
+        tabu_list: Dict[Tuple, int] = {}
+        tabu_tenure = max(5, int(len(all_slots) ** 0.5))  # √n slots
+        # Track best grid seen during repair (sideways moves may worsen then improve)
+        best_repair_grid = self.grid.cells.copy()
+        best_repair_conflicts = best_conflict_count
+
+        while True:
             self.iterations += 1
 
-            # Check timeout
+            # Check timeout — stop early to leave time for focused CSP
             elapsed = time.time() - self.start_time
-            if elapsed > timeout:
+            if elapsed > repair_budget:
                 break
 
-            # Stop if no improvement for 50 iterations
-            if no_improvement_count >= 50:
+            if not conflicts:
                 break
 
             # Report progress
             if self.progress_reporter and self.iterations % 10 == 0:
-                progress = 30 + int((self.iterations / self.max_iterations) * 70)
+                progress = min(85, 30 + int((elapsed / timeout) * 55))
                 self.progress_reporter.update(
                     progress,
                     f"Repair iteration {self.iterations}: {len(conflicts)} conflicts"
@@ -229,46 +327,107 @@ class IterativeRepair:
             slot_conflict_counts = self._count_conflicts_per_slot(conflicts, all_slots)
 
             if not slot_conflict_counts:
-                # No conflicts remain
                 break
 
-            # Get slot with maximum conflicts
-            worst_slot_id = max(slot_conflict_counts.items(), key=lambda x: x[1])[0]
+            # Get slots sorted by conflict count (descending)
+            sorted_slots = sorted(slot_conflict_counts.items(), key=lambda x: -x[1])
 
-            # CONFLICT-DIRECTED BACKJUMPING (Phase 2.3):
-            # Identify culprit slot (root cause) instead of just worst slot (symptom)
-            culprit_slot_id = self._identify_culprit_slot(conflicts, worst_slot_id, all_slots)
+            # Pick the worst slot we haven't tried recently
+            culprit_slot_id = None
+            for slot_id, count in sorted_slots:
+                candidate = self._identify_culprit_slot(conflicts, slot_id, all_slots)
 
-            # CRITICAL: Skip theme-locked slots (can't be changed)
-            culprit_slot = self._get_slot_by_id(culprit_slot_id, all_slots)
-            if culprit_slot:
-                # Check if slot has any locked cells (theme words)
-                row, col, direction = culprit_slot_id
-                has_locked_cells = False
-                for i in range(culprit_slot['length']):
-                    check_row = row + (i if direction == 'down' else 0)
-                    check_col = col + (i if direction == 'across' else 0)
-                    if (check_row, check_col) in self.grid.locked_cells:
-                        has_locked_cells = True
-                        break
+                # Skip theme-locked slots
+                cslot = self._get_slot_by_id(candidate, all_slots)
+                if cslot:
+                    row, col, direction = candidate
+                    has_locked = any(
+                        (row + (i if direction == 'down' else 0),
+                         col + (i if direction == 'across' else 0)) in self.grid.locked_cells
+                        for i in range(cslot['length'])
+                    )
+                    if has_locked:
+                        continue
 
-                if has_locked_cells:
-                    # Can't repair this slot - it's theme-locked
-                    # Remove it from conflicts and try next iteration
-                    no_improvement_count += 1
-                    continue
+                if candidate not in tried_slots:
+                    culprit_slot_id = candidate
+                    break
 
-            # Try to repair the CULPRIT slot (not necessarily the worst)
+            if culprit_slot_id is None:
+                # All slots tried — try random perturbation to escape local optimum
+                tried_slots.clear()
+                stall_count += 1
+
+                if stall_count >= 3 and restart_count < max_restarts:
+                    # Random perturbation: strip 2-4 conflicting slots and their neighbors
+                    conflict_slots = list(slot_conflict_counts.keys())
+                    if conflict_slots:
+                        n_strip = min(len(conflict_slots), random.randint(2, 4))
+                        to_strip = random.sample(conflict_slots, n_strip)
+                        for sid in to_strip:
+                            slot = self._get_slot_by_id(sid, all_slots)
+                            if not slot:
+                                continue
+                            for i in range(slot['length']):
+                                if slot['direction'] == 'across':
+                                    pos = (slot['row'], slot['col'] + i)
+                                else:
+                                    pos = (slot['row'] + i, slot['col'])
+                                if pos not in self.grid.locked_cells:
+                                    self.grid.cells[pos] = 0
+
+                        # Re-fill stripped slots
+                        refill_slots = self._sort_slots_by_constraint(
+                            [s for s in all_slots if '?' in self.grid.get_pattern_for_slot(s)]
+                        )
+                        used_words = set()
+                        for s in all_slots:
+                            p = self.grid.get_pattern_for_slot(s)
+                            if '?' not in p:
+                                used_words.add(p)
+
+                        for slot in refill_slots:
+                            pattern = self.grid.get_pattern_for_slot(slot)
+                            if '?' not in pattern:
+                                continue
+                            candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+                            for word, score in candidates:
+                                if word not in used_words:
+                                    try:
+                                        self.grid.place_word(
+                                            word, slot['row'], slot['col'], slot['direction']
+                                        )
+                                        used_words.add(word)
+                                        break
+                                    except ValueError:
+                                        continue
+
+                        conflicts = self._find_conflicts(self.grid, all_slots)
+                        if len(conflicts) < best_conflict_count:
+                            best_conflict_count = len(conflicts)
+                        stall_count = 0
+                        restart_count += 1
+                continue
+
+            tried_slots.add(culprit_slot_id)
+
+            # Try to repair the culprit slot (with tabu list)
             improved, best_word = self._try_repair_slot(
                 self.grid,
-                culprit_slot_id,  # Change culprit, not worst
+                culprit_slot_id,
                 conflicts,
-                all_slots
+                all_slots,
+                tabu_list=tabu_list,
+                current_iteration=self.iterations,
+                best_conflict_count=best_conflict_count
             )
 
             if improved and best_word:
-                # Apply the repair to the CULPRIT slot
+                # Record old word as tabu (don't swap back for tabu_tenure iterations)
                 slot = self._get_slot_by_id(culprit_slot_id, all_slots)
+                old_word = self.grid.get_pattern_for_slot(slot)
+                tabu_list[(culprit_slot_id, old_word)] = self.iterations + tabu_tenure
+
                 self.grid.place_word(
                     best_word,
                     slot['row'],
@@ -278,130 +437,213 @@ class IterativeRepair:
 
                 # Recompute conflicts
                 conflicts = self._find_conflicts(self.grid, all_slots)
+                tried_slots.clear()
+                stall_count = 0
 
-                # Check if we improved
                 if len(conflicts) < best_conflict_count:
                     best_conflict_count = len(conflicts)
                     no_improvement_count = 0
-                else:
-                    no_improvement_count += 1
+                if len(conflicts) < best_repair_conflicts:
+                    best_repair_conflicts = len(conflicts)
+                    best_repair_grid = self.grid.cells.copy()
 
-                # Early exit if no conflicts
                 if not conflicts:
                     break
             else:
                 no_improvement_count += 1
 
+        # Restore best grid seen during repair (sideways moves may have worsened it)
+        if best_repair_conflicts < len(self._find_conflicts(self.grid, all_slots)):
+            self.grid.cells[:] = best_repair_grid
+            conflicts = self._find_conflicts(self.grid, all_slots)
+
+        # Step 4: Pairwise conflict resolution
+        # For each invalid word, strip it and its worst crossing, then backtrack
+        # just those 2 slots. Small enough for reliable backtracking.
+        remaining_time = timeout - (time.time() - self.start_time)
+        if remaining_time > 2:
+            current_conflicts = self._find_conflicts(self.grid, all_slots)
+            # Get unique invalid word slots (self-conflicts)
+            invalid_slots = []
+            for c in current_conflicts:
+                if c.slot1_id == c.slot2_id and c.slot1_id not in [s for s, _ in invalid_slots]:
+                    # Find a crossing that's also conflicting
+                    crossing_id = None
+                    slot = self._get_slot_by_id(c.slot1_id, all_slots)
+                    if slot:
+                        for other in all_slots:
+                            if other['direction'] == slot['direction']:
+                                continue
+                            if self._get_intersection(slot, other) is not None:
+                                other_id = (other['row'], other['col'], other['direction'])
+                                # Prefer crossing slots that are also invalid
+                                other_p = self.grid.get_pattern_for_slot(other)
+                                if '?' not in other_p:
+                                    other_matches = self.pattern_matcher.find(other_p, min_score=self.min_score)
+                                    if not any(w == other_p for w, s in other_matches):
+                                        crossing_id = other_id
+                                        break
+                        if crossing_id is None:
+                            # No invalid crossing — just pick first crossing
+                            for other in all_slots:
+                                if other['direction'] == slot['direction']:
+                                    continue
+                                if self._get_intersection(slot, other) is not None:
+                                    crossing_id = (other['row'], other['col'], other['direction'])
+                                    break
+                    invalid_slots.append((c.slot1_id, crossing_id))
+
+            random.shuffle(invalid_slots)
+
+            if self.progress_reporter:
+                self.progress_reporter.update(
+                    85, f"Pairwise CSP: {len(invalid_slots)} conflicts"
+                )
+
+            for pair_idx, (slot_id, crossing_id) in enumerate(invalid_slots):
+                elapsed = time.time() - self.start_time
+                if elapsed > timeout - 1:
+                    break
+
+                saved_grid = self.grid.cells.copy()
+                pre_count = len(self._find_conflicts(self.grid, all_slots))
+
+                # Strip both slots
+                pair_ids = {slot_id}
+                if crossing_id:
+                    pair_ids.add(crossing_id)
+
+                for sid in pair_ids:
+                    slot = self._get_slot_by_id(sid, all_slots)
+                    if not slot:
+                        continue
+                    for i in range(slot['length']):
+                        if slot['direction'] == 'across':
+                            pos = (slot['row'], slot['col'] + i)
+                        else:
+                            pos = (slot['row'] + i, slot['col'])
+                        if pos not in self.grid.locked_cells:
+                            self.grid.cells[pos] = 0
+
+                # Build region slots and used words
+                region_slots = []
+                for sid in pair_ids:
+                    s = self._get_slot_by_id(sid, all_slots)
+                    if s:
+                        region_slots.append(s)
+                region_slots = self._sort_slots_by_constraint(region_slots)
+
+                used_words = set()
+                for s in all_slots:
+                    sid2 = (s['row'], s['col'], s['direction'])
+                    if sid2 not in pair_ids:
+                        p = self.grid.get_pattern_for_slot(s)
+                        if '?' not in p:
+                            used_words.add(p)
+
+                bt_time = min(5.0, timeout - (time.time() - self.start_time))
+                solved = self._backtrack_region(
+                    region_slots, 0, used_words, all_slots,
+                    time.time(), bt_time
+                )
+
+                if not solved:
+                    # Greedy refill
+                    for slot in region_slots:
+                        pattern = self.grid.get_pattern_for_slot(slot)
+                        if '?' not in pattern:
+                            continue
+                        candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+                        for word, score in candidates:
+                            if word not in used_words:
+                                try:
+                                    self.grid.place_word(
+                                        word, slot['row'], slot['col'], slot['direction']
+                                    )
+                                    used_words.add(word)
+                                    break
+                                except ValueError:
+                                    continue
+
+                post_count = len(self._find_conflicts(self.grid, all_slots))
+                if post_count >= pre_count:
+                    self.grid.cells[:] = saved_grid
+                elif post_count == 0:
+                    break
+
+        # Step 5: Final fill — try remaining empty slots with gibberish check
+        remaining = [s for s in all_slots if '?' in self.grid.get_pattern_for_slot(s)]
+        if remaining:
+            used_words = set()
+            for s in all_slots:
+                p = self.grid.get_pattern_for_slot(s)
+                if '?' not in p:
+                    used_words.add(p)
+
+            for slot in remaining:
+                pattern = self.grid.get_pattern_for_slot(slot)
+                if '?' not in pattern:
+                    continue
+                candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+                for word, score in candidates:
+                    if word not in used_words:
+                        if self._would_create_gibberish(word, slot, all_slots):
+                            continue
+                        try:
+                            self.grid.place_word(
+                                word, slot['row'], slot['col'], slot['direction']
+                            )
+                            used_words.add(word)
+                            break
+                        except ValueError:
+                            continue
+
         # Return result
         time_elapsed = time.time() - self.start_time
 
-        # CRITICAL FIX: Remove all invalid words before returning
-        # This ensures we NEVER return gibberish to the user
-        # Loop until no invalid words remain (clearing creates new invalid patterns)
-        removed_count = 0
-        max_cleanup_iterations = 10  # Prevent infinite loops
-
-        for cleanup_iter in range(max_cleanup_iterations):
-            # Find all invalid slots in current grid state
-            slots_to_clear = []
-            for slot in all_slots:
-                pattern = self.grid.get_pattern_for_slot(slot)
-
-                # Skip empty slots
-                if '?' in pattern:
-                    continue
-
-                # Check if ALL cells in this slot are locked (can't modify anything)
-                all_locked = True
-                has_non_locked = False
-                if slot['direction'] == 'across':
-                    for i in range(slot['length']):
-                        if (slot['row'], slot['col'] + i) not in self.grid.locked_cells:
-                            all_locked = False
-                            has_non_locked = True
-                            break
-                else:  # down
-                    for i in range(slot['length']):
-                        if (slot['row'] + i, slot['col']) not in self.grid.locked_cells:
-                            all_locked = False
-                            has_non_locked = True
-                            break
-
-                # Skip fully-locked words (nothing we can modify)
-                if all_locked:
-                    continue
-
-                # Validate word exists in wordlist
-                candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
-                word_exists = any(word == pattern for word, score in candidates)
-
-                if not word_exists and has_non_locked:
-                    # Invalid word with modifiable cells - mark for removal
-                    slots_to_clear.append(slot)
-
-            # If no invalid words found, we're done
-            if not slots_to_clear:
-                break
-
-            # Clear invalid slots (but preserve locked cells)
-            cells_cleared_this_iteration = 0
-            for slot in slots_to_clear:
-                # Clear only non-locked cells in the slot
-                if slot['direction'] == 'across':
-                    for i in range(slot['length']):
-                        pos = (slot['row'], slot['col'] + i)
-                        if pos not in self.grid.locked_cells:
-                            self.grid.cells[pos[0], pos[1]] = 0  # Set to empty
-                            cells_cleared_this_iteration += 1
-                else:  # down
-                    for i in range(slot['length']):
-                        pos = (slot['row'] + i, slot['col'])
-                        if pos not in self.grid.locked_cells:
-                            self.grid.cells[pos[0], pos[1]] = 0  # Set to empty
-                            cells_cleared_this_iteration += 1
-                removed_count += 1
-
-            # If no cells were actually cleared (all were locked), stop
-            # This prevents infinite loops when invalid words are entirely locked
-            if cells_cleared_this_iteration == 0:
-                # Report that we found invalid words but couldn't remove them
-                if self.progress_reporter and slots_to_clear:
-                    self.progress_reporter.update(
-                        90,
-                        f"Cleanup: {len(slots_to_clear)} invalid words have all cells locked (theme intersections)"
-                    )
-                break
-
-        # NOW count actually filled slots (after cleanup)
+        # Count filled slots
         filled_slots = sum(
             1 for slot in all_slots
             if '?' not in self.grid.get_pattern_for_slot(slot)
         )
 
-        # Find problematic slots (empty or conflicting)
+        # Final conflict check — verify all words are valid
+        final_conflicts = self._find_conflicts(self.grid, all_slots)
+
+        # Find problematic slots (empty, conflicting, or invalid)
         problematic_slots = []
+        conflict_slot_ids = set()
+        for c in final_conflicts:
+            conflict_slot_ids.add(c.slot1_id)
+            if c.slot2_id != c.slot1_id:
+                conflict_slot_ids.add(c.slot2_id)
+
         for slot in all_slots:
             pattern = self.grid.get_pattern_for_slot(slot)
+            slot_id = (slot['row'], slot['col'], slot['direction'])
             if '?' in pattern:
-                # Slot not fully filled
                 problematic_slots.append({
-                    'slot': (slot['row'], slot['col'], slot['direction']),
+                    'slot': slot_id,
                     'pattern': pattern,
                     'reason': 'unfilled'
                 })
+            elif slot_id in conflict_slot_ids:
+                problematic_slots.append({
+                    'slot': slot_id,
+                    'pattern': pattern,
+                    'reason': 'invalid_word'
+                })
 
-        # Success = no conflicts AND all slots filled with valid words
-        # After cleanup, conflicts should be 0 if we removed all invalid words
-        success = filled_slots == total_slots
+        # Success = all slots filled AND no conflicts (including invalid words)
+        success = filled_slots == total_slots and len(final_conflicts) == 0
 
         if self.progress_reporter:
             if success:
                 self.progress_reporter.update(100, f"Complete! {filled_slots}/{total_slots} slots filled")
             else:
-                cleanup_msg = f" (removed {removed_count} invalid)" if removed_count > 0 else ""
                 self.progress_reporter.update(
                     90,
-                    f"Partial fill: {filled_slots}/{total_slots} slots{cleanup_msg}, {len(problematic_slots)} unfilled"
+                    f"Partial fill: {filled_slots}/{total_slots} slots, {len(problematic_slots)} unfilled"
                 )
 
         return FillResult(
@@ -492,7 +734,8 @@ class IterativeRepair:
     def _generate_initial_fill(
         self,
         empty_slots: List[Dict],
-        timeout: float
+        timeout: float,
+        randomize: bool = False
     ) -> None:
         """
         Generate fill using multiple passes with increasing flexibility.
@@ -509,6 +752,7 @@ class IterativeRepair:
         Args:
             empty_slots: Slots that need filling
             timeout: Time budget for initial fill
+            randomize: If True, shuffle top candidates on all passes (for restarts)
         """
         used_words = set()
         all_slots = self.grid.get_word_slots()
@@ -534,8 +778,6 @@ class IterativeRepair:
             # Re-sort by constraint level (MRV — fewest candidates first)
             remaining = self._sort_slots_by_constraint(remaining)
 
-            # First pass: strict (check gibberish). Later passes: relaxed.
-            strict = (pass_num == 0)
             placed_this_pass = 0
 
             for slot in remaining:
@@ -550,12 +792,24 @@ class IterativeRepair:
                     pattern, min_score=self.min_score
                 )
 
+                # Shuffle candidates to diversify fills:
+                # - On restart attempts: always shuffle (all passes)
+                # - Normal: only shuffle on passes 2+
+                if (randomize or pass_num > 0) and len(candidates) > 5:
+                    top = list(candidates[:20])
+                    random.shuffle(top)
+                    candidates = top + list(candidates[20:])
+
                 placed = False
                 for word, score in candidates:
                     if word in used_words:
                         continue
 
-                    if strict and self._would_create_gibberish(word, slot, all_slots):
+                    # Pass 1: strict gibberish check (min 2 filled letters)
+                    # Pass 2+: skip gibberish check (repair loop fixes conflicts)
+                    if pass_num == 0 and self._would_create_gibberish(
+                        word, slot, all_slots, min_filled=2
+                    ):
                         continue
 
                     try:
@@ -655,32 +909,61 @@ class IterativeRepair:
                         letter2=letter2
                     ))
 
-        # STEP 2: NEW - Validate each filled word exists in wordlist
-        # This prevents gibberish words like "TRICOTSME" that happen to
-        # have matching crossings
+        # STEP 2: Flag invalid words (filled but not in wordlist) as pseudo-conflicts
+        # Swapping these triggers cascading improvements in crossing slots
         for slot in slots:
             pattern = grid.get_pattern_for_slot(slot)
-
-            # Skip if slot has wildcards (not fully filled)
             if '?' in pattern:
-                continue
-
-            # Check if this word exists in our wordlist
+                continue  # Not fully filled
             candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
             word_exists = any(word == pattern for word, score in candidates)
-
             if not word_exists:
-                # Word doesn't exist in wordlist - treat as a conflict
-                # Create a pseudo-conflict to flag this slot for repair
                 slot_id = (slot['row'], slot['col'], slot['direction'])
                 conflicts.append(Conflict(
                     slot1_id=slot_id,
-                    slot2_id=slot_id,  # Self-conflict
+                    slot2_id=slot_id,
                     position1=0,
                     position2=0,
                     letter1=pattern[0] if pattern else '?',
-                    letter2='?',  # Invalid word marker
+                    letter2='?',
                 ))
+
+        # STEP 3: Flag unfillable partially-filled slots as pseudo-conflicts
+        # Only for slots where crossing letters create an impossible pattern
+        # (not slots unfillable due to wordlist lacking words of that length)
+        for slot in slots:
+            pattern = grid.get_pattern_for_slot(slot)
+            if '?' not in pattern:
+                continue
+            if pattern == '?' * len(pattern):
+                continue  # Fully empty — not constrained by crossings
+
+            # Check if ANY word of this length exists
+            wildcard = '?' * len(pattern)
+            if not self.pattern_matcher.find(wildcard, min_score=self.min_score):
+                continue  # No words of this length in wordlist — not a crossing issue
+
+            candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+            if not candidates:
+                slot_id = (slot['row'], slot['col'], slot['direction'])
+                for other in slots:
+                    if other['direction'] == slot['direction']:
+                        continue
+                    intersection = self._get_intersection(slot, other)
+                    if intersection is None:
+                        continue
+                    pos_in_slot, pos_in_other = intersection
+                    if pattern[pos_in_slot] != '?':
+                        other_id = (other['row'], other['col'], other['direction'])
+                        conflicts.append(Conflict(
+                            slot1_id=slot_id,
+                            slot2_id=other_id,
+                            position1=pos_in_slot,
+                            position2=pos_in_other,
+                            letter1=pattern[pos_in_slot],
+                            letter2='?',
+                        ))
+                        break
 
         return conflicts
 
@@ -689,22 +972,26 @@ class IterativeRepair:
         grid: Grid,
         slot_id: Tuple[int, int, str],
         conflicts: List[Conflict],
-        all_slots: List[Dict]
+        all_slots: List[Dict],
+        tabu_list: Optional[Dict[Tuple, int]] = None,
+        current_iteration: int = 0,
+        best_conflict_count: int = 999
     ) -> Tuple[bool, Optional[str]]:
         """
         Try to find better word for slot that reduces conflicts.
 
-        Strategy:
-        1. Count current conflicts involving this slot
-        2. Try alternative words (up to 50 candidates)
-        3. For each word: place it, count new conflicts
-        4. Keep word with fewest conflicts (if better than current)
+        Uses tabu search: skips (slot, word) pairs that are tabu (recently
+        swapped away from), UNLESS the word achieves a new best conflict count
+        (aspiration criterion).
 
         Args:
             grid: Current grid
             slot_id: (row, col, direction) of slot to repair
             conflicts: Current conflicts in grid
             all_slots: All slots in grid
+            tabu_list: Maps (slot_id, word) → expiry iteration
+            current_iteration: Current repair iteration number
+            best_conflict_count: Best conflict count seen so far (for aspiration)
 
         Returns:
             (improved, best_word) where:
@@ -713,9 +1000,8 @@ class IterativeRepair:
 
         Complexity: O(candidates × conflict_counting)
         """
-        # Count current conflicts for this slot
-        current_conflicts = [c for c in conflicts if c.involves_slot(slot_id)]
-        current_count = len(current_conflicts)
+        # Count current TOTAL conflicts (for global optimization)
+        current_count = len(conflicts)
 
         # Get the slot
         slot = self._get_slot_by_id(slot_id, all_slots)
@@ -772,8 +1058,8 @@ class IterativeRepair:
             # Each group is already sorted by score (from pattern_matcher)
             candidates = theme_candidates + non_theme_candidates
 
-        # Limit to top 50
-        candidates = candidates[:50]
+        # Limit to top 100 (more candidates = better chance of finding valid swaps)
+        candidates = candidates[:100]
 
         best_word = None
         best_count = current_count
@@ -788,12 +1074,14 @@ class IterativeRepair:
             if word in used_words:
                 continue
 
-            # CRITICAL: Skip if placing this word would create gibberish
-            if self._would_create_gibberish(word, slot, all_slots):
-                continue  # Don't even try - creates invalid intersections
-
-            # Save current state
-            original_pattern = current_pattern
+            # Save cell values before placing (to restore exactly)
+            saved_cells = {}
+            for i in range(slot['length']):
+                if slot['direction'] == 'across':
+                    pos = (slot['row'], slot['col'] + i)
+                else:
+                    pos = (slot['row'] + i, slot['col'])
+                saved_cells[pos] = grid.cells[pos]
 
             # Try placing this word (skip if conflicts with locked cells)
             try:
@@ -801,25 +1089,33 @@ class IterativeRepair:
             except ValueError:
                 continue  # Word conflicts with locked cell, skip
 
-            # Count new conflicts
+            # Count new TOTAL conflicts
             new_conflicts = self._find_conflicts(grid, all_slots)
-            new_conflicts_for_slot = [c for c in new_conflicts if c.involves_slot(slot_id)]
-            new_count = len(new_conflicts_for_slot)
+            new_count = len(new_conflicts)
 
-            # Check if better
+            # Tabu check
+            is_tabu = (
+                tabu_list is not None
+                and (slot_id, word) in tabu_list
+                and tabu_list[(slot_id, word)] > current_iteration
+            )
+            if is_tabu and new_count >= best_conflict_count:
+                for pos, val in saved_cells.items():
+                    grid.cells[pos] = val
+                continue
+
+            # Accept if strictly better
             if new_count < best_count:
                 best_word = word
                 best_count = new_count
+            elif new_count == current_count and best_word is None and random.random() < 0.3:
+                # Accept sideways move with 30% probability (shifts conflicts)
+                best_word = word
+                best_count = new_count
 
-            # Restore original
-            if '?' not in original_pattern:  # Pattern has no wildcards - it's a real word
-                try:
-                    grid.place_word(original_pattern, slot['row'], slot['col'], slot['direction'])
-                except ValueError:
-                    grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
-            else:
-                # Clear the slot (pattern has wildcards, not a valid word)
-                grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
+            # Restore original cell values exactly
+            for pos, val in saved_cells.items():
+                grid.cells[pos] = val
 
         # Return result
         if best_word is not None:
@@ -918,11 +1214,125 @@ class IterativeRepair:
 
         return None
 
+    def _backtrack_region(
+        self,
+        region_slots: List[Dict],
+        index: int,
+        used_words: set,
+        all_slots: List[Dict],
+        start_time: float,
+        timeout: float
+    ) -> bool:
+        """
+        Backtracking CSP solver for a small region of the grid.
+
+        Fills region_slots using backtracking with forward checking.
+        Checks that placed words don't create invalid perpendicular patterns.
+
+        Args:
+            region_slots: Slots in the region to fill (sorted by constraint)
+            index: Current position in region_slots
+            used_words: Words already used in non-region slots
+            all_slots: All slots in the grid (for intersection checking)
+            start_time: When this backtracking attempt started
+            timeout: Maximum seconds for this attempt
+
+        Returns:
+            True if region successfully filled, False otherwise
+        """
+        if time.time() - start_time > timeout:
+            return False
+
+        if index >= len(region_slots):
+            return True  # All region slots filled
+
+        slot = region_slots[index]
+        pattern = self.grid.get_pattern_for_slot(slot)
+
+        if '?' not in pattern:
+            # Already filled (by a crossing word placement)
+            return self._backtrack_region(
+                region_slots, index + 1, used_words, all_slots,
+                start_time, timeout
+            )
+
+        candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+
+        # Limit candidates for speed
+        # Limit candidates — fewer = faster backtracking, more = better solutions
+        candidates = candidates[:100]
+
+        for word, score in candidates:
+            if word in used_words:
+                continue
+
+            # Check perpendicular constraints: would this create an impossible
+            # pattern in any crossing slot?
+            creates_dead_end = False
+            perp_dir = 'down' if slot['direction'] == 'across' else 'across'
+
+            # Temporarily place word
+            saved_cells = {}
+            for i in range(len(word)):
+                if slot['direction'] == 'across':
+                    pos = (slot['row'], slot['col'] + i)
+                else:
+                    pos = (slot['row'] + i, slot['col'])
+                saved_cells[pos] = self.grid.cells[pos]
+                self.grid.cells[pos] = ord(word[i]) - ord('A') + 1
+
+            # Check crossing slots
+            for other_slot in all_slots:
+                if other_slot['direction'] != perp_dir:
+                    continue
+                if self._get_intersection(slot, other_slot) is None:
+                    continue
+
+                other_pattern = self.grid.get_pattern_for_slot(other_slot)
+                if '?' not in other_pattern:
+                    # Fully filled — must be valid
+                    match = self.pattern_matcher.find(other_pattern, min_score=self.min_score)
+                    if not any(w == other_pattern for w, s in match):
+                        creates_dead_end = True
+                        break
+                else:
+                    # Partially filled — must have at least one candidate
+                    filled = sum(1 for c in other_pattern if c != '?')
+                    if filled >= 2:
+                        match = self.pattern_matcher.find(other_pattern, min_score=self.min_score)
+                        # Filter out used words
+                        available = [w for w, s in match if w not in used_words]
+                        if not available:
+                            creates_dead_end = True
+                            break
+
+            if creates_dead_end:
+                # Restore and try next candidate
+                for pos, val in saved_cells.items():
+                    self.grid.cells[pos] = val
+                continue
+
+            # Word looks viable — recurse
+            used_words.add(word)
+            if self._backtrack_region(
+                region_slots, index + 1, used_words, all_slots,
+                start_time, timeout
+            ):
+                return True
+
+            # Backtrack: remove word
+            used_words.discard(word)
+            for pos, val in saved_cells.items():
+                self.grid.cells[pos] = val
+
+        return False
+
     def _would_create_gibberish(
         self,
         word: str,
         slot: Dict,
-        all_slots: List[Dict]
+        all_slots: List[Dict],
+        min_filled: int = 2
     ) -> bool:
         """
         Check if placing this word would create gibberish at perpendicular intersections.
@@ -934,6 +1344,8 @@ class IterativeRepair:
             word: Word to test
             slot: Slot where word would be placed
             all_slots: All slots in grid
+            min_filled: Minimum number of filled letters in a perpendicular pattern
+                       before checking for candidates. Lower = stricter check.
 
         Returns:
             True if placing word would create gibberish, False otherwise
@@ -986,59 +1398,28 @@ class IterativeRepair:
                 continue  # Can't modify fully locked words
 
             # Check if pattern is gibberish:
-            # 1. Fully filled but not in wordlist
-            # 2. Has invalid short filled segments (e.g., "RDB????" has invalid "RDB")
+            # 1. Fully filled but not in wordlist → always reject
+            # 2. Partially filled: only reject if majority filled and no matches
+            #    (checking too early is too restrictive and prevents progress)
             if '?' not in pattern:
-                # Fully filled - check if it's a valid word
+                # Fully filled - must be a valid word
                 if len(pattern) < 3:
                     creates_gibberish = True
                     break
 
-                # Check if word exists in wordlist
                 candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
                 word_exists = any(w == pattern for w, s in candidates)
                 if not word_exists:
                     creates_gibberish = True
                     break
             else:
-                # Partially filled - check for invalid ISOLATED segments
-                # Only validate segments that CANNOT be extended (surrounded by non-wildcards)
-                # Example: "ABC??DEF???" has segments "ABC", "DEF"
-                # - "ABC" can be extended (followed by ?) - DON'T validate
-                # - If pattern was "ABC#DEF??", "ABC" cannot extend - VALIDATE
-
-                # Split pattern by wildcards to get segments with context
-                i = 0
-                while i < len(pattern):
-                    if pattern[i] == '?':
-                        i += 1
-                        continue
-
-                    # Found start of a filled segment
-                    segment_start = i
-                    segment = ""
-                    while i < len(pattern) and pattern[i] != '?':
-                        segment += pattern[i]
-                        i += 1
-
-                    # Only validate if segment is 3+ letters AND cannot be extended
-                    if len(segment) >= 3:
-                        # Check if segment can be extended on the right
-                        can_extend_right = i < len(pattern) and pattern[i] == '?'
-                        # Check if segment can be extended on the left
-                        can_extend_left = segment_start > 0 and pattern[segment_start - 1] == '?'
-
-                        # Only validate isolated segments (cannot extend either direction)
-                        if not can_extend_right and not can_extend_left:
-                            # This segment is isolated - must be a valid word
-                            candidates = self.pattern_matcher.find(segment, min_score=self.min_score)
-                            word_exists = any(w == segment for w, s in candidates)
-                            if not word_exists:
-                                creates_gibberish = True
-                                break
-
-                if creates_gibberish:
-                    break
+                # Partially filled — check if at least one candidate exists
+                filled_count = sum(1 for c in pattern if c != '?')
+                if filled_count >= min_filled:
+                    candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)
+                    if not candidates:
+                        creates_gibberish = True
+                        break
 
         # Restore original state
         for pos, val in original_cells.items():
@@ -1070,6 +1451,183 @@ class IterativeRepair:
                 return slot
 
         return None
+
+    def _backtrack_unfillable(
+        self,
+        unfillable_slots: List[Dict],
+        all_slots: List[Dict],
+        timeout: float
+    ) -> None:
+        """
+        Fix unfillable slots by replacing crossing words that create impossible patterns.
+
+        For each unfillable slot:
+        1. Find which crossing words contribute letters to the impossible pattern
+        2. Try replacing each crossing word with an alternative
+        3. After replacement, try to fill the previously-unfillable slot
+        4. If it works, keep the change. If not, restore and try next crossing word.
+        """
+        used_words = set()
+        for s in all_slots:
+            p = self.grid.get_pattern_for_slot(s)
+            if '?' not in p:
+                used_words.add(p)
+
+        for unfillable in unfillable_slots:
+            if time.time() - self.start_time > timeout * 0.8:
+                break
+
+            pattern = self.grid.get_pattern_for_slot(unfillable)
+            if '?' not in pattern:
+                continue  # Already filled by a previous backtrack
+
+            # Find crossing slots that contribute filled letters to this slot
+            crossing_slots = []
+            for other in all_slots:
+                if other['direction'] == unfillable['direction']:
+                    continue
+                intersection = self._get_intersection(unfillable, other)
+                if intersection is None:
+                    continue
+                pos_in_unfillable, pos_in_other = intersection
+                # Only care about positions that ARE filled (not '?')
+                if pattern[pos_in_unfillable] != '?':
+                    other_pattern = self.grid.get_pattern_for_slot(other)
+                    if '?' not in other_pattern:
+                        crossing_slots.append((other, pos_in_unfillable, pos_in_other))
+
+            # Try replacing each crossing word
+            fixed = False
+            for crossing, pos_in_target, pos_in_crossing in crossing_slots:
+                if fixed:
+                    break
+                if time.time() - self.start_time > timeout * 0.8:
+                    break
+
+                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+
+                # Skip locked slots
+                has_locked = False
+                for i in range(crossing['length']):
+                    if crossing['direction'] == 'across':
+                        pos = (crossing['row'], crossing['col'] + i)
+                    else:
+                        pos = (crossing['row'] + i, crossing['col'])
+                    if pos in self.grid.locked_cells:
+                        has_locked = True
+                        break
+                if has_locked:
+                    continue
+
+                # Save state of crossing slot cells
+                saved = {}
+                for i in range(crossing['length']):
+                    if crossing['direction'] == 'across':
+                        pos = (crossing['row'], crossing['col'] + i)
+                    else:
+                        pos = (crossing['row'] + i, crossing['col'])
+                    saved[pos] = self.grid.cells[pos]
+
+                old_word = self.grid.get_pattern_for_slot(crossing)
+
+                # Get alternative words for the crossing slot
+                # Use full wildcard to get more candidates
+                repair_pattern = list('?' * crossing['length'])
+                for i in range(crossing['length']):
+                    if crossing['direction'] == 'across':
+                        pos = (crossing['row'], crossing['col'] + i)
+                    else:
+                        pos = (crossing['row'] + i, crossing['col'])
+                    if pos in self.grid.locked_cells:
+                        cell_val = self.grid.cells[pos]
+                        if cell_val > 0:
+                            repair_pattern[i] = chr(cell_val + ord('A') - 1)
+
+                # But keep letters from OTHER crossings (not the unfillable one)
+                for other2 in all_slots:
+                    if other2['direction'] == crossing['direction']:
+                        continue
+                    if other2 is unfillable:
+                        continue  # Skip — this is the one we want to change
+                    inter = self._get_intersection(crossing, other2)
+                    if inter is None:
+                        continue
+                    pos_in_c, pos_in_o = inter
+                    other_p = self.grid.get_pattern_for_slot(other2)
+                    if '?' not in other_p:
+                        # This crossing is constrained by other2
+                        repair_pattern[pos_in_c] = other_p[pos_in_o]
+
+                repair_str = ''.join(repair_pattern)
+                candidates = self.pattern_matcher.find(repair_str, min_score=self.min_score)
+
+                for alt_word, score in candidates[:30]:
+                    if alt_word == old_word:
+                        continue
+                    if alt_word in used_words:
+                        continue
+
+                    # Place alternative crossing word
+                    try:
+                        self.grid.place_word(
+                            alt_word, crossing['row'], crossing['col'], crossing['direction']
+                        )
+                    except ValueError:
+                        continue
+
+                    # Check if unfillable slot now has candidates
+                    new_pattern = self.grid.get_pattern_for_slot(unfillable)
+                    new_candidates = self.pattern_matcher.find(new_pattern, min_score=self.min_score)
+                    fillable_candidates = [
+                        (w, s) for w, s in new_candidates if w not in used_words and w != alt_word
+                    ]
+
+                    if fillable_candidates:
+                        # Before accepting: check we didn't create NEW unfillable slots
+                        # by changing this crossing word
+                        creates_new_problem = False
+                        for check_slot in all_slots:
+                            if check_slot is unfillable:
+                                continue
+                            cp = self.grid.get_pattern_for_slot(check_slot)
+                            if '?' not in cp:
+                                continue
+                            # This slot has wildcards — check it's still fillable
+                            check_cands = self.pattern_matcher.find(cp, min_score=self.min_score)
+                            if not check_cands:
+                                creates_new_problem = True
+                                break
+
+                        if creates_new_problem:
+                            # Restore and try next candidate
+                            for pos, val in saved.items():
+                                self.grid.cells[pos] = val
+                            continue
+
+                        # Fill the previously-unfillable slot
+                        fill_word = fillable_candidates[0][0]
+                        try:
+                            self.grid.place_word(
+                                fill_word, unfillable['row'], unfillable['col'],
+                                unfillable['direction']
+                            )
+                            # Success! Update used_words
+                            used_words.discard(old_word)
+                            used_words.add(alt_word)
+                            used_words.add(fill_word)
+                            fixed = True
+                            break
+                        except ValueError:
+                            pass
+
+                    # Restore crossing slot
+                    for pos, val in saved.items():
+                        self.grid.cells[pos] = val
+
+                if not fixed:
+                    # Make sure state is restored if we never found a fix
+                    for pos, val in saved.items():
+                        self.grid.cells[pos] = val
 
     def _sort_slots_by_constraint(self, slots: List[Dict]) -> List[Dict]:
         """

@@ -383,6 +383,59 @@ function App() {
     toast.success('Autofill state reset - ready to start fresh!');
   }, []);
 
+  const handleVerifyWords = useCallback(async () => {
+    if (!grid) return;
+
+    try {
+      const response = await axios.post('/api/grid/verify-words', {
+        size: gridSize,
+        grid: grid.map(row => row.map(cell => ({
+          letter: cell.letter || '',
+          isBlack: cell.isBlack || false
+        }))),
+        wordlists: ['comprehensive']
+      });
+
+      const { invalid_words, invalid_count, total_checked, wordlist_size } = response.data;
+
+      // Build set of cells that belong to invalid words
+      const errorCells = new Set();
+      invalid_words.forEach(({ cells }) => {
+        cells.forEach(([r, c]) => errorCells.add(`${r},${c}`));
+      });
+
+      // Update grid: set isError on invalid cells, clear on valid ones
+      const newGrid = grid.map((row, r) =>
+        row.map((cell, c) => ({
+          ...cell,
+          isError: errorCells.has(`${r},${c}`)
+        }))
+      );
+      setGrid(newGrid);
+
+      if (invalid_count === 0) {
+        toast.success(`All ${total_checked} words valid!`);
+      } else {
+        const invalid = invalid_words.filter(w => w.status === 'invalid');
+        const unfillable = invalid_words.filter(w => w.status === 'unfillable');
+        const parts = [];
+        if (invalid.length > 0) {
+          parts.push(`${invalid.length} invalid: ${invalid.map(w => w.word).join(', ')}`);
+        }
+        if (unfillable.length > 0) {
+          parts.push(`${unfillable.length} unfillable: ${unfillable.map(w => w.word.replace(/\?/g, '_')).join(', ')}`);
+        }
+        toast.error(
+          `${invalid_count} of ${total_checked} words flagged — ${parts.join('; ')}`,
+          { duration: 8000 }
+        );
+      }
+    } catch (error) {
+      console.error('Verify words failed:', error);
+      toast.error('Failed to verify words: ' + (error.response?.data?.message || error.message));
+    }
+  }, [grid, gridSize]);
+
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     // Update grid with the applied theme word
     setGrid(updatedGrid);
@@ -500,6 +553,15 @@ function App() {
           </button>
         </div>
       </header>
+
+      <div className="grid-toolbar">
+        <button className="verify-btn" onClick={handleVerifyWords}>
+          Verify Words
+        </button>
+        <button className="save-btn" onClick={handleSaveGrid}>
+          Save Grid
+        </button>
+      </div>
 
       <div className="app-body">
         <div className="main-panel">

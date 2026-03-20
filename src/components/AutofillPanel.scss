@@ -1,19 +1,297 @@
-// Wordlist sections styling
+.autofill-panel {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .autofill-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+
+    h2 {
+      margin: 0;
+      color: #667eea;
+      font-size: 1.2rem;
+    }
+
+    .empty-slots {
+      font-size: 0.85rem;
+      color: #666;
+
+      strong {
+        color: #667eea;
+      }
+
+      .theme-count {
+        color: #7b1fa2;
+
+        strong {
+          color: #7b1fa2;
+        }
+      }
+    }
+  }
+
+  .autofill-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #5a67d8 0%, #6b4299 100%);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .progress-section {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+
+    .cancel-btn {
+      padding: 0.4rem 0.75rem;
+      background: white;
+      color: #f44336;
+      border: 2px solid #f44336;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+
+      &:hover {
+        background: #f44336;
+        color: white;
+      }
+    }
+
+    .reset-btn {
+      padding: 0.4rem 0.75rem;
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+
+      &:hover {
+        background: #667eea;
+        color: white;
+      }
+    }
+  }
+
+  .autofill-options {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+
+    h3 {
+      margin: 0 0 0.5rem 0;
+      color: #333;
+      font-size: 0.95rem;
+    }
+
+    .compact-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+
+      label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #333;
+        white-space: nowrap;
+        min-width: 100px;
+      }
+
+      select {
+        flex: 1;
+        padding: 0.3rem 0.4rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.85rem;
+      }
+
+      input[type="range"] {
+        flex: 1;
+      }
+    }
+
+    .checkbox-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 1rem;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      background: #f8f9fa;
+      border-radius: 6px;
+
+      label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #333;
+        cursor: pointer;
+        white-space: nowrap;
+
+        input[type="checkbox"] {
+          margin: 0;
+          cursor: pointer;
+        }
+      }
+    }
+
+    .wordlists-group {
+      margin-bottom: 0;
+
+      > label {
+        display: block;
+        font-weight: 500;
+        color: #333;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+      }
+    }
+
+    .wordlist-scroll-container {
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 0.25rem;
+    }
+
+    .option-group {
+      margin-bottom: 0.5rem;
+    }
+  }
+
+  .resume-prompt {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+
+    h3 {
+      margin: 0 0 0.25rem 0;
+      color: #856404;
+      font-size: 0.95rem;
+    }
+
+    p {
+      margin: 0 0 0.35rem 0;
+      font-size: 0.85rem;
+      color: #333;
+
+      strong {
+        color: #856404;
+      }
+    }
+
+    .resume-btn {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 0.4rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.85rem;
+
+      &:hover {
+        background: #218838;
+      }
+    }
+
+    .discard-btn {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 0.4rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+
+      &:hover {
+        background: #5a6268;
+      }
+    }
+  }
+
+  .pause-btn {
+    background: #ff9800;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.85rem;
+
+    &:hover {
+      background: #e68900;
+    }
+  }
+
+  .suggest-black-btn {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    border: none;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-shrink: 0;
+
+    &:hover {
+      box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
 .wordlist-section {
-  margin-bottom: 1rem;
+  margin-bottom: 0.25rem;
 
   h4 {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    margin-bottom: 0.5rem;
-    margin-top: 0.75rem;
+    margin: 0.25rem 0;
     color: #555;
   }
 
   &.custom-section {
     border-top: 1px solid #e0e0e0;
-    padding-top: 0.75rem;
-    margin-top: 0.75rem;
+    padding-top: 0.25rem;
 
     h4 {
       color: #7b1fa2;
@@ -24,16 +302,16 @@
 .wordlist-checkboxes {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0;
 
   label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    gap: 0.35rem;
+    padding: 0.2rem 0.35rem;
+    border-radius: 3px;
     cursor: pointer;
+    font-size: 0.82rem;
 
     &:hover {
       background-color: #f5f5f5;
@@ -49,16 +327,15 @@
 .wordlist-item-container {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
 
   .wordlist-checkbox {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    gap: 0.35rem;
+    padding: 0.2rem 0.35rem;
+    border-radius: 3px;
     cursor: pointer;
+    font-size: 0.82rem;
 
     &:hover {
       background-color: #f5f5f5;
@@ -73,15 +350,14 @@
   .theme-designation {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.5rem 0.25rem 2rem;
-    margin-left: 0.5rem;
-    font-size: 0.85rem;
+    gap: 0.35rem;
+    padding: 0.15rem 0.35rem 0.15rem 1.5rem;
+    font-size: 0.78rem;
     cursor: pointer;
     border-left: 2px solid #7b1fa2;
     background-color: #f3e5f5;
-    border-radius: 0 4px 4px 0;
-    transition: all 0.2s;
+    border-radius: 0 3px 3px 0;
+    margin-left: 0.35rem;
 
     &:hover {
       background-color: #e1bee7;
@@ -100,400 +376,24 @@
 }
 
 .theme-info {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.5rem;
   background-color: #fff3e0;
   border-left: 3px solid #ff9800;
   border-radius: 4px;
+  font-size: 0.82rem;
 
   strong {
     color: #e65100;
-    display: block;
-    margin-bottom: 0.25rem;
-  }
-
-  .help-text {
-    margin: 0.25rem 0 0 0;
-    color: #666;
-    font-size: 0.85rem;
-    line-height: 1.4;
   }
 }
 
 .wordlist-loading {
   text-align: center;
-  padding: 1rem;
+  padding: 0.5rem;
   color: #666;
   font-style: italic;
-}
-
-.no-custom-lists {
-  padding: 1rem;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  margin-top: 0.5rem;
-
-  .help-text {
-    margin: 0;
-    color: #666;
-    font-size: 0.9rem;
-  }
-}
-
-.autofill-panel {
-  padding: 2rem;
-
-  h2 {
-    margin-bottom: 1.5rem;
-    color: #667eea;
-  }
-
-  .autofill-info {
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-
-    p {
-      margin-bottom: 0.5rem;
-      color: #666;
-    }
-
-    .empty-slots {
-      font-size: 1.1rem;
-      color: #333;
-
-      strong {
-        color: #667eea;
-        font-weight: 700;
-      }
-    }
-  }
-
-  .autofill-options {
-    margin-bottom: 1.5rem;
-
-    h3 {
-      margin-bottom: 1rem;
-      color: #333;
-    }
-
-    .option-group {
-      margin-bottom: 1.25rem;
-
-      label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: #333;
-      }
-
-      .slider-group {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-
-        input[type="range"] {
-          flex: 1;
-        }
-
-        .value {
-          min-width: 40px;
-          padding: 0.25rem 0.5rem;
-          background: #667eea;
-          color: white;
-          border-radius: 4px;
-          font-weight: 600;
-          text-align: center;
-        }
-      }
-
-      select {
-        width: 100%;
-        padding: 0.5rem;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-      }
-
-      .help-text {
-        font-size: 0.85rem;
-        color: #666;
-        margin-top: 0.25rem;
-      }
-
-      .wordlist-checkboxes {
-        display: flex;
-        gap: 1rem;
-
-        label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: normal;
-        }
-      }
-
-      .algorithm-selector {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-
-        .radio-option {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          border: 2px solid #e0e0e0;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.2s;
-
-          &:hover {
-            border-color: #667eea;
-            background: #f8f9fa;
-          }
-
-          input[type="radio"] {
-            margin-top: 0.25rem;
-            cursor: pointer;
-          }
-
-          input[type="radio"]:checked + .radio-label {
-            strong {
-              color: #667eea;
-            }
-          }
-
-          .radio-label {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-
-            strong {
-              font-size: 1rem;
-              color: #333;
-            }
-
-            small {
-              font-size: 0.85rem;
-              color: #666;
-              font-weight: normal;
-            }
-          }
-        }
-
-        .radio-option:has(input[type="radio"]:checked) {
-          border-color: #667eea;
-          background: linear-gradient(135deg, #667eea08 0%, #764ba208 100%);
-        }
-      }
-    }
-  }
-
-  // Pause/Resume UI
-  .resume-prompt {
-    background: #fff3cd;
-    border: 2px solid #ffc107;
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    animation: slideIn 0.3s ease-out;
-
-    h3 {
-      margin: 0 0 0.5rem 0;
-      color: #856404;
-      font-size: 1.1rem;
-    }
-
-    p {
-      margin: 0 0 0.5rem 0;
-      font-size: 0.9rem;
-      color: #333;
-
-      &:last-of-type {
-        color: #666;
-      }
-
-      strong {
-        color: #856404;
-      }
-    }
-
-    .resume-btn {
-      background: #28a745;
-      color: white;
-      border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 500;
-      transition: background 0.2s;
-
-      &:hover {
-        background: #218838;
-      }
-    }
-
-    .discard-btn {
-      background: #6c757d;
-      color: white;
-      border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.2s;
-
-      &:hover {
-        background: #5a6268;
-      }
-    }
-  }
-
-  .pause-btn {
-    background: #ff9800;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 0.2s;
-
-    &:hover {
-      background: #e68900;
-    }
-  }
-
-  .autofill-btn {
-    width: 100%;
-    padding: 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-size: 1.1rem;
-    font-weight: 600;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-
-    &:hover:not(:disabled) {
-      background: linear-gradient(135deg, #5a67d8 0%, #6b4299 100%);
-    }
-  }
-
-  .progress-section {
-    padding: 1.5rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-
-    h3 {
-      margin-bottom: 1rem;
-      color: #333;
-    }
-
-    .progress-bar {
-      width: 100%;
-      height: 24px;
-      background: #e0e0e0;
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 1rem;
-
-      .progress-fill {
-        height: 100%;
-        transition: width 0.3s ease;
-        border-radius: 12px;
-        animation: progressPulse 1.5s ease-in-out infinite;
-      }
-    }
-
-    .progress-message {
-      font-size: 0.95rem;
-      color: #666;
-      margin-bottom: 1rem;
-    }
-
-    .cancel-btn {
-      padding: 0.5rem 1rem;
-      background: white;
-      color: #f44336;
-      border: 2px solid #f44336;
-      border-radius: 6px;
-      font-weight: 500;
-
-      &:hover {
-        background: #f44336;
-        color: white;
-      }
-    }
-
-    .reset-btn {
-      padding: 0.5rem 1rem;
-      background: white;
-      color: #667eea;
-      border: 2px solid #667eea;
-      border-radius: 6px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-
-      &:hover {
-        background: #667eea;
-        color: white;
-      }
-    }
-  }
-
-  .autofill-tips {
-    h3 {
-      margin-bottom: 1rem;
-      color: #333;
-    }
-
-    ul {
-      list-style: none;
-      display: grid;
-      gap: 0.5rem;
-
-      li {
-        padding: 0.75rem;
-        background: #e8eaf6;
-        border-radius: 6px;
-        font-size: 0.9rem;
-        border-left: 3px solid #667eea;
-      }
-    }
-  }
-
-  .suggest-black-btn {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-
-    &:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
-  }
+  font-size: 0.85rem;
 }
 
 @keyframes progressPulse {
@@ -502,16 +402,5 @@
   }
   50% {
     opacity: 0.8;
-  }
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }

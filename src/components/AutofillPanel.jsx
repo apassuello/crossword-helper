@@ -430,293 +430,25 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
 
   return (
     <div className="autofill-panel">
-      <h2>Autofill Grid</h2>
-
-      <div className="autofill-info">
-        <p>
-          The autofill engine uses constraint satisfaction with backtracking
-          to find valid word combinations for your grid.
-        </p>
+      <div className="autofill-header">
+        <h2>Autofill Grid</h2>
         <div className="empty-slots">
-          Empty slots to fill: <strong>{getEmptySlots()}</strong>
-        </div>
-        {Object.keys(getThemeEntries()).length > 0 && (
-          <div className="theme-entries" style={{marginTop: '0.5rem', color: '#7b1fa2', fontWeight: '500'}}>
-            Theme words placed: <strong>{Object.keys(getThemeEntries()).length}</strong>
-            <small style={{display: 'block', fontSize: '0.85rem', fontWeight: 'normal', color: '#666', marginTop: '0.25rem'}}>
-              {(() => {
-                // Count theme cells
-                let themeCellCount = 0;
-                if (grid) {
-                  for (let row = 0; row < grid.length; row++) {
-                    for (let col = 0; col < grid[row].length; col++) {
-                      if (grid[row][col].isThemeLocked && !grid[row][col].isBlack) {
-                        themeCellCount++;
-                      }
-                    }
-                  }
-                }
-                return `${themeCellCount} cells locked • Right-click to lock/unlock`;
-              })()}
-            </small>
-          </div>
-        )}
-      </div>
-
-      <div className="autofill-options">
-        <h3>Options</h3>
-
-        <div className="option-group">
-          <label>Minimum Word Score</label>
-          <div className="slider-group">
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="10"
-              value={options.minScore}
-              onChange={(e) => handleOptionChange('minScore', parseInt(e.target.value))}
-            />
-            <span className="value">{options.minScore}</span>
-          </div>
-          <p className="help-text">Higher scores mean better crossword words</p>
-        </div>
-
-        <div className="option-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={options.preferPersonalWords}
-              onChange={(e) => handleOptionChange('preferPersonalWords', e.target.checked)}
-            />
-            Prefer personal word list
-          </label>
-        </div>
-
-        <div className="option-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={options.adaptiveMode}
-              onChange={(e) => handleOptionChange('adaptiveMode', e.target.checked)}
-            />
-            ⚡ Adaptive Mode (Auto Black Squares)
-          </label>
-          <p className="help-text">
-            Automatically place strategic black squares when autofill gets stuck
-          </p>
-
-          {options.adaptiveMode && (
-            <div className="slider-group" style={{marginTop: '0.5rem'}}>
-              <label style={{fontSize: '0.9rem', fontWeight: 'normal'}}>Max Adaptations:</label>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                step="1"
-                value={options.maxAdaptations}
-                onChange={(e) => handleOptionChange('maxAdaptations', parseInt(e.target.value))}
-              />
-              <span className="value">{options.maxAdaptations}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="option-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={options.partialFill}
-              onChange={(e) => handleOptionChange('partialFill', e.target.checked)}
-            />
-            🎯 Partial Fill Mode (Collaborative)
-          </label>
-          <p className="help-text">
-            Stop when stuck and preserve valid words instead of backtracking. Perfect for iterative human-AI collaboration.
-          </p>
-        </div>
-
-        <div className="option-group">
-          <label>Algorithm</label>
-          <div className="algorithm-selector">
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="algorithm"
-                value="repair"
-                checked={options.algorithm === 'repair'}
-                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
-              />
-              <span className="radio-label">
-                <strong>Repair</strong> (Recommended)
-                <small>Fast, reliable iterative repair - 100% success rate</small>
-              </span>
-            </label>
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="algorithm"
-                value="beam"
-                checked={options.algorithm === 'beam'}
-                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
-              />
-              <span className="radio-label">
-                <strong>Beam Search</strong> (Experimental)
-                <small>May have backtracking issues - use Repair instead</small>
-              </span>
-            </label>
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="algorithm"
-                value="trie"
-                checked={options.algorithm === 'trie'}
-                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
-              />
-              <span className="radio-label">
-                <strong>Trie</strong> (Classic CSP)
-                <small>Classic algorithm - Repair is faster and more reliable</small>
-              </span>
-            </label>
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="algorithm"
-                value="regex"
-                checked={options.algorithm === 'regex'}
-                onChange={(e) => handleOptionChange('algorithm', e.target.value)}
-              />
-              <span className="radio-label">
-                <strong>Regex</strong> (Legacy)
-                <small>Fallback option, slower</small>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        <div className="option-group">
-          <label>Timeout (seconds)</label>
-          <select
-            value={options.timeout}
-            onChange={(e) => handleOptionChange('timeout', parseInt(e.target.value))}
-          >
-            <option value="60">1 minute</option>
-            <option value="180">3 minutes</option>
-            <option value="300">5 minutes</option>
-            <option value="600">10 minutes</option>
-          </select>
-        </div>
-
-        <div className="option-group">
-          <label>Word Lists</label>
-
-          {wordlistsLoading ? (
-            <div className="wordlist-loading">Loading wordlists...</div>
-          ) : (
-            <>
-              {/* Built-in wordlists */}
-              {availableWordlists.built_in.length > 0 && (
-                <div className="wordlist-section">
-                  <h4>Built-in Lists</h4>
-                  <div className="wordlist-checkboxes">
-                    {availableWordlists.built_in.map(wl => (
-                      <label key={wl.key}>
-                        <input
-                          type="checkbox"
-                          checked={options.wordlists.includes(wl.key)}
-                          onChange={(e) => {
-                            const lists = e.target.checked
-                              ? [...options.wordlists, wl.key]
-                              : options.wordlists.filter(l => l !== wl.key);
-                            handleOptionChange('wordlists', lists);
-                          }}
-                        />
-                        {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()} words)`}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Custom wordlists */}
-              {availableWordlists.custom.length > 0 && (
-                <div className="wordlist-section custom-section">
-                  <h4>🎨 Custom Lists</h4>
-                  <div className="wordlist-checkboxes">
-                    {availableWordlists.custom.map(wl => (
-                      <div key={wl.key} className="wordlist-item-container">
-                        <label className="wordlist-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={options.wordlists.includes(wl.key)}
-                            onChange={(e) => {
-                              const lists = e.target.checked
-                                ? [...options.wordlists, wl.key]
-                                : options.wordlists.filter(l => l !== wl.key);
-                              handleOptionChange('wordlists', lists);
-
-                              // If unchecking and it's the theme list, clear theme designation
-                              if (!e.target.checked && options.themeList === wl.key) {
-                                handleOptionChange('themeList', null);
-                              }
-                            }}
-                          />
-                          {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()} words)`}
-                        </label>
-
-                        {/* Theme designation radio button - only show if checked */}
-                        {options.wordlists.includes(wl.key) && (
-                          <label className="theme-designation">
-                            <input
-                              type="radio"
-                              name="themeList"
-                              checked={options.themeList === wl.key}
-                              onChange={() => handleOptionChange('themeList', wl.key)}
-                            />
-                            <span className="theme-label">⭐ Theme List</span>
-                          </label>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Theme list info banner */}
-                  {options.themeList && (
-                    <div className="theme-info">
-                      <strong>⭐ Theme List Active:</strong> {availableWordlists.custom.find(w => w.key === options.themeList)?.name}
-                      <p className="help-text">
-                        The autofill algorithm will prioritize words from this list and try to use as many as possible.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {availableWordlists.custom.length === 0 && (
-                <div className="no-custom-lists">
-                  <p className="help-text">
-                    No custom wordlists yet. Upload one in the "Word Lists" tab!
-                  </p>
-                </div>
-              )}
-            </>
+          <strong>{getEmptySlots()}</strong> empty slots
+          {Object.keys(getThemeEntries()).length > 0 && (
+            <span className="theme-count"> | <strong>{Object.keys(getThemeEntries()).length}</strong> theme words</span>
           )}
         </div>
       </div>
 
-      {/* Resume Prompt Banner */}
       {showResumePrompt && pausedStateInfo && !progress && (
         <div className="resume-prompt">
-          <h3>⏸ Paused Autofill Available</h3>
-          <p>
-            You have a paused autofill from {new Date(pausedStateInfo.timestamp).toLocaleString()}
-          </p>
+          <h3>Paused Autofill Available</h3>
           <p>
             <strong>{pausedStateInfo.slots_filled}/{pausedStateInfo.total_slots}</strong> slots filled
           </p>
           <div style={{display: 'flex', gap: '0.5rem'}}>
             <button className="resume-btn" onClick={handleResume}>
-              ▶ Resume Autofill
+              Resume Autofill
             </button>
             <button className="discard-btn" onClick={handleDiscardPaused}>
               Discard
@@ -737,7 +469,6 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
 
       {progress && (
         <div className="progress-section">
-          <h3>Autofill Progress</h3>
           <ProgressIndicator
             type={progress.progress > 0 ? "bar" : "spinner"}
             progress={progress.progress || 0}
@@ -751,52 +482,200 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
             }
           />
           {progress.status === 'running' && (
-            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap'}}>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap'}}>
               <button className="pause-btn" onClick={handlePause}>
-                ⏸ Pause
+                Pause
               </button>
               <button className="cancel-btn" onClick={onCancelAutofill}>
                 Cancel
               </button>
               <button className="suggest-black-btn" onClick={handleSuggestBlackSquares}>
-                ⬛ Suggest Black Square
+                Suggest Black Square
               </button>
             </div>
           )}
           {(progress.status === 'error' || progress.status === 'complete' || progress.status === 'warning') && (
-            <div style={{display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap'}}>
+            <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap'}}>
               <button className="reset-btn" onClick={onResetAutofill}>
-                🔄 Reset Autofill
+                Reset Autofill
               </button>
             </div>
           )}
         </div>
       )}
 
-      <div className="autofill-tips">
-        <h3>Tips</h3>
-        <ul>
-          <li>Place theme answers manually before autofilling</li>
-          <li>Add more black squares if autofill is too slow</li>
-          <li>Use a higher minimum score for cleaner fill</li>
-          <li>Personal word lists help create unique puzzles</li>
-        </ul>
+      <div className="autofill-options">
+        <h3>Options</h3>
 
-        {!progress && getEmptySlots() > 0 && (
-          <div style={{marginTop: '1rem'}}>
-            <button
-              className="suggest-black-btn"
-              onClick={handleSuggestBlackSquares}
-              style={{width: '100%'}}
-            >
-              ⬛ Suggest Strategic Black Square
-            </button>
-            <p className="help-text" style={{marginTop: '0.5rem', fontSize: '0.85rem'}}>
-              Get suggestions for placing "cheater squares" to make difficult slots easier to fill
-            </p>
+        <div className="compact-row">
+          <label>Algorithm</label>
+          <select
+            value={options.algorithm}
+            onChange={(e) => handleOptionChange('algorithm', e.target.value)}
+          >
+            <option value="repair">Repair (Recommended)</option>
+            <option value="beam">Beam Search (Experimental)</option>
+            <option value="trie">Trie (Classic CSP)</option>
+            <option value="regex">Regex (Legacy)</option>
+          </select>
+        </div>
+
+        <div className="compact-row">
+          <label>Timeout</label>
+          <select
+            value={options.timeout}
+            onChange={(e) => handleOptionChange('timeout', parseInt(e.target.value))}
+          >
+            <option value="60">1 min</option>
+            <option value="180">3 min</option>
+            <option value="300">5 min</option>
+            <option value="600">10 min</option>
+          </select>
+        </div>
+
+        <div className="compact-row">
+          <label>Min Score: {options.minScore}</label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="10"
+            value={options.minScore}
+            onChange={(e) => handleOptionChange('minScore', parseInt(e.target.value))}
+          />
+        </div>
+
+        <div className="checkbox-row">
+          <label>
+            <input
+              type="checkbox"
+              checked={options.preferPersonalWords}
+              onChange={(e) => handleOptionChange('preferPersonalWords', e.target.checked)}
+            />
+            Prefer personal words
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={options.adaptiveMode}
+              onChange={(e) => handleOptionChange('adaptiveMode', e.target.checked)}
+            />
+            Adaptive mode
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={options.partialFill}
+              onChange={(e) => handleOptionChange('partialFill', e.target.checked)}
+            />
+            Partial fill
+          </label>
+        </div>
+
+        {options.adaptiveMode && (
+          <div className="compact-row">
+            <label>Max adaptations: {options.maxAdaptations}</label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              value={options.maxAdaptations}
+              onChange={(e) => handleOptionChange('maxAdaptations', parseInt(e.target.value))}
+            />
           </div>
         )}
+
+        <div className="option-group wordlists-group">
+          <label>Word Lists</label>
+
+          {wordlistsLoading ? (
+            <div className="wordlist-loading">Loading...</div>
+          ) : (
+            <div className="wordlist-scroll-container">
+              {availableWordlists.built_in.length > 0 && (
+                <div className="wordlist-section">
+                  <h4>Built-in</h4>
+                  <div className="wordlist-checkboxes">
+                    {availableWordlists.built_in.map(wl => (
+                      <label key={wl.key}>
+                        <input
+                          type="checkbox"
+                          checked={options.wordlists.includes(wl.key)}
+                          onChange={(e) => {
+                            const lists = e.target.checked
+                              ? [...options.wordlists, wl.key]
+                              : options.wordlists.filter(l => l !== wl.key);
+                            handleOptionChange('wordlists', lists);
+                          }}
+                        />
+                        {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()})`}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {availableWordlists.custom.length > 0 && (
+                <div className="wordlist-section custom-section">
+                  <h4>Custom</h4>
+                  <div className="wordlist-checkboxes">
+                    {availableWordlists.custom.map(wl => (
+                      <div key={wl.key} className="wordlist-item-container">
+                        <label className="wordlist-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={options.wordlists.includes(wl.key)}
+                            onChange={(e) => {
+                              const lists = e.target.checked
+                                ? [...options.wordlists, wl.key]
+                                : options.wordlists.filter(l => l !== wl.key);
+                              handleOptionChange('wordlists', lists);
+
+                              if (!e.target.checked && options.themeList === wl.key) {
+                                handleOptionChange('themeList', null);
+                              }
+                            }}
+                          />
+                          {wl.name} {wl.word_count && `(${wl.word_count.toLocaleString()})`}
+                        </label>
+
+                        {options.wordlists.includes(wl.key) && (
+                          <label className="theme-designation">
+                            <input
+                              type="radio"
+                              name="themeList"
+                              checked={options.themeList === wl.key}
+                              onChange={() => handleOptionChange('themeList', wl.key)}
+                            />
+                            <span className="theme-label">Theme List</span>
+                          </label>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {options.themeList && (
+            <div className="theme-info">
+              <strong>Theme List Active:</strong> {availableWordlists.custom.find(w => w.key === options.themeList)?.name}
+            </div>
+          )}
+        </div>
       </div>
+
+      {!progress && getEmptySlots() > 0 && (
+        <button
+          className="suggest-black-btn"
+          onClick={handleSuggestBlackSquares}
+          style={{width: '100%', marginTop: '0.5rem'}}
+        >
+          Suggest Strategic Black Square
+        </button>
+      )}
 
       {/* Black Square Suggestions Modal */}
       {showBlackSquareModal && problematicSlot && (

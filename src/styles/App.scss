@@ -61,18 +61,60 @@
   }
 }
 
+.grid-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 2rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+  .verify-btn {
+    padding: 0.5rem 1.2rem;
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+
+    &:hover {
+      background: #1565c0;
+    }
+  }
+
+  .save-btn {
+    padding: 0.5rem 1.2rem;
+    background: #388e3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+
+    &:hover {
+      background: #2e7d32;
+    }
+  }
+}
+
 .app-body {
   flex: 1;
   display: flex;
   background: #f8f9fa;
-  min-height: calc(100vh - 80px);
+  min-height: calc(100vh - 120px);
 
   .main-panel {
     flex: 1;
     padding: 2rem;
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
     overflow: auto;
   }
 
@@ -81,7 +123,8 @@
     background: white;
     border-left: 1px solid #e0e0e0;
     overflow-y: auto;
-    animation: slideInUp 0.3s ease;
+    display: flex;
+    flex-direction: column;
   }
 }
 
