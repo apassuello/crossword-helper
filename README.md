@@ -4,11 +4,9 @@ A toolkit for building crossword puzzles. It has a web UI for interactive grid
 editing and autofill, plus a CLI for scripting and batch operations. All puzzle
 logic lives in the CLI; the web app is a thin wrapper around it.
 
-![Grid editor showing a 21x21 themed crossword](docs/screenshots/ui_21x21_themed_grid_editor.png)
-
-![Autofill running with real-time progress](docs/screenshots/ui_21x21_autofill_in_progress.png)
-
-![Pattern search with results](docs/screenshots/ui_pattern_search_with_results.png)
+| Grid Editor | Autofill with Theme Words | 21x21 Complete Fill |
+|:-:|:-:|:-:|
+| ![Grid editor](docs/screenshots/grid_editor_15x15.png) | ![Autofill](docs/screenshots/autofill_15x15_birthday.png) | ![Complete](docs/screenshots/autofill_21x21_complete.png) |
 
 ## Quick Start
 
