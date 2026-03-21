@@ -95,6 +95,9 @@ test_grids/
 # Claude Code
 .claude/
 
+# Downloaded third-party sources (fetched by scripts/research/)
+data/research/
+
 # Utility scripts output
 *.log
 *.tmp
