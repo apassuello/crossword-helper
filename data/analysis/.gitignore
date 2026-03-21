@@ -1,0 +1,9 @@
+# Downloaded data files (large, externally hosted — re-fetch with scripts/fetch_crossword_datasets.sh)
+*.zip
+*.dict
+*.txt
+*.tsv
+*.csv
+*.sqlite
+*.puz
+xword_benchmark/
