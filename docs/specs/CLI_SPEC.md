@@ -2,7 +2,7 @@
 
 **Document Type:** Component Specification (Layer 1 - Single Source of Truth)
 **Version:** 2.0.0
-**Last Updated:** 2025-12-27
+**Last Updated:** 2026-03
 **Status:** Production-Ready - All Features Complete
 
 ---
@@ -63,7 +63,7 @@ The CLI tool is the **single source of truth** for all crossword puzzle logic in
 ```
 cli/
 ├── src/
-│   ├── cli.py                      # Main CLI entry point (903 lines, 8 commands)
+│   ├── cli.py                      # Main CLI entry point (1,347 lines, 13 commands)
 │   ├── core/                       # Core grid operations
 │   │   ├── grid.py                 # Grid data structure (NumPy-backed)
 │   │   ├── numbering.py            # Auto-numbering algorithm
@@ -73,7 +73,7 @@ cli/
 │   │   ├── cell_types.py           # Cell state enumeration
 │   │   └── progress.py             # Progress reporting (JSON stderr)
 │   ├── fill/                       # Autofill algorithms
-│   │   ├── autofill.py             # CSP with backtracking (43k lines)
+│   │   ├── autofill.py             # CSP with backtracking + MAC (1,248 lines)
 │   │   ├── beam_search_autofill.py # Beam search algorithm
 │   │   ├── iterative_repair.py     # Iterative repair algorithm
 │   │   ├── hybrid_autofill.py      # Hybrid (beam + repair)
@@ -209,7 +209,7 @@ crossword new --size 11 --output test.json
 
 ### Overview
 
-The CLI provides 11 primary commands organized by functionality:
+The CLI provides 13 commands organized by functionality:
 
 | Command | Category | Purpose | Typical Usage |
 |---------|----------|---------|---------------|
@@ -221,9 +221,12 @@ The CLI provides 11 primary commands organized by functionality:
 | `validate` | Grid Ops | Validate against NYT standards | Quality check |
 | `show` | Display | Display grid in terminal | Quick preview |
 | `export` | Export | Export to HTML/JSON | Final output |
-| `pause` | State Mgmt | Pause running autofill | ⚠️ Not yet implemented |
-| `resume` | State Mgmt | Resume from saved state | ⚠️ Not yet implemented |
-| `list-states` | State Mgmt | List saved autofill states | ⚠️ Not yet implemented |
+| `build-cache` | Wordlist | Pre-build wordlist cache (.pkl) | Performance optimization |
+| `pause` | State Mgmt | Pause running autofill | Interrupt long fills |
+| `resume` | State Mgmt | Resume from saved state | Continue paused fills |
+| `list-states` | State Mgmt | List saved autofill states | Browse saved states |
+
+> **For detailed algorithm analysis:** See [../ALGORITHM_DEEP_DIVE.md](../ALGORITHM_DEEP_DIVE.md)
 
 ---
 
@@ -3532,5 +3535,5 @@ crossword fill puzzle.json \
 
 **Document Version:** 2.0.0
 **Total Lines:** 2,847
-**Last Updated:** 2025-12-27
+**Last Updated:** 2026-03
 **Maintained By:** Development Team

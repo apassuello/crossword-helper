@@ -1,7 +1,7 @@
 # Crossword Helper - Master Architecture Document
 
-**Version:** 1.0
-**Last Updated:** December 27, 2025
+**Version:** 2.0
+**Last Updated:** March 2026
 **Status:** Production - All Phases Complete
 **Test Coverage:** 165/165 tests passing (100%)
 
@@ -414,7 +414,7 @@ class CLIAdapter:
 
 #### Command Structure
 
-**File:** `cli/src/cli.py` (903 lines, 8 commands)
+**File:** `cli/src/cli.py` (1,347 lines, 13 commands)
 
 **Commands:**
 
@@ -423,7 +423,7 @@ class CLIAdapter:
    crossword new --size 15 --output puzzle.json
    ```
 
-2. **fill** - Autofill grid with CSP/Beam Search
+2. **fill** - Autofill grid with CSP/Beam Search/Hybrid
    ```bash
    crossword fill puzzle.json \
      --algorithm hybrid \
@@ -458,16 +458,36 @@ class CLIAdapter:
    crossword validate puzzle.json
    ```
 
-7. **wordlists** - Manage word lists
-   ```bash
-   crossword wordlists list
-   crossword wordlists stats comprehensive.txt
-   ```
-
-8. **export** - Export puzzle to HTML/JSON
+7. **export** - Export puzzle to HTML/JSON
    ```bash
    crossword export puzzle.json --format html --output puzzle.html
    ```
+
+8. **show** - Display grid in terminal
+   ```bash
+   crossword show puzzle.json --format pretty
+   ```
+
+9. **build-cache** - Pre-build wordlist cache (.pkl)
+   ```bash
+   crossword build-cache comprehensive.txt --output comprehensive.pkl
+   ```
+
+10. **pause** - Signal a running autofill to pause
+    ```bash
+    crossword pause <task-id> --json-output
+    ```
+
+11. **resume** - Resume a paused autofill with optional edits
+    ```bash
+    crossword resume state.json.gz --edited-grid edited.json \
+      --wordlists comprehensive.txt --timeout 300
+    ```
+
+12. **list-states** - List saved pause/resume states
+    ```bash
+    crossword list-states --json-output --sort-by date
+    ```
 
 #### Core Modules
 
@@ -483,52 +503,77 @@ class CLIAdapter:
 
 **Autofill Engines** (`cli/src/fill/`)
 
-Three algorithms with different trade-offs:
+Four algorithm implementations with different trade-offs:
 
-1. **CSP with Backtracking** (`autofill.py`, ~800 lines)
-   - Classic constraint satisfaction
-   - Most Constrained Variable (MCV) heuristic
-   - Least Constraining Value (LCV) heuristic
-   - AC-3 arc consistency
-   - Forward checking
+1. **CSP with Backtracking + MAC** (`autofill.py`, 1,248 lines)
+   - Constraint Satisfaction Problem with AC-3 arc consistency
+   - MAC (Maintaining Arc Consistency) during backtracking
+   - Most Constrained Variable (MCV) heuristic for slot ordering
+   - Least Constraining Value (LCV) with two-tier scoring:
+     - Fast: pre-computed letter frequency table (O(1) estimates)
+     - Accurate: counts exact remaining options (top 100 candidates)
+   - Forward checking after each placement
+   - Stratified sampling for large domains (>10,000 words)
    - Guaranteed solution if one exists
    - Fast for small grids (11×11 < 30s)
-   - Struggles with large grids (21×21 can timeout)
 
-2. **Beam Search** (`fill/beam_search/orchestrator.py`, ~600 lines)
-   - Global optimization approach
-   - Maintains top-k partial solutions (beam width)
-   - Scores complete fills by word quality
+2. **Beam Search** (`fill/beam_search/`, 19 files across 6 subpackages)
+   - **Orchestrator pattern** (`orchestrator.py`, 1,100 lines) coordinates:
+     - `MRVSlotSelector` (selection/slot_selector.py) — Minimum Remaining Values
+     - `MACConstraintEngine` (constraints/engine.py) — Constraint propagation
+     - `CompositeValueOrdering` (selection/value_ordering.py) — Chained ordering pipeline:
+       - ThemeWordPriorityOrdering → LCVValueOrdering → ThresholdDiverseOrdering → StratifiedValueOrdering
+     - `DiversityManager` (beam/diversity.py) — Diverse Beam Search (Vijayakumar et al. 2016)
+     - `BeamManager` (beam/manager.py) — Beam expansion and pruning
+     - `StateEvaluator` (evaluation/state_evaluator.py) — Predictive risk assessment
+     - Memory management (memory/domain_manager.py, grid_snapshot.py, pools.py)
+   - Maintains top-k parallel solutions (beam width, default: 5)
+   - Predictive risk scoring penalizes constrained crossings (0.70×–1.0×)
+   - Dead end recovery: conflict-directed backjumping + escalating retries
    - Better word quality than CSP
-   - No guarantees of finding solution
-   - Configurable beam width (default: 5)
-   - Good for medium grids (15×15)
+   - Good for medium grids (15×15, 1-5min)
 
-3. **Hybrid Algorithm** (default)
-   - Starts with Beam Search for global optimization
-   - Falls back to CSP for difficult regions
-   - Combines quality and completeness
+3. **Hybrid Algorithm** (`hybrid_autofill.py`, 191 lines) — **default**
+   - **Phase 1 — Beam Search** (20% of timeout, max 60s): Global exploration
+   - **Phase 2 — Iterative Repair** (80% of remaining): Fixes crossing mismatches
+   - Returns better of beam vs. repair result
    - Best all-around performance
+
+4. **Iterative Repair** (`iterative_repair.py`, 1,919 lines)
+   - Region-based conflict detection and resolution
+   - Multi-pass greedy fill with gibberish detection
+   - **Tabu search** for local optimization (tenure = √num_slots)
+   - Used as Phase 2 in Hybrid algorithm
+
+5. **Adaptive Autofill** (`adaptive_autofill.py`, 415 lines)
+   - Wrapper that monitors autofill progress
+   - Auto-detects stuck situations (thrashing, stagnation)
+   - Suggests strategic black square placements via `BlackSquareSuggester`
+   - Max 3 adaptations per session, only for slots ≥6 letters
+
+> **For detailed algorithm analysis:** See [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md)
 
 **Pattern Matching** (`cli/src/fill/`)
 
-Three algorithms with different performance characteristics:
+Three implementations with different performance characteristics:
 
 1. **Regex Matcher** (`pattern_matcher.py`)
-   - Simple, reliable
-   - ~100ms for 454k words
-   - Good for small wordlists
+   - Converts `C?T` → regex `^C.T$`, length-filtered
+   - ~200-500ms per query on 454k words
+   - LRU cache for repeated patterns
 
-2. **Trie Matcher** (`trie_matcher.py`)
-   - 10-50x faster than regex
-   - ~10ms for 454k words
-   - Memory-efficient
-   - Default for CLI
+2. **Trie Matcher** (`trie_pattern_matcher.py` + `word_trie.py`)
+   - Length-indexed tries (separate trie per word length 3–21)
+   - Score-based subtree pruning via min/max bounds per node
+   - Wildcard `?` branches to all children simultaneously
+   - 10-50x faster than regex (~10-50ms per query)
+   - Build time: ~2-3s for 454k words
+   - **Default for autofill algorithms**
 
 3. **Aho-Corasick** (`ahocorasick_matcher.py`)
-   - Fastest for multiple patterns
-   - Pre-built automaton
-   - Best for batch operations
+   - Separate automaton per word length
+   - 10-100x faster than regex (~1-20ms per query)
+   - Requires `pyahocorasick` library (optional; falls back to Trie)
 
 **Word List Manager** (`cli/src/fill/word_list.py`)
 
@@ -941,18 +986,22 @@ is_symmetric = np.array_equal(grid == -1, np.rot90(grid == -1, 2))
 
 ### 7.7 Hybrid Autofill Algorithm
 
-**Decision:** Default to hybrid (Beam Search → CSP fallback)
+**Decision:** Default to hybrid (Beam Search → Iterative Repair)
 
 **Rationale:**
-- ✅ Beam Search finds high-quality fills (better words)
-- ✅ CSP provides completeness guarantee (finds solution if exists)
-- ✅ Combination gives best of both worlds
+- ✅ Beam Search finds high-quality partial fills (better words, global optimization)
+- ✅ Iterative Repair fixes crossing mismatches via targeted word swaps (tabu search)
+- ✅ Two-phase approach: exploration (20% time) + refinement (80% time)
 - ✅ User can override if needed (--algorithm flag)
+
+**Two-Phase Strategy:**
+- Phase 1: Beam Search (20% of timeout, max 60s) — global exploration
+- Phase 2: Iterative Repair (remaining time) — conflict resolution via region-based fill + tabu search
 
 **Performance:**
 - 11×11: <30s (Beam Search sufficient)
 - 15×15: 1-5min (Hybrid best)
-- 21×21: 5-30min (CSP fallback critical)
+- 21×21: 5-30min (Iterative Repair critical for conflict resolution)
 
 **Word Quality:**
 - Beam Search average score: 75/100

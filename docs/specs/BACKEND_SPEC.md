@@ -1,8 +1,8 @@
 # Backend/Web API Specification
 
 **Document Type:** Component Specification (Layer 2)
-**Version:** 2.0.0 (Phase 3 Integration Complete)
-**Last Updated:** 2025-12-27
+**Version:** 2.1.0
+**Last Updated:** 2026-03
 **Status:** All phases complete, 165/165 tests passing
 
 ---
@@ -1499,6 +1499,13 @@ curl http://localhost:5000/api/wordlists/comprehensive/stats
 - `500 Internal Server Error` - Import failed
 
 **Frontend Usage:** `WordListPanel.jsx` - Upload wordlist file
+
+### Additional Endpoints
+
+For endpoints added after Phase 3 (progress streaming, theme management, wordlist operations, and black square suggestions), see:
+
+- **[NEW_ENDPOINTS_DOCUMENTATION.md](../NEW_ENDPOINTS_DOCUMENTATION.md)** — Full documentation for 17+ additional endpoints
+- **[../NEW_FEATURES.md](../NEW_FEATURES.md)** — Proposed future endpoints (constraint analysis, placement impact)
 
 ---
 
