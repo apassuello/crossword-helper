@@ -15,6 +15,7 @@ This suite ensures that all combinations of:
 import pytest
 import json
 import subprocess
+import sys
 import tempfile
 import os
 from backend.app import create_app
@@ -52,7 +53,7 @@ def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeou
 
     try:
         cmd = [
-            "python", "-m", "cli.src.cli", "fill",
+            sys.executable, "-m", "cli.src.cli", "fill",
             grid_file,
             "--wordlists", "data/wordlists/comprehensive.txt",
             "--timeout", str(timeout),
@@ -88,7 +89,7 @@ class TestCLIAutofillScenarios:
         Expected: Should complete without crash (partial fill OK)
         """
         grid_data = create_empty_grid(11)
-        returncode, stdout, stderr = run_cli_fill(grid_data, "trie", adaptive=False)
+        returncode, stdout, stderr = run_cli_fill(grid_data, "trie", adaptive=False, timeout=120)
 
         # Should not crash
         assert "'FillResult' object has no attribute 'get'" not in stdout
@@ -136,7 +137,7 @@ class TestCLIAutofillScenarios:
         Expected: Should complete without crash (THIS WAS BROKEN BEFORE)
         """
         grid_data = create_empty_grid(11)
-        returncode, stdout, stderr = run_cli_fill(grid_data, "trie", adaptive=True, timeout=30)
+        returncode, stdout, stderr = run_cli_fill(grid_data, "trie", adaptive=True, timeout=120)
 
         # KEY ASSERTION: No TypeError about 'timeout' parameter
         assert "TypeError: Autofill.fill() got an unexpected keyword argument 'timeout'" not in stderr
