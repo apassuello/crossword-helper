@@ -1343,5 +1343,146 @@ def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int]):
         sys.exit(1)
 
 
+@cli.command("import-nyt")
+@click.argument("nyt_file", type=click.Path(exists=True))
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file for grid (.json)"
+)
+@click.option(
+    "--filled", is_flag=True, default=False, help="Output filled grid instead of empty"
+)
+@click.option(
+    "--verify/--no-verify", default=True, help="Run self-verification (default: on)"
+)
+@click.option(
+    "--json-output", is_flag=True, default=False, help="Machine-readable JSON output"
+)
+def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool, json_output: bool):
+    """
+    Import an NYT crossword JSON file (doshea/nyt_crosswords format).
+
+    Parses the NYT JSON to extract:
+    - Empty grid with black square pattern
+    - Word list with positions, directions, and clues
+    - Self-verification by reconstructing the grid
+
+    Examples:
+        crossword import-nyt puzzle.json
+        crossword import-nyt puzzle.json --json-output
+        crossword import-nyt puzzle.json -o empty_grid.json
+        crossword import-nyt puzzle.json --filled -o filled_grid.json
+    """
+    from .core.nyt_parser import parse_nyt_json, NytParseError
+
+    try:
+        result = parse_nyt_json(nyt_file, verify=verify)
+    except NytParseError as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(1)
+
+    if json_output:
+        grid_obj = result.filled_grid if filled else result.empty_grid
+        output_data = {
+            "success": True,
+            "size": result.size,
+            "grid": grid_obj.to_dict()["grid"],
+            "metadata": result.metadata,
+            "words": [
+                {
+                    "number": w.number,
+                    "direction": w.direction,
+                    "answer": w.answer,
+                    "clue": w.clue,
+                    "row": w.row,
+                    "col": w.col,
+                    "length": w.length,
+                }
+                for w in result.words
+            ],
+        }
+
+        if result.verification:
+            v = result.verification
+            output_data["verification"] = {
+                "success": v.success,
+                "conflicts": v.conflicts,
+                "grid_match": v.grid_match,
+                "words_placed": v.words_placed,
+                "total_words": v.total_words,
+                "mismatched_cells": [
+                    {"row": r, "col": c, "expected": e, "got": g}
+                    for r, c, e, g in v.mismatched_cells
+                ],
+            }
+
+        click.echo(json.dumps(output_data, indent=2))
+    else:
+        # Human-readable output
+        m = result.metadata
+        click.echo(f"\n{'='*60}")
+        click.echo(f"NYT Crossword: {m.get('title', 'Unknown')}")
+        click.echo(f"{'='*60}\n")
+
+        click.echo(f"Date: {m.get('date', 'Unknown')}")
+        click.echo(f"Author: {m.get('author', 'Unknown')}")
+        click.echo(f"Size: {result.size}x{result.size}")
+        click.echo(f"Words: {len(result.words)} ({sum(1 for w in result.words if w.direction == 'across')} across, {sum(1 for w in result.words if w.direction == 'down')} down)")
+
+        if m.get('has_rebus'):
+            click.echo(click.style("Warning: Puzzle contains rebus cells (multi-letter)", fg="yellow"))
+
+        if m.get('numbering_warnings'):
+            for warn in m['numbering_warnings']:
+                click.echo(click.style(f"Warning: {warn}", fg="yellow"))
+
+        # Show word list
+        click.echo(f"\n--- Across ---")
+        for w in sorted((w for w in result.words if w.direction == 'across'), key=lambda w: w.number):
+            click.echo(f"  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  \"{w.clue}\"")
+
+        click.echo(f"\n--- Down ---")
+        for w in sorted((w for w in result.words if w.direction == 'down'), key=lambda w: w.number):
+            click.echo(f"  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  \"{w.clue}\"")
+
+        # Verification
+        if result.verification:
+            v = result.verification
+            click.echo(f"\n{'='*60}")
+            click.echo("Verification")
+            click.echo(f"{'='*60}\n")
+
+            if v.success:
+                click.echo(click.style(
+                    f"PASSED - All {v.words_placed}/{v.total_words} words placed, grid matches",
+                    fg="green", bold=True
+                ))
+            else:
+                click.echo(click.style("FAILED", fg="red", bold=True))
+                if v.conflicts:
+                    click.echo(f"\nConflicts ({len(v.conflicts)}):")
+                    for c in v.conflicts[:10]:
+                        click.echo(f"  - {c}")
+                if v.mismatched_cells:
+                    click.echo(f"\nMismatched cells ({len(v.mismatched_cells)}):")
+                    for r, c, exp, got in v.mismatched_cells[:10]:
+                        click.echo(f"  ({r},{c}): expected '{exp}', got '{got}'")
+                click.echo(f"\nWords placed: {v.words_placed}/{v.total_words}")
+
+        click.echo(f"\n{'='*60}\n")
+
+    # Save grid if output specified
+    if output:
+        grid_obj = result.filled_grid if filled else result.empty_grid
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(grid_obj.to_dict(), f, indent=2)
+        if not json_output:
+            click.echo(f"Saved {'filled' if filled else 'empty'} grid to: {output}")
+
+
 if __name__ == "__main__":
     cli()
