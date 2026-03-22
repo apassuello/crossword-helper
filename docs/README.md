@@ -2,8 +2,8 @@
 
 **Welcome to the Crossword Helper documentation!** This guide helps you find the right documentation for your needs.
 
-**Version**: 2.0.0
-**Last Updated**: December 28, 2025
+**Version**: 2.1.0
+**Last Updated**: March 2026
 
 > 📚 **New to the project?** Check out [../READING_LIST.md](../READING_LIST.md) for guided reading paths based on your role (user, developer, contributor).
 
@@ -48,21 +48,27 @@ docs/
 ├── README.md                    # This file - Documentation navigation
 ├── ARCHITECTURE.md              # System architecture (start here!)
 ├── ROADMAP.md                   # Development roadmap and status
+├── ALGORITHM_DEEP_DIVE.md       # Algorithm deep dive (CSP, beam search, scoring, matching)
+├── IMPROVEMENTS.md              # Identified bugs, gaps, and implementation plan
+├── NEW_FEATURES.md              # Feature proposals (heatmap, constraint viz, corpus scoring)
+├── CLI_INTEGRATION_GUIDE.md     # Quick reference for backend developers
+├── NEW_ENDPOINTS_DOCUMENTATION.md # Additional endpoint documentation
+├── THEME_LIST_FEATURE.md        # Theme word feature guide
 │
 ├── specs/                       # Component Specifications
-│   ├── CLI_SPEC.md             # CLI tool specification (3,257 lines)
-│   ├── BACKEND_SPEC.md         # Backend API specification (3,800+ lines)
-│   └── FRONTEND_SPEC.md        # Frontend React app specification (3,045 lines)
+│   ├── CLI_SPEC.md             # CLI tool specification
+│   ├── BACKEND_SPEC.md         # Backend API specification
+│   └── FRONTEND_SPEC.md        # Frontend React app specification
 │
 ├── api/                         # API Documentation
-│   ├── openapi.yaml            # OpenAPI 3.1.0 spec (26 endpoints)
-│   └── API_REFERENCE.md        # Human-readable API reference (2,386 lines)
+│   ├── openapi.yaml            # OpenAPI 3.1.0 spec
+│   └── API_REFERENCE.md        # Human-readable API reference
 │
 ├── ops/                         # Operational Documentation
-│   └── TESTING.md              # Testing guide (2,617 lines, 55+ examples)
+│   └── TESTING.md              # Testing guide (55+ examples)
 │
 ├── dev/                         # Developer Documentation
-│   ├── DEVELOPMENT.md          # Development guide (4,439 lines)
+│   ├── DEVELOPMENT.md          # Development guide
 │   └── CONTRIBUTING.md         # Contribution guidelines
 │
 └── archive/                     # Archived Documentation
@@ -80,6 +86,7 @@ docs/
 
 ### "I want to understand the system"
 - **Overview**: [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture and design
+- **Algorithms**: [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md) - CSP, beam search, scoring, pattern matching
 - **Deep Dive**: [specs/](./specs/) - Detailed component specifications
 - **Visual**: [ARCHITECTURE.md#diagrams](./ARCHITECTURE.md) - System diagrams
 
@@ -96,12 +103,14 @@ docs/
 
 ### "I want to understand the CLI tool"
 - **Overview**: [specs/CLI_SPEC.md](./specs/CLI_SPEC.md) - Complete CLI documentation
-- **Commands**: [specs/CLI_SPEC.md#command-reference](./specs/CLI_SPEC.md#command-reference) - All 8 commands
-- **Algorithms**: [specs/CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) - CSP, Beam Search, etc.
+- **Commands**: [specs/CLI_SPEC.md#command-reference](./specs/CLI_SPEC.md#command-reference) - All 13 commands
+- **Algorithms**: [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md) - CSP, Beam Search, Hybrid, Iterative Repair
+- **Integration**: [CLI_INTEGRATION_GUIDE.md](./CLI_INTEGRATION_GUIDE.md) - Backend↔CLI quick reference
 
 ### "I want to work on the backend"
 - **Architecture**: [specs/BACKEND_SPEC.md](./specs/BACKEND_SPEC.md) - Backend design
-- **API Endpoints**: [specs/BACKEND_SPEC.md#api-routes](./specs/BACKEND_SPEC.md#api-routes) - All 26 endpoints
+- **API Endpoints**: [specs/BACKEND_SPEC.md#api-routes](./specs/BACKEND_SPEC.md#api-routes) - API routes
+- **Additional Endpoints**: [NEW_ENDPOINTS_DOCUMENTATION.md](./NEW_ENDPOINTS_DOCUMENTATION.md) - Progress, theme, wordlist endpoints
 - **CLI Integration**: [specs/BACKEND_SPEC.md#cli-adapter](./specs/BACKEND_SPEC.md#cli-adapter) - CLIAdapter pattern
 
 ### "I want to work on the frontend"
@@ -116,10 +125,11 @@ docs/
 - **Coverage**: [TESTING.md#code-coverage](./ops/TESTING.md#code-coverage) - Coverage goals
 
 ### "I want to add a new feature"
-1. [DEVELOPMENT.md#adding-new-features](./dev/DEVELOPMENT.md#adding-new-features) - Feature checklist
-2. [CONTRIBUTING.md](./dev/CONTRIBUTING.md) - Coding standards
-3. [TESTING.md](./ops/TESTING.md) - Write tests
-4. Follow the contribution workflow
+1. [NEW_FEATURES.md](./NEW_FEATURES.md) - Proposed features with implementation plans
+2. [IMPROVEMENTS.md](./IMPROVEMENTS.md) - Known bugs and gaps to fix
+3. [DEVELOPMENT.md#adding-new-features](./dev/DEVELOPMENT.md#adding-new-features) - Feature checklist
+4. [CONTRIBUTING.md](./dev/CONTRIBUTING.md) - Coding standards
+5. [TESTING.md](./ops/TESTING.md) - Write tests
 
 ### "I need historical context"
 - **Archive**: [archive/README.md](./archive/README.md) - Historical documentation
@@ -136,6 +146,9 @@ docs/
 | Document | What It Covers | Read Time | Best For |
 |----------|---------------|-----------|----------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design, components, data flow | 15-20 min | New developers, architects |
+| [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md) | CSP, beam search, scoring, pattern matching | 20-30 min | Algorithm developers |
+| [IMPROVEMENTS.md](./IMPROVEMENTS.md) | Known bugs, gaps, and fix plans | 15-20 min | Contributors, maintainers |
+| [NEW_FEATURES.md](./NEW_FEATURES.md) | Feature proposals and implementation plans | 15-20 min | Feature planning |
 | [ROADMAP.md](./ROADMAP.md) | Development plan and status | 5-10 min | Understanding project direction |
 
 ### 📋 Specification Documentation
@@ -209,13 +222,14 @@ docs/
 
 **Goal**: Make successful API calls
 
-### Path 5: Algorithm Developer (Total: 1-1.5 hours)
+### Path 5: Algorithm Developer (Total: 1.5-2 hours)
 1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) - 15 min
-2. Read [CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) - 30 min
-3. Review [CLI_SPEC.md#performance](./specs/CLI_SPEC.md#performance-characteristics) - 15 min
-4. Study test examples in [TESTING.md](./ops/TESTING.md) - 20 min
+2. Read [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md) - 30 min (CSP, beam search, hybrid, scoring)
+3. Read [IMPROVEMENTS.md](./IMPROVEMENTS.md) - 15 min (known bugs and optimization opportunities)
+4. Review [CLI_SPEC.md#performance](./specs/CLI_SPEC.md#performance-characteristics) - 15 min
+5. Study test examples in [TESTING.md](./ops/TESTING.md) - 20 min
 
-**Goal**: Understand CSP/Beam Search and optimize
+**Goal**: Understand CSP/Beam Search/Hybrid and optimize
 
 ---
 
@@ -230,7 +244,7 @@ docs/
 **By Concept**:
 | Looking for... | Check... |
 |----------------|----------|
-| Algorithms | [CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) |
+| Algorithms | [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md) or [CLI_SPEC.md#autofill-algorithms](./specs/CLI_SPEC.md#autofill-algorithms) |
 | API endpoints | [API_REFERENCE.md](./api/API_REFERENCE.md) or [openapi.yaml](./api/openapi.yaml) |
 | Data structures | Any SPEC.md file, search for "Data Structures" |
 | Performance | [CLI_SPEC.md#performance](./specs/CLI_SPEC.md#performance-characteristics) |
@@ -241,12 +255,13 @@ docs/
 
 ## 📊 Documentation Statistics
 
-- **Total Active Documentation**: ~20,000 lines across 8 files
+- **Total Active Documentation**: ~25,000+ lines across 14 files
 - **Archive**: 87 files preserved for historical reference
 - **Code Examples**: 200+ across all documents
-- **API Endpoints Documented**: 26
+- **API Endpoints Documented**: 26+ (see NEW_ENDPOINTS_DOCUMENTATION.md for additional)
 - **Test Examples**: 55+
-- **CLI Commands**: 8
+- **CLI Commands**: 13
+- **Autofill Algorithms**: 4 (CSP, Beam Search, Hybrid, Iterative Repair) + Adaptive wrapper
 - **React Components**: 10 major components
 
 ---
