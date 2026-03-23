@@ -170,24 +170,30 @@ class TestThemeWordCLIIntegration:
             json.dump(grid_data, f)
 
         try:
-            # Run CLI with theme wordlist
-            result = subprocess.run(
-                [
-                    'python3', '-m', 'cli.src.cli', 'fill',
-                    str(grid_file),
-                    '--wordlists', 'data/wordlists/comprehensive.txt',
-                    '--theme-wordlist', theme_file,
-                    '--timeout', '30',  # Increased for slower CI environments (Python 3.10)
-                    '--allow-nonstandard'
-                ],
-                capture_output=True,
-                text=True,
-                timeout=45  # Increased for slower CI environments
-            )
+            # Run CLI with theme wordlist. We only care about loading messages
+            # (printed in first ~2s), not fill completion — use short timeout
+            # and check partial stdout if the fill runs longer.
+            try:
+                result = subprocess.run(
+                    [
+                        'python3', '-m', 'cli.src.cli', 'fill',
+                        str(grid_file),
+                        '--wordlists', 'data/wordlists/comprehensive.txt',
+                        '--theme-wordlist', theme_file,
+                        '--timeout', '10',
+                        '--allow-nonstandard'
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                stdout = result.stdout
+            except subprocess.TimeoutExpired as e:
+                stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
 
             # Check that CLI loaded theme words
-            assert '⭐' in result.stdout, "CLI should show theme word indicator"
-            assert 'Loaded 5 theme words' in result.stdout or '5 theme words' in result.stdout, \
+            assert '⭐' in stdout, "CLI should show theme word indicator"
+            assert 'Loaded 5 theme words' in stdout or '5 theme words' in stdout, \
                 "CLI should report loading 5 theme words"
 
         finally:
@@ -215,23 +221,28 @@ class TestThemeWordCLIIntegration:
             json.dump(grid_data, f)
 
         try:
-            result = subprocess.run(
-                [
-                    'python3', '-m', 'cli.src.cli', 'fill',
-                    str(grid_file),
-                    '--wordlists', 'data/wordlists/comprehensive.txt',
-                    '--theme-wordlist', str(demo_wordlist),
-                    '--timeout', '30',  # Increased for slower CI environments (Python 3.10)
-                    '--allow-nonstandard'
-                ],
-                capture_output=True,
-                text=True,
-                timeout=45  # Increased for slower CI environments
-            )
+            # Only care about loading messages, not fill completion
+            try:
+                result = subprocess.run(
+                    [
+                        'python3', '-m', 'cli.src.cli', 'fill',
+                        str(grid_file),
+                        '--wordlists', 'data/wordlists/comprehensive.txt',
+                        '--theme-wordlist', str(demo_wordlist),
+                        '--timeout', '10',
+                        '--allow-nonstandard'
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                stdout = result.stdout
+            except subprocess.TimeoutExpired as e:
+                stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
 
             # Verify theme word loading message appears
-            assert '⭐' in result.stdout, "Output should contain star emoji for theme words"
-            assert 'theme words' in result.stdout.lower(), "Output should mention 'theme words'"
+            assert '⭐' in stdout, "Output should contain star emoji for theme words"
+            assert 'theme words' in stdout.lower(), "Output should mention 'theme words'"
 
         finally:
             grid_file.unlink(missing_ok=True)
