@@ -20,7 +20,6 @@ import subprocess
 import sys
 import tempfile
 import os
-from backend.app import create_app
 
 
 # Realistic 7x7 grid with symmetric black squares (22 slots)
@@ -53,14 +52,6 @@ PREFILLED_GRID_7x7 = {
 
 WORDLIST = "data/wordlists/comprehensive.txt"
 
-
-@pytest.fixture
-def client():
-    """Create Flask test client"""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
 
 
 def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeout=20):

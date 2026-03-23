@@ -12,17 +12,6 @@ Tests the full integration stack: Frontend → Backend → CLI → Business Logi
 
 import pytest
 import json
-import time
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
 
 
 def create_empty_grid(size=11):
@@ -63,10 +52,8 @@ class TestCreateFillExportWorkflow:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait for autofill to complete
-        time.sleep(18)
-
         # Step 3: Get completed grid (via SSE stream)
+        # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
         sse_response = client.get(f"/api/progress/{task_id}")
         assert sse_response.status_code == 200
 

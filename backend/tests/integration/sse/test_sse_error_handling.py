@@ -18,6 +18,7 @@ import pytest
 import json
 import time
 import os
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestSSECLIErrorHandling:

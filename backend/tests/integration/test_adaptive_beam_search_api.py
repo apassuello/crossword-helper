@@ -11,63 +11,6 @@ This test reproduces the exact scenario reported by the user:
 
 import pytest
 import json
-import time
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client"""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """
-    Parse SSE message format.
-
-    SSE format spec:
-    ```
-    data: {"key": "value"}\n
-    \n
-    ```
-
-    Returns a function that parses SSE stream into list of messages.
-    """
-    def parse_sse_stream(data_bytes):
-        """
-        Parse SSE stream bytes into list of message dicts.
-
-        Args:
-            data_bytes: Raw SSE stream data
-
-        Returns:
-            List of parsed JSON messages
-        """
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-
-        # Split by double newline (message separator)
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-
-            # Extract data line
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]  # Remove "data: " prefix
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError as e:
-                        # Invalid JSON - this is a test failure
-                        pytest.fail(f"Invalid JSON in SSE message: {line}\nError: {e}")
-
-        return messages
-
-    return parse_sse_stream
 
 
 def create_21x21_grid_with_theme_words():
@@ -151,12 +94,7 @@ def test_adaptive_beam_search_comprehensive_wordlist(client, sse_parser):
     # For this test, we just verify the task started without immediate error
     # The SSE stream tests verify the actual stream behavior
 
-    # Alternative: Use a timeout-based check
-    # Just verify the autofill process starts and doesn't crash immediately
-    time.sleep(2)
-
-    # If we got here without exceptions, the test passes
-    # The actual autofill behavior is tested by other integration tests
+    # 202 + task_id proves startup didn't crash. No sleep needed.
     print(f"✓ Autofill process started successfully for adaptive + beam search")
 
 

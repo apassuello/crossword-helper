@@ -13,15 +13,6 @@ This test simulates pause/resume with user edits:
 import pytest
 import json
 import time
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
 
 
 def create_empty_grid(size=11):
@@ -112,10 +103,8 @@ class TestPauseResumeWorkflow:
             assert response.status_code == 202
             new_task_id = response.json["task_id"]
 
-            # Wait for resume to complete
-            time.sleep(35)
-
             # Verify resumed task completes
+            # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
             sse_response = client.get(f"/api/progress/{new_task_id}")
             assert sse_response.status_code == 200
 

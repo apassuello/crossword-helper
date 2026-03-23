@@ -12,16 +12,6 @@ import json
 import subprocess
 import tempfile
 import os
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client"""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.mark.slow

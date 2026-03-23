@@ -11,16 +11,6 @@ This test simulates adaptive black square placement:
 
 import pytest
 import json
-import time
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
 
 
 def create_difficult_grid():
@@ -67,10 +57,8 @@ class TestAdaptiveWorkflow:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(35)
-
         # Get result
+        # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
         sse_response = client.get(f"/api/progress/{task_id}")
         assert sse_response.status_code == 200
 
@@ -130,8 +118,6 @@ class TestAdaptiveWorkflow:
 
         task_id_1 = response1.json["task_id"]
 
-        time.sleep(18)
-
         # Adaptive (should complete better)
         response2 = client.post(
             "/api/fill/with-progress",
@@ -149,8 +135,6 @@ class TestAdaptiveWorkflow:
         )
 
         task_id_2 = response2.json["task_id"]
-
-        time.sleep(18)
 
         # Both should complete (adaptive might do better)
         sse1 = client.get(f"/api/progress/{task_id_1}")
