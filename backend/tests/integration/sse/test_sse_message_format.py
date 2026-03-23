@@ -15,69 +15,8 @@ the event stream.
 
 import pytest
 import json
-import time
 import threading
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client with SSE support."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """
-    Parse SSE message format.
-
-    SSE format spec:
-    ```
-    data: {"key": "value"}\n
-    \n
-    ```
-
-    Returns a function that parses SSE stream into list of messages.
-    """
-    def parse_sse_stream(data_bytes):
-        """
-        Parse SSE stream bytes into list of message dicts.
-
-        Args:
-            data_bytes: Raw SSE stream data
-
-        Returns:
-            List of parsed JSON messages
-        """
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-
-        # Split by double newline (message separator)
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-
-            # Extract data line
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]  # Remove "data: " prefix
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError as e:
-                        # Invalid JSON - this is a test failure
-                        pytest.fail(f"Invalid JSON in SSE message: {line}\nError: {e}")
-
-        return messages
-
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid for testing."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestSSEMessageFormatCompliance:
@@ -148,9 +87,6 @@ class TestSSEMessageFormatCompliance:
 
         assert response.status_code == 202
         task_id = response.json["task_id"]
-
-        # Wait briefly for task to start
-        time.sleep(0.5)
 
         # Get SSE stream (will collect all messages until stream closes)
         sse_response = client.get(f"/api/progress/{task_id}")

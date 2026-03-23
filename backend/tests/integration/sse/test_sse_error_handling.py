@@ -18,41 +18,6 @@ import pytest
 import json
 import time
 import os
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """Parse SSE message format."""
-    def parse_sse_stream(data_bytes):
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError:
-                        pass
-        return messages
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
 
 
 class TestSSECLIErrorHandling:
@@ -86,9 +51,6 @@ class TestSSECLIErrorHandling:
         # Should still accept request (error occurs during execution)
         assert response.status_code == 202
         task_id = response.json["task_id"]
-
-        # Wait for error to occur
-        time.sleep(3)
 
         # Get SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")
@@ -136,7 +98,6 @@ class TestSSECLIErrorHandling:
         elif response.status_code == 202:
             # Accepted, will fail during CLI execution
             task_id = response.json["task_id"]
-            time.sleep(2)
 
             sse_response = client.get(f"/api/progress/{task_id}")
             messages = sse_parser(sse_response.data)

@@ -15,44 +15,10 @@ must maintain separate SSE streams and progress state for each task.
 
 import pytest
 import json
-import time
 import threading
 from queue import Queue
 from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """Parse SSE message format."""
-    def parse_sse_stream(data_bytes):
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError:
-                        pass  # Skip invalid JSON
-        return messages
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestConcurrentSSEStreams:
@@ -106,10 +72,7 @@ class TestConcurrentSSEStreams:
         # Task IDs must be unique
         assert task_id_1 != task_id_2, "Task IDs must be unique"
 
-        # Wait for both to complete
-        time.sleep(5)
-
-        # Get SSE streams for both tasks
+        # Get SSE streams for both tasks (blocks until each stream ends)
         sse_response_1 = client.get(f"/api/progress/{task_id_1}")
         sse_response_2 = client.get(f"/api/progress/{task_id_2}")
 
@@ -184,10 +147,7 @@ class TestConcurrentSSEStreams:
         # All task IDs unique
         assert len({task_id_pattern, task_id_fill_1, task_id_fill_2}) == 3
 
-        # Wait for completion
-        time.sleep(18)
-
-        # Get all SSE streams
+        # Get all SSE streams (each blocks until its stream ends)
         sse_pattern = client.get(f"/api/progress/{task_id_pattern}")
         sse_fill_1 = client.get(f"/api/progress/{task_id_fill_1}")
         sse_fill_2 = client.get(f"/api/progress/{task_id_fill_2}")
@@ -242,10 +202,7 @@ class TestSSETaskIsolation:
         )
         task_id_2 = response2.json["task_id"]
 
-        # Wait for completion
-        time.sleep(5)
-
-        # Get both streams
+        # Get both streams (each blocks until its stream ends)
         sse_1 = client.get(f"/api/progress/{task_id_1}")
         sse_2 = client.get(f"/api/progress/{task_id_2}")
 
@@ -308,10 +265,7 @@ class TestSSEResourceCleanup:
 
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(2)
-
-        # Get SSE stream
+        # Get SSE stream (blocks until stream ends)
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Stream should contain data
@@ -349,10 +303,7 @@ class TestSSEResourceCleanup:
 
         task_id = response.json["task_id"]
 
-        # Wait briefly for task to start
-        time.sleep(1)
-
-        # Open 2 SSE connections to same task
+        # Open 2 SSE connections to same task (each blocks until stream ends)
         sse_response_1 = client.get(f"/api/progress/{task_id}")
         sse_response_2 = client.get(f"/api/progress/{task_id}")
 
@@ -462,10 +413,7 @@ class TestSSELongRunningOperations:
 
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(25)
-
-        # Get SSE stream
+        # Get SSE stream (blocks until stream ends)
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Should have received messages throughout operation
