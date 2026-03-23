@@ -145,9 +145,7 @@ class TestThemeWordCLIIntegration:
 
     def test_cli_loads_theme_wordlist_file(self):
         """Test CLI --theme-wordlist flag loads words correctly."""
-        import subprocess
-        import json
-        from pathlib import Path
+        from backend.tests.integration.conftest import run_cli_until_output
 
         # Create a temporary theme wordlist file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -170,47 +168,36 @@ class TestThemeWordCLIIntegration:
             json.dump(grid_data, f)
 
         try:
-            # Run CLI with theme wordlist. We only care about loading messages
-            # (printed in first ~2s), not fill completion — use short timeout
-            # and check partial stdout if the fill runs longer.
-            try:
-                result = subprocess.run(
-                    [
-                        'python3', '-m', 'cli.src.cli', 'fill',
-                        str(grid_file),
-                        '--wordlists', 'data/wordlists/comprehensive.txt',
-                        '--theme-wordlist', theme_file,
-                        '--timeout', '10',
-                        '--allow-nonstandard'
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                stdout = result.stdout
-            except subprocess.TimeoutExpired as e:
-                stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+            # Kill as soon as the loading message appears — don't wait for fill to finish
+            stdout = run_cli_until_output(
+                cmd=[
+                    'python3', '-m', 'cli.src.cli', 'fill',
+                    str(grid_file),
+                    '--wordlists', 'data/wordlists/comprehensive.txt',
+                    '--theme-wordlist', theme_file,
+                    '--timeout', '10',
+                    '--allow-nonstandard'
+                ],
+                target_text='theme words',
+                timeout=10,
+            )
 
-            # Check that CLI loaded theme words
             assert '⭐' in stdout, "CLI should show theme word indicator"
             assert 'Loaded 5 theme words' in stdout or '5 theme words' in stdout, \
                 "CLI should report loading 5 theme words"
 
         finally:
-            # Cleanup
             Path(theme_file).unlink(missing_ok=True)
             grid_file.unlink(missing_ok=True)
 
     def test_theme_words_display_in_cli_output(self):
         """Verify CLI shows '⭐ Loaded N theme words' message."""
-        import subprocess
+        from backend.tests.integration.conftest import run_cli_until_output
 
-        # Use existing demo wordlist
         demo_wordlist = Path('data/wordlists/custom/demo_words.txt')
         if not demo_wordlist.exists():
             pytest.skip("Demo wordlist not found")
 
-        # Create minimal grid
         grid_file = Path(tempfile.gettempdir()) / 'test_grid_cli_msg.json'
         grid_data = {
             "grid": [[".", ".", "."], [".", ".", "."], [".", ".", "."]],
@@ -221,26 +208,20 @@ class TestThemeWordCLIIntegration:
             json.dump(grid_data, f)
 
         try:
-            # Only care about loading messages, not fill completion
-            try:
-                result = subprocess.run(
-                    [
-                        'python3', '-m', 'cli.src.cli', 'fill',
-                        str(grid_file),
-                        '--wordlists', 'data/wordlists/comprehensive.txt',
-                        '--theme-wordlist', str(demo_wordlist),
-                        '--timeout', '10',
-                        '--allow-nonstandard'
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                stdout = result.stdout
-            except subprocess.TimeoutExpired as e:
-                stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+            # Kill as soon as the loading message appears
+            stdout = run_cli_until_output(
+                cmd=[
+                    'python3', '-m', 'cli.src.cli', 'fill',
+                    str(grid_file),
+                    '--wordlists', 'data/wordlists/comprehensive.txt',
+                    '--theme-wordlist', str(demo_wordlist),
+                    '--timeout', '10',
+                    '--allow-nonstandard'
+                ],
+                target_text='theme words',
+                timeout=10,
+            )
 
-            # Verify theme word loading message appears
             assert '⭐' in stdout, "Output should contain star emoji for theme words"
             assert 'theme words' in stdout.lower(), "Output should mention 'theme words'"
 
