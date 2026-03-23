@@ -174,15 +174,15 @@ class TestSSEMessageFormatCompliance:
         2. Progressive updates (progress increasing, status='running')
         3. Final message (progress=100 OR status='complete'/'error')
         """
-        # Start autofill
-        grid = create_test_grid(11)
+        # Start autofill with small grid (fills in <1s)
+        grid = create_test_grid(5)
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 10,  # Short timeout for testing
+                "timeout": 10,
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -191,9 +191,8 @@ class TestSSEMessageFormatCompliance:
 
         task_id = response.json["task_id"]
 
-        # Wait for operation to complete (or timeout)
-        # Note: In real tests, we might want to poll or use shorter timeout
-        time.sleep(12)  # Timeout + buffer
+        # Wait for operation to complete
+        time.sleep(5)
 
         # Get SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")

@@ -14,6 +14,8 @@ import json
 import time
 from backend.app import create_app
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def client():

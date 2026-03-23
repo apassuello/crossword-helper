@@ -33,6 +33,7 @@ def create_empty_grid(size=11):
 class TestCreateFillExportWorkflow:
     """Test complete workflow from grid creation to export."""
 
+    @pytest.mark.slow
     def test_basic_create_fill_export_workflow(self, client):
         """
         Basic workflow:

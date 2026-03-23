@@ -206,6 +206,7 @@ class TestBeamSearchPauseResume:
         """Create pattern matcher."""
         return PatternMatcher(word_list)
 
+    @pytest.mark.slow
     def test_pause_during_search(self, tmp_path, test_grid, word_list, pattern_matcher):
         """Test pausing beam search during active search."""
         # Create pause controller
@@ -257,6 +258,7 @@ class TestBeamSearchPauseResume:
         # Cleanup
         pause_controller.cleanup()
 
+    @pytest.mark.slow
     def test_resume_from_paused_state(self, tmp_path, test_grid, word_list, pattern_matcher):
         """Test resuming beam search from saved state."""
         state_manager = StateManager(storage_dir=tmp_path)

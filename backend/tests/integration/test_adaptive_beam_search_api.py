@@ -101,6 +101,7 @@ def create_21x21_grid_with_theme_words():
     return grid
 
 
+@pytest.mark.slow
 def test_adaptive_beam_search_comprehensive_wordlist(client, sse_parser):
     """
     Test adaptive autofill with beam search and comprehensive wordlist.

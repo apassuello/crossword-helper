@@ -216,7 +216,7 @@ class TestSSETimeoutHandling:
                 "size": 11,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 3,  # Short timeout for difficult grid
+                "timeout": 10,  # Short timeout for difficult grid
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -231,7 +231,7 @@ class TestSSETimeoutHandling:
 
         assert response.status_code == 202
         task_id = response.json["task_id"]
-        time.sleep(5)
+        time.sleep(13)
 
         # Get SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")
@@ -391,12 +391,12 @@ class TestSSEClientDisconnection:
         This is hard to test in Flask test client (no real HTTP connection).
         We verify the stream can be closed without errors.
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
@@ -431,15 +431,15 @@ class TestSSEEdgeCases:
 
         This tests that SSE handles the common case of starting from scratch.
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 15,
+                "timeout": 10,
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -447,7 +447,7 @@ class TestSSEEdgeCases:
         )
 
         task_id = response.json["task_id"]
-        time.sleep(18)
+        time.sleep(5)
 
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)

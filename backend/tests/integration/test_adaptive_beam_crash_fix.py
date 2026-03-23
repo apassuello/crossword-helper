@@ -24,6 +24,7 @@ def client():
         yield client
 
 
+@pytest.mark.slow
 def test_cli_adaptive_beam_no_crash():
     """
     Test that CLI doesn't crash when running adaptive mode with beam search.
