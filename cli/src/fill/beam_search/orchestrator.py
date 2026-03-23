@@ -348,6 +348,10 @@ class BeamSearchOrchestrator:
             if not expanded_beam and len(filled_slots) > 0:
                 expanded_beam = self._try_backtracking(beam, slot)
 
+            # Re-check timeout after potentially expensive backtracking
+            if time.time() - self.start_time > timeout:
+                break
+
             if not expanded_beam:
                 # Track this failure to prevent thrashing on same (beam, slot) combination
                 beam_sig = self._get_beam_signature(beam)
@@ -891,6 +895,10 @@ class BeamSearchOrchestrator:
             # Backtracking if needed (only if we have successfully filled slots to backtrack from)
             if not expanded_beam and len(filled_slots) > 0:
                 expanded_beam = self._try_backtracking(beam, slot)
+
+            # Re-check timeout after potentially expensive backtracking
+            if time.time() - self.start_time > timeout:
+                break
 
             if not expanded_beam:
                 # Track this failure to prevent thrashing on same (beam, slot) combination
