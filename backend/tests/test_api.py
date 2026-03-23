@@ -84,17 +84,17 @@ class TestPatternEndpoint:
         assert response.status_code == 400
 
     def test_pattern_search_with_wordlists(self, client):
-        """Test pattern search with wordlists parameter."""
+        """Test pattern search with a real wordlist."""
         response = client.post('/api/pattern',
                                 json={
                                     'pattern': 'C?T',
-                                    'wordlists': ['standard']
+                                    'wordlists': ['comprehensive']
                                 },
                                 content_type='application/json')
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['meta']['sources_searched'] == ['standard']
+        assert data['meta']['sources_searched'] == ['comprehensive']
 
     def test_pattern_search_invalid_wordlists(self, client):
         """Test pattern search with invalid wordlists type."""
