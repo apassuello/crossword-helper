@@ -10,7 +10,7 @@ This suite ensures that all combinations of:
 
 ...work correctly without crashes.
 
-Uses a 7x7 grid with standard black square pattern and top_50k wordlist
+Uses a 7x7 grid with standard black square pattern and the `comprehensive` wordlist
 for fast, reliable test execution (~2-20s per test).
 """
 
@@ -129,6 +129,7 @@ def assert_valid_json_output(stdout):
 class TestCLIAutofillScenarios:
     """Test all CLI autofill scenarios with actual subprocess execution"""
 
+    @pytest.mark.slow
     def test_trie_standard_grid(self):
         """CSP/Trie on 7x7 grid with black squares — should fill completely."""
         returncode, stdout, stderr = run_cli_fill(
@@ -147,6 +148,7 @@ class TestCLIAutofillScenarios:
         assert_no_crash(stdout, stderr)
         assert_valid_json_output(stdout)
 
+    @pytest.mark.slow
     def test_adaptive_trie_standard_grid(self):
         """Adaptive + CSP/Trie on 7x7 grid — should complete without crash."""
         returncode, stdout, stderr = run_cli_fill(
@@ -166,7 +168,7 @@ class TestCLIAutofillScenarios:
             assert_no_crash(stdout, stderr)
             assert_valid_json_output(stdout)
         except subprocess.TimeoutExpired:
-            pass  # Adaptive+beam may exceed timeout with multiple iterations
+            pytest.skip("Adaptive+beam exceeded timeout — cannot verify crash fix")
 
     @pytest.mark.slow
     def test_beam_prefilled_grid(self):
@@ -187,7 +189,7 @@ class TestCLIAutofillScenarios:
             assert_no_crash(stdout, stderr)
             assert_valid_json_output(stdout)
         except subprocess.TimeoutExpired:
-            pass  # Adaptive+beam may exceed timeout with multiple iterations
+            pytest.skip("Adaptive+beam exceeded timeout — cannot verify crash fix")
 
     @pytest.mark.slow
     def test_beam_11x11(self):
@@ -214,7 +216,7 @@ class TestCLIAutofillScenarios:
             )
             assert_no_crash(stdout, stderr)
         except subprocess.TimeoutExpired:
-            pass  # Timeout is acceptable for 11x11
+            pytest.skip("Beam on 11x11 exceeded timeout — cannot verify crash fix")
 
 
 class TestAPIAutofillScenarios:
