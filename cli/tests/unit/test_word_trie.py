@@ -18,7 +18,7 @@ def test_trie_node_creation():
     assert node.children == {}
     assert node.words == []
     assert node.is_end_of_word  is False
-    assert node.min_score == 0
+    assert node.min_score == float('inf')
     assert node.max_score == 0
 
 
@@ -179,3 +179,39 @@ def test_nonexistent_length():
 
     results = trie.find_pattern("BIRD")  # 4 letters, only 3-letter words in trie
     assert len(results) == 0
+
+
+def test_score_bounds_multiple_words():
+    """Score bounds track min and max across all words in subtree."""
+    trie = WordTrie()
+    trie.add_word(ScoredWord("CAT", 100, 3))
+    trie.add_word(ScoredWord("COT", 50, 3))
+    trie.add_word(ScoredWord("CUT", 1, 3))
+
+    root = trie._length_roots[3]
+    assert root.min_score == 1
+    assert root.max_score == 100
+
+
+def test_score_bounds_zero_score():
+    """Score bound handles word with score=0 correctly."""
+    trie = WordTrie()
+    trie.add_word(ScoredWord("ZZZ", 0, 3))
+
+    root = trie._length_roots[3]
+    assert root.min_score == 0
+    assert root.max_score == 0
+
+
+def test_score_pruning_filters_low_scores():
+    """min_score parameter in find_pattern excludes low-scoring words."""
+    trie = WordTrie()
+    trie.add_word(ScoredWord("CAT", 100, 3))
+    trie.add_word(ScoredWord("COT", 50, 3))
+    trie.add_word(ScoredWord("CUT", 1, 3))
+
+    results = trie.find_pattern("C?T", min_score=50)
+    words = {w.text for w in results}
+    assert "CAT" in words
+    assert "COT" in words
+    assert "CUT" not in words

@@ -26,7 +26,7 @@ class TrieNode:
         self.children: Dict[str, TrieNode] = {}  # char -> child node
         self.words: List[ScoredWord] = []  # Words ending at this node
         self.is_end_of_word: bool = False
-        self.min_score: int = 0  # Minimum score in subtree (for pruning)
+        self.min_score: float = float('inf')  # Minimum score in subtree (for pruning)
         self.max_score: int = 0  # Maximum score in subtree (for pruning)
 
     def __repr__(self) -> str:
@@ -78,7 +78,7 @@ class WordTrie:
         node = self._length_roots[length]
 
         # Update root's score bounds (fix for pruning bug)
-        node.min_score = min(node.min_score, word.score) if node.min_score > 0 else word.score
+        node.min_score = min(node.min_score, word.score)
         node.max_score = max(node.max_score, word.score)
 
         for char in word.text:
@@ -89,7 +89,7 @@ class WordTrie:
             node = node.children[char]
 
             # Update score bounds for pruning
-            node.min_score = min(node.min_score, word.score) if node.min_score > 0 else word.score
+            node.min_score = min(node.min_score, word.score)
             node.max_score = max(node.max_score, word.score)
 
         # Mark end of word and store it
