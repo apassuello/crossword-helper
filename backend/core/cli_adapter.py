@@ -217,6 +217,91 @@ class CLIAdapter:
             # Clean up temp file
             Path(temp_path).unlink(missing_ok=True)
 
+    def analyze_constraints(
+        self,
+        grid_data: Dict[str, Any],
+        wordlist_paths: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Analyze grid constraints (per-cell option counts).
+
+        Args:
+            grid_data: Grid data dictionary
+            wordlist_paths: List of wordlist file paths
+
+        Returns:
+            Dict with 'constraints' and 'summary' keys
+        """
+        if not grid_data:
+            raise ValueError("Grid data cannot be empty")
+        if not wordlist_paths:
+            raise ValueError("At least one wordlist path is required")
+
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            args = ["analyze", temp_path, "--json-output"]
+            for wl in wordlist_paths:
+                args.extend(["-w", wl])
+
+            stdout, stderr, _ = self._run_command(args, timeout=30)
+
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse CLI output: {e}\nOutput: {stdout}")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def analyze_placement_impact(
+        self,
+        grid_data: Dict[str, Any],
+        word: str,
+        slot: Dict[str, Any],
+        wordlist_paths: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Analyze how placing a word affects crossing slots.
+
+        Args:
+            grid_data: Grid data dictionary
+            word: Word to place
+            slot: Slot dict with row, col, direction, length
+            wordlist_paths: List of wordlist file paths
+
+        Returns:
+            Dict with 'impacts' and 'summary' keys
+        """
+        if not grid_data:
+            raise ValueError("Grid data cannot be empty")
+        if not word:
+            raise ValueError("Word cannot be empty")
+
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            slot_str = f"{slot['row']},{slot['col']},{slot['direction']},{slot['length']}"
+            args = ["analyze", temp_path, "--json-output", "--word", word, "--slot", slot_str]
+            for wl in wordlist_paths:
+                args.extend(["-w", wl])
+
+            stdout, stderr, _ = self._run_command(args, timeout=30)
+
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse CLI output: {e}\nOutput: {stdout}")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
     def fill(
         self,
         grid_data: Dict[str, Any],
