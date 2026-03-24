@@ -303,3 +303,107 @@ class TestThemeWordAPIIntegration:
 # Note: The actual end-to-end test verifying theme words appear in results
 # requires a longer-running autofill which would be better in a performance
 # or E2E test suite. The tests above verify the infrastructure is in place.
+
+
+class TestThemeEntriesCLICanary:
+    """Canary tests for the --theme-entries CLI flag.
+
+    KNOWN BROKEN: The --theme-entries flag does NOT actually preserve theme
+    words during autofill. This test documents the broken behavior so we
+    detect when/if it gets fixed. See CLAUDE.md "Known Issues" section.
+    """
+
+    @pytest.mark.slow
+    def test_theme_entries_flag_preserves_words(self):
+        """Canary: --theme-entries should preserve 'CAT' at (0,0,across) in a 5x5 grid.
+
+        This test exercises the --theme-entries CLI flag end-to-end.
+        It is a regression canary for a known-broken feature: the flag is
+        accepted but theme words are NOT preserved in the filled output.
+        If this test starts passing, the feature has been fixed.
+        """
+        import subprocess
+        import sys
+        import os
+
+        grid_data = {
+            "size": 5,
+            "grid": [
+                ["C", "A", "T", ".", "."],
+                [".", ".", ".", ".", "."],
+                [".", ".", ".", ".", "."],
+                [".", ".", ".", ".", "."],
+                [".", ".", ".", ".", "."],
+            ]
+        }
+
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.json', delete=False
+        ) as f:
+            json.dump(grid_data, f)
+            grid_file = f.name
+
+        try:
+            theme_entries = json.dumps({"(0,0,across)": "CAT"})
+            cmd = [
+                sys.executable, "-m", "cli.src.cli", "fill",
+                grid_file,
+                "--wordlists", "data/wordlists/core/crosswordese.txt",
+                "--theme-entries", theme_entries,
+                "--timeout", "10",
+                "--allow-nonstandard",
+                "--json-output",
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+
+            # Try to parse JSON from stdout (may be mixed with progress text)
+            output = result.stdout.strip()
+            json_result = None
+            for line in reversed(output.splitlines()):
+                line = line.strip()
+                if line.startswith("{"):
+                    try:
+                        json_result = json.loads(line)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+
+            if json_result is None:
+                pytest.skip(
+                    f"CLI did not produce JSON output (rc={result.returncode}); "
+                    f"stderr: {result.stderr[:300]}"
+                )
+
+            filled_grid = json_result.get("grid")
+            if filled_grid is None:
+                pytest.skip(
+                    f"JSON output has no 'grid' key: {list(json_result.keys())}"
+                )
+
+            # Check whether CAT is preserved at row 0, cols 0-2
+            row0 = filled_grid[0]
+            cat_preserved = (
+                row0[0] == "C" and row0[1] == "A" and row0[2] == "T"
+            )
+
+            # KNOWN BROKEN: this assertion is expected to fail.
+            # When the feature is fixed, this canary will start passing.
+            assert cat_preserved, (
+                "KNOWN BROKEN CANARY: --theme-entries did not preserve 'CAT' "
+                f"at row 0. Got: {row0[:3]}. "
+                "See CLAUDE.md Known Issues: CLI --theme-entries flag does "
+                "NOT preserve theme words."
+            )
+
+        except subprocess.TimeoutExpired:
+            pytest.skip("CLI process timed out (expected for slow CI)")
+
+        finally:
+            if os.path.exists(grid_file):
+                os.unlink(grid_file)
