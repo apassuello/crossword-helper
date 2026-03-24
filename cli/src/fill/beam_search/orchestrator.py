@@ -667,9 +667,9 @@ class BeamSearchOrchestrator:
         Multi-level backtracking strategy with conflict analysis.
 
         Strategy progression:
-        1. Try more candidates (relaxed constraints)
-        2. Try with no score filter
-        3. Conflict-directed backjumping (undo problematic assignments) - skipped in partial fill mode
+        1. Conflict-directed backjumping (undo problematic assignments) - skipped in partial fill mode
+        2. Try more candidates (relaxed constraints)
+        3. Try with no score filter
         4. Chronological backtracking (undo recent assignments) - limited in partial fill mode
 
         Returns:
@@ -681,30 +681,7 @@ class BeamSearchOrchestrator:
         if self.partial_fill_mode:
             logger.debug("  (Partial fill mode: using gentle strategies)")
 
-        # Try 1: More candidates (2x)
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
-        if expanded:
-            logger.debug("  ✓ Success with 2x candidates")
-            return expanded
-
-        # Try 2: Even more candidates (5x)
-        logger.debug("  Trying 5x candidates...")
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
-        if expanded:
-            logger.debug("  ✓ Success with 5x candidates")
-            return expanded
-
-        # Try 3: No score filter (accept any quality words)
-        logger.debug("  Trying min_score=0...")
-        old_min_score = self.min_score
-        self.min_score = 0
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
-        self.min_score = old_min_score
-        if expanded:
-            logger.debug("  ✓ Success with no score filter")
-            return expanded
-
-        # Try 4: CONFLICT-DIRECTED BACKJUMPING (intelligent)
+        # Try 1: CONFLICT-DIRECTED BACKJUMPING (intelligent)
         # Skip in partial fill mode - too aggressive
         if self.partial_fill_mode:
             logger.debug("  Skipping conflict-directed backjumping (partial fill mode)")
@@ -745,6 +722,29 @@ class BeamSearchOrchestrator:
             if expanded:
                 logger.debug("  ✓ Success with conflict-directed backjumping")
                 return expanded
+
+        # Try 2: More candidates (2x)
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
+        if expanded:
+            logger.debug("  ✓ Success with 2x candidates")
+            return expanded
+
+        # Try 3: Even more candidates (5x)
+        logger.debug("  Trying 5x candidates...")
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
+        if expanded:
+            logger.debug("  ✓ Success with 5x candidates")
+            return expanded
+
+        # Try 4: No score filter (accept any quality words)
+        logger.debug("  Trying min_score=0...")
+        old_min_score = self.min_score
+        self.min_score = 0
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
+        self.min_score = old_min_score
+        if expanded:
+            logger.debug("  ✓ Success with no score filter")
+            return expanded
 
         # Try 5: CHRONOLOGICAL BACKTRACKING - undo last assignment
         logger.debug("  Trying chronological backtracking (depth=1)...")
