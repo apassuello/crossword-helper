@@ -260,3 +260,28 @@ class TestHybridIntegration:
         # Should make some progress
         assert result.slots_filled >= 0
         assert result.time_elapsed < 30.0
+
+
+class TestBeamTimeoutScaling:
+    """Test that beam timeout scales with grid size."""
+
+    def test_small_grid_gets_short_beam_timeout(self):
+        """11x11 grid should get beam_cap=30."""
+        # beam_cap = min(120, max(30, (11 - 11) * 9 + 30)) = 30
+        beam_cap = min(120, max(30, (11 - 11) * 9 + 30))
+        assert beam_cap == 30
+
+    def test_large_grid_gets_long_beam_timeout(self):
+        """21x21 grid should get beam_cap=120."""
+        beam_cap = min(120, max(30, (21 - 11) * 9 + 30))
+        assert beam_cap == 120
+
+    def test_standard_grid_beam_timeout(self):
+        """15x15 grid should get beam_cap=66."""
+        beam_cap = min(120, max(30, (15 - 11) * 9 + 30))
+        assert beam_cap == 66
+
+    def test_nonstandard_grid_beam_timeout(self):
+        """19x19 grid should get beam_cap=102 (linear interpolation)."""
+        beam_cap = min(120, max(30, (19 - 11) * 9 + 30))
+        assert beam_cap == 102

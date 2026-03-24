@@ -451,8 +451,7 @@ For comprehensive information, see:
 - Real-time progress tracking
 
 ### Known Issues ⚠️
-- CLI `--theme-entries` flag does NOT preserve theme words
-  - **Workaround:** Use web interface for themed puzzles
+- ~~CLI `--theme-entries` flag does NOT preserve theme words~~ **FIXED** (the feature works; the canary test was broken — it was passing raw JSON instead of a file path)
 - CLI `--adaptive` flag does NOT auto-add black squares
   - **Workaround:** Use web interface black square optimizer
 

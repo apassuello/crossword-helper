@@ -112,8 +112,9 @@ class HybridAutofill:
 
         time.time()
 
-        # Calculate timeouts (beam capped at 60s — it's slow on large grids)
-        beam_timeout = min(60, max(10, int(timeout * beam_timeout_ratio)))
+        # Scale beam timeout cap with grid size (linear: 30s at size 11, +9s per size step, max 120s)
+        beam_cap = min(120, max(30, (self.grid.size - 11) * 9 + 30))
+        beam_timeout = min(beam_cap, max(10, int(timeout * beam_timeout_ratio)))
         repair_timeout = max(10, timeout - beam_timeout)
 
         # Phase 1: Beam Search
