@@ -65,7 +65,7 @@ jobs:
     - name: Generate coverage HTML report
       if: matrix.python-version == '3.12'
       run: |
-        pytest --cov=backend --cov=cli --cov-report=html
+        coverage html
 
     - name: Upload coverage HTML
       if: matrix.python-version == '3.12'
