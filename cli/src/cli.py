@@ -949,6 +949,116 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
         click.echo(f"\n{'='*60}\n")
 
 
+@cli.command()
+@click.argument("grid_file", type=click.Path(exists=True))
+@click.option(
+    "--wordlists", "-w", multiple=True, help="Word list files (can specify multiple)"
+)
+@click.option(
+    "--word", default=None, help="Word to analyze placement for"
+)
+@click.option(
+    "--slot", default=None, help="Target slot as 'row,col,direction,length' (requires --word)"
+)
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format",
+)
+def analyze(grid_file: str, wordlists: tuple, word: Optional[str], slot: Optional[str], json_output: bool):
+    """
+    Analyze grid constraints and placement impact.
+
+    Without --word: shows per-cell constraint data (how many words fit each slot).
+    With --word and --slot: shows how placing a word affects crossing slots.
+
+    Examples:
+        crossword analyze puzzle.json -w data/wordlists/comprehensive.txt --json-output
+        crossword analyze puzzle.json -w data/wordlists/comprehensive.txt --word OCEAN --slot "0,0,across,5" --json-output
+    """
+    from .core.constraint_analyzer import analyze_constraints, analyze_placement_impact
+    from .fill.trie_pattern_matcher import TriePatternMatcher
+
+    # Validate --slot requires --word
+    if slot and not word:
+        click.echo("Error: --slot requires --word", err=True)
+        sys.exit(1)
+
+    # Load grid (Grid has from_dict, not from_file)
+    try:
+        with open(grid_file) as f:
+            grid_data = json.load(f)
+        grid = Grid.from_dict(grid_data, strict_size=False)
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(f"Error loading grid: {e}", err=True)
+        sys.exit(1)
+
+    # Load wordlists (WordList has from_file but no merge — use first, add_words for rest)
+    if not wordlists:
+        click.echo("Error: at least one wordlist is required (-w)", err=True)
+        sys.exit(1)
+
+    word_list = None
+    for wl_path in wordlists:
+        try:
+            wl = WordList.from_file(wl_path)
+            if word_list is None:
+                word_list = wl
+            else:
+                # Add words from subsequent wordlists
+                word_list.add_words([sw.text for sw in wl.get_all()])
+        except Exception as e:
+            click.echo(f"Warning: Could not load {wl_path}: {e}", err=True)
+
+    if word_list is None or len(word_list) == 0:
+        click.echo("Error: no words loaded from wordlists", err=True)
+        sys.exit(1)
+
+    # Build pattern matcher
+    pattern_matcher = TriePatternMatcher(word_list)
+
+    if word and slot:
+        # Placement impact analysis
+        try:
+            parts = slot.split(',')
+            if len(parts) != 4:
+                raise ValueError("Expected 'row,col,direction,length'")
+            slot_dict = {
+                'row': int(parts[0]),
+                'col': int(parts[1]),
+                'direction': parts[2].strip(),
+                'length': int(parts[3]),
+            }
+        except (ValueError, IndexError) as e:
+            click.echo(f"Error parsing --slot: {e}. Expected format: row,col,direction,length", err=True)
+            sys.exit(1)
+
+        result = analyze_placement_impact(grid, word, slot_dict, word_list, pattern_matcher)
+    else:
+        # Grid-wide constraint analysis
+        result = analyze_constraints(grid, word_list, pattern_matcher)
+
+    result['success'] = True
+
+    if json_output:
+        click.echo(json.dumps(result))
+    else:
+        # Human-readable output
+        if 'constraints' in result:
+            summary = result['summary']
+            click.echo(f"Grid analysis: {summary['total_cells']} cells")
+            click.echo(f"  Critical cells (< 5 options): {summary['critical_cells']}")
+            click.echo(f"  Average min options: {summary['average_min_options']}")
+        elif 'impacts' in result:
+            click.echo(f"Placement impact for {word}:")
+            for slot_key, impact in result['impacts'].items():
+                click.echo(f"  {slot_key}: {impact['before']} → {impact['after']} ({impact['delta']:+d})")
+
+
 @cli.command("build-cache")
 @click.argument("wordlist", type=click.Path(exists=True))
 @click.option(
