@@ -49,9 +49,13 @@ node.max_score = max(node.max_score, word.score)
 
 In `_search()` / `find_pattern()`, update any pruning check that compares against `min_score` to handle `float('inf')` as "no words in this subtree" (should already work since `float('inf') >= any_threshold` is always true, meaning empty branches are never pruned — but they also have no children, so no issue).
 
+**Note:** Changing `min_score` from `int` to `float` may break existing tests that assert `node.min_score == 0` for freshly created nodes. Search the codebase for all `min_score` comparisons and update them. The existing test in `test_word_trie.py` that checks initial state needs updating.
+
 ### Test
 
-Add to `cli/tests/unit/test_word_trie.py`:
+Update existing tests in `cli/tests/unit/test_word_trie.py` that assert `min_score == 0` on fresh nodes (now `float('inf')`).
+
+Add new tests:
 - Test that after adding words with scores [100, 50, 1], root `min_score` is 1 and `max_score` is 100
 - Test that after adding a single word with score=0, `min_score` is 0
 - Test that pruning with `min_score=50` excludes the score=1 word but includes scores 50 and 100
@@ -92,11 +96,11 @@ Reorder the strategy blocks so conflict-directed backjumping (currently Try 4, ~
 6. Chronological depth=2 (was Try 6)
 7. Chronological depth=3 (was Try 7)
 
-This is a pure code block reorder — no logic changes.
+**Caution:** This is mostly a code block reorder, but the conflict-directed block has a scoping subtlety. The `conflicts` variable is only assigned when `partial_fill_mode` is False. The current code works because a guard `if not self.partial_fill_mode and conflicts:` short-circuits. When moving this block to Try 1, preserve the guard structure exactly — don't split the conditional assignment from its guard check.
 
 ### Test
 
-Existing beam search tests must still pass. No new tests needed since this is an ordering optimization, not a behavior change.
+Existing beam search tests must still pass. Run full test suite since reordering strategies can change which solutions the algorithm finds (tests should assert structural properties, not specific grid contents). No new tests needed.
 
 ### Verification
 
@@ -121,15 +125,16 @@ Replace line 116:
 beam_timeout = min(60, max(10, int(timeout * beam_timeout_ratio)))
 ```
 
-With grid-size-aware cap:
+With grid-size-aware cap using a linear formula that handles any grid size (including non-standard sizes passed with `--allow-nonstandard`):
 ```python
-# Scale beam timeout cap with grid size
-size = self.grid.size if hasattr(self.grid, 'size') else self.grid.cells.shape[0]
-beam_cap = {11: 30, 13: 45, 15: 60, 17: 90, 21: 120}.get(size, 60)
+# Scale beam timeout cap with grid size (linear: 30s at size 11, +9s per size step)
+beam_cap = min(120, max(30, (self.grid.size - 11) * 9 + 30))
 beam_timeout = min(beam_cap, max(10, int(timeout * beam_timeout_ratio)))
 ```
 
-For a 21x21 grid with `timeout=300`, beam gets `min(120, max(10, 60)) = 60`. With `timeout=600`, beam gets `min(120, max(10, 120)) = 120`. The cap prevents beam from consuming too much of the overall budget while still giving it meaningful time on large grids.
+This gives: 11→30s, 13→48s, 15→66s, 17→84s, 19→102s, 21→120s (capped). Works for any grid size without a lookup table. `Grid` always has a `size` attribute (set in `__init__` and `from_dict`), so no `hasattr` guard needed.
+
+For a 21x21 grid with `timeout=300`, beam gets `min(120, max(10, 60)) = 60`. With `timeout=600`, beam gets `min(120, max(10, 120)) = 120`.
 
 ### Test
 
@@ -200,9 +205,11 @@ For each white cell, count valid words for the across and down slot passing thro
 
 **Implementation:**
 1. Call `grid.get_word_slots()` to find all slots (across and down entries ≥3 letters)
-2. For each slot, call `pattern_matcher.find(slot_pattern)` to count valid words — cache count by slot (a cell references its slot's count, not its own)
+2. For each slot, use `grid.get_pattern_for_slot(slot)` to get the wildcard pattern (converts `.` empty cells to `?` wildcards that the trie expects), then call `pattern_matcher.find(pattern)` to count valid words — cache count by slot
 3. Build per-cell dict mapping `(row, col)` to `{across_options, down_options, min_options}`
 4. Compute summary: `total_cells`, `critical_cells` (min_options < 5), `average_min_options`
+
+**Important:** Do NOT use `slot['pattern']` directly — `get_word_slots()` returns `.` for empty cells, but the trie pattern matcher expects `?` as the wildcard character. Always go through `grid.get_pattern_for_slot()`.
 
 **Returns:**
 ```json
@@ -219,7 +226,7 @@ For each white cell, count valid words for the across and down slot passing thro
 }
 ```
 
-**Performance:** A 15x15 grid has ~78 slots. With trie pattern matching at ~10ms/call, total is ~800ms. Acceptable for interactive use with debouncing.
+**Performance:** A 15x15 grid has ~78 slots. With trie pattern matching at ~10ms/call, total is ~800ms within a single CLI process invocation. The `analyze` command loads the trie once and runs all 78 pattern matches in-process — there is NOT a subprocess call per slot. Including the ~200ms subprocess overhead, total is ~1s. Acceptable for interactive use with debouncing.
 
 #### `analyze_placement_impact(grid, word, slot, word_list, pattern_matcher) → dict`
 
@@ -231,12 +238,12 @@ Compute domain sizes for all crossing slots before and after placing a proposed 
 3. Temporarily place the word in a grid clone, recompute crossing patterns, count matches (after)
 4. Return before/after/delta per crossing slot
 
-**Returns:**
+**Returns:** Keys use slot coordinates `"row,col,direction"` (not clue numbers — computing clue numbers requires the numbering algorithm, which is unnecessary overhead here):
 ```json
 {
   "impacts": {
-    "3-Down": {"before": 847, "after": 12, "delta": -835},
-    "5-Down": {"before": 234, "after": 89, "delta": -145}
+    "0,3,down": {"before": 847, "after": 12, "delta": -835, "length": 5},
+    "0,5,down": {"before": 234, "after": 89, "delta": -145, "length": 4}
   },
   "summary": {
     "total_crossings": 5,
@@ -360,9 +367,9 @@ New file: `backend/tests/unit/test_constraint_routes.py`
   - Call `/api/constraints/impact` with the proposed word and target slot
   - Show compact tooltip near the grid with crossing deltas:
     ```
-    Placing OCEAN at 1-Across:
-      3-Down: 847 → 12
-      5-Down: 234 → 89
+    Placing OCEAN at (0,0) across:
+      (0,3) down: 847 → 12
+      (0,5) down: 234 → 89
     ```
   - Color-code deltas: large negative = red text, small = yellow, zero = green
 - Debounce requests (300ms) — don't flood API on rapid navigation through suggestions
