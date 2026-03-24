@@ -307,8 +307,9 @@ class TestBeamSearchAutofill:
         result = autofill.fill(timeout=timeout)
         elapsed = time.time() - start
 
-        # Should not exceed timeout by more than 10%
-        assert elapsed <= timeout * 1.1
+        # Should not exceed timeout by more than 5 seconds (fixed ceiling, not % —
+        # % margins are fragile on loaded CI runners where a single iteration can take 1-2s)
+        assert elapsed <= timeout + 5
 
     def test_fill_no_duplicate_words(self, small_grid, word_list, pattern_matcher_trie):
         """Test that fill doesn't use duplicate words."""

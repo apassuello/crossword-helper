@@ -22,6 +22,8 @@ from cli.src.fill.state_manager import StateManager
 from cli.src.fill.pause_controller import PauseController
 from backend.core.edit_merger import EditMerger
 
+pytestmark = pytest.mark.slow
+
 
 class TestEndToEndPauseResume:
     """End-to-end tests for complete pause/resume workflow."""
@@ -165,8 +167,8 @@ class TestEndToEndPauseResume:
             task_id=task_id + '_resume'
         )
 
-        # Resume (allow longer timeout to potentially complete)
-        result2 = orchestrator2.fill(timeout=30, resume_state=loaded_state)
+        # Resume (beam search minimum is 10s)
+        result2 = orchestrator2.fill(timeout=10, resume_state=loaded_state)
 
         # Step 6: Verify resume worked
         assert result2.iterations >= result1.iterations, "Should continue from previous iteration count"
@@ -325,7 +327,7 @@ class TestEndToEndPauseResume:
             pause_thread = threading.Thread(target=pause_quickly)
             pause_thread.start()
 
-            result = orchestrator.fill(timeout=30, resume_state=resume_state)
+            result = orchestrator.fill(timeout=10, resume_state=resume_state)
             pause_thread.join()
 
             if hasattr(result, 'paused') and result.paused:
@@ -415,7 +417,7 @@ class TestEndToEndPauseResume:
                 )
 
                 resume_start = time.time()
-                result2 = orchestrator2.fill(timeout=5, resume_state=loaded_state)
+                result2 = orchestrator2.fill(timeout=10, resume_state=loaded_state)
                 resume_elapsed = time.time() - resume_start
 
                 print(f"  Resume execution time: {resume_elapsed:.2f}s")

@@ -11,16 +11,8 @@ This test simulates theme-based crossword creation:
 
 import pytest
 import json
-import time
-from backend.app import create_app
 
-
-@pytest.fixture
-def client():
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
+pytestmark = pytest.mark.slow
 
 
 def create_empty_grid(size=15):
@@ -133,10 +125,8 @@ class TestThemePlacementWorkflow:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(25)
-
         # Get result
+        # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
         sse_response = client.get(f"/api/progress/{task_id}")
         # Theme word should be unchanged in result
         # (This would require parsing SSE stream for final grid)

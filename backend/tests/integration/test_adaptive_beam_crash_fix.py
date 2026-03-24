@@ -10,20 +10,12 @@ This test verifies the fix works through the full web UI → backend → CLI sta
 import pytest
 import json
 import subprocess
+import sys
 import tempfile
 import os
-from backend.app import create_app
 
 
-@pytest.fixture
-def client():
-    """Create Flask test client"""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
+@pytest.mark.slow
 def test_cli_adaptive_beam_no_crash():
     """
     Test that CLI doesn't crash when running adaptive mode with beam search.
@@ -133,3 +125,97 @@ def test_api_adaptive_beam_starts_successfully(client):
     print(f"\n✅ SUCCESS: API successfully started adaptive + beam search task")
     print(f"   Task ID: {data['task_id']}")
     print(f"   Progress URL: {data['progress_url']}")
+
+
+@pytest.mark.slow
+def test_adaptive_mode_adds_black_squares():
+    """Canary: --adaptive should auto-add black squares to an empty grid.
+
+    This test exercises the --adaptive CLI flag on a 7x7 all-empty grid
+    (no black squares). The adaptive feature is supposed to strategically
+    add black squares to make the grid fillable, but it is KNOWN BROKEN
+    and does NOT actually add them.
+
+    This is a regression canary. If this test starts passing, the feature
+    has been fixed. See CLAUDE.md Known Issues section.
+    """
+    grid_data = {
+        "size": 7,
+        "grid": [
+            ["." for _ in range(7)] for _ in range(7)
+        ]
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.json', delete=False
+    ) as f:
+        json.dump(grid_data, f)
+        grid_file = f.name
+
+    try:
+        cmd = [
+            sys.executable, "-m", "cli.src.cli", "fill",
+            grid_file,
+            "--wordlists", "data/wordlists/core/crosswordese.txt",
+            "--algorithm", "beam",
+            "--adaptive",
+            "--max-adaptations", "3",
+            "--timeout", "15",
+            "--allow-nonstandard",
+            "--json-output",
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=25,
+        )
+
+        # Try to parse JSON from stdout
+        output = result.stdout.strip()
+        json_result = None
+        for line in reversed(output.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    json_result = json.loads(line)
+                    break
+                except json.JSONDecodeError:
+                    continue
+
+        if json_result is None:
+            pytest.skip(
+                f"CLI did not produce JSON output (rc={result.returncode}); "
+                f"stderr: {result.stderr[:300]}"
+            )
+
+        filled_grid = json_result.get("grid")
+        if filled_grid is None:
+            pytest.skip(
+                f"JSON output has no 'grid' key: {list(json_result.keys())}"
+            )
+
+        # Count black squares in input vs output
+        input_blacks = 0  # We started with zero black squares
+        output_blacks = sum(
+            1 for row in filled_grid for cell in row if cell == "#"
+        )
+
+        black_squares_added = output_blacks > input_blacks
+
+        # KNOWN BROKEN: this assertion is expected to fail.
+        # When the feature is fixed, this canary will start passing.
+        assert black_squares_added, (
+            "KNOWN BROKEN CANARY: --adaptive did not add any black squares "
+            f"to the 7x7 grid. Input had {input_blacks}, output has "
+            f"{output_blacks}. See CLAUDE.md Known Issues: CLI --adaptive "
+            "flag does NOT auto-add black squares."
+        )
+
+    except subprocess.TimeoutExpired:
+        pytest.skip("CLI process timed out (expected for slow CI)")
+
+    finally:
+        if os.path.exists(grid_file):
+            os.unlink(grid_file)

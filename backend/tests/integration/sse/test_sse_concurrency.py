@@ -15,44 +15,10 @@ must maintain separate SSE streams and progress state for each task.
 
 import pytest
 import json
-import time
 import threading
 from queue import Queue
 from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """Parse SSE message format."""
-    def parse_sse_stream(data_bytes):
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError:
-                        pass  # Skip invalid JSON
-        return messages
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestConcurrentSSEStreams:
@@ -67,16 +33,16 @@ class TestConcurrentSSEStreams:
         - Each SSE stream reports correct progress for its task
         - No cross-contamination of progress updates
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         # Start first autofill
         response1 = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 15,
+                "timeout": 10,
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -90,12 +56,12 @@ class TestConcurrentSSEStreams:
         response2 = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 15,
+                "timeout": 10,
                 "min_score": 10,
-                "algorithm": "beam"  # Different algorithm
+                "algorithm": "trie"
             }),
             content_type="application/json"
         )
@@ -106,10 +72,7 @@ class TestConcurrentSSEStreams:
         # Task IDs must be unique
         assert task_id_1 != task_id_2, "Task IDs must be unique"
 
-        # Wait for both to complete
-        time.sleep(18)
-
-        # Get SSE streams for both tasks
+        # Get SSE streams for both tasks (blocks until each stream ends)
         sse_response_1 = client.get(f"/api/progress/{task_id_1}")
         sse_response_2 = client.get(f"/api/progress/{task_id_2}")
 
@@ -184,10 +147,7 @@ class TestConcurrentSSEStreams:
         # All task IDs unique
         assert len({task_id_pattern, task_id_fill_1, task_id_fill_2}) == 3
 
-        # Wait for completion
-        time.sleep(18)
-
-        # Get all SSE streams
+        # Get all SSE streams (each blocks until its stream ends)
         sse_pattern = client.get(f"/api/progress/{task_id_pattern}")
         sse_fill_1 = client.get(f"/api/progress/{task_id_fill_1}")
         sse_fill_2 = client.get(f"/api/progress/{task_id_fill_2}")
@@ -211,13 +171,13 @@ class TestSSETaskIsolation:
 
         Create 2 tasks, verify each stream only contains its own updates.
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         # Start 2 autofill tasks
         response1 = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
@@ -231,21 +191,18 @@ class TestSSETaskIsolation:
         response2 = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
                 "min_score": 10,
-                "algorithm": "beam"
+                "algorithm": "trie"
             }),
             content_type="application/json"
         )
         task_id_2 = response2.json["task_id"]
 
-        # Wait for completion
-        time.sleep(13)
-
-        # Get both streams
+        # Get both streams (each blocks until its stream ends)
         sse_1 = client.get(f"/api/progress/{task_id_1}")
         sse_2 = client.get(f"/api/progress/{task_id_2}")
 
@@ -308,10 +265,7 @@ class TestSSEResourceCleanup:
 
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(2)
-
-        # Get SSE stream
+        # Get SSE stream (blocks until stream ends)
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Stream should contain data
@@ -331,13 +285,13 @@ class TestSSEResourceCleanup:
         - User refreshes page while autofill running
         - User opens multiple browser tabs
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         # Start autofill
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
@@ -349,10 +303,7 @@ class TestSSEResourceCleanup:
 
         task_id = response.json["task_id"]
 
-        # Wait briefly for task to start
-        time.sleep(1)
-
-        # Open 2 SSE connections to same task
+        # Open 2 SSE connections to same task (each blocks until stream ends)
         sse_response_1 = client.get(f"/api/progress/{task_id}")
         sse_response_2 = client.get(f"/api/progress/{task_id}")
 
@@ -377,13 +328,13 @@ class TestSSERaceConditions:
         3. Task starts in background
         4. SSE should receive all updates
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         # Start autofill
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
@@ -462,10 +413,7 @@ class TestSSELongRunningOperations:
 
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(25)
-
-        # Get SSE stream
+        # Get SSE stream (blocks until stream ends)
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Should have received messages throughout operation

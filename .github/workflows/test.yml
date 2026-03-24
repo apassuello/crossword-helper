@@ -38,13 +38,22 @@ jobs:
 
     - name: Run unit tests
       run: |
-        pytest backend/tests/unit cli/tests/unit -v --cov=backend --cov=cli --cov-report=xml --cov-report=term -n auto
+        COV_ARGS=""
+        if [ "${{ matrix.python-version }}" = "3.12" ]; then
+          COV_ARGS="--cov=backend --cov=cli --cov-report=xml --cov-report=term"
+        fi
+        pytest backend/tests/unit cli/tests/unit -v $COV_ARGS -n auto
 
     - name: Run integration tests
       run: |
-        pytest backend/tests/integration cli/tests/integration -v --cov=backend --cov=cli --cov-append --cov-report=xml --cov-report=term
+        COV_ARGS=""
+        if [ "${{ matrix.python-version }}" = "3.12" ]; then
+          COV_ARGS="--cov=backend --cov=cli --cov-append --cov-report=xml --cov-report=term"
+        fi
+        pytest backend/tests/integration cli/tests/integration -v $COV_ARGS
 
     - name: Verify coverage file exists
+      if: matrix.python-version == '3.12'
       run: |
         ls -lh coverage.xml
         echo "Coverage file size: $(wc -c < coverage.xml) bytes"
@@ -65,7 +74,7 @@ jobs:
     - name: Generate coverage HTML report
       if: matrix.python-version == '3.12'
       run: |
-        pytest --cov=backend --cov=cli --cov-report=html
+        coverage html
 
     - name: Upload coverage HTML
       if: matrix.python-version == '3.12'

@@ -15,69 +15,8 @@ the event stream.
 
 import pytest
 import json
-import time
 import threading
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client with SSE support."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """
-    Parse SSE message format.
-
-    SSE format spec:
-    ```
-    data: {"key": "value"}\n
-    \n
-    ```
-
-    Returns a function that parses SSE stream into list of messages.
-    """
-    def parse_sse_stream(data_bytes):
-        """
-        Parse SSE stream bytes into list of message dicts.
-
-        Args:
-            data_bytes: Raw SSE stream data
-
-        Returns:
-            List of parsed JSON messages
-        """
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-
-        # Split by double newline (message separator)
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-
-            # Extract data line
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]  # Remove "data: " prefix
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError as e:
-                        # Invalid JSON - this is a test failure
-                        pytest.fail(f"Invalid JSON in SSE message: {line}\nError: {e}")
-
-        return messages
-
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid for testing."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestSSEMessageFormatCompliance:
@@ -149,9 +88,6 @@ class TestSSEMessageFormatCompliance:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait briefly for task to start
-        time.sleep(0.5)
-
         # Get SSE stream (will collect all messages until stream closes)
         sse_response = client.get(f"/api/progress/{task_id}")
 
@@ -174,15 +110,15 @@ class TestSSEMessageFormatCompliance:
         2. Progressive updates (progress increasing, status='running')
         3. Final message (progress=100 OR status='complete'/'error')
         """
-        # Start autofill
-        grid = create_test_grid(11)
+        # Start autofill with small grid (fills in <1s)
+        grid = create_test_grid(5)
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 10,  # Short timeout for testing
+                "timeout": 10,
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -191,11 +127,7 @@ class TestSSEMessageFormatCompliance:
 
         task_id = response.json["task_id"]
 
-        # Wait for operation to complete (or timeout)
-        # Note: In real tests, we might want to poll or use shorter timeout
-        time.sleep(12)  # Timeout + buffer
-
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 
@@ -245,9 +177,8 @@ class TestSSEMessageFormatCompliance:
         )
 
         task_id = response.json["task_id"]
-        time.sleep(1)  # Wait for completion
 
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 
@@ -295,10 +226,7 @@ class TestSSEProgressiveUpdates:
 
         task_id = response.json["task_id"]
 
-        # Wait for operation to complete
-        time.sleep(25)
-
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 
@@ -344,10 +272,7 @@ class TestSSEErrorHandling:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait for error to occur
-        time.sleep(2)
-
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 
@@ -392,10 +317,7 @@ class TestSSEErrorHandling:
         assert response.status_code == 202
         task_id = response.json["task_id"]
 
-        # Wait for timeout to occur
-        time.sleep(3)
-
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 
@@ -439,10 +361,7 @@ class TestSSEDataPayload:
 
         task_id = response.json["task_id"]
 
-        # Wait for completion
-        time.sleep(25)
-
-        # Get SSE stream
+        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
 

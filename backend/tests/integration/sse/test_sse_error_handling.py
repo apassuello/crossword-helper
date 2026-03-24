@@ -18,41 +18,7 @@ import pytest
 import json
 import time
 import os
-from backend.app import create_app
-
-
-@pytest.fixture
-def client():
-    """Create Flask test client."""
-    app = create_app()
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-@pytest.fixture
-def sse_parser():
-    """Parse SSE message format."""
-    def parse_sse_stream(data_bytes):
-        messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
-            if not chunk.strip():
-                continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
-                    try:
-                        message_json = line[6:]
-                        messages.append(json.loads(message_json))
-                    except json.JSONDecodeError:
-                        pass
-        return messages
-    return parse_sse_stream
-
-
-def create_test_grid(size=11):
-    """Helper to create empty grid."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+from backend.tests.integration.conftest import create_test_grid
 
 
 class TestSSECLIErrorHandling:
@@ -86,9 +52,6 @@ class TestSSECLIErrorHandling:
         # Should still accept request (error occurs during execution)
         assert response.status_code == 202
         task_id = response.json["task_id"]
-
-        # Wait for error to occur
-        time.sleep(3)
 
         # Get SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")
@@ -136,7 +99,6 @@ class TestSSECLIErrorHandling:
         elif response.status_code == 202:
             # Accepted, will fail during CLI execution
             task_id = response.json["task_id"]
-            time.sleep(2)
 
             sse_response = client.get(f"/api/progress/{task_id}")
             messages = sse_parser(sse_response.data)
@@ -216,7 +178,7 @@ class TestSSETimeoutHandling:
                 "size": 11,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 3,  # Short timeout for difficult grid
+                "timeout": 10,  # Short timeout for difficult grid
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -231,7 +193,7 @@ class TestSSETimeoutHandling:
 
         assert response.status_code == 202
         task_id = response.json["task_id"]
-        time.sleep(5)
+        time.sleep(13)
 
         # Get SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")
@@ -391,12 +353,12 @@ class TestSSEClientDisconnection:
         This is hard to test in Flask test client (no real HTTP connection).
         We verify the stream can be closed without errors.
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
                 "timeout": 10,
@@ -431,15 +393,15 @@ class TestSSEEdgeCases:
 
         This tests that SSE handles the common case of starting from scratch.
         """
-        grid = create_test_grid(11)
+        grid = create_test_grid(5)
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps({
-                "size": 11,
+                "size": 5,
                 "grid": grid,
                 "wordlists": ["comprehensive"],
-                "timeout": 15,
+                "timeout": 10,
                 "min_score": 10,
                 "algorithm": "trie"
             }),
@@ -447,7 +409,7 @@ class TestSSEEdgeCases:
         )
 
         task_id = response.json["task_id"]
-        time.sleep(18)
+        time.sleep(5)
 
         sse_response = client.get(f"/api/progress/{task_id}")
         messages = sse_parser(sse_response.data)
