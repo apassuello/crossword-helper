@@ -1,5 +1,7 @@
 """Unit tests for BlackSquareSuggester and validate_grid_for_black_squares."""
 
+from typing import Optional
+
 import pytest
 
 from backend.core.black_square_suggester import (
@@ -30,7 +32,7 @@ def _empty_grid(size: int):
     return [[_empty_cell() for _ in range(size)] for _ in range(size)]
 
 
-def _slot(row: int, col: int, direction: str, length: int, pattern: str | None = None):
+def _slot(row: int, col: int, direction: str, length: int, pattern: Optional[str] = None):
     if pattern is None:
         pattern = "?" * length
     return {"row": row, "col": col, "direction": direction, "length": length, "pattern": pattern}
