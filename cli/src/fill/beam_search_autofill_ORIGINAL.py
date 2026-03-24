@@ -37,20 +37,28 @@ class BeamState:
     - All words in used_words exist in grid
     """
 
-    grid: Grid                                          # Current grid state
-    slots_filled: int                                   # Number of slots filled so far
-    total_slots: int                                    # Total slots in grid
-    score: float                                        # Quality score (0.0-100.0)
-    used_words: Set[str] = field(default_factory=set)  # Words placed (prevent duplicates)
-    slot_assignments: Dict[Tuple[int, int, str], str] = field(default_factory=dict)  # slot → word
-    domains: Dict[Tuple[int, int, str], List[str]] = field(default_factory=dict)  # slot → candidate words
-    domain_reductions: Dict[Tuple[int, int, str], List] = field(default_factory=dict)  # slot → MAC reductions
+    grid: Grid  # Current grid state
+    slots_filled: int  # Number of slots filled so far
+    total_slots: int  # Total slots in grid
+    score: float  # Quality score (0.0-100.0)
+    used_words: Set[str] = field(
+        default_factory=set
+    )  # Words placed (prevent duplicates)
+    slot_assignments: Dict[Tuple[int, int, str], str] = field(
+        default_factory=dict
+    )  # slot → word
+    domains: Dict[Tuple[int, int, str], List[str]] = field(
+        default_factory=dict
+    )  # slot → candidate words
+    domain_reductions: Dict[Tuple[int, int, str], List] = field(
+        default_factory=dict
+    )  # slot → MAC reductions
 
     def completion_rate(self) -> float:
         """Return fraction of slots filled (0.0-1.0)"""
         return self.slots_filled / self.total_slots if self.total_slots > 0 else 0.0
 
-    def clone(self) -> 'BeamState':
+    def clone(self) -> "BeamState":
         """
         Create deep copy of this state.
 
@@ -66,11 +74,14 @@ class BeamState:
             score=self.score,
             used_words=self.used_words.copy(),  # CRITICAL: copy set
             slot_assignments=self.slot_assignments.copy(),
-            domains={k: v.copy() if isinstance(v, list) else v for k, v in self.domains.items()},
-            domain_reductions=self.domain_reductions.copy()
+            domains={
+                k: v.copy() if isinstance(v, list) else v
+                for k, v in self.domains.items()
+            },
+            domain_reductions=self.domain_reductions.copy(),
         )
 
-    def __eq__(self, other: 'BeamState') -> bool:
+    def __eq__(self, other: "BeamState") -> bool:
         """
         Check equality (for testing).
 
@@ -79,8 +90,8 @@ class BeamState:
         if not isinstance(other, BeamState):
             return False
         return (
-            self.grid.to_dict() == other.grid.to_dict() and
-            self.used_words == other.used_words
+            self.grid.to_dict() == other.grid.to_dict()
+            and self.used_words == other.used_words
         )
 
     def __hash__(self) -> int:
@@ -90,10 +101,9 @@ class BeamState:
         WARNING: Expensive operation, use sparingly.
         """
         grid_dict = self.grid.to_dict()
-        return hash((
-            tuple(tuple(row) for row in grid_dict['grid']),
-            frozenset(self.used_words)
-        ))
+        return hash(
+            (tuple(tuple(row) for row in grid_dict["grid"]), frozenset(self.used_words))
+        )
 
 
 class BeamSearchAutofill:
@@ -123,7 +133,7 @@ class BeamSearchAutofill:
         min_score: int = 0,
         diversity_bonus: float = 0.1,
         progress_reporter=None,
-        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None
+        theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
     ):
         """
         Initialize beam search solver.
@@ -150,7 +160,9 @@ class BeamSearchAutofill:
         if beam_width < 1 or beam_width > 20:
             raise ValueError(f"beam_width must be 1-20, got {beam_width}")
         if candidates_per_slot < 1 or candidates_per_slot > 100:
-            raise ValueError(f"candidates_per_slot must be 1-100, got {candidates_per_slot}")
+            raise ValueError(
+                f"candidates_per_slot must be 1-100, got {candidates_per_slot}"
+            )
         if min_score < 0 or min_score > 100:
             raise ValueError(f"min_score must be 0-100, got {min_score}")
         if diversity_bonus < 0.0 or diversity_bonus > 1.0:
@@ -212,7 +224,7 @@ class BeamSearchAutofill:
                 slots_filled=0,
                 total_slots=0,
                 problematic_slots=[],
-                iterations=0
+                iterations=0,
             )
 
         # Sort slots with THEME ENTRY PRIORITIZATION
@@ -242,12 +254,14 @@ class BeamSearchAutofill:
             total_slots=total_slots,
             score=100.0 * theme_slot_count,  # Initial score for theme entries
             used_words=theme_words.copy(),  # Theme words marked as used
-            slot_assignments=theme_slot_assignments.copy()
+            slot_assignments=theme_slot_assignments.copy(),
         )
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
         # DEBUG: Note that we're using DYNAMIC MRV, not static ordering
-        logger.debug("\nDEBUG: Using DYNAMIC MRV variable ordering (will interleave directions naturally)")
+        logger.debug(
+            "\nDEBUG: Using DYNAMIC MRV variable ordering (will interleave directions naturally)"
+        )
         logger.debug(f"Total slots to fill: {total_slots}")
 
         # Main beam search loop with DYNAMIC MRV
@@ -265,8 +279,11 @@ class BeamSearchAutofill:
                 break
 
             # DYNAMIC MRV: Select next slot based on current state
-            unfilled_slots = [s for s in all_slots
-                             if (s['row'], s['col'], s['direction']) not in filled_slots]
+            unfilled_slots = [
+                s
+                for s in all_slots
+                if (s["row"], s["col"], s["direction"]) not in filled_slots
+            ]
 
             if not unfilled_slots:
                 break  # All slots filled
@@ -275,23 +292,26 @@ class BeamSearchAutofill:
             slot = self._select_next_slot_dynamic_mrv(unfilled_slots, beam[0])
 
             if slot is None:
-                logger.debug(f"\nDEBUG: No slot selected by MRV at iteration {slot_idx}")
+                logger.debug(
+                    f"\nDEBUG: No slot selected by MRV at iteration {slot_idx}"
+                )
                 break
 
             # Mark slot as being filled
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             filled_slots.add(slot_id)
 
             # DEBUG: Print what MRV selected (shows direction interleaving)
             if slot_idx <= 10:  # Show first 10 to see interleaving pattern
-                logger.debug(f"\nDEBUG MRV: Slot {slot_idx}/{total_slots}: {slot['direction'].upper():6s} length={slot['length']:2d} at ({slot['row']:2d},{slot['col']:2d})")
+                logger.debug(
+                    f"\nDEBUG MRV: Slot {slot_idx}/{total_slots}: {slot['direction'].upper():6s} length={slot['length']:2d} at ({slot['row']:2d},{slot['col']:2d})"
+                )
 
             # Report progress
             if self.progress_reporter:
                 progress = int((len(filled_slots) / total_slots) * 90) + 10  # 10-100%
                 self.progress_reporter.update(
-                    progress,
-                    f"Beam search: slot {len(filled_slots)}/{total_slots}"
+                    progress, f"Beam search: slot {len(filled_slots)}/{total_slots}"
                 )
 
             # Expand beam
@@ -299,27 +319,37 @@ class BeamSearchAutofill:
 
             # BACKTRACKING: If expansion fails, try with more candidates
             if not expanded_beam and slot_idx > 0:
-                logger.debug(f"\nDEBUG: Beam expansion failed at slot {slot_idx+1}. Trying backtracking...")
+                logger.debug(
+                    f"\nDEBUG: Beam expansion failed at slot {slot_idx+1}. Trying backtracking..."
+                )
 
                 # Try expanding with 2x more candidates
-                expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 2)
+                expanded_beam = self._expand_beam(
+                    beam, slot, self.candidates_per_slot * 2
+                )
 
                 # If still failing, try 5x more candidates
                 if not expanded_beam:
                     logger.debug("  Retry with 5x candidates...")
-                    expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 5)
+                    expanded_beam = self._expand_beam(
+                        beam, slot, self.candidates_per_slot * 5
+                    )
 
                 # If still failing, try with NO score filter (min_score=0 temporarily)
                 if not expanded_beam:
                     logger.debug("  Retry with min_score=0...")
                     old_min_score = self.min_score
                     self.min_score = 0
-                    expanded_beam = self._expand_beam(beam, slot, self.candidates_per_slot * 10)
+                    expanded_beam = self._expand_beam(
+                        beam, slot, self.candidates_per_slot * 10
+                    )
                     self.min_score = old_min_score
 
             # Final fallback: exit if truly no options
             if not expanded_beam:
-                logger.debug(f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early.")
+                logger.debug(
+                    f"\nDEBUG: Beam expansion returned empty at slot {slot_idx+1} even after backtracking! Exiting early."
+                )
                 break
 
             # PHASE 4: Apply Smart Adaptive Beam Width + Diverse Beam Search
@@ -329,23 +359,27 @@ class BeamSearchAutofill:
                 beam_states=beam,
                 unfilled_slots=unfilled_slots,
                 total_slots=total_slots,
-                slot=slot
+                slot=slot,
             )
 
             # Apply pruning with adaptive width
             if len(expanded_beam) > adaptive_width:
                 # Get candidate words for this slot (for diversity calculation)
                 pattern = beam[0].grid.get_pattern_for_slot(slot) if beam else ""
-                min_score = self._get_min_score_for_length(slot['length'])
-                slot_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
-                slot_candidates = filter_crosswordese(slot_candidates, slot['length'])
+                min_score = self._get_min_score_for_length(slot["length"])
+                slot_candidates = self.pattern_matcher.find(
+                    pattern, min_score=min_score
+                )
+                slot_candidates = filter_crosswordese(slot_candidates, slot["length"])
 
                 # Temporarily override beam_width for diverse pruning
                 original_width = self.beam_width
                 self.beam_width = adaptive_width
 
                 # Apply Diverse Beam Search to select diverse states
-                beam = self._diverse_beam_prune(expanded_beam, slot, num_groups=4, diversity_lambda=0.5)
+                beam = self._diverse_beam_prune(
+                    expanded_beam, slot, num_groups=4, diversity_lambda=0.5
+                )
 
                 # Restore original width
                 self.beam_width = original_width
@@ -364,8 +398,11 @@ class BeamSearchAutofill:
 
                 # FIX #4 (Phase 4.2): Double-check actual grid completion
                 # Note: No need to check for dots - get_pattern_for_slot() converts dots to '?'
-                actual_filled = sum(1 for slot in all_slots
-                                   if '?' not in best_complete.grid.get_pattern_for_slot(slot))
+                actual_filled = sum(
+                    1
+                    for slot in all_slots
+                    if "?" not in best_complete.grid.get_pattern_for_slot(slot)
+                )
 
                 return FillResult(
                     success=(actual_filled == total_slots),  # Verify actual completion
@@ -374,7 +411,7 @@ class BeamSearchAutofill:
                     slots_filled=actual_filled,  # Use verified count
                     total_slots=total_slots,
                     problematic_slots=[],
-                    iterations=self.iterations
+                    iterations=self.iterations,
                 )
 
         # Return best partial solution
@@ -384,7 +421,7 @@ class BeamSearchAutofill:
         # Find problematic slots (unfilled)
         problematic_slots = []
         for slot in all_slots:
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             if slot_id not in best_state.slot_assignments:
                 problematic_slots.append(slot)
 
@@ -396,14 +433,17 @@ class BeamSearchAutofill:
             # Check if pattern contains gibberish (repeated letters)
             if self._is_gibberish_pattern(pattern):
                 best_state.grid.remove_word(
-                    slot['row'], slot['col'], slot['length'], slot['direction']
+                    slot["row"], slot["col"], slot["length"], slot["direction"]
                 )
 
         # FIX #3 (Phase 4.2): Calculate ACTUAL filled slots from grid state
         # Don't trust best_state.slots_filled - verify by checking grid
         # Note: No need to check for dots - get_pattern_for_slot() converts dots to '?'
-        actual_filled = sum(1 for slot in all_slots
-                           if '?' not in best_state.grid.get_pattern_for_slot(slot))
+        actual_filled = sum(
+            1
+            for slot in all_slots
+            if "?" not in best_state.grid.get_pattern_for_slot(slot)
+        )
 
         return FillResult(
             success=False,
@@ -412,7 +452,7 @@ class BeamSearchAutofill:
             slots_filled=actual_filled,  # Use verified count, not best_state.slots_filled
             total_slots=total_slots,
             problematic_slots=problematic_slots,
-            iterations=self.iterations
+            iterations=self.iterations,
         )
 
     def _sort_slots_by_constraint(self, slots: List[Dict]) -> List[Dict]:
@@ -448,7 +488,7 @@ class BeamSearchAutofill:
         # Group by length
         length_groups = defaultdict(list)
         for slot in slots:
-            length_groups[slot['length']].append(slot)
+            length_groups[slot["length"]].append(slot)
 
         result = []
 
@@ -457,8 +497,8 @@ class BeamSearchAutofill:
             group = length_groups[length]
 
             # Separate by direction
-            across = [s for s in group if s['direction'] == 'across']
-            down = [s for s in group if s['direction'] == 'down']
+            across = [s for s in group if s["direction"] == "across"]
+            down = [s for s in group if s["direction"] == "down"]
 
             # Sort each by secondary constraint (domain size, empty count)
             across_sorted = self._sort_by_secondary_constraint(across)
@@ -491,28 +531,28 @@ class BeamSearchAutofill:
         Returns:
             Sorted list (most constrained first)
         """
+
         def constraint_key(slot: Dict):
             pattern = self.grid.get_pattern_for_slot(slot)
 
             # Use length-dependent quality threshold
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
 
             # Count candidates (domain size)
-            candidates = self.pattern_matcher.find(
-                pattern,
-                min_score=min_score
-            )
+            candidates = self.pattern_matcher.find(pattern, min_score=min_score)
             domain_size = len(candidates)
 
             # Count empty cells
-            empty_count = pattern.count('?')
+            empty_count = pattern.count("?")
 
             # Sort by domain size, then empty count
             return (domain_size, empty_count)
 
         return sorted(slots, key=constraint_key)
 
-    def _prioritize_theme_entries(self, slots: List[Dict]) -> Tuple[List[Dict], Set[str]]:
+    def _prioritize_theme_entries(
+        self, slots: List[Dict]
+    ) -> Tuple[List[Dict], Set[str]]:
         """
         Separate theme entries from regular slots and prioritize them.
 
@@ -540,7 +580,7 @@ class BeamSearchAutofill:
         theme_words = set()
 
         for slot in slots:
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             if slot_id in self.theme_entries:
                 theme_slots.append(slot)
                 theme_words.add(self.theme_entries[slot_id].upper())
@@ -548,7 +588,9 @@ class BeamSearchAutofill:
                 regular_slots.append(slot)
 
         # Sort theme slots by length (longest first)
-        theme_slots_sorted = sorted(theme_slots, key=lambda s: s['length'], reverse=True)
+        theme_slots_sorted = sorted(
+            theme_slots, key=lambda s: s["length"], reverse=True
+        )
 
         # Sort regular slots with interleaving
         regular_slots_sorted = self._sort_slots_by_constraint(regular_slots)
@@ -584,22 +626,22 @@ class BeamSearchAutofill:
             - 9+ letter: 70 (high-quality only)
         """
         if length <= 3:
-            return 0    # Accept any word (crosswordese OK)
+            return 0  # Accept any word (crosswordese OK)
         elif length == 4:
-            return 10   # Slightly filtered
+            return 10  # Slightly filtered
         elif length <= 6:
-            return 30   # Prefer common words
+            return 30  # Prefer common words
         elif length <= 8:
-            return 50   # Common words only
+            return 50  # Common words only
         else:  # 9+ letters
-            return 70   # High-quality phrases only
+            return 70  # High-quality phrases only
 
     def _get_adaptive_beam_width(
         self,
         beam_states: List[BeamState],
         unfilled_slots: List[Dict],
         total_slots: int,
-        slot: Dict
+        slot: Dict,
     ) -> int:
         """
         Smart adaptive beam width based on search state, not just depth.
@@ -628,7 +670,7 @@ class BeamSearchAutofill:
             mean_score = sum(scores) / len(scores)
             variance = sum((s - mean_score) ** 2 for s in scores) / len(scores)
             # Normalize variance
-            normalized_variance = variance / (mean_score ** 2 + 0.001)
+            normalized_variance = variance / (mean_score**2 + 0.001)
         else:
             normalized_variance = 1.0
 
@@ -641,8 +683,12 @@ class BeamSearchAutofill:
             diversity_factor = 1.0
 
         # Factor 2: Count viable candidates for current slot
-        pattern = beam_states[0].grid.get_pattern_for_slot(slot) if beam_states else "?" * slot['length']
-        min_score = self._get_min_score_for_length(slot['length'])
+        pattern = (
+            beam_states[0].grid.get_pattern_for_slot(slot)
+            if beam_states
+            else "?" * slot["length"]
+        )
+        min_score = self._get_min_score_for_length(slot["length"])
         candidates = self.pattern_matcher.find(pattern, min_score=min_score)
         viable_count = len(candidates)
 
@@ -660,23 +706,25 @@ class BeamSearchAutofill:
             depth_factor = 0.8  # Only mild narrowing near end
 
         # Calculate final width
-        adaptive_width = int(base_width * diversity_factor * candidate_factor * depth_factor)
+        adaptive_width = int(
+            base_width * diversity_factor * candidate_factor * depth_factor
+        )
 
         # Clamp between reasonable bounds
         adaptive_width = max(3, min(20, adaptive_width))
 
         # Debug output
-        if hasattr(self, 'debug_adaptive') and self.debug_adaptive:
-            print(f"DEBUG ADAPTIVE WIDTH: depth={depth:.2f}, variance={normalized_variance:.3f}, "
-                  f"viable={viable_count}, factors=(div={diversity_factor:.1f}, "
-                  f"cand={candidate_factor:.2f}, depth={depth_factor:.1f}) → width={adaptive_width}")
+        if hasattr(self, "debug_adaptive") and self.debug_adaptive:
+            print(
+                f"DEBUG ADAPTIVE WIDTH: depth={depth:.2f}, variance={normalized_variance:.3f}, "
+                f"viable={viable_count}, factors=(div={diversity_factor:.1f}, "
+                f"cand={candidate_factor:.2f}, depth={depth_factor:.1f}) → width={adaptive_width}"
+            )
 
         return adaptive_width
 
     def _select_next_slot_dynamic_mrv(
-        self,
-        unfilled_slots: List[Dict],
-        current_state: BeamState
+        self, unfilled_slots: List[Dict], current_state: BeamState
     ) -> Optional[Dict]:
         """
         Dynamic MRV + degree heuristic for variable ordering.
@@ -701,25 +749,27 @@ class BeamSearchAutofill:
             pattern = current_state.grid.get_pattern_for_slot(slot)
 
             # MRV: Count currently valid candidates given state
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
             valid_words = self.pattern_matcher.find(pattern, min_score=min_score)
             domain_size = len(valid_words)
 
             # Degree: Count unfilled crossing slots
             degree = 0
             for crossing in self._get_slot_crossings(slot):
-                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+                crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
                 if crossing_id not in current_state.slot_assignments:
                     degree += 1
 
             # Track for selection
-            candidates.append({
-                'slot': slot,
-                'domain_size': domain_size,
-                'degree': degree,
-                'length': slot['length'],
-                'direction': slot['direction']
-            })
+            candidates.append(
+                {
+                    "slot": slot,
+                    "domain_size": domain_size,
+                    "degree": degree,
+                    "length": slot["length"],
+                    "direction": slot["direction"],
+                }
+            )
 
         if not candidates:
             return None
@@ -734,25 +784,33 @@ class BeamSearchAutofill:
         # Sort by MRV (ascending), then degree (descending), then length (descending)
         # Final tie-breaker: prefer alternating directions to encourage interleaving
         # If this is the first slot, prefer DOWN to avoid bias from get_word_slots() ordering
-        candidates.sort(key=lambda c: (
-            c['domain_size'],
-            -c['degree'],
-            -c['length'],
-            0 if (last_direction is None and c['direction'] == 'down') or
-                 (last_direction is not None and c['direction'] != last_direction) else 1
-        ))
+        candidates.sort(
+            key=lambda c: (
+                c["domain_size"],
+                -c["degree"],
+                -c["length"],
+                (
+                    0
+                    if (last_direction is None and c["direction"] == "down")
+                    or (last_direction is not None and c["direction"] != last_direction)
+                    else 1
+                ),
+            )
+        )
 
         selected = candidates[0]
 
         # Debug: Verify direction interleaving
         # Always show MRV selection for first 10 slots to verify interleaving
         if len(current_state.slot_assignments) <= 10:
-            directions = [c['direction'] for c in candidates[:5]]
-            domain_sizes = [c['domain_size'] for c in candidates[:5]]
+            directions = [c["direction"] for c in candidates[:5]]
+            domain_sizes = [c["domain_size"] for c in candidates[:5]]
             logger.debug(f"  MRV top 5: {list(zip(directions, domain_sizes))}")
-            logger.debug(f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})")
+            logger.debug(
+                f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})"
+            )
 
-        return selected['slot']
+        return selected["slot"]
 
     def _get_slot_crossings(self, slot: Dict) -> List[Dict]:
         """
@@ -769,25 +827,31 @@ class BeamSearchAutofill:
 
         for other_slot in all_slots:
             # Skip same slot
-            if (other_slot['row'] == slot['row'] and
-                other_slot['col'] == slot['col'] and
-                other_slot['direction'] == slot['direction']):
+            if (
+                other_slot["row"] == slot["row"]
+                and other_slot["col"] == slot["col"]
+                and other_slot["direction"] == slot["direction"]
+            ):
                 continue
 
             # Check for intersection
-            if slot['direction'] == 'across' and other_slot['direction'] == 'down':
+            if slot["direction"] == "across" and other_slot["direction"] == "down":
                 # This slot is horizontal, other is vertical
-                if (slot['row'] >= other_slot['row'] and
-                    slot['row'] < other_slot['row'] + other_slot['length'] and
-                    other_slot['col'] >= slot['col'] and
-                    other_slot['col'] < slot['col'] + slot['length']):
+                if (
+                    slot["row"] >= other_slot["row"]
+                    and slot["row"] < other_slot["row"] + other_slot["length"]
+                    and other_slot["col"] >= slot["col"]
+                    and other_slot["col"] < slot["col"] + slot["length"]
+                ):
                     crossings.append(other_slot)
-            elif slot['direction'] == 'down' and other_slot['direction'] == 'across':
+            elif slot["direction"] == "down" and other_slot["direction"] == "across":
                 # This slot is vertical, other is horizontal
-                if (slot['col'] >= other_slot['col'] and
-                    slot['col'] < other_slot['col'] + other_slot['length'] and
-                    other_slot['row'] >= slot['row'] and
-                    other_slot['row'] < slot['row'] + slot['length']):
+                if (
+                    slot["col"] >= other_slot["col"]
+                    and slot["col"] < other_slot["col"] + other_slot["length"]
+                    and other_slot["row"] >= slot["row"]
+                    and other_slot["row"] < slot["row"] + slot["length"]
+                ):
                     crossings.append(other_slot)
 
         return crossings
@@ -797,7 +861,7 @@ class BeamSearchAutofill:
         slot: Dict,
         word: str,
         state: BeamState,
-        domains: Dict[Tuple[int, int, str], List[str]]
+        domains: Dict[Tuple[int, int, str], List[str]],
     ) -> Tuple[bool, Dict, Set]:
         """
         Maintaining Arc Consistency (AC-3 algorithm).
@@ -820,10 +884,10 @@ class BeamSearchAutofill:
         """
         # Initialize queue with all arcs affected by this assignment
         queue = []
-        slot_id = (slot['row'], slot['col'], slot['direction'])
+        slot_id = (slot["row"], slot["col"], slot["direction"])
 
         for crossing in self._get_slot_crossings(slot):
-            crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+            crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
             if crossing_id not in state.slot_assignments:
                 queue.append((crossing_id, slot_id))
 
@@ -844,10 +908,11 @@ class BeamSearchAutofill:
 
             # Revise domain of xi given xj's assignment
             removed = self._revise_domain(
-                xi_slot, xi_id,
+                xi_slot,
+                xi_id,
                 slot if xj_id == slot_id else self._get_slot_by_id(xj_id),
-                word if xj_id == slot_id else state.slot_assignments.get(xj_id, ''),
-                domains
+                word if xj_id == slot_id else state.slot_assignments.get(xj_id, ""),
+                domains,
             )
 
             if removed:
@@ -862,19 +927,18 @@ class BeamSearchAutofill:
 
                 # Add all OTHER neighbors of xi to queue (transitive propagation)
                 for neighbor in self._get_slot_crossings(xi_slot):
-                    neighbor_id = (neighbor['row'], neighbor['col'], neighbor['direction'])
+                    neighbor_id = (
+                        neighbor["row"],
+                        neighbor["col"],
+                        neighbor["direction"],
+                    )
                     if neighbor_id != xj_id and neighbor_id in state.slot_assignments:
                         queue.append((xi_id, neighbor_id))
 
         return True, reduced_domains, conflict_set
 
     def _revise_domain(
-        self,
-        xi_slot: Dict,
-        xi_id: Tuple,
-        xj_slot: Dict,
-        xj_word: str,
-        domains: Dict
+        self, xi_slot: Dict, xi_id: Tuple, xj_slot: Dict, xj_word: str, domains: Dict
     ) -> List[str]:
         """
         Remove values from xi's domain with no support in xj.
@@ -916,38 +980,46 @@ class BeamSearchAutofill:
         """Get slot dict by its ID tuple (row, col, direction)."""
         row, col, direction = slot_id
         for slot in self.grid.get_word_slots():
-            if (slot['row'] == row and
-                slot['col'] == col and
-                slot['direction'] == direction):
+            if (
+                slot["row"] == row
+                and slot["col"] == col
+                and slot["direction"] == direction
+            ):
                 return slot
         return None
 
-    def _get_crossing_position(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+    def _get_crossing_position(
+        self, slot1: Dict, slot2: Dict
+    ) -> Optional[Tuple[int, int]]:
         """
         Get the position where two slots cross.
 
         Returns:
             (pos_in_slot1, pos_in_slot2) or None if no crossing
         """
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None  # Parallel slots don't cross
 
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             h_slot, v_slot = slot1, slot2
         else:
             h_slot, v_slot = slot2, slot1
 
         # Check if they intersect
-        h_row, h_col = h_slot['row'], h_slot['col']
-        v_row, v_col = v_slot['row'], v_slot['col']
+        h_row, h_col = h_slot["row"], h_slot["col"]
+        v_row, v_col = v_slot["row"], v_slot["col"]
 
-        if (h_row >= v_row and h_row < v_row + v_slot['length'] and
-            v_col >= h_col and v_col < h_col + h_slot['length']):
+        if (
+            h_row >= v_row
+            and h_row < v_row + v_slot["length"]
+            and v_col >= h_col
+            and v_col < h_col + h_slot["length"]
+        ):
             # They cross!
             h_pos = v_col - h_col
             v_pos = h_row - v_row
 
-            if slot1['direction'] == 'across':
+            if slot1["direction"] == "across":
                 return (h_pos, v_pos)
             else:
                 return (v_pos, h_pos)
@@ -955,10 +1027,7 @@ class BeamSearchAutofill:
         return None
 
     def _order_values_lcv(
-        self,
-        slot: Dict,
-        candidates: List[Tuple[str, int]],
-        state: BeamState
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
     ) -> List[Tuple[str, int]]:
         """
         Order candidates by Least Constraining Value heuristic.
@@ -979,7 +1048,7 @@ class BeamSearchAutofill:
             constraints_removed = 0
 
             for crossing in self._get_slot_crossings(slot):
-                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+                crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
 
                 # Skip already filled slots
                 if crossing_id in state.slot_assignments:
@@ -993,8 +1062,10 @@ class BeamSearchAutofill:
 
                     # Count how many words would be eliminated
                     pattern = state.grid.get_pattern_for_slot(crossing)
-                    min_score = self._get_min_score_for_length(crossing['length'])
-                    crossing_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+                    min_score = self._get_min_score_for_length(crossing["length"])
+                    crossing_candidates = self.pattern_matcher.find(
+                        pattern, min_score=min_score
+                    )
 
                     for other_word, _ in crossing_candidates:
                         if other_word[their_pos] != required_letter:
@@ -1016,7 +1087,7 @@ class BeamSearchAutofill:
     def _stratified_shuffle(
         self,
         candidates: List[Tuple[str, int]],
-        tier_boundaries: List[int] = [10, 30, 60, 100]
+        tier_boundaries: List[int] = [10, 30, 60, 100],
     ) -> List[Tuple[str, int]]:
         """
         Shuffle within quality tiers to prevent alphabetical bias
@@ -1057,7 +1128,7 @@ class BeamSearchAutofill:
         expanded_beam: List[BeamState],
         slot: Dict,
         num_groups: int = 4,
-        diversity_lambda: float = 0.5
+        diversity_lambda: float = 0.5,
     ) -> List[BeamState]:
         """
         Select diverse states from expanded beam using Diverse Beam Search principles.
@@ -1123,10 +1194,12 @@ class BeamSearchAutofill:
 
         # Debug output
         if len(result) > 0:
-            logger.debug(f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates")
+            logger.debug(
+                f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates"
+            )
             logger.debug(f"    Groups={num_groups}, Lambda={diversity_lambda}")
 
-        return result[:self.beam_width]
+        return result[: self.beam_width]
 
     def _state_diversity_score(self, state1: BeamState, state2: BeamState) -> float:
         """
@@ -1142,7 +1215,9 @@ class BeamSearchAutofill:
             Diversity score (higher = more different)
         """
         # Count different word assignments
-        all_slots = set(state1.slot_assignments.keys()) | set(state2.slot_assignments.keys())
+        all_slots = set(state1.slot_assignments.keys()) | set(
+            state2.slot_assignments.keys()
+        )
 
         different_count = 0
         for slot_id in all_slots:
@@ -1160,7 +1235,7 @@ class BeamSearchAutofill:
         slot: Dict,
         candidates: List[Tuple[str, int]],
         num_groups: int = 4,
-        diversity_lambda: float = 0.5
+        diversity_lambda: float = 0.5,
     ) -> List[BeamState]:
         """
         Diverse Beam Search (Vijayakumar et al., 2016 AAAI).
@@ -1220,11 +1295,15 @@ class BeamSearchAutofill:
 
                     # Create new state
                     new_state = state.clone()
-                    new_state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    new_state.grid.place_word(
+                        word, slot["row"], slot["col"], slot["direction"]
+                    )
                     new_state.slots_filled += 1
                     new_state.score += augmented_score
                     new_state.used_words.add(word)
-                    new_state.slot_assignments[(slot['row'], slot['col'], slot['direction'])] = word
+                    new_state.slot_assignments[
+                        (slot["row"], slot["col"], slot["direction"])
+                    ] = word
 
                     group_states.append((new_state, augmented_score))
 
@@ -1242,10 +1321,14 @@ class BeamSearchAutofill:
 
         # DEBUG: Show diversity effect
         if result:
-            logger.debug(f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups")
-            logger.debug(f"    Diversity lambda={diversity_lambda} applied to prevent collapse")
+            logger.debug(
+                f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups"
+            )
+            logger.debug(
+                f"    Diversity lambda={diversity_lambda} applied to prevent collapse"
+            )
 
-        return result[:self.beam_width]  # Maintain constant beam width
+        return result[: self.beam_width]  # Maintain constant beam width
 
     def _hamming_distance_at_crossings(
         self, word: str, state: BeamState, slot: Dict
@@ -1268,14 +1351,18 @@ class BeamSearchAutofill:
 
         # Get all crossing slots for this slot
         for other_slot in state.grid.slots:
-            if other_slot['direction'] != slot['direction']:
+            if other_slot["direction"] != slot["direction"]:
                 # Check if they intersect
                 intersection = self._get_slot_intersection(slot, other_slot)
                 if intersection:
                     my_pos, their_pos = intersection
 
                     # Check if other slot is filled
-                    other_id = (other_slot['row'], other_slot['col'], other_slot['direction'])
+                    other_id = (
+                        other_slot["row"],
+                        other_slot["col"],
+                        other_slot["direction"],
+                    )
                     if other_id in state.slot_assignments:
                         other_word = state.slot_assignments[other_id]
                         # Count if letters differ
@@ -1285,7 +1372,9 @@ class BeamSearchAutofill:
 
         return diff_count
 
-    def _get_slot_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+    def _get_slot_intersection(
+        self, slot1: Dict, slot2: Dict
+    ) -> Optional[Tuple[int, int]]:
         """
         Get intersection positions between two slots.
 
@@ -1296,26 +1385,26 @@ class BeamSearchAutofill:
         Returns:
             (slot1_position, slot2_position) if they intersect, None otherwise
         """
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None  # Parallel slots don't intersect
 
         # Get cell coordinates for each slot
         cells1 = set()
         cells2 = set()
 
-        if slot1['direction'] == 'across':
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'], slot1['col'] + i, i))
+        if slot1["direction"] == "across":
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"], slot1["col"] + i, i))
         else:  # down
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'] + i, slot1['col'], i))
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"] + i, slot1["col"], i))
 
-        if slot2['direction'] == 'across':
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'], slot2['col'] + i, i))
+        if slot2["direction"] == "across":
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"], slot2["col"] + i, i))
         else:  # down
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'] + i, slot2['col'], i))
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"] + i, slot2["col"], i))
 
         # Find intersection
         for r1, c1, pos1 in cells1:
@@ -1349,7 +1438,7 @@ class BeamSearchAutofill:
         length = len(word)
 
         # Heuristic 1: Vowel ratio (English typically 35-45%)
-        vowels = sum(1 for c in word if c in 'AEIOUY')
+        vowels = sum(1 for c in word if c in "AEIOUY")
         vowel_ratio = vowels / length if length > 0 else 0
 
         # Too consonant-heavy or vowel-heavy is suspicious
@@ -1359,13 +1448,14 @@ class BeamSearchAutofill:
         # Heuristic 2: Repeated letters
         # "AAA" might be OK, "AAAA" is very suspicious
         import itertools
+
         max_repeats = max((len(list(g)) for k, g in itertools.groupby(word)), default=1)
         if max_repeats > 3:
             return False
 
         # Heuristic 3: Consonant clusters
         # English rarely has 5+ consonants in a row (e.g., "QZXRTPL")
-        consonants = 'BCDFGHJKLMNPQRSTVWXZ'
+        consonants = "BCDFGHJKLMNPQRSTVWXZ"
         consonant_run = 0
         max_consonant_run = 0
 
@@ -1380,19 +1470,16 @@ class BeamSearchAutofill:
             return False
 
         # Heuristic 4: Q not followed by U (rare in English)
-        if 'Q' in word and length > 6:  # Stricter for long words
-            q_index = word.index('Q')
-            if q_index + 1 < len(word) and word[q_index + 1] != 'U':
+        if "Q" in word and length > 6:  # Stricter for long words
+            q_index = word.index("Q")
+            if q_index + 1 < len(word) and word[q_index + 1] != "U":
                 # QI, QAT are valid short words, but QZXR... is not
                 return False
 
         return True
 
     def _expand_beam(
-        self,
-        beam: List[BeamState],
-        slot: Dict,
-        candidates_per_slot: int
+        self, beam: List[BeamState], slot: Dict, candidates_per_slot: int
     ) -> List[BeamState]:
         """
         Expand beam by trying top-K candidates in each state.
@@ -1423,25 +1510,24 @@ class BeamSearchAutofill:
         #   Beam 1: candidates[2:12]   = ALMOSTNEVER, ALLTOGETHER, APPLICATION, ...
         #   Beam 2: candidates[4:14]   = APPLICATION, APPROPRIATE, ALTERNATIVES, ...
         #   → Overlapping ensures quality, offset ensures diversity
-        offset_per_beam = 2  # Tunable: increase for more diversity, decrease for more quality overlap
+        offset_per_beam = (
+            2  # Tunable: increase for more diversity, decrease for more quality overlap
+        )
 
         for beam_idx, state in enumerate(beam):
             # Get pattern for this slot in current state
             pattern = state.grid.get_pattern_for_slot(slot)
 
             # Skip if already filled
-            if '?' not in pattern:
+            if "?" not in pattern:
                 expanded.append(state)
                 continue
 
             # Use length-dependent quality threshold
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
 
             # Get ALL candidate words
-            all_candidates = self.pattern_matcher.find(
-                pattern,
-                min_score=min_score
-            )
+            all_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
 
             if len(all_candidates) == 0:
                 # No candidates: this beam state is dead
@@ -1452,16 +1538,17 @@ class BeamSearchAutofill:
             # - 3-4 letters: Crosswordese OK (glue words)
             # - 5-6 letters: Crosswordese penalized (score reduced 50%)
             # - 7+ letters: Crosswordese completely filtered (unacceptable)
-            all_candidates = filter_crosswordese(all_candidates, slot['length'])
+            all_candidates = filter_crosswordese(all_candidates, slot["length"])
 
             if len(all_candidates) == 0:
                 # No candidates after crosswordese filter: dead end
                 continue
 
             # QUALITY FILTER: For long slots, reject likely gibberish
-            if slot['length'] >= 7:
+            if slot["length"] >= 7:
                 quality_candidates = [
-                    (word, score) for word, score in all_candidates
+                    (word, score)
+                    for word, score in all_candidates
                     if self._is_quality_word(word)
                 ]
 
@@ -1478,8 +1565,10 @@ class BeamSearchAutofill:
             all_candidates = self._stratified_shuffle(all_candidates)
 
             # Debug output for LCV impact
-            if hasattr(self, 'debug_lcv') and self.debug_lcv and beam_idx == 0:
-                logger.debug(f"DEBUG LCV: Top 5 candidates after LCV+shuffle for slot at ({slot['row']},{slot['col']}):")
+            if hasattr(self, "debug_lcv") and self.debug_lcv and beam_idx == 0:
+                logger.debug(
+                    f"DEBUG LCV: Top 5 candidates after LCV+shuffle for slot at ({slot['row']},{slot['col']}):"
+                )
                 for word, score in all_candidates[:5]:
                     logger.debug(f"  {word}: score={score}")
 
@@ -1493,7 +1582,10 @@ class BeamSearchAutofill:
             candidates = all_candidates[start_idx:end_idx]
 
             # Fallback: If offset exceeds available candidates, wrap around
-            if len(candidates) < candidates_per_slot and len(all_candidates) >= candidates_per_slot:
+            if (
+                len(candidates) < candidates_per_slot
+                and len(all_candidates) >= candidates_per_slot
+            ):
                 candidates = all_candidates[:candidates_per_slot]
 
             # Try each candidate
@@ -1506,7 +1598,7 @@ class BeamSearchAutofill:
                 # FIX #5 (Phase 4.3): CRITICAL - Validate word length matches slot length
                 # This should never fail if pattern matching is correct, but add defensive check
                 # to prevent partial placements that leave dots in grid
-                if len(word) != slot['length']:
+                if len(word) != slot["length"]:
                     continue
 
                 # Create new state
@@ -1514,15 +1606,12 @@ class BeamSearchAutofill:
 
                 # Place word
                 new_state.grid.place_word(
-                    word,
-                    slot['row'],
-                    slot['col'],
-                    slot['direction']
+                    word, slot["row"], slot["col"], slot["direction"]
                 )
 
                 # Update metadata
                 new_state.used_words.add(word)
-                slot_id = (slot['row'], slot['col'], slot['direction'])
+                slot_id = (slot["row"], slot["col"], slot["direction"])
                 new_state.slot_assignments[slot_id] = word
 
                 # FIX #1 (Phase 4.2): Only increment slots_filled if slot is COMPLETELY filled
@@ -1530,7 +1619,7 @@ class BeamSearchAutofill:
                 # Correct: Only count when pattern has no '?' remaining
                 # Note: No need to check for dots - get_pattern_for_slot() converts dots to '?'
                 pattern = new_state.grid.get_pattern_for_slot(slot)
-                if '?' not in pattern:
+                if "?" not in pattern:
                     new_state.slots_filled += 1
 
                 # Compute score
@@ -1541,12 +1630,15 @@ class BeamSearchAutofill:
                 if not new_state.domains:
                     # Initialize domains for all unfilled slots
                     for s in self.grid.get_word_slots():
-                        s_id = (s['row'], s['col'], s['direction'])
+                        s_id = (s["row"], s["col"], s["direction"])
                         if s_id not in new_state.slot_assignments:
                             pattern = new_state.grid.get_pattern_for_slot(s)
-                            min_score = self._get_min_score_for_length(s['length'])
+                            min_score = self._get_min_score_for_length(s["length"])
                             new_state.domains[s_id] = [
-                                w for w, _ in self.pattern_matcher.find(pattern, min_score=min_score)
+                                w
+                                for w, _ in self.pattern_matcher.find(
+                                    pattern, min_score=min_score
+                                )
                             ]
 
                 # Apply MAC propagation
@@ -1557,8 +1649,10 @@ class BeamSearchAutofill:
                 if not success:
                     # MAC detected conflict - skip this candidate
                     total_skipped_viability += 1
-                    if hasattr(self, 'debug_mac') and self.debug_mac:
-                        logger.debug(f"DEBUG MAC: Pruned {word} due to domain wipeout in {conflicts}")
+                    if hasattr(self, "debug_mac") and self.debug_mac:
+                        logger.debug(
+                            f"DEBUG MAC: Pruned {word} due to domain wipeout in {conflicts}"
+                        )
                     continue
 
                 # Track reductions for potential backtracking
@@ -1566,7 +1660,9 @@ class BeamSearchAutofill:
 
                 # Check viability with PREDICTIVE RISK ASSESSMENT
                 # Now enhanced with domain information from MAC
-                is_viable, risk_penalty = self._evaluate_state_viability(new_state, slot)
+                is_viable, risk_penalty = self._evaluate_state_viability(
+                    new_state, slot
+                )
 
                 if is_viable:
                     # Apply risk penalty to score (discourages risky paths)
@@ -1585,11 +1681,7 @@ class BeamSearchAutofill:
 
         return expanded
 
-    def _prune_beam(
-        self,
-        beam: List[BeamState],
-        beam_width: int
-    ) -> List[BeamState]:
+    def _prune_beam(self, beam: List[BeamState], beam_width: int) -> List[BeamState]:
         """
         Prune beam to keep only top-K DIVERSE states.
 
@@ -1701,9 +1793,11 @@ class BeamSearchAutofill:
 
         for slot in all_slots:
             # Skip same slot
-            if (slot['row'] == reference_slot['row'] and
-                slot['col'] == reference_slot['col'] and
-                slot['direction'] == reference_slot['direction']):
+            if (
+                slot["row"] == reference_slot["row"]
+                and slot["col"] == reference_slot["col"]
+                and slot["direction"] == reference_slot["direction"]
+            ):
                 continue
 
             # Check if they intersect
@@ -1724,18 +1818,18 @@ class BeamSearchAutofill:
             True if slots intersect, False otherwise
         """
         # Same direction can't intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Get cell positions for each slot
         def get_positions(slot):
             positions = []
-            if slot['direction'] == 'across':
-                for i in range(slot['length']):
-                    positions.append((slot['row'], slot['col'] + i))
+            if slot["direction"] == "across":
+                for i in range(slot["length"]):
+                    positions.append((slot["row"], slot["col"] + i))
             else:  # down
-                for i in range(slot['length']):
-                    positions.append((slot['row'] + i, slot['col']))
+                for i in range(slot["length"]):
+                    positions.append((slot["row"] + i, slot["col"]))
             return set(positions)
 
         pos1 = get_positions(slot1)
@@ -1744,7 +1838,9 @@ class BeamSearchAutofill:
         # Check for any common positions
         return bool(pos1 & pos2)
 
-    def _evaluate_state_viability(self, state: BeamState, last_filled_slot: Dict = None) -> Tuple[bool, float]:
+    def _evaluate_state_viability(
+        self, state: BeamState, last_filled_slot: Dict = None
+    ) -> Tuple[bool, float]:
         """
         Check viability with PREDICTIVE RISK ASSESSMENT.
 
@@ -1787,30 +1883,30 @@ class BeamSearchAutofill:
         risky_slots = 0
 
         # DEBUG: Track viability check details
-        if hasattr(state, '_debug_viability_count'):
+        if hasattr(state, "_debug_viability_count"):
             state._debug_viability_count += 1
         else:
             state._debug_viability_count = 0
 
         if state._debug_viability_count < 2:
-            logger.debug(f"\nDEBUG VIABILITY: Checking {len(slots_to_check)} intersecting slots")
+            logger.debug(
+                f"\nDEBUG VIABILITY: Checking {len(slots_to_check)} intersecting slots"
+            )
 
         # Check each slot and assess risk
         for slot in slots_to_check:
             pattern = state.grid.get_pattern_for_slot(slot)
 
             # Use length-dependent quality threshold
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
 
             # Get candidates (excluding used words)
-            candidates = self.pattern_matcher.find(
-                pattern,
-                min_score=min_score
-            )
+            candidates = self.pattern_matcher.find(pattern, min_score=min_score)
 
             # Filter out used words
             available_candidates = [
-                (word, score) for word, score in candidates
+                (word, score)
+                for word, score in candidates
                 if word not in state.used_words
             ]
 
@@ -1820,9 +1916,13 @@ class BeamSearchAutofill:
             if count == 0:
                 # Dead end - not viable
                 if state._debug_viability_count < 2:
-                    logger.debug(f"  DEAD END: slot at ({slot['row']},{slot['col']}) {slot['direction']} length={slot['length']}")
+                    logger.debug(
+                        f"  DEAD END: slot at ({slot['row']},{slot['col']}) {slot['direction']} length={slot['length']}"
+                    )
                     logger.debug(f"    Pattern: '{pattern}'")
-                    logger.debug(f"    Total candidates: {len(candidates)}, Available (not used): 0")
+                    logger.debug(
+                        f"    Total candidates: {len(candidates)}, Available (not used): 0"
+                    )
                 return (False, 0.0)
             elif count <= 2:
                 # Severe risk: Very few options
@@ -1839,16 +1939,17 @@ class BeamSearchAutofill:
 
         if state._debug_viability_count < 2:
             if risky_slots > 0:
-                logger.debug(f"  ✓ Viable, but {risky_slots} risky slots (penalty: {total_penalty:.2f}×)")
+                logger.debug(
+                    f"  ✓ Viable, but {risky_slots} risky slots (penalty: {total_penalty:.2f}×)"
+                )
             else:
-                logger.debug(f"  ✓ All {len(slots_to_check)} intersecting slots have good options!")
+                logger.debug(
+                    f"  ✓ All {len(slots_to_check)} intersecting slots have good options!"
+                )
 
         return (True, total_penalty)
 
-    def _apply_diversity_bonus(
-        self,
-        beam: List[BeamState]
-    ) -> List[BeamState]:
+    def _apply_diversity_bonus(self, beam: List[BeamState]) -> List[BeamState]:
         """
         Apply bonus to states that differ from others in beam.
 
@@ -1887,11 +1988,7 @@ class BeamSearchAutofill:
 
         return beam
 
-    def _count_differences(
-        self,
-        state1: BeamState,
-        state2: BeamState
-    ) -> int:
+    def _count_differences(self, state1: BeamState, state2: BeamState) -> int:
         """
         Count number of slots with different words between two states.
 
@@ -1917,11 +2014,7 @@ class BeamSearchAutofill:
 
         return diff_count
 
-    def _compute_score(
-        self,
-        state: BeamState,
-        word_score: int
-    ) -> float:
+    def _compute_score(self, state: BeamState, word_score: int) -> float:
         """
         Compute quality score for a state.
 
@@ -1942,8 +2035,9 @@ class BeamSearchAutofill:
         completion_score = (state.slots_filled / state.total_slots) * 100
         quality_score = word_score  # 1-100
 
-        total = (completion_score * completion_weight / 100) + \
-                (quality_score * quality_weight / 100)
+        total = (completion_score * completion_weight / 100) + (
+            quality_score * quality_weight / 100
+        )
 
         return total
 
@@ -1966,14 +2060,14 @@ class BeamSearchAutofill:
             D?AMA → False (partial valid pattern)
         """
         # Remove wildcards for checking
-        letters_only = pattern.replace('?', '')
+        letters_only = pattern.replace("?", "")
 
         if not letters_only or len(letters_only) < 3:
             return False  # Too short to be obviously gibberish
 
         # Check for 3+ repeated letters in a row
         for i in range(len(letters_only) - 2):
-            if letters_only[i] == letters_only[i+1] == letters_only[i+2]:
+            if letters_only[i] == letters_only[i + 1] == letters_only[i + 2]:
                 return True  # AAA, NNN, etc.
 
         # Check if entire pattern is same letter
@@ -1981,7 +2075,7 @@ class BeamSearchAutofill:
             return True  # AAAAA, NNN, etc.
 
         # Check for impossible consonant clusters (4+ consonants)
-        vowels = set('AEIOUY')
+        vowels = set("AEIOUY")
         consonant_run = 0
         for char in letters_only:
             if char not in vowels:

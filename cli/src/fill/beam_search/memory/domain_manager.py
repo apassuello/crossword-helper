@@ -57,7 +57,7 @@ class DomainManager:
         self._next_index = 0
 
         # Cache of immutable domains (for sharing)
-        self._domain_cache: Dict[Tuple, 'Domain'] = {}
+        self._domain_cache: Dict[Tuple, "Domain"] = {}
 
         # Statistics
         self._total_domains_created = 0
@@ -65,11 +65,8 @@ class DomainManager:
         self._cache_hits = 0
 
     def create_domain_for_pattern(
-        self,
-        pattern: str,
-        min_score: int = 0,
-        exclude_words: Optional[Set[str]] = None
-    ) -> 'Domain':
+        self, pattern: str, min_score: int = 0, exclude_words: Optional[Set[str]] = None
+    ) -> "Domain":
         """
         Create domain for a pattern.
 
@@ -97,7 +94,9 @@ class DomainManager:
 
         # Find matching words
         candidates = self.word_list.find(pattern, min_score=min_score)
-        words = [word for word, score in candidates if word not in (exclude_words or set())]
+        words = [
+            word for word, score in candidates if word not in (exclude_words or set())
+        ]
 
         # Create appropriate domain type
         if len(words) <= self.BITSET_THRESHOLD:
@@ -114,11 +113,11 @@ class DomainManager:
 
         return domain
 
-    def create_empty_domain(self) -> 'Domain':
+    def create_empty_domain(self) -> "Domain":
         """Create an empty domain."""
         return SetDomain([])
 
-    def intersect_domains(self, domain1: 'Domain', domain2: 'Domain') -> 'Domain':
+    def intersect_domains(self, domain1: "Domain", domain2: "Domain") -> "Domain":
         """
         Compute intersection of two domains.
 
@@ -136,7 +135,7 @@ class DomainManager:
         else:
             return SetDomain(list(words))
 
-    def union_domains(self, domain1: 'Domain', domain2: 'Domain') -> 'Domain':
+    def union_domains(self, domain1: "Domain", domain2: "Domain") -> "Domain":
         """
         Compute union of two domains.
 
@@ -197,12 +196,12 @@ class DomainManager:
             - 'word_index_size': Number of indexed words
         """
         return {
-            'total_domains': self._total_domains_created,
-            'bitset_domains': self._bitset_domains_created,
-            'set_domains': self._total_domains_created - self._bitset_domains_created,
-            'cache_size': len(self._domain_cache),
-            'cache_hits': self._cache_hits,
-            'word_index_size': self._next_index
+            "total_domains": self._total_domains_created,
+            "bitset_domains": self._bitset_domains_created,
+            "set_domains": self._total_domains_created - self._bitset_domains_created,
+            "cache_size": len(self._domain_cache),
+            "cache_hits": self._cache_hits,
+            "word_index_size": self._next_index,
         }
 
     def clear_cache(self) -> None:
@@ -237,7 +236,7 @@ class Domain:
         """Check if domain is empty."""
         return self.size() == 0
 
-    def clone(self) -> 'Domain':
+    def clone(self) -> "Domain":
         """Create a copy of this domain."""
         raise NotImplementedError
 
@@ -278,7 +277,7 @@ class SetDomain(Domain):
         """Get number of words in domain."""
         return len(self._words)
 
-    def clone(self) -> 'Domain':
+    def clone(self) -> "Domain":
         """Create a copy of this domain."""
         return SetDomain(list(self._words))
 
@@ -321,7 +320,7 @@ class BitsetDomain(Domain):
             index = manager._get_or_create_word_index(word)
             if index >= 64:
                 raise ValueError(f"Word index {index} exceeds bitset capacity (64)")
-            self._bitset |= (1 << index)
+            self._bitset |= 1 << index
 
     def contains(self, word: str) -> bool:
         """Check if word is in domain."""
@@ -340,7 +339,7 @@ class BitsetDomain(Domain):
         if index >= 64:
             raise ValueError(f"Word index {index} exceeds bitset capacity (64)")
 
-        self._bitset |= (1 << index)
+        self._bitset |= 1 << index
 
     def remove(self, word: str) -> None:
         """Remove word from domain."""
@@ -373,13 +372,13 @@ class BitsetDomain(Domain):
             bitset >>= 1
         return count
 
-    def clone(self) -> 'Domain':
+    def clone(self) -> "Domain":
         """Create a copy of this domain."""
         new_domain = BitsetDomain([], self._manager)
         new_domain._bitset = self._bitset
         return new_domain
 
-    def intersect(self, other: 'BitsetDomain') -> 'BitsetDomain':
+    def intersect(self, other: "BitsetDomain") -> "BitsetDomain":
         """
         Fast bitwise intersection with another bitset domain.
 
@@ -396,7 +395,7 @@ class BitsetDomain(Domain):
         new_domain._bitset = self._bitset & other._bitset
         return new_domain
 
-    def union(self, other: 'BitsetDomain') -> 'BitsetDomain':
+    def union(self, other: "BitsetDomain") -> "BitsetDomain":
         """
         Fast bitwise union with another bitset domain.
 

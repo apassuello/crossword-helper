@@ -10,7 +10,6 @@ from src.core.nyt_parser import (
     NytParseError,
     NytParseResult,
     NytWord,
-    VerificationResult,
     extract_words,
     load_nyt_file,
     nyt_grid_to_internal,

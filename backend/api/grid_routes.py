@@ -6,7 +6,10 @@ Handles grid manipulation helpers like black square suggestions.
 
 from flask import Blueprint, request, jsonify
 import logging
-from backend.core.black_square_suggester import BlackSquareSuggester, validate_grid_for_black_squares
+from backend.core.black_square_suggester import (
+    BlackSquareSuggester,
+    validate_grid_for_black_squares,
+)
 from backend.api.errors import handle_error
 
 logger = logging.getLogger(__name__)
@@ -61,54 +64,59 @@ def suggest_black_square():
 
         # Validate input
         if not data:
-            return jsonify({'error': 'Missing request body'}), 400
+            return jsonify({"error": "Missing request body"}), 400
 
-        if 'grid' not in data:
-            return jsonify({'error': 'Missing grid'}), 400
+        if "grid" not in data:
+            return jsonify({"error": "Missing grid"}), 400
 
-        if 'problematic_slot' not in data:
-            return jsonify({'error': 'Missing problematic_slot'}), 400
+        if "problematic_slot" not in data:
+            return jsonify({"error": "Missing problematic_slot"}), 400
 
-        grid = data['grid']
-        grid_size = data.get('grid_size', 15)
-        slot = data['problematic_slot']
-        max_suggestions = data.get('max_suggestions', 3)
+        grid = data["grid"]
+        grid_size = data.get("grid_size", 15)
+        slot = data["problematic_slot"]
+        max_suggestions = data.get("max_suggestions", 3)
 
         # Validate slot
-        required_slot_fields = ['row', 'col', 'direction', 'length']
+        required_slot_fields = ["row", "col", "direction", "length"]
         if not all(field in slot for field in required_slot_fields):
-            return jsonify({'error': 'Incomplete slot data'}), 400
+            return jsonify({"error": "Incomplete slot data"}), 400
 
         # Validate grid
         validation = validate_grid_for_black_squares(grid, grid_size)
-        if not validation['valid']:
-            return jsonify({
-                'error': 'Invalid grid',
-                'validation': validation
-            }), 400
+        if not validation["valid"]:
+            return jsonify({"error": "Invalid grid", "validation": validation}), 400
 
         # Create suggester and generate suggestions
         suggester = BlackSquareSuggester(grid_size)
         suggestions = suggester.suggest_placements(
-            grid,
-            slot,
-            max_suggestions=max_suggestions
+            grid, slot, max_suggestions=max_suggestions
         )
 
         # Check if any suggestions found
         if not suggestions:
-            return jsonify({
-                'suggestions': [],
-                'message': 'No viable black square positions found for this slot',
-                'slot_info': slot
-            }), 200
+            return (
+                jsonify(
+                    {
+                        "suggestions": [],
+                        "message": "No viable black square positions found for this slot",
+                        "slot_info": slot,
+                    }
+                ),
+                200,
+            )
 
-        return jsonify({
-            'suggestions': suggestions,
-            'slot_info': slot,
-            'grid_size': grid_size,
-            'validation': validation
-        }), 200
+        return (
+            jsonify(
+                {
+                    "suggestions": suggestions,
+                    "slot_info": slot,
+                    "grid_size": grid_size,
+                    "validation": validation,
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error suggesting black square: {e}", exc_info=True)
@@ -142,36 +150,37 @@ def apply_black_squares():
     try:
         data = request.get_json()
 
-        if not data or 'grid' not in data or 'primary' not in data or 'symmetric' not in data:
-            return jsonify({'error': 'Missing grid or positions'}), 400
+        if (
+            not data
+            or "grid" not in data
+            or "primary" not in data
+            or "symmetric" not in data
+        ):
+            return jsonify({"error": "Missing grid or positions"}), 400
 
-        grid = data['grid']
-        primary = data['primary']
-        symmetric = data['symmetric']
+        grid = data["grid"]
+        primary = data["primary"]
+        symmetric = data["symmetric"]
 
         # Apply black squares
         positions = [primary, symmetric]
 
         for pos in positions:
-            row = pos['row']
-            col = pos['col']
+            row = pos["row"]
+            col = pos["col"]
 
             if not (0 <= row < len(grid) and 0 <= col < len(grid[row])):
                 continue
 
             cell = grid[row][col]
             if isinstance(cell, dict):
-                cell['isBlack'] = True
-                cell['letter'] = ''
-                cell['isThemeLocked'] = False
+                cell["isBlack"] = True
+                cell["letter"] = ""
+                cell["isThemeLocked"] = False
             else:
-                grid[row][col] = '#'
+                grid[row][col] = "#"
 
-        return jsonify({
-            'grid': grid,
-            'applied': True,
-            'positions': positions
-        }), 200
+        return jsonify({"grid": grid, "applied": True, "positions": positions}), 200
 
     except Exception as e:
         logger.error(f"Error applying black squares: {e}", exc_info=True)
@@ -204,11 +213,11 @@ def validate_grid():
     try:
         data = request.get_json()
 
-        if not data or 'grid' not in data:
-            return jsonify({'error': 'Missing grid'}), 400
+        if not data or "grid" not in data:
+            return jsonify({"error": "Missing grid"}), 400
 
-        grid = data['grid']
-        grid_size = data.get('grid_size', 15)
+        grid = data["grid"]
+        grid_size = data.get("grid_size", 15)
 
         # Validate grid structure
         validation = validate_grid_for_black_squares(grid, grid_size)
@@ -219,8 +228,10 @@ def validate_grid():
 
         # Count black squares
         black_count = sum(
-            1 for row in grid for cell in row
-            if (isinstance(cell, dict) and cell.get('isBlack', False)) or cell == '#'
+            1
+            for row in grid
+            for cell in row
+            if (isinstance(cell, dict) and cell.get("isBlack", False)) or cell == "#"
         )
 
         total_cells = grid_size * grid_size
@@ -232,22 +243,33 @@ def validate_grid():
         # Generate suggestions
         suggestions = []
         if word_count < min_words:
-            suggestions.append(f"Low word count ({word_count}). Try adding black squares to reach {min_words}-{max_words}.")
+            suggestions.append(
+                f"Low word count ({word_count}). Try adding black squares to reach {min_words}-{max_words}."
+            )
         elif word_count > max_words:
-            suggestions.append(f"High word count ({word_count}). Consider removing some black squares.")
+            suggestions.append(
+                f"High word count ({word_count}). Consider removing some black squares."
+            )
 
         if black_percentage > 20:
-            suggestions.append(f"High black square percentage ({black_percentage:.1f}%). Standard is ~16-18%.")
+            suggestions.append(
+                f"High black square percentage ({black_percentage:.1f}%). Standard is ~16-18%."
+            )
 
-        return jsonify({
-            'valid': validation['valid'],
-            'word_count': word_count,
-            'black_square_count': black_count,
-            'black_square_percentage': round(black_percentage, 1),
-            'word_count_range': [min_words, max_words],
-            'warnings': validation.get('warnings', []),
-            'suggestions': suggestions
-        }), 200
+        return (
+            jsonify(
+                {
+                    "valid": validation["valid"],
+                    "word_count": word_count,
+                    "black_square_count": black_count,
+                    "black_square_percentage": round(black_percentage, 1),
+                    "word_count_range": [min_words, max_words],
+                    "warnings": validation.get("warnings", []),
+                    "suggestions": suggestions,
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error validating grid: {e}", exc_info=True)

@@ -44,7 +44,7 @@ class HybridAutofill:
         progress_reporter=None,
         theme_entries=None,
         theme_words=None,
-        all_valid_words: set = None
+        all_valid_words: set = None,
     ):
         """
         Initialize hybrid autofill solver.
@@ -76,7 +76,7 @@ class HybridAutofill:
         self,
         timeout: int = 300,
         beam_timeout_ratio: float = 0.2,
-        repair_timeout_ratio: float = 0.8
+        repair_timeout_ratio: float = 0.8,
     ) -> FillResult:
         """
         Fill grid using hybrid approach.
@@ -98,7 +98,6 @@ class HybridAutofill:
         Raises:
             ValueError: If timeout < 30 or ratios invalid
         """
-        from .autofill import FillResult  # Import here to avoid circular dependency
 
         # Validate parameters
         if timeout < 30:
@@ -129,7 +128,7 @@ class HybridAutofill:
             min_score=self.min_score,
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
-            theme_words=self.theme_words
+            theme_words=self.theme_words,
         )
 
         beam_result = beam_search.fill(timeout=beam_timeout)
@@ -139,7 +138,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}"
+                    f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
             return beam_result
 
@@ -147,7 +146,7 @@ class HybridAutofill:
         if self.progress_reporter:
             self.progress_reporter.update(
                 70,
-                f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)"
+                f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)",
             )
 
         # Use beam result grid as starting point
@@ -160,7 +159,7 @@ class HybridAutofill:
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
-            all_valid_words=self.all_valid_words
+            all_valid_words=self.all_valid_words,
         )
 
         repair_result = repair.fill(timeout=repair_timeout)
@@ -171,7 +170,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Repair complete: {repair_result.slots_filled}/{repair_result.total_slots}"
+                    f"Repair complete: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
             return repair_result
         elif repair_result.slots_filled >= beam_result.slots_filled:
@@ -179,7 +178,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Repair improved: {repair_result.slots_filled}/{repair_result.total_slots}"
+                    f"Repair improved: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
             return repair_result
         else:
@@ -187,6 +186,6 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Beam best: {beam_result.slots_filled}/{beam_result.total_slots}"
+                    f"Beam best: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
             return beam_result

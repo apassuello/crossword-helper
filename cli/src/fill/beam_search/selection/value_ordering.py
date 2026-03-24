@@ -20,7 +20,9 @@ class ValueOrderingStrategy(ABC):
     """Abstract base class for value ordering strategies."""
 
     @abstractmethod
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Order candidate values for a slot.
 
@@ -54,7 +56,9 @@ class LCVValueOrdering(ValueOrderingStrategy):
         self.get_min_score = min_score_func
         self.lcv_cache = {}  # Cache for LCV calculations
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Order candidates by Least Constraining Value heuristic.
 
@@ -90,16 +94,20 @@ class LCVValueOrdering(ValueOrderingStrategy):
             total_remaining = 0
             for crossing in crossing_slots:
                 # Skip already filled slots
-                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+                crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
                 if crossing_id in state.slot_assignments:
                     continue
 
                 # THEME PRESERVATION: Temporarily place word and get pattern
                 # This may fail if word conflicts with locked cells (theme words)
                 try:
-                    state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    state.grid.place_word(
+                        word, slot["row"], slot["col"], slot["direction"]
+                    )
                     pattern = state.grid.get_pattern_for_slot(crossing)
-                    state.grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
+                    state.grid.remove_word(
+                        slot["row"], slot["col"], slot["length"], slot["direction"]
+                    )
                 except ValueError:
                     # Word conflicts with locked cells - skip it entirely
                     # This word cannot be placed, so give it very low score
@@ -107,11 +115,15 @@ class LCVValueOrdering(ValueOrderingStrategy):
                     break
 
                 # Count how many words would be eliminated
-                min_score = self.get_min_score(crossing['length'])
-                crossing_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+                min_score = self.get_min_score(crossing["length"])
+                crossing_candidates = self.pattern_matcher.find(
+                    pattern, min_score=min_score
+                )
 
                 # Filter out used words
-                available = [w for w, s in crossing_candidates if w not in state.used_words]
+                available = [
+                    w for w, s in crossing_candidates if w not in state.used_words
+                ]
                 total_remaining += len(available)
 
             # Higher total_remaining = less constraining = better
@@ -155,26 +167,28 @@ class LCVValueOrdering(ValueOrderingStrategy):
 
     def _slots_intersect(self, slot1: Dict, slot2: Dict) -> bool:
         """Check if two slots intersect."""
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
         else:
             across_slot = slot2
             down_slot = slot1
 
-        across_row = across_slot['row']
-        across_col_start = across_slot['col']
-        across_col_end = across_col_start + across_slot['length'] - 1
+        across_row = across_slot["row"]
+        across_col_start = across_slot["col"]
+        across_col_end = across_col_start + across_slot["length"] - 1
 
-        down_col = down_slot['col']
-        down_row_start = down_slot['row']
-        down_row_end = down_row_start + down_slot['length'] - 1
+        down_col = down_slot["col"]
+        down_row_start = down_slot["row"]
+        down_row_end = down_row_start + down_slot["length"] - 1
 
-        return (down_row_start <= across_row <= down_row_end and
-                across_col_start <= down_col <= across_col_end)
+        return (
+            down_row_start <= across_row <= down_row_end
+            and across_col_start <= down_col <= across_col_end
+        )
 
 
 class StratifiedValueOrdering(ValueOrderingStrategy):
@@ -194,7 +208,9 @@ class StratifiedValueOrdering(ValueOrderingStrategy):
         """
         self.tier_size = tier_size
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Apply stratified shuffling to candidates.
 
@@ -221,7 +237,7 @@ class StratifiedValueOrdering(ValueOrderingStrategy):
         # Group into tiers
         tiers = []
         for i in range(0, len(sorted_candidates), self.tier_size):
-            tier = sorted_candidates[i:i + self.tier_size]
+            tier = sorted_candidates[i : i + self.tier_size]
             random.shuffle(tier)  # Shuffle within tier
             tiers.append(tier)
 
@@ -249,7 +265,9 @@ class CompositeValueOrdering(ValueOrderingStrategy):
         """
         self.strategies = strategies
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Apply multiple ordering strategies in sequence.
 
@@ -277,7 +295,7 @@ class CompositeValueOrdering(ValueOrderingStrategy):
             word: Word that was just placed
         """
         for strategy in self.strategies:
-            if hasattr(strategy, 'track_word_usage'):
+            if hasattr(strategy, "track_word_usage"):
                 strategy.track_word_usage(word)
 
 
@@ -298,7 +316,9 @@ class QualityValueOrdering(ValueOrderingStrategy):
         """
         self.min_quality = min_quality
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Order candidates by quality score.
 
@@ -352,9 +372,11 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         self.temperature = temperature
         # Phase 5.1: Pattern diversity tracking
         self.recent_bigrams = {}  # Track recently used letter pairs
-        self.bigram_decay = 0.9   # Decay factor per word placed
+        self.bigram_decay = 0.9  # Decay factor per word placed
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Order candidates by threshold + diversity.
 
@@ -385,10 +407,12 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
 
             # Check each bigram (pair of adjacent letters)
             for i in range(len(word) - 1):
-                bigram = word[i:i+2]
+                bigram = word[i : i + 2]
                 if bigram in self.recent_bigrams:
                     # Penalize proportional to recent usage
-                    penalty += self.recent_bigrams[bigram] * 5  # 5 points per occurrence
+                    penalty += (
+                        self.recent_bigrams[bigram] * 5
+                    )  # 5 points per occurrence
 
             diversity_adjusted.append((word, score - int(penalty)))
 
@@ -431,7 +455,10 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
                 if random.random() < self.temperature:
                     # Swap with random position
                     j = random.randint(i, len(rest_candidates) - 1)
-                    rest_candidates[i], rest_candidates[j] = rest_candidates[j], rest_candidates[i]
+                    rest_candidates[i], rest_candidates[j] = (
+                        rest_candidates[j],
+                        rest_candidates[i],
+                    )
 
         return top_candidates + rest_candidates
 
@@ -448,7 +475,7 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         """
         # Add bigrams from selected word
         for i in range(len(word) - 1):
-            bigram = word[i:i+2]
+            bigram = word[i : i + 2]
             # Increment count for this bigram
             self.recent_bigrams[bigram] = self.recent_bigrams.get(bigram, 0) + 1
 
@@ -486,7 +513,9 @@ class ThemeWordPriorityOrdering(ValueOrderingStrategy):
         """
         self.theme_words = theme_words or set()
 
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+    def order_values(
+        self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState
+    ) -> List[Tuple[str, int]]:
         """
         Order candidates with theme words first.
 

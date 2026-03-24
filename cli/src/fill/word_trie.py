@@ -26,7 +26,7 @@ class TrieNode:
         self.children: Dict[str, TrieNode] = {}  # char -> child node
         self.words: List[ScoredWord] = []  # Words ending at this node
         self.is_end_of_word: bool = False
-        self.min_score: float = float('inf')  # Minimum score in subtree (for pruning)
+        self.min_score: float = float("inf")  # Minimum score in subtree (for pruning)
         self.max_score: int = 0  # Maximum score in subtree (for pruning)
 
     def __repr__(self) -> str:
@@ -112,7 +112,7 @@ class WordTrie:
         pattern: str,
         min_score: int = 0,
         max_results: Optional[int] = None,
-        progress_callback=None
+        progress_callback=None,
     ) -> List[ScoredWord]:
         """
         Find all words matching a pattern.
@@ -147,12 +147,14 @@ class WordTrie:
             return []
 
         # Estimate total nodes to search (rough approximation for progress)
-        wildcard_count = pattern.count('?')
-        estimated_total = max(1, 26 ** min(wildcard_count, 3))  # Cap estimate at 3 wildcards
+        wildcard_count = pattern.count("?")
+        estimated_total = max(
+            1, 26 ** min(wildcard_count, 3)
+        )  # Cap estimate at 3 wildcards
 
         # Search trie recursively
         results = []
-        progress_state = {'nodes_visited': 0}
+        progress_state = {"nodes_visited": 0}
 
         self._search_trie(
             node=self._length_roots[length],
@@ -163,7 +165,7 @@ class WordTrie:
             max_results=max_results,
             progress_callback=progress_callback,
             progress_state=progress_state,
-            estimated_total=estimated_total
+            estimated_total=estimated_total,
         )
 
         # Sort by score (descending)
@@ -185,7 +187,7 @@ class WordTrie:
         max_results: Optional[int],
         progress_callback=None,
         progress_state=None,
-        estimated_total=1
+        estimated_total=1,
     ) -> None:
         """
         Recursive trie search with wildcard support and pruning.
@@ -203,13 +205,13 @@ class WordTrie:
         """
         # Track visited nodes for progress
         if progress_state is not None:
-            progress_state['nodes_visited'] += 1
+            progress_state["nodes_visited"] += 1
 
             # Report progress every 100 nodes
-            if progress_callback and progress_state['nodes_visited'] % 100 == 0:
+            if progress_callback and progress_state["nodes_visited"] % 100 == 0:
                 progress_callback(
-                    min(progress_state['nodes_visited'], estimated_total),
-                    estimated_total
+                    min(progress_state["nodes_visited"], estimated_total),
+                    estimated_total,
                 )
 
         # Early exit if we have enough results
@@ -235,7 +237,7 @@ class WordTrie:
 
         char = pattern[index]
 
-        if char == '?':
+        if char == "?":
             # Wildcard: Try all children
             for child_char, child_node in node.children.items():
                 self._search_trie(
@@ -247,7 +249,7 @@ class WordTrie:
                     max_results,
                     progress_callback,
                     progress_state,
-                    estimated_total
+                    estimated_total,
                 )
 
                 # Early exit if we have enough results
@@ -265,7 +267,7 @@ class WordTrie:
                     max_results,
                     progress_callback,
                     progress_state,
-                    estimated_total
+                    estimated_total,
                 )
 
     def count_matches(self, pattern: str, min_score: int = 0) -> int:
@@ -310,11 +312,13 @@ class WordTrie:
             Dictionary with trie metrics
         """
         return {
-            'total_words': self._word_count,
-            'total_nodes': self._total_nodes,
-            'length_ranges': sorted(self._length_roots.keys()),
-            'num_length_tries': len(self._length_roots),
-            'avg_nodes_per_word': self._total_nodes / self._word_count if self._word_count > 0 else 0
+            "total_words": self._word_count,
+            "total_nodes": self._total_nodes,
+            "length_ranges": sorted(self._length_roots.keys()),
+            "num_length_tries": len(self._length_roots),
+            "avg_nodes_per_word": (
+                self._total_nodes / self._word_count if self._word_count > 0 else 0
+            ),
         }
 
     def __len__(self) -> int:

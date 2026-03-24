@@ -16,7 +16,9 @@ import time
 
 
 def create_empty_grid(size=11):
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+    return [
+        [{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)
+    ]
 
 
 class TestPauseResumeWorkflow:
@@ -37,15 +39,17 @@ class TestPauseResumeWorkflow:
         # Step 1: Start autofill
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 30,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 30,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -64,7 +68,6 @@ class TestPauseResumeWorkflow:
         response = client.get(f"/api/fill/state/{task_id}")
 
         if response.status_code == 200:
-            state = response.json
             state_path = f"/tmp/state-{task_id}.json.gz"  # Mock path
 
             # Step 4: User edits (simulate by creating modified grid)
@@ -76,12 +79,10 @@ class TestPauseResumeWorkflow:
             # Get edit summary
             response = client.post(
                 "/api/fill/edit-summary",
-                data=json.dumps({
-                    "state_path": state_path,
-                    "new_grid": edited_grid,
-                    "size": 11
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {"state_path": state_path, "new_grid": edited_grid, "size": 11}
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 200
@@ -91,13 +92,15 @@ class TestPauseResumeWorkflow:
             # Step 5: Resume with edits
             response = client.post(
                 "/api/fill/resume",
-                data=json.dumps({
-                    "state_path": state_path,
-                    "edited_grid": edited_grid,
-                    "size": 11,
-                    "timeout": 30
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {
+                        "state_path": state_path,
+                        "edited_grid": edited_grid,
+                        "size": 11,
+                        "timeout": 30,
+                    }
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 202
@@ -121,15 +124,17 @@ class TestPauseResumeWorkflow:
         # Start autofill
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 30,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 30,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -139,4 +144,4 @@ class TestPauseResumeWorkflow:
         response = client.post(f"/api/fill/cancel/{task_id}")
 
         assert response.status_code == 200
-        assert response.json.get("state_saved") == True
+        assert response.json.get("state_saved")

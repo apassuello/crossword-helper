@@ -117,8 +117,15 @@ class CLIAdapter:
             raise ValueError("Pattern cannot be empty")
 
         # Build command args
-        args = ["pattern", pattern, "--json-output", "--max-results", str(max_results),
-                "--algorithm", algorithm]
+        args = [
+            "pattern",
+            pattern,
+            "--json-output",
+            "--max-results",
+            str(max_results),
+            "--algorithm",
+            algorithm,
+        ]
 
         if wordlist_paths:
             for wordlist_path in wordlist_paths:
@@ -288,8 +295,18 @@ class CLIAdapter:
             temp_path = f.name
 
         try:
-            slot_str = f"{slot['row']},{slot['col']},{slot['direction']},{slot['length']}"
-            args = ["analyze", temp_path, "--json-output", "--word", word, "--slot", slot_str]
+            slot_str = (
+                f"{slot['row']},{slot['col']},{slot['direction']},{slot['length']}"
+            )
+            args = [
+                "analyze",
+                temp_path,
+                "--json-output",
+                "--word",
+                word,
+                "--slot",
+                slot_str,
+            ]
             for wl in wordlist_paths:
                 args.extend(["-w", wl])
 
@@ -407,7 +424,7 @@ class CLIAdapter:
         wordlist_paths: List[str],
         timeout_seconds: int = 300,
         min_score: int = 30,
-        algorithm: str = "trie"
+        algorithm: str = "trie",
     ) -> Dict[str, Any]:
         """
         Resume auto-fill from saved state.
@@ -434,6 +451,7 @@ class CLIAdapter:
 
         # Create temp output file
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             output_path = f.name
 
@@ -452,7 +470,7 @@ class CLIAdapter:
                 "--algorithm",
                 algorithm,
                 "--task-id",
-                task_id
+                task_id,
             ]
 
             for wordlist_path in wordlist_paths:

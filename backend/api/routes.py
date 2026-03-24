@@ -59,7 +59,9 @@ def pattern_search():
     try:
         # Check Content-Type
         if not request.is_json:
-            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+            return handle_error(
+                "INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400
+            )
 
         # Parse JSON with error handling
         try:
@@ -103,7 +105,9 @@ def number_grid():
     try:
         # Check Content-Type
         if not request.is_json:
-            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+            return handle_error(
+                "INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400
+            )
 
         # Parse JSON with error handling
         try:
@@ -146,7 +150,9 @@ def normalize_entry():
     try:
         # Check Content-Type
         if not request.is_json:
-            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+            return handle_error(
+                "INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400
+            )
 
         # Parse JSON with error handling
         try:
@@ -181,7 +187,9 @@ def fill_grid():
     try:
         # Check Content-Type
         if not request.is_json:
-            return handle_error("INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400)
+            return handle_error(
+                "INVALID_CONTENT_TYPE", "Content-Type must be application/json", 400
+            )
 
         # Parse JSON with error handling
         try:
@@ -249,6 +257,7 @@ def fill_grid():
 # SSE-enabled routes for real-time progress tracking
 # ==================================================
 
+
 def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
     """
     Run CLI command and send progress updates via SSE.
@@ -269,7 +278,7 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
         logger.info(f"Executing CLI command: {' '.join(cmd)}")
         logger.debug(f"CLI working directory: {cli_path.parent}")
 
-        send_progress(task_id, 5, 'Starting CLI process...', 'running')
+        send_progress(task_id, 5, "Starting CLI process...", "running")
 
         # Start process with stderr capture
         process = subprocess.Popen(
@@ -283,10 +292,11 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
 
         # Register process for cleanup on client disconnect
         from .progress_routes import register_process
+
         register_process(task_id, process)
 
         logger.info(f"[CLI DEBUG] PID={process.pid}, cmd={' '.join(cmd)}")
-        send_progress(task_id, 10, 'CLI process running...', 'running')
+        send_progress(task_id, 10, "CLI process running...", "running")
 
         # Read stderr in real-time for progress updates
         stderr_lines = []
@@ -301,22 +311,22 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             # Parse progress JSON from stderr
             try:
                 progress_data = json.loads(line.strip())
-                if progress_data.get('type') == 'progress':
+                if progress_data.get("type") == "progress":
                     # CRITICAL: Never forward 'complete'/'error' from stderr.
                     # The CLI sends a 'complete' progress event to stderr BEFORE
                     # writing the actual result (with grid data) to stdout.
                     # If we forward 'complete' here, the SSE generator breaks
                     # before the real result arrives, causing "No solution found".
-                    stderr_status = progress_data.get('status', 'running')
-                    if stderr_status in ('complete', 'error'):
-                        stderr_status = 'running'
+                    stderr_status = progress_data.get("status", "running")
+                    if stderr_status in ("complete", "error"):
+                        stderr_status = "running"
 
                     send_progress(
                         task_id,
-                        progress_data.get('progress', 0),
-                        progress_data.get('message', 'Processing...'),
+                        progress_data.get("progress", 0),
+                        progress_data.get("message", "Processing..."),
                         stderr_status,
-                        progress_data.get('data')
+                        progress_data.get("data"),
                     )
             except json.JSONDecodeError:
                 pass
@@ -336,32 +346,51 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             # Parse filled grid from stdout JSON
             try:
                 result_data = json.loads(stdout.strip())
-                logger.info(f"[CLI DEBUG] Parsed result: success={result_data.get('success')}, "
-                           f"filled={result_data.get('slots_filled')}/{result_data.get('total_slots')}")
+                logger.info(
+                    f"[CLI DEBUG] Parsed result: success={result_data.get('success')}, "
+                    f"filled={result_data.get('slots_filled')}/{result_data.get('total_slots')}"
+                )
                 # Send completion with grid data
-                send_progress(task_id, 100, 'Complete', 'complete', result_data)
+                send_progress(task_id, 100, "Complete", "complete", result_data)
             except (json.JSONDecodeError, Exception) as e:
                 logger.error(f"[CLI DEBUG] Failed to parse stdout JSON: {e}")
                 logger.error(f"[CLI DEBUG] Raw stdout: {repr(stdout[:500])}")
-                send_progress(task_id, 100, 'Complete', 'complete')
+                send_progress(task_id, 100, "Complete", "complete")
         else:
             # Log full error for debugging
             logger.error(f"CLI process failed with return code {process.returncode}")
             logger.error(f"CLI command: {' '.join(cmd)}")
-            logger.error(f"STDOUT (first 200 lines):")
-            for i, line in enumerate(stdout.split('\n')[:200]):
+            logger.error("STDOUT (first 200 lines):")
+            for i, line in enumerate(stdout.split("\n")[:200]):
                 logger.error(f"  {i+1}: {line}")
-            logger.error(f"STDERR (first 200 lines):")
-            for i, line in enumerate(stderr.split('\n')[:200]):
+            logger.error("STDERR (first 200 lines):")
+            for i, line in enumerate(stderr.split("\n")[:200]):
                 logger.error(f"  {i+1}: {line}")
 
             # Send user-friendly error message — combine all stderr sources
-            all_stderr = "\n".join(stderr_lines) + "\n" + stderr if stderr else "\n".join(stderr_lines)
+            all_stderr = (
+                "\n".join(stderr_lines) + "\n" + stderr
+                if stderr
+                else "\n".join(stderr_lines)
+            )
             all_stderr = all_stderr.strip()
             # Filter out progress JSON lines to find actual errors
-            error_lines = [l for l in all_stderr.split('\n') if l and not l.startswith('{')]
-            error_preview = "\n".join(error_lines[-10:]) if error_lines else (stdout[:500] if stdout else "Unknown error")
-            send_progress(task_id, 0, f'CLI Error (code {process.returncode}): {error_preview}', 'error')
+            error_lines = [
+                line
+                for line in all_stderr.split("\n")
+                if line and not line.startswith("{")
+            ]
+            error_preview = (
+                "\n".join(error_lines[-10:])
+                if error_lines
+                else (stdout[:500] if stdout else "Unknown error")
+            )
+            send_progress(
+                task_id,
+                0,
+                f"CLI Error (code {process.returncode}): {error_preview}",
+                "error",
+            )
 
     except subprocess.TimeoutExpired:
         try:
@@ -369,11 +398,12 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             process.wait(timeout=5)
         except (subprocess.TimeoutExpired, OSError):
             process.kill()
-        send_progress(task_id, 0, 'Operation timed out', 'error')
+        send_progress(task_id, 0, "Operation timed out", "error")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        send_progress(task_id, 0, f'Error: {str(e)}', 'error')
+        send_progress(task_id, 0, f"Error: {str(e)}", "error")
     finally:
         # Clean up temp files
         if temp_files:
@@ -403,8 +433,10 @@ def pattern_search_with_progress():
             "pattern",
             data["pattern"],
             "--json-output",
-            "--max-results", str(data.get("max_results", 20)),
-            "--algorithm", data.get("algorithm", "regex")
+            "--max-results",
+            str(data.get("max_results", 20)),
+            "--algorithm",
+            data.get("algorithm", "regex"),
         ]
 
         for wp in wordlist_paths:
@@ -412,17 +444,15 @@ def pattern_search_with_progress():
 
         # Start background task
         thread = threading.Thread(
-            target=run_cli_with_progress,
-            args=(task_id, cmd_args, 60),
-            daemon=True
+            target=run_cli_with_progress, args=(task_id, cmd_args, 60), daemon=True
         )
         thread.start()
 
         # Return task ID for SSE connection
-        return jsonify({
-            "task_id": task_id,
-            "progress_url": f"/api/progress/{task_id}"
-        }), 202
+        return (
+            jsonify({"task_id": task_id, "progress_url": f"/api/progress/{task_id}"}),
+            202,
+        )
 
     except ValueError as e:
         return handle_error("INVALID_REQUEST", str(e), 400)
@@ -456,6 +486,7 @@ def fill_with_progress():
         # Frontend: [{"letter": "A", "isBlack": false}, ...]
         # CLI: ["A", "#", ".", ...]
         import tempfile
+
         cli_grid = []
         for row in data["grid"]:
             cli_row = []
@@ -480,7 +511,9 @@ def fill_with_progress():
         # Save theme entries to temp file if provided (Phase 3.2)
         theme_entries_file = None
         if "theme_entries" in data and data["theme_entries"]:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as f:
                 json.dump(data["theme_entries"], f)
                 theme_entries_file = f.name
 
@@ -492,23 +525,32 @@ def fill_with_progress():
         logger.info(f"[AUTOFILL DEBUG] Algorithm: {data.get('algorithm', 'repair')}")
         logger.info(f"[AUTOFILL DEBUG] Timeout: {data.get('timeout', 300)}")
         logger.info(f"[AUTOFILL DEBUG] Min score: {data.get('min_score', 30)}")
-        logger.info(f"[AUTOFILL DEBUG] Theme entries: {bool(data.get('theme_entries'))}")
+        logger.info(
+            f"[AUTOFILL DEBUG] Theme entries: {bool(data.get('theme_entries'))}"
+        )
 
         # Count non-empty cells in grid
-        filled_cells = sum(1 for row in cli_grid for c in row if c not in ('.', '#', ''))
-        black_cells = sum(1 for row in cli_grid for c in row if c == '#')
-        total_cells = data['size'] * data['size']
-        logger.info(f"[AUTOFILL DEBUG] Grid cells: {filled_cells} filled, {black_cells} black, {total_cells - filled_cells - black_cells} empty")
+        filled_cells = sum(
+            1 for row in cli_grid for c in row if c not in (".", "#", "")
+        )
+        black_cells = sum(1 for row in cli_grid for c in row if c == "#")
+        total_cells = data["size"] * data["size"]
+        logger.info(
+            f"[AUTOFILL DEBUG] Grid cells: {filled_cells} filled, {black_cells} black, {total_cells - filled_cells - black_cells} empty"
+        )
 
         # Build CLI command
         cmd_args = [
             "fill",
             grid_file,
-            "--timeout", str(data.get("timeout", 300)),
-            "--min-score", str(data.get("min_score", 30)),
-            "--algorithm", data.get("algorithm", "repair"),
+            "--timeout",
+            str(data.get("timeout", 300)),
+            "--min-score",
+            str(data.get("min_score", 30)),
+            "--algorithm",
+            data.get("algorithm", "repair"),
             "--allow-nonstandard",
-            "--json-output"  # Enable progress reporting via stderr
+            "--json-output",  # Enable progress reporting via stderr
         ]
 
         for wp in wordlist_paths:
@@ -544,15 +586,15 @@ def fill_with_progress():
         thread = threading.Thread(
             target=run_cli_with_progress,
             args=(task_id, cmd_args, data.get("timeout", 300) + 10, temp_files),
-            daemon=True
+            daemon=True,
         )
         thread.start()
 
         # Return task ID for SSE connection
-        return jsonify({
-            "task_id": task_id,
-            "progress_url": f"/api/progress/{task_id}"
-        }), 202
+        return (
+            jsonify({"task_id": task_id, "progress_url": f"/api/progress/{task_id}"}),
+            202,
+        )
 
     except ValueError as e:
         return handle_error("INVALID_REQUEST", str(e), 400)
@@ -585,7 +627,11 @@ def verify_words():
         wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
         all_wl_paths = list(wordlist_dir.rglob("*.txt"))
         # Filter out archive and custom
-        all_wl_paths = [p for p in all_wl_paths if "archive" not in p.parts and "custom" not in p.parts]
+        all_wl_paths = [
+            p
+            for p in all_wl_paths
+            if "archive" not in p.parts and "custom" not in p.parts
+        ]
         # Also include the explicitly requested wordlists (in case of custom paths)
         for wp in wordlist_paths:
             wp_path = Path(wp)
@@ -659,33 +705,39 @@ def verify_words():
             if not has_empty:
                 # Fully filled — exact lookup
                 if pattern not in words_set:
-                    invalid_words.append({
-                        "word": pattern,
-                        "direction": direction,
-                        "cells": positions,
-                        "status": "invalid"
-                    })
+                    invalid_words.append(
+                        {
+                            "word": pattern,
+                            "direction": direction,
+                            "cells": positions,
+                            "status": "invalid",
+                        }
+                    )
             else:
                 # Partially filled — check if any word matches the pattern
                 candidates = words_by_length.get(len(pattern))
                 if not candidates:
                     # No words of this length at all
-                    invalid_words.append({
-                        "word": pattern,
-                        "direction": direction,
-                        "cells": positions,
-                        "status": "unfillable"
-                    })
+                    invalid_words.append(
+                        {
+                            "word": pattern,
+                            "direction": direction,
+                            "cells": positions,
+                            "status": "unfillable",
+                        }
+                    )
                     return
                 # Build regex: replace ? with [A-Z]
                 regex = re.compile("^" + pattern.replace("?", "[A-Z]") + "$")
                 if not any(regex.match(w) for w in candidates):
-                    invalid_words.append({
-                        "word": pattern,
-                        "direction": direction,
-                        "cells": positions,
-                        "status": "unfillable"
-                    })
+                    invalid_words.append(
+                        {
+                            "word": pattern,
+                            "direction": direction,
+                            "cells": positions,
+                            "status": "unfillable",
+                        }
+                    )
 
         # Find all across slots (boundary to boundary)
         for r in range(size):
@@ -724,12 +776,17 @@ def verify_words():
                 if len(slot_cells) >= 3:
                     check_slot(slot_cells, "down")
 
-        return jsonify({
-            "invalid_words": invalid_words,
-            "invalid_count": len(invalid_words),
-            "total_checked": checked_count[0],
-            "wordlist_size": len(words_set),
-        }), 200
+        return (
+            jsonify(
+                {
+                    "invalid_words": invalid_words,
+                    "invalid_count": len(invalid_words),
+                    "total_checked": checked_count[0],
+                    "wordlist_size": len(words_set),
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error verifying words: {e}")
@@ -826,7 +883,7 @@ def clean_grid():
                     slots.append((slot_cells, "down", word))
 
         # Step 2: Classify each slot
-        valid_slots = set()    # indices into slots[]
+        valid_slots = set()  # indices into slots[]
         invalid_slots = set()
 
         for i, (cells, direction, word) in enumerate(slots):
@@ -839,12 +896,17 @@ def clean_grid():
                 invalid_slots.add(i)
 
         if not invalid_slots:
-            return jsonify({
-                "grid": grid_data,
-                "removed_count": 0,
-                "valid_count": len(valid_slots),
-                "message": "All words are valid, nothing to clean"
-            }), 200
+            return (
+                jsonify(
+                    {
+                        "grid": grid_data,
+                        "removed_count": 0,
+                        "valid_count": len(valid_slots),
+                        "message": "All words are valid, nothing to clean",
+                    }
+                ),
+                200,
+            )
 
         # Step 3: Build set of cells protected by valid words
         protected_cells = set()
@@ -862,13 +924,18 @@ def clean_grid():
                     set_letter(r, c, "")
                     cleared_cells += 1
 
-        return jsonify({
-            "grid": grid_data,
-            "removed_count": len(invalid_slots),
-            "valid_count": len(valid_slots),
-            "cleared_cells": cleared_cells,
-            "message": f"Removed {len(invalid_slots)} invalid words ({cleared_cells} cells cleared), kept {len(valid_slots)} valid words"
-        }), 200
+        return (
+            jsonify(
+                {
+                    "grid": grid_data,
+                    "removed_count": len(invalid_slots),
+                    "valid_count": len(valid_slots),
+                    "cleared_cells": cleared_cells,
+                    "message": f"Removed {len(invalid_slots)} invalid words ({cleared_cells} cells cleared), kept {len(valid_slots)} valid words",
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error cleaning grid: {e}")

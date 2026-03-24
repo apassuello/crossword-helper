@@ -19,7 +19,9 @@ class ConstraintPropagationStrategy(ABC):
     """Abstract base class for constraint propagation strategies."""
 
     @abstractmethod
-    def propagate(self, slot: Dict, word: str, state: BeamState) -> Tuple[bool, List, Set]:
+    def propagate(
+        self, slot: Dict, word: str, state: BeamState
+    ) -> Tuple[bool, List, Set]:
         """
         Propagate constraints after placing a word.
 
@@ -46,7 +48,9 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
         self.pattern_matcher = pattern_matcher
         self.slot_cache = {}  # Cache for slot lookups
 
-    def propagate(self, slot: Dict, word: str, state: BeamState) -> Tuple[bool, List, Set]:
+    def propagate(
+        self, slot: Dict, word: str, state: BeamState
+    ) -> Tuple[bool, List, Set]:
         """
         Apply MAC propagation after placing a word.
 
@@ -66,13 +70,17 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
         """
         reductions = []
         conflicts = set()
-        (slot['row'], slot['col'], slot['direction'])
+        (slot["row"], slot["col"], slot["direction"])
 
         # Get all crossing slots
         crossing_slots = self._get_crossing_slots(slot, state.grid)
 
         for crossing_slot in crossing_slots:
-            crossing_id = (crossing_slot['row'], crossing_slot['col'], crossing_slot['direction'])
+            crossing_id = (
+                crossing_slot["row"],
+                crossing_slot["col"],
+                crossing_slot["direction"],
+            )
 
             # Skip if already filled
             if crossing_id in state.slot_assignments:
@@ -90,7 +98,8 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
             if crossing_id in state.domains:
                 original_domain = state.domains[crossing_id]
                 reduced_domain = [
-                    w for w in original_domain
+                    w
+                    for w in original_domain
                     if len(w) > crossing_pos and w[crossing_pos] == crossing_letter
                 ]
 
@@ -113,7 +122,7 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
         pos1: int,
         pos2: int,
         domains: Dict,
-        grid: Grid
+        grid: Grid,
     ) -> Tuple[bool, Set[str]]:
         """
         Revise domain of slot1 based on constraint with slot2.
@@ -179,7 +188,9 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
 
         return crossing
 
-    def _get_crossing_position(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+    def _get_crossing_position(
+        self, slot1: Dict, slot2: Dict
+    ) -> Optional[Tuple[int, int]]:
         """
         Get the positions where two slots intersect.
 
@@ -191,11 +202,11 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
             Tuple of (pos_in_slot1, pos_in_slot2) or None if no intersection
         """
         # Slots must be perpendicular to intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None
 
         # Determine which is across and which is down
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
             across_is_first = True
@@ -205,16 +216,16 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
             across_is_first = False
 
         # Calculate intersection point
-        across_row = across_slot['row']
-        across_col = across_slot['col']
-        down_row = down_slot['row']
-        down_col = down_slot['col']
+        across_row = across_slot["row"]
+        across_col = across_slot["col"]
+        down_row = down_slot["row"]
+        down_col = down_slot["col"]
 
         # Check if they intersect
-        if down_col < across_col or down_col >= across_col + across_slot['length']:
+        if down_col < across_col or down_col >= across_col + across_slot["length"]:
             return None  # Down slot doesn't cross across slot horizontally
 
-        if across_row < down_row or across_row >= down_row + down_slot['length']:
+        if across_row < down_row or across_row >= down_row + down_slot["length"]:
             return None  # Across slot doesn't cross down slot vertically
 
         # Calculate positions within each word
@@ -238,17 +249,19 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
             True if slots intersect, False otherwise
         """
         # Quick rejection: same slot
-        if (slot1['row'] == slot2['row'] and
-            slot1['col'] == slot2['col'] and
-            slot1['direction'] == slot2['direction']):
+        if (
+            slot1["row"] == slot2["row"]
+            and slot1["col"] == slot2["col"]
+            and slot1["direction"] == slot2["direction"]
+        ):
             return False
 
         # Quick rejection: parallel slots can't intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Get slot ranges
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
         else:
@@ -256,17 +269,19 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
             down_slot = slot1
 
         # Check if ranges overlap
-        across_row = across_slot['row']
-        across_col_start = across_slot['col']
-        across_col_end = across_col_start + across_slot['length'] - 1
+        across_row = across_slot["row"]
+        across_col_start = across_slot["col"]
+        across_col_end = across_col_start + across_slot["length"] - 1
 
-        down_col = down_slot['col']
-        down_row_start = down_slot['row']
-        down_row_end = down_row_start + down_slot['length'] - 1
+        down_col = down_slot["col"]
+        down_row_start = down_slot["row"]
+        down_row_end = down_row_start + down_slot["length"] - 1
 
         # Check intersection
-        return (down_row_start <= across_row <= down_row_end and
-                across_col_start <= down_col <= across_col_end)
+        return (
+            down_row_start <= across_row <= down_row_end
+            and across_col_start <= down_col <= across_col_end
+        )
 
     def get_slot_by_id(self, slot_id: Tuple, slots: List[Dict]) -> Optional[Dict]:
         """
@@ -285,9 +300,11 @@ class MACConstraintEngine(ConstraintPropagationStrategy):
 
         # Search for slot
         for slot in slots:
-            if (slot['row'] == slot_id[0] and
-                slot['col'] == slot_id[1] and
-                slot['direction'] == slot_id[2]):
+            if (
+                slot["row"] == slot_id[0]
+                and slot["col"] == slot_id[1]
+                and slot["direction"] == slot_id[2]
+            ):
                 self.slot_cache[slot_id] = slot
                 return slot
 
@@ -352,8 +369,7 @@ class ArcConsistencyChecker:
 
             # Revise domain
             was_revised, removed = self.constraint_engine.revise_domain(
-                slot_id, other_id, pos1, pos2,
-                state.domains, state.grid
+                slot_id, other_id, pos1, pos2, state.domains, state.grid
             )
 
             if was_revised:

@@ -12,7 +12,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def resolve_wordlist_paths(wordlist_names: List[str], data_dir: Path = None) -> List[str]:
+def resolve_wordlist_paths(
+    wordlist_names: List[str], data_dir: Path = None
+) -> List[str]:
     """
     Resolve wordlist names to absolute file paths.
 

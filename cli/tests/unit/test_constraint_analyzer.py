@@ -1,10 +1,10 @@
 """Unit tests for constraint analyzer."""
 
 import pytest
-from core.grid import Grid
-from core.constraint_analyzer import analyze_constraints, analyze_placement_impact
-from fill.word_list import WordList
-from fill.trie_pattern_matcher import TriePatternMatcher
+from src.core.grid import Grid
+from src.core.constraint_analyzer import analyze_constraints, analyze_placement_impact
+from src.fill.word_list import WordList
+from src.fill.trie_pattern_matcher import TriePatternMatcher
 
 
 @pytest.fixture

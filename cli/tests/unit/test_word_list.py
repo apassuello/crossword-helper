@@ -106,7 +106,7 @@ class TestWordList:
     def test_score_word_repetition_penalty(self):
         """Test that repeated letters reduce score."""
         wl = WordList(['LETTER', 'STRONG'])  # LETTER has repeated letters
-        letter = next(w for w in wl.words if w.text == 'LETTER')
+        next(w for w in wl.words if w.text == 'LETTER')
         strong = next(w for w in wl.words if w.text == 'STRONG')
         # STRONG should score higher (no repeated letters)
         # Note: this might not always hold due to other factors

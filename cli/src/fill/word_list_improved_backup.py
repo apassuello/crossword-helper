@@ -15,16 +15,16 @@ from dataclasses import dataclass
 import pickle
 from pathlib import Path
 
-
 # Letter frequency scoring (based on common crossword usage)
-COMMON_LETTERS = set('EARIOTNS')  # Very common, good for crosswords
-REGULAR_LETTERS = set('DHCLUMPFGYBWKV')  # Regular usage
-UNCOMMON_LETTERS = set('JQXZ')  # Difficult letters
+COMMON_LETTERS = set("EARIOTNS")  # Very common, good for crosswords
+REGULAR_LETTERS = set("DHCLUMPFGYBWKV")  # Regular usage
+UNCOMMON_LETTERS = set("JQXZ")  # Difficult letters
 
 
 @dataclass
 class ScoredWord:
     """Word with crossword-ability score."""
+
     text: str
     score: int
     length: int
@@ -81,11 +81,7 @@ class WordList:
 
             # Score and add
             score = self._score_word(word)
-            scored_word = ScoredWord(
-                text=word,
-                score=score,
-                length=len(word)
-            )
+            scored_word = ScoredWord(text=word, score=score, length=len(word))
 
             self.words.append(scored_word)
 
@@ -334,7 +330,9 @@ class WordList:
         return f"WordList(words={len(self.words)})"
 
     @classmethod
-    def from_file(cls, filepath: str, progress_callback=None, use_cache=True) -> 'WordList':
+    def from_file(
+        cls, filepath: str, progress_callback=None, use_cache=True
+    ) -> "WordList":
         """
         Load word list from file, using cache if available.
 
@@ -364,7 +362,7 @@ class WordList:
 
             # Check for cache file (.pkl)
             if use_cache:
-                cache_path = resolved_path.with_suffix('.pkl')
+                cache_path = resolved_path.with_suffix(".pkl")
 
                 if cache_path.exists():
                     # Check if cache is newer than source file
@@ -378,16 +376,22 @@ class WordList:
                         except (ValueError, FileNotFoundError) as e:
                             # Cache is corrupt, fall through to text loading
                             import sys
-                            print(f"Warning: Cache corrupted, rebuilding: {e}", file=sys.stderr)
+
+                            print(
+                                f"Warning: Cache corrupted, rebuilding: {e}",
+                                file=sys.stderr,
+                            )
 
             # No cache or cache disabled - load from text file
             # Check file size (prevent loading huge files)
             file_size = resolved_path.stat().st_size
             if file_size > 100 * 1024 * 1024:  # 100MB limit
-                raise ValueError(f"Word list file too large (max 100MB): {file_size / 1024 / 1024:.1f}MB")
+                raise ValueError(
+                    f"Word list file too large (max 100MB): {file_size / 1024 / 1024:.1f}MB"
+                )
 
             # Read with proper error handling
-            with open(resolved_path, 'r', encoding='utf-8') as f:
+            with open(resolved_path, "r", encoding="utf-8") as f:
                 words = [line.strip() for line in f if line.strip()]
 
             return cls(words, progress_callback)
@@ -412,20 +416,20 @@ class WordList:
 
         # Serialize entire WordList state
         cache_data = {
-            'words': self.words,
-            'length_index': self._length_index,
-            'first_letter_index': self._first_letter_index,
-            'version': '1.0'  # For future compatibility
+            "words": self.words,
+            "length_index": self._length_index,
+            "first_letter_index": self._first_letter_index,
+            "version": "1.0",  # For future compatibility
         }
 
         try:
-            with open(cache_path, 'wb') as f:
+            with open(cache_path, "wb") as f:
                 pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
         except (OSError, IOError) as e:
             raise IOError(f"Failed to write cache to {cache_path}: {e}")
 
     @classmethod
-    def from_cache(cls, cache_path: str) -> 'WordList':
+    def from_cache(cls, cache_path: str) -> "WordList":
         """
         Load word list from binary cache file.
 
@@ -448,22 +452,24 @@ class WordList:
             raise ValueError(f"Cache path is not a file: {cache_path}")
 
         try:
-            with open(cache_path, 'rb') as f:
+            with open(cache_path, "rb") as f:
                 cache_data = pickle.load(f)
 
             # Validate cache structure
             if not isinstance(cache_data, dict):
                 raise ValueError("Invalid cache format")
 
-            required_keys = {'words', 'length_index', 'first_letter_index'}
+            required_keys = {"words", "length_index", "first_letter_index"}
             if not required_keys.issubset(cache_data.keys()):
-                raise ValueError(f"Cache missing required keys: {required_keys - cache_data.keys()}")
+                raise ValueError(
+                    f"Cache missing required keys: {required_keys - cache_data.keys()}"
+                )
 
             # Create instance and restore state
             instance = cls()
-            instance.words = cache_data['words']
-            instance._length_index = cache_data['length_index']
-            instance._first_letter_index = cache_data['first_letter_index']
+            instance.words = cache_data["words"]
+            instance._length_index = cache_data["length_index"]
+            instance._first_letter_index = cache_data["first_letter_index"]
 
             return instance
 

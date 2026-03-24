@@ -20,25 +20,29 @@ def client():
 @pytest.fixture
 def sse_parser():
     """Parse SSE stream bytes into list of JSON message dicts."""
+
     def parse_sse_stream(data_bytes):
         messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
+        data_str = data_bytes.decode("utf-8")
+        for chunk in data_str.split("\n\n"):
             if not chunk.strip():
                 continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
+            for line in chunk.split("\n"):
+                if line.startswith("data: "):
                     try:
                         messages.append(json.loads(line[6:]))
                     except json.JSONDecodeError:
                         pass
         return messages
+
     return parse_sse_stream
 
 
 def create_test_grid(size=11):
     """Create empty grid in frontend format."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+    return [
+        [{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)
+    ]
 
 
 def start_fill_task(client, size=5, algorithm="trie", timeout=10, **extra):
@@ -58,7 +62,9 @@ def start_fill_task(client, size=5, algorithm="trie", timeout=10, **extra):
         data=json.dumps(request_data),
         content_type="application/json",
     )
-    assert response.status_code == 202, f"Expected 202, got {response.status_code}: {response.data}"
+    assert (
+        response.status_code == 202
+    ), f"Expected 202, got {response.status_code}: {response.data}"
     return response.json["task_id"]
 
 
@@ -77,12 +83,12 @@ def collect_sse_messages(client, task_id):
     """
     sse_response = client.get(f"/api/progress/{task_id}")
     messages = []
-    data_str = sse_response.data.decode('utf-8')
-    for chunk in data_str.split('\n\n'):
+    data_str = sse_response.data.decode("utf-8")
+    for chunk in data_str.split("\n\n"):
         if not chunk.strip():
             continue
-        for line in chunk.split('\n'):
-            if line.startswith('data: '):
+        for line in chunk.split("\n"):
+            if line.startswith("data: "):
                 try:
                     messages.append(json.loads(line[6:]))
                 except json.JSONDecodeError:

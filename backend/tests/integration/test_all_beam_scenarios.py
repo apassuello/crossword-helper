@@ -21,7 +21,6 @@ import sys
 import tempfile
 import os
 
-
 # Realistic 7x7 grid with symmetric black squares (22 slots)
 STANDARD_GRID_7x7 = {
     "size": 7,
@@ -33,7 +32,7 @@ STANDARD_GRID_7x7 = {
         [".", ".", ".", ".", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
-    ]
+    ],
 }
 
 # 7x7 grid with some pre-filled letters
@@ -47,11 +46,10 @@ PREFILLED_GRID_7x7 = {
         [".", ".", ".", ".", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
-    ]
+    ],
 }
 
 WORDLIST = "data/wordlists/comprehensive.txt"
-
 
 
 def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeout=20):
@@ -61,20 +59,27 @@ def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeou
     Returns:
         tuple: (return_code, stdout, stderr)
     """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(grid_data, f)
         grid_file = f.name
 
     try:
         cmd = [
-            sys.executable, "-m", "cli.src.cli", "fill",
+            sys.executable,
+            "-m",
+            "cli.src.cli",
+            "fill",
             grid_file,
-            "--wordlists", WORDLIST,
-            "--timeout", str(timeout),
-            "--min-score", "1",
-            "--algorithm", algorithm,
+            "--wordlists",
+            WORDLIST,
+            "--timeout",
+            str(timeout),
+            "--min-score",
+            "1",
+            "--algorithm",
+            algorithm,
             "--allow-nonstandard",
-            "--json-output"
+            "--json-output",
         ]
 
         if adaptive:
@@ -85,7 +90,7 @@ def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeou
             cmd,
             capture_output=True,
             text=True,
-            timeout=timeout + 10  # Add buffer for subprocess overhead
+            timeout=timeout + 10,  # Add buffer for subprocess overhead
         )
 
         return result.returncode, result.stdout, result.stderr
@@ -107,7 +112,7 @@ def assert_no_crash(stdout, stderr):
 
 def assert_valid_json_output(stdout):
     """Verify stdout contains valid JSON with expected keys."""
-    for line in stdout.split('\n'):
+    for line in stdout.split("\n"):
         if line.strip().startswith('{"success"'):
             result = json.loads(line)
             assert "success" in result
@@ -145,7 +150,10 @@ class TestCLIAutofillScenarios:
         returncode, stdout, stderr = run_cli_fill(
             STANDARD_GRID_7x7, "trie", adaptive=True, timeout=15
         )
-        assert "TypeError: Autofill.fill() got an unexpected keyword argument 'timeout'" not in stderr
+        assert (
+            "TypeError: Autofill.fill() got an unexpected keyword argument 'timeout'"
+            not in stderr
+        )
         assert_no_crash(stdout, stderr)
         assert_valid_json_output(stdout)
 
@@ -199,7 +207,7 @@ class TestCLIAutofillScenarios:
                 [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
                 ["#", ".", ".", ".", ".", ".", "#", ".", ".", ".", "."],
                 ["#", ".", ".", ".", ".", ".", "#", ".", ".", ".", "."],
-            ]
+            ],
         }
         try:
             returncode, stdout, stderr = run_cli_fill(
@@ -215,7 +223,9 @@ class TestAPIAutofillScenarios:
 
     def test_api_beam_starts_successfully(self, client):
         """API endpoint successfully starts a beam search task."""
-        grid = [[{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)]
+        grid = [
+            [{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)
+        ]
 
         request_data = {
             "size": 11,
@@ -223,13 +233,13 @@ class TestAPIAutofillScenarios:
             "wordlists": ["comprehensive"],
             "timeout": 30,
             "min_score": 10,
-            "algorithm": "beam"
+            "algorithm": "beam",
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -239,7 +249,9 @@ class TestAPIAutofillScenarios:
 
     def test_api_adaptive_beam_starts_successfully(self, client):
         """Adaptive + Beam via API should start without error."""
-        grid = [[{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)]
+        grid = [
+            [{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)
+        ]
 
         request_data = {
             "size": 11,
@@ -249,13 +261,13 @@ class TestAPIAutofillScenarios:
             "min_score": 10,
             "algorithm": "beam",
             "adaptive_mode": True,
-            "max_adaptations": 2
+            "max_adaptations": 2,
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -265,7 +277,9 @@ class TestAPIAutofillScenarios:
 
     def test_api_adaptive_trie_starts_successfully(self, client):
         """Adaptive + CSP via API should start without error."""
-        grid = [[{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)]
+        grid = [
+            [{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)
+        ]
 
         request_data = {
             "size": 11,
@@ -275,13 +289,13 @@ class TestAPIAutofillScenarios:
             "min_score": 10,
             "algorithm": "trie",
             "adaptive_mode": True,
-            "max_adaptations": 2
+            "max_adaptations": 2,
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202

@@ -18,41 +18,140 @@ Examples:
 
 from typing import Set
 
-
 # Common 3-letter crosswordese
 CROSSWORDESE_3: Set[str] = {
     # Compass directions
-    'ESE', 'ENE', 'SSE', 'SSW', 'NNE', 'NNW', 'WSW', 'WNW',
+    "ESE",
+    "ENE",
+    "SSE",
+    "SSW",
+    "NNE",
+    "NNW",
+    "WSW",
+    "WNW",
     # Common short words
-    'ERA', 'ERE', 'ORE', 'ATE', 'OLE', 'ETA', 'IRE', 'ODE',
+    "ERA",
+    "ERE",
+    "ORE",
+    "ATE",
+    "OLE",
+    "ETA",
+    "IRE",
+    "ODE",
     # Names
-    'ALI', 'ARI', 'ELI', 'IRA', 'IDA', 'AVA', 'EVA', 'ELI',
-    'ANN', 'EVE', 'MAE', 'RAE', 'ZOE',
+    "ALI",
+    "ARI",
+    "ELI",
+    "IRA",
+    "IDA",
+    "AVA",
+    "EVA",
+    "ELI",
+    "ANN",
+    "EVE",
+    "MAE",
+    "RAE",
+    "ZOE",
     # Misc
-    'AWE', 'EEL', 'ERR', 'OAR', 'ORB', 'OPT', 'AWL'
+    "AWE",
+    "EEL",
+    "ERR",
+    "OAR",
+    "ORB",
+    "OPT",
+    "AWL",
 }
 
 # Common 4-letter crosswordese
 CROSSWORDESE_4: Set[str] = {
     # Very common
-    'ESNE', 'ALOE', 'OLEO', 'OREO', 'ARIA', 'ERNE', 'ALEE', 'ASEA',
-    'EPEE', 'OLIO', 'AGAR', 'AGRA', 'AGIO', 'AGUE', 'AVER', 'AVOW',
+    "ESNE",
+    "ALOE",
+    "OLEO",
+    "OREO",
+    "ARIA",
+    "ERNE",
+    "ALEE",
+    "ASEA",
+    "EPEE",
+    "OLIO",
+    "AGAR",
+    "AGRA",
+    "AGIO",
+    "AGUE",
+    "AVER",
+    "AVOW",
     # Names
-    'EERO', 'OMAR', 'OTIS', 'EDNA', 'ETTA', 'EZRA', 'ELIA', 'ENID',
+    "EERO",
+    "OMAR",
+    "OTIS",
+    "EDNA",
+    "ETTA",
+    "EZRA",
+    "ELIA",
+    "ENID",
     # Common patterns
-    'ANTE', 'ANON', 'AJAR', 'ABET', 'ALES', 'AMPS', 'ARCS', 'ARES',
-    'ASPS', 'ELLS', 'EROS', 'ERRS', 'ETAS', 'EWES', 'IBIS', 'ICES',
-    'ODES', 'OARS', 'OKRA', 'OLES', 'OMEN', 'ONER', 'ONES', 'OPTS',
-    'ORES', 'ORBS', 'OWES', 'OWLS'
+    "ANTE",
+    "ANON",
+    "AJAR",
+    "ABET",
+    "ALES",
+    "AMPS",
+    "ARCS",
+    "ARES",
+    "ASPS",
+    "ELLS",
+    "EROS",
+    "ERRS",
+    "ETAS",
+    "EWES",
+    "IBIS",
+    "ICES",
+    "ODES",
+    "OARS",
+    "OKRA",
+    "OLES",
+    "OMEN",
+    "ONER",
+    "ONES",
+    "OPTS",
+    "ORES",
+    "ORBS",
+    "OWES",
+    "OWLS",
 }
 
 # Common 5-letter crosswordese
 CROSSWORDESE_5: Set[str] = {
-    'ENURE', 'INURE', 'ARETE', 'ANISE', 'ELATE', 'ERATO', 'ARIEL',
-    'OSIER', 'OTERO', 'STERE', 'ESSES', 'EDGER', 'ALLEE', 'AREAE',
-    'ATONE', 'ANEAR', 'EELER', 'OATER', 'OARED', 'REATA', 'OASES',
+    "ENURE",
+    "INURE",
+    "ARETE",
+    "ANISE",
+    "ELATE",
+    "ERATO",
+    "ARIEL",
+    "OSIER",
+    "OTERO",
+    "STERE",
+    "ESSES",
+    "EDGER",
+    "ALLEE",
+    "AREAE",
+    "ATONE",
+    "ANEAR",
+    "EELER",
+    "OATER",
+    "OARED",
+    "REATA",
+    "OASES",
     # Names
-    'ALAMO', 'ARIES', 'EARLE', 'ELIOT', 'ENLAI', 'ERNIE', 'ESTES'
+    "ALAMO",
+    "ARIES",
+    "EARLE",
+    "ELIOT",
+    "ENLAI",
+    "ERNIE",
+    "ESTES",
 }
 
 # Combine all crosswordese
@@ -104,17 +203,14 @@ def get_crosswordese_penalty(word: str, length: int) -> float:
 
     # Crosswordese word - apply length-based policy
     if length <= 4:
-        return 1.0   # Acceptable for short slots (glue words)
+        return 1.0  # Acceptable for short slots (glue words)
     elif length <= 6:
-        return 0.5   # Discouraged for medium slots (penalized)
+        return 0.5  # Discouraged for medium slots (penalized)
     else:  # 7+ letters
-        return 0.0   # Unacceptable for long slots (filtered out)
+        return 0.0  # Unacceptable for long slots (filtered out)
 
 
-def filter_crosswordese(
-    candidates: list,
-    slot_length: int
-) -> list:
+def filter_crosswordese(candidates: list, slot_length: int) -> list:
     """
     Filter candidates to remove unacceptable crosswordese for given slot length.
 
@@ -165,8 +261,10 @@ def get_crosswordese_stats(words: list) -> dict:
     crosswordese_found = [w for w in words if is_crosswordese(w)]
 
     return {
-        'total_words': len(words),
-        'crosswordese_count': len(crosswordese_found),
-        'crosswordese_percentage': len(crosswordese_found) / len(words) * 100 if words else 0,
-        'examples': crosswordese_found[:10]  # First 10 examples
+        "total_words": len(words),
+        "crosswordese_count": len(crosswordese_found),
+        "crosswordese_percentage": (
+            len(crosswordese_found) / len(words) * 100 if words else 0
+        ),
+        "examples": crosswordese_found[:10],  # First 10 examples
     }

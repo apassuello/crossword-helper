@@ -26,22 +26,22 @@ def validate_pattern_request(data: dict) -> dict:
     if not data:
         raise ValueError("Request body is required")
 
-    if 'pattern' not in data:
+    if "pattern" not in data:
         raise ValueError("Field 'pattern' is required")
 
-    if not isinstance(data['pattern'], str):
+    if not isinstance(data["pattern"], str):
         raise ValueError("Field 'pattern' must be string")
 
-    if 'wordlists' in data:
-        if not isinstance(data['wordlists'], list):
+    if "wordlists" in data:
+        if not isinstance(data["wordlists"], list):
             raise ValueError("Field 'wordlists' must be array")
-        if not all(isinstance(w, str) for w in data['wordlists']):
+        if not all(isinstance(w, str) for w in data["wordlists"]):
             raise ValueError("Field 'wordlists' must contain strings")
 
-    if 'max_results' in data:
-        if not isinstance(data['max_results'], int):
+    if "max_results" in data:
+        if not isinstance(data["max_results"], int):
             raise ValueError("Field 'max_results' must be integer")
-        if not 1 <= data['max_results'] <= 100:
+        if not 1 <= data["max_results"] <= 100:
             raise ValueError("Field 'max_results' must be 1-100")
 
     return data
@@ -68,29 +68,29 @@ def validate_grid_request(data: dict) -> dict:
     if not data:
         raise ValueError("Request body is required")
 
-    if 'size' not in data:
+    if "size" not in data:
         raise ValueError("Field 'size' is required")
 
-    if not isinstance(data['size'], int):
+    if not isinstance(data["size"], int):
         raise ValueError("Field 'size' must be integer")
 
     # Phase 3: Allow non-standard sizes (CLI handles validation)
-    if data['size'] < 3 or data['size'] > 50:
+    if data["size"] < 3 or data["size"] > 50:
         raise ValueError("Field 'size' must be between 3 and 50")
 
-    if 'grid' not in data:
+    if "grid" not in data:
         raise ValueError("Field 'grid' is required")
 
-    if not isinstance(data['grid'], list):
+    if not isinstance(data["grid"], list):
         raise ValueError("Field 'grid' must be array")
 
     # Validate grid is 2D array
-    for row in data['grid']:
+    for row in data["grid"]:
         if not isinstance(row, list):
             raise ValueError("Field 'grid' must be 2D array (array of arrays)")
 
-    if 'numbering' in data:
-        if not isinstance(data['numbering'], dict):
+    if "numbering" in data:
+        if not isinstance(data["numbering"], dict):
             raise ValueError("Field 'numbering' must be object")
 
     return data
@@ -117,16 +117,16 @@ def validate_normalize_request(data: dict) -> dict:
     if not data:
         raise ValueError("Request body is required")
 
-    if 'text' not in data:
+    if "text" not in data:
         raise ValueError("Field 'text' is required")
 
-    if not isinstance(data['text'], str):
+    if not isinstance(data["text"], str):
         raise ValueError("Field 'text' must be string")
 
-    if not data['text'].strip():
+    if not data["text"].strip():
         raise ValueError("Field 'text' cannot be empty")
 
-    if len(data['text']) > 100:
+    if len(data["text"]) > 100:
         raise ValueError("Field 'text' must be at most 100 characters")
 
     return data
@@ -156,69 +156,75 @@ def validate_fill_request(data: dict) -> dict:
         raise ValueError("Request body is required")
 
     # Validate grid (reuse grid validation logic)
-    if 'grid' not in data:
+    if "grid" not in data:
         raise ValueError("Field 'grid' is required")
 
-    if not isinstance(data['grid'], list):
+    if not isinstance(data["grid"], list):
         raise ValueError("Field 'grid' must be array")
 
-    for row in data['grid']:
+    for row in data["grid"]:
         if not isinstance(row, list):
             raise ValueError("Field 'grid' must be 2D array (array of arrays)")
 
     # Validate size
-    if 'size' not in data:
+    if "size" not in data:
         raise ValueError("Field 'size' is required")
 
-    if not isinstance(data['size'], int):
+    if not isinstance(data["size"], int):
         raise ValueError("Field 'size' must be integer")
 
-    if data['size'] < 3 or data['size'] > 50:
+    if data["size"] < 3 or data["size"] > 50:
         raise ValueError("Field 'size' must be between 3 and 50")
 
     # Validate wordlists
-    if 'wordlists' in data:
-        if not isinstance(data['wordlists'], list):
+    if "wordlists" in data:
+        if not isinstance(data["wordlists"], list):
             raise ValueError("Field 'wordlists' must be array")
-        if not all(isinstance(w, str) for w in data['wordlists']):
+        if not all(isinstance(w, str) for w in data["wordlists"]):
             raise ValueError("Field 'wordlists' must contain strings")
-        if len(data['wordlists']) == 0:
+        if len(data["wordlists"]) == 0:
             raise ValueError("Field 'wordlists' must contain at least one word list")
 
     # Validate timeout
-    if 'timeout' in data:
-        if not isinstance(data['timeout'], int):
+    if "timeout" in data:
+        if not isinstance(data["timeout"], int):
             raise ValueError("Field 'timeout' must be integer")
-        if not 10 <= data['timeout'] <= 1800:
+        if not 10 <= data["timeout"] <= 1800:
             raise ValueError("Field 'timeout' must be between 10 and 1800 seconds")
 
     # Validate min_score
-    if 'min_score' in data:
-        if not isinstance(data['min_score'], int):
+    if "min_score" in data:
+        if not isinstance(data["min_score"], int):
             raise ValueError("Field 'min_score' must be integer")
-        if not 0 <= data['min_score'] <= 100:
+        if not 0 <= data["min_score"] <= 100:
             raise ValueError("Field 'min_score' must be between 0 and 100")
 
     # Validate theme_entries (Phase 3.2)
-    if 'theme_entries' in data:
-        if not isinstance(data['theme_entries'], dict):
+    if "theme_entries" in data:
+        if not isinstance(data["theme_entries"], dict):
             raise ValueError("Field 'theme_entries' must be object")
 
         # Validate each theme entry
-        for key, word in data['theme_entries'].items():
+        for key, word in data["theme_entries"].items():
             if not isinstance(key, str):
-                raise ValueError("Theme entry keys must be strings in format '(row,col,direction)'")
+                raise ValueError(
+                    "Theme entry keys must be strings in format '(row,col,direction)'"
+                )
             if not isinstance(word, str):
                 raise ValueError("Theme entry values must be strings (words)")
 
             # Validate key format: "(row,col,direction)"
-            if not key.startswith('(') or not key.endswith(')'):
-                raise ValueError(f"Theme entry key '{key}' must be in format '(row,col,direction)'")
+            if not key.startswith("(") or not key.endswith(")"):
+                raise ValueError(
+                    f"Theme entry key '{key}' must be in format '(row,col,direction)'"
+                )
 
             # Basic validation - just check it has 3 comma-separated parts
-            key_content = key.strip('()')
-            parts = key_content.split(',')
+            key_content = key.strip("()")
+            parts = key_content.split(",")
             if len(parts) != 3:
-                raise ValueError(f"Theme entry key '{key}' must have format '(row,col,direction)'")
+                raise ValueError(
+                    f"Theme entry key '{key}' must have format '(row,col,direction)'"
+                )
 
     return data

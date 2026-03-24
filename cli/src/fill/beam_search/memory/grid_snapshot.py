@@ -30,10 +30,10 @@ class GridSnapshot:
 
     def __init__(
         self,
-        parent: Optional['GridSnapshot'] = None,
+        parent: Optional["GridSnapshot"] = None,
         data: Optional[List[List[str]]] = None,
         height: int = 0,
-        width: int = 0
+        width: int = 0,
     ):
         """
         Initialize grid snapshot.
@@ -60,7 +60,7 @@ class GridSnapshot:
             else:
                 self._height = height
                 self._width = width
-                self._root_data = [['.' for _ in range(width)] for _ in range(height)]
+                self._root_data = [["." for _ in range(width)] for _ in range(height)]
         else:
             # Child snapshot - inherit dimensions from parent
             self._height = parent._height
@@ -84,7 +84,9 @@ class GridSnapshot:
             IndexError: If (row, col) out of bounds
         """
         if row < 0 or row >= self._height or col < 0 or col >= self._width:
-            raise IndexError(f"Cell ({row}, {col}) out of bounds for {self._height}x{self._width} grid")
+            raise IndexError(
+                f"Cell ({row}, {col}) out of bounds for {self._height}x{self._width} grid"
+            )
 
         # Check if this snapshot modified the cell
         key = (row, col)
@@ -113,7 +115,9 @@ class GridSnapshot:
             ValueError: If value is invalid
         """
         if row < 0 or row >= self._height or col < 0 or col >= self._width:
-            raise IndexError(f"Cell ({row}, {col}) out of bounds for {self._height}x{self._width} grid")
+            raise IndexError(
+                f"Cell ({row}, {col}) out of bounds for {self._height}x{self._width} grid"
+            )
 
         if not isinstance(value, str) or len(value) != 1:
             raise ValueError(f"Cell value must be single character, got: {value}")
@@ -150,7 +154,7 @@ class GridSnapshot:
             for row in range(self._height)
         ]
 
-    def materialize(self) -> 'GridSnapshot':
+    def materialize(self) -> "GridSnapshot":
         """
         Create a new root snapshot from current state.
 
@@ -163,7 +167,7 @@ class GridSnapshot:
         materialized_data = self.get_all_data()
         return GridSnapshot(data=materialized_data)
 
-    def clone(self) -> 'GridSnapshot':
+    def clone(self) -> "GridSnapshot":
         """
         Create a copy-on-write child snapshot.
 

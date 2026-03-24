@@ -7,21 +7,22 @@ All subprocess calls are mocked — no real CLI invocations.
 import json
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from backend.core.cli_adapter import CLIAdapter, get_adapter, cached_normalize
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     """Reset the module-level singleton before every test."""
     import backend.core.cli_adapter as mod
+
     mod._adapter = None
     # Also clear lru_cache between tests
     cached_normalize.cache_clear()
@@ -44,13 +45,16 @@ def adapter(cli_path):
 
 
 def _make_completed_process(stdout="", stderr="", returncode=0):
-    cp = subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
+    cp = subprocess.CompletedProcess(
+        args=[], returncode=returncode, stdout=stdout, stderr=stderr
+    )
     return cp
 
 
 # ===========================================================================
 # Constructor
 # ===========================================================================
+
 
 class TestConstructor:
     def test_raises_when_cli_not_found(self, tmp_path):
@@ -72,6 +76,7 @@ class TestConstructor:
 # ===========================================================================
 # pattern()
 # ===========================================================================
+
 
 class TestPattern:
     def test_empty_pattern_raises(self, adapter):
@@ -142,6 +147,7 @@ class TestPattern:
 # number()
 # ===========================================================================
 
+
 class TestNumber:
     def test_empty_grid_raises(self, adapter):
         with pytest.raises(ValueError, match="empty"):
@@ -188,6 +194,7 @@ class TestNumber:
 # fill()
 # ===========================================================================
 
+
 class TestFill:
     def test_empty_grid_raises(self, adapter):
         with pytest.raises(ValueError, match="empty"):
@@ -208,9 +215,12 @@ class TestFill:
 
         def patched_open(path, *a, **kw):
             path_str = str(path)
-            if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
+            if path_str.endswith(".json") and "r" in (
+                a[0] if a else kw.get("mode", "r")
+            ):
                 # Could be reading the output file
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -220,7 +230,10 @@ class TestFill:
                     mock_stat.return_value = MagicMock(st_size=100)
                     with patch.object(Path, "unlink"):
                         adapter.fill(
-                            {"size": 7, "grid": [["." for _ in range(7)] for _ in range(7)]},
+                            {
+                                "size": 7,
+                                "grid": [["." for _ in range(7)] for _ in range(7)],
+                            },
                             ["w1.txt", "w2.txt"],
                             timeout_seconds=120,
                             min_score=50,
@@ -252,8 +265,11 @@ class TestFill:
 
         def patched_open(path, *a, **kw):
             path_str = str(path)
-            if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
+            if path_str.endswith(".json") and "r" in (
+                a[0] if a else kw.get("mode", "r")
+            ):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -279,8 +295,11 @@ class TestFill:
 
         def patched_open(path, *a, **kw):
             path_str = str(path)
-            if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
+            if path_str.endswith(".json") and "r" in (
+                a[0] if a else kw.get("mode", "r")
+            ):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -289,7 +308,9 @@ class TestFill:
                 with patch.object(Path, "stat") as mock_stat:
                     mock_stat.return_value = MagicMock(st_size=100)
                     with patch.object(Path, "unlink"):
-                        adapter.fill({"size": 15, "grid": []}, ["w.txt"], timeout_seconds=200)
+                        adapter.fill(
+                            {"size": 15, "grid": []}, ["w.txt"], timeout_seconds=200
+                        )
 
         # subprocess.run should have been called with timeout=210
         call_kwargs = mock_run.call_args[1]
@@ -327,6 +348,7 @@ class TestFill:
 # fill_with_resume()
 # ===========================================================================
 
+
 class TestFillWithResume:
     def test_missing_state_file_raises(self, adapter):
         with pytest.raises(FileNotFoundError, match="State file not found"):
@@ -343,8 +365,11 @@ class TestFillWithResume:
 
         def patched_open(path, *a, **kw):
             path_str = str(path)
-            if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
+            if path_str.endswith(".json") and "r" in (
+                a[0] if a else kw.get("mode", "r")
+            ):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -385,14 +410,19 @@ class TestFillWithResume:
 
         def patched_open(path, *a, **kw):
             path_str = str(path)
-            if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
+            if path_str.endswith(".json") and "r" in (
+                a[0] if a else kw.get("mode", "r")
+            ):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
         with patch("builtins.open", side_effect=patched_open):
             with patch.object(Path, "unlink"):
-                adapter.fill_with_resume("t", str(state_file), ["w.txt"], timeout_seconds=100)
+                adapter.fill_with_resume(
+                    "t", str(state_file), ["w.txt"], timeout_seconds=100
+                )
 
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["timeout"] == 110
@@ -401,6 +431,7 @@ class TestFillWithResume:
 # ===========================================================================
 # normalize()
 # ===========================================================================
+
 
 class TestNormalize:
     def test_empty_text_raises(self, adapter):
@@ -430,6 +461,7 @@ class TestNormalize:
 # health_check()
 # ===========================================================================
 
+
 class TestHealthCheck:
     @patch("subprocess.run")
     def test_returns_true_on_success(self, mock_run, adapter):
@@ -455,6 +487,7 @@ class TestHealthCheck:
 # ===========================================================================
 # _run_command() internals
 # ===========================================================================
+
 
 class TestRunCommand:
     @patch("subprocess.run")
@@ -493,6 +526,7 @@ class TestRunCommand:
 # Singleton: get_adapter()
 # ===========================================================================
 
+
 class TestGetAdapter:
     @patch("backend.core.cli_adapter.CLIAdapter.__init__", return_value=None)
     def test_returns_same_instance(self, mock_init):
@@ -506,6 +540,7 @@ class TestGetAdapter:
 # ===========================================================================
 # Caching: cached_normalize()
 # ===========================================================================
+
 
 class TestCachedNormalize:
     @patch("backend.core.cli_adapter.get_adapter")

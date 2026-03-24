@@ -8,14 +8,14 @@ based on extensive testing with various grid configurations.
 # Profile for 21×21 birthday/themed puzzles with 10-20 theme words
 BIRTHDAY_21X21_PROFILE = {
     "algorithm": "beam",  # Beam search handles large grids better
-    "beam_width": 15,     # Increased from default 5 for better exploration
+    "beam_width": 15,  # Increased from default 5 for better exploration
     "candidates_per_slot": 30,  # More candidates for difficult slots
-    "min_score": 25,      # Lower threshold to find more words
+    "min_score": 25,  # Lower threshold to find more words
     "diversity_bonus": 0.2,  # Encourage diverse solutions
-    "timeout": 900,       # 15 minutes max (21×21 takes time)
+    "timeout": 900,  # 15 minutes max (21×21 takes time)
     "max_attempts_per_slot": 5,  # More retries for stuck slots
     "progressive_fill": True,  # Fill in stages if needed
-    "notes": "Optimized for 21×21 grids with 10-20 locked theme words"
+    "notes": "Optimized for 21×21 grids with 10-20 locked theme words",
 }
 
 # Profile for 15×15 standard puzzles
@@ -28,35 +28,36 @@ STANDARD_15X15_PROFILE = {
     "timeout": 300,  # 5 minutes
     "max_attempts_per_slot": 3,
     "progressive_fill": False,
-    "notes": "Standard settings for 15×15 daily-style puzzles"
+    "notes": "Standard settings for 15×15 daily-style puzzles",
 }
 
 # Profile for 11×11 quick puzzles
 QUICK_11X11_PROFILE = {
-    "algorithm": "csp",   # CSP is faster for small grids
-    "beam_width": None,   # Not used for CSP
+    "algorithm": "csp",  # CSP is faster for small grids
+    "beam_width": None,  # Not used for CSP
     "candidates_per_slot": None,
     "min_score": 40,
     "diversity_bonus": None,
     "timeout": 60,  # 1 minute
     "max_attempts_per_slot": None,
     "progressive_fill": False,
-    "notes": "Fast fill for small 11×11 grids"
+    "notes": "Fast fill for small 11×11 grids",
 }
 
 # Profile for heavily themed puzzles (many locked entries)
 HEAVY_THEME_PROFILE = {
     "algorithm": "hybrid",  # Try beam first, fall back to CSP
-    "beam_width": 20,       # Maximum exploration
+    "beam_width": 20,  # Maximum exploration
     "candidates_per_slot": 50,  # Many candidates
-    "min_score": 20,        # Very low threshold
+    "min_score": 20,  # Very low threshold
     "diversity_bonus": 0.3,
-    "timeout": 1200,        # 20 minutes
+    "timeout": 1200,  # 20 minutes
     "max_attempts_per_slot": 10,
     "progressive_fill": True,
     "use_theme_priority": True,  # Prioritize theme wordlist
-    "notes": "For puzzles with 20+ theme words or difficult patterns"
+    "notes": "For puzzles with 20+ theme words or difficult patterns",
 }
+
 
 def get_profile(grid_size: int, theme_word_count: int = 0, difficulty: str = "medium"):
     """
@@ -92,6 +93,7 @@ def get_profile(grid_size: int, theme_word_count: int = 0, difficulty: str = "me
 
     # Default fallback
     return STANDARD_15X15_PROFILE
+
 
 def apply_profile_to_options(options: dict, profile: dict):
     """

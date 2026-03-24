@@ -13,7 +13,7 @@ from typing import List
 class OneLookClient:
     """Client for OneLook dictionary API."""
 
-    BASE_URL = 'https://api.onelook.com/words'
+    BASE_URL = "https://api.onelook.com/words"
 
     def __init__(self, timeout: int = 5):
         """
@@ -40,13 +40,13 @@ class OneLookClient:
         try:
             response = requests.get(
                 self.BASE_URL,
-                params={'sp': pattern.lower(), 'max': max_results},
-                timeout=self.timeout
+                params={"sp": pattern.lower(), "max": max_results},
+                timeout=self.timeout,
             )
             response.raise_for_status()
 
             data = response.json()
-            words = [entry['word'].upper() for entry in data]
+            words = [entry["word"].upper() for entry in data]
 
             self.logger.info(f"OneLook found {len(words)} matches for '{pattern}'")
             return words

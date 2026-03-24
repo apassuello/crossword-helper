@@ -6,8 +6,8 @@ grid fill difficulty, and overall crossword construction metrics.
 """
 
 # Letter frequency categories based on crossword fill difficulty
-COMMON_LETTERS = set('EARIOTNS')
-UNCOMMON_LETTERS = set('JQXZ')
+COMMON_LETTERS = set("EARIOTNS")
+UNCOMMON_LETTERS = set("JQXZ")
 
 
 def score_word(word: str) -> int:
@@ -74,7 +74,7 @@ def analyze_letters(word: str) -> dict:
     regular_count = len(word) - common_count - uncommon_count
 
     return {
-        'common': common_count,
-        'uncommon': uncommon_count,
-        'regular': regular_count
+        "common": common_count,
+        "uncommon": uncommon_count,
+        "regular": regular_count,
     }

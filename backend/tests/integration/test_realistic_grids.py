@@ -12,15 +12,22 @@ from pathlib import Path
 
 # Import fixtures
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from fixtures.realistic_grid_fixtures import (
-    get_11x11_empty_frontend, get_11x11_empty_cli,
-    get_11x11_filled_frontend, get_11x11_filled_cli,
-    get_11x11_test_cli, get_15x15_empty_frontend,
-    get_15x15_empty_cli, get_15x15_my_puzzle_frontend,
-    get_15x15_my_puzzle_cli, get_21x21_empty_frontend,
-    get_21x21_empty_cli, frontend_to_cli_grid,
-    validate_transformation
+    get_11x11_empty_frontend,
+    get_11x11_empty_cli,
+    get_11x11_filled_frontend,
+    get_11x11_filled_cli,
+    get_11x11_test_cli,
+    get_15x15_empty_frontend,
+    get_15x15_empty_cli,
+    get_15x15_my_puzzle_frontend,
+    get_15x15_my_puzzle_cli,
+    get_21x21_empty_frontend,
+    get_21x21_empty_cli,
+    frontend_to_cli_grid,
+    validate_transformation,
 )
 
 # Paths
@@ -33,13 +40,15 @@ WORDLIST_PATH = PROJECT_ROOT / "data" / "wordlists" / "comprehensive.txt"
 # TRANSFORMATION VALIDATION TESTS (The Critical Bug)
 # ============================================================================
 
+
 def test_transformation_11x11_empty():
     """Verify frontend → CLI transformation for 11x11 empty grid."""
     frontend_data = get_11x11_empty_frontend()
     cli_data = get_11x11_empty_cli()
 
-    assert validate_transformation(frontend_data["grid"], cli_data["grid"]), \
-        "Frontend → CLI transformation failed for 11x11 empty grid"
+    assert validate_transformation(
+        frontend_data["grid"], cli_data["grid"]
+    ), "Frontend → CLI transformation failed for 11x11 empty grid"
 
 
 def test_transformation_11x11_filled():
@@ -47,8 +56,9 @@ def test_transformation_11x11_filled():
     frontend_data = get_11x11_filled_frontend()
     cli_data = get_11x11_filled_cli()
 
-    assert validate_transformation(frontend_data["grid"], cli_data["grid"]), \
-        "Frontend → CLI transformation failed for 11x11 filled grid"
+    assert validate_transformation(
+        frontend_data["grid"], cli_data["grid"]
+    ), "Frontend → CLI transformation failed for 11x11 filled grid"
 
 
 def test_transformation_15x15_empty():
@@ -56,8 +66,9 @@ def test_transformation_15x15_empty():
     frontend_data = get_15x15_empty_frontend()
     cli_data = get_15x15_empty_cli()
 
-    assert validate_transformation(frontend_data["grid"], cli_data["grid"]), \
-        "Frontend → CLI transformation failed for 15x15 empty grid"
+    assert validate_transformation(
+        frontend_data["grid"], cli_data["grid"]
+    ), "Frontend → CLI transformation failed for 15x15 empty grid"
 
 
 def test_transformation_15x15_my_puzzle():
@@ -65,8 +76,9 @@ def test_transformation_15x15_my_puzzle():
     frontend_data = get_15x15_my_puzzle_frontend()
     cli_data = get_15x15_my_puzzle_cli()
 
-    assert validate_transformation(frontend_data["grid"], cli_data["grid"]), \
-        "Frontend → CLI transformation failed for 15x15 my_puzzle"
+    assert validate_transformation(
+        frontend_data["grid"], cli_data["grid"]
+    ), "Frontend → CLI transformation failed for 15x15 my_puzzle"
 
 
 def test_transformation_21x21_empty():
@@ -74,13 +86,15 @@ def test_transformation_21x21_empty():
     frontend_data = get_21x21_empty_frontend()
     cli_data = get_21x21_empty_cli()
 
-    assert validate_transformation(frontend_data["grid"], cli_data["grid"]), \
-        "Frontend → CLI transformation failed for 21x21 empty grid"
+    assert validate_transformation(
+        frontend_data["grid"], cli_data["grid"]
+    ), "Frontend → CLI transformation failed for 21x21 empty grid"
 
 
 # ============================================================================
 # CLI PARSING TESTS (Verify CLI Can Parse Transformed Data)
 # ============================================================================
+
 
 @pytest.mark.slow
 def test_cli_can_parse_11x11_grid(tmp_path):
@@ -105,21 +119,33 @@ def test_cli_can_parse_11x11_grid(tmp_path):
     # Try to load with CLI (this would crash with the bug)
     try:
         result = subprocess.run(
-            ["python", str(CLI_PATH), "fill", str(grid_file),
-             "--timeout", "1", "--json-output",
-             "--wordlists", str(WORDLIST_PATH)],
+            [
+                "python",
+                str(CLI_PATH),
+                "fill",
+                str(grid_file),
+                "--timeout",
+                "1",
+                "--json-output",
+                "--wordlists",
+                str(WORDLIST_PATH),
+            ],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         # Should NOT crash with AttributeError
-        assert "AttributeError" not in result.stderr, \
-            f"CLI crashed parsing 11x11 grid: {result.stderr}"
+        assert (
+            "AttributeError" not in result.stderr
+        ), f"CLI crashed parsing 11x11 grid: {result.stderr}"
 
         # Should load the grid successfully
-        assert "Loading grid" in result.stderr or result.returncode == 0 or "timeout" in result.stderr.lower(), \
-            f"CLI didn't load grid properly: {result.stderr}"
+        assert (
+            "Loading grid" in result.stderr
+            or result.returncode == 0
+            or "timeout" in result.stderr.lower()
+        ), f"CLI didn't load grid properly: {result.stderr}"
 
     except subprocess.TimeoutExpired:
         # Timeout is OK - means it loaded and started processing
@@ -141,16 +167,25 @@ def test_cli_can_parse_15x15_grid(tmp_path):
 
     try:
         result = subprocess.run(
-            ["python", str(CLI_PATH), "fill", str(grid_file),
-             "--timeout", "1", "--json-output",
-             "--wordlists", str(WORDLIST_PATH)],
+            [
+                "python",
+                str(CLI_PATH),
+                "fill",
+                str(grid_file),
+                "--timeout",
+                "1",
+                "--json-output",
+                "--wordlists",
+                str(WORDLIST_PATH),
+            ],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
-        assert "AttributeError" not in result.stderr, \
-            f"CLI crashed parsing 15x15 grid: {result.stderr}"
+        assert (
+            "AttributeError" not in result.stderr
+        ), f"CLI crashed parsing 15x15 grid: {result.stderr}"
 
     except subprocess.TimeoutExpired:
         pass
@@ -171,16 +206,25 @@ def test_cli_can_parse_21x21_grid(tmp_path):
 
     try:
         result = subprocess.run(
-            ["python", str(CLI_PATH), "fill", str(grid_file),
-             "--timeout", "1", "--json-output",
-             "--wordlists", str(WORDLIST_PATH)],
+            [
+                "python",
+                str(CLI_PATH),
+                "fill",
+                str(grid_file),
+                "--timeout",
+                "1",
+                "--json-output",
+                "--wordlists",
+                str(WORDLIST_PATH),
+            ],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
-        assert "AttributeError" not in result.stderr, \
-            f"CLI crashed parsing 21x21 grid: {result.stderr}"
+        assert (
+            "AttributeError" not in result.stderr
+        ), f"CLI crashed parsing 21x21 grid: {result.stderr}"
 
     except subprocess.TimeoutExpired:
         pass
@@ -189,6 +233,7 @@ def test_cli_can_parse_21x21_grid(tmp_path):
 # ============================================================================
 # REGRESSION TEST (The Bug That Was Missed)
 # ============================================================================
+
 
 @pytest.mark.slow
 def test_bug_regression_frontend_dict_causes_crash(tmp_path):
@@ -212,19 +257,29 @@ def test_bug_regression_frontend_dict_causes_crash(tmp_path):
 
     # This SHOULD crash with AttributeError
     result = subprocess.run(
-        ["python", str(CLI_PATH), "fill", str(grid_file),
-         "--timeout", "1", "--json-output",
-         "--wordlists", str(WORDLIST_PATH)],
+        [
+            "python",
+            str(CLI_PATH),
+            "fill",
+            str(grid_file),
+            "--timeout",
+            "1",
+            "--json-output",
+            "--wordlists",
+            str(WORDLIST_PATH),
+        ],
         capture_output=True,
         text=True,
-        timeout=5
+        timeout=5,
     )
 
     # Verify the bug manifests
-    assert "AttributeError" in result.stderr, \
-        "Expected AttributeError when passing frontend dict format to CLI (this is the bug)"
-    assert "'dict' object has no attribute" in result.stderr, \
-        "Expected specific error message about dict not having attribute"
+    assert (
+        "AttributeError" in result.stderr
+    ), "Expected AttributeError when passing frontend dict format to CLI (this is the bug)"
+    assert (
+        "'dict' object has no attribute" in result.stderr
+    ), "Expected specific error message about dict not having attribute"
 
 
 # ============================================================================
@@ -247,6 +302,7 @@ def test_bug_regression_frontend_dict_causes_crash(tmp_path):
 # ============================================================================
 # GRID SIZE VALIDATION
 # ============================================================================
+
 
 def test_validate_grid_sizes():
     """Verify all test grids have correct sizes."""
@@ -271,12 +327,14 @@ def test_validate_grid_dimensions():
     ]
 
     for grid_data, expected_size in grids:
-        assert len(grid_data["grid"]) == expected_size, \
-            f"Grid has {len(grid_data['grid'])} rows, expected {expected_size}"
+        assert (
+            len(grid_data["grid"]) == expected_size
+        ), f"Grid has {len(grid_data['grid'])} rows, expected {expected_size}"
 
         for i, row in enumerate(grid_data["grid"]):
-            assert len(row) == expected_size, \
-                f"Row {i} has {len(row)} cells, expected {expected_size}"
+            assert (
+                len(row) == expected_size
+            ), f"Row {i} has {len(row)} cells, expected {expected_size}"
 
 
 # ============================================================================

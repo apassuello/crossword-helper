@@ -33,11 +33,13 @@ class PatternMatcher:
         self.word_list = word_list
         self._pattern_cache: Dict[str, List[Tuple[str, int]]] = {}
 
-    def find(self,
-             pattern: str,
-             min_score: int = 30,
-             max_results: int = 100,
-             progress_callback=None) -> List[Tuple[str, int]]:
+    def find(
+        self,
+        pattern: str,
+        min_score: int = 30,
+        max_results: int = 100,
+        progress_callback=None,
+    ) -> List[Tuple[str, int]]:
         """
         Find words matching pattern.
 
@@ -55,7 +57,7 @@ class PatternMatcher:
             [('VISA', 85), ('PITA', 80), ('DIVA', 75), ('RITA', 70)]
         """
         # Normalize pattern (convert . to ?)
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
 
         # Check cache
         cache_key = f"{pattern}:{min_score}:{max_results}"
@@ -104,7 +106,7 @@ class PatternMatcher:
         Returns:
             All matching words with scores
         """
-        return self.find(pattern, min_score=0, max_results=float('inf'))
+        return self.find(pattern, min_score=0, max_results=float("inf"))
 
     def count_matches(self, pattern: str, min_score: int = 30) -> int:
         """
@@ -117,7 +119,7 @@ class PatternMatcher:
         Returns:
             Number of matching words
         """
-        return len(self.find(pattern, min_score=min_score, max_results=float('inf')))
+        return len(self.find(pattern, min_score=min_score, max_results=float("inf")))
 
     def _pattern_to_regex(self, pattern: str) -> Pattern:
         """
@@ -184,7 +186,7 @@ class PatternMatcher:
         """
         # Normalize both word and pattern
         word = word.upper()
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
 
         # Check length first (quick rejection)
         if len(word) != len(pattern):

@@ -28,27 +28,27 @@ def analyze_constraints(grid, word_list, pattern_matcher) -> Dict[str, Any]:
     # Count matches per slot (cache by slot identity)
     slot_counts = {}
     for slot in slots:
-        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_key = (slot["row"], slot["col"], slot["direction"])
         pattern = grid.get_pattern_for_slot(slot)
         matches = pattern_matcher.find(pattern, min_score=0)
         slot_counts[slot_key] = len(matches)
 
     # Build cell-to-slot mapping
     cell_across = {}  # (row, col) -> match count for across slot
-    cell_down = {}    # (row, col) -> match count for down slot
+    cell_down = {}  # (row, col) -> match count for down slot
 
     for slot in slots:
-        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_key = (slot["row"], slot["col"], slot["direction"])
         count = slot_counts[slot_key]
-        row, col = slot['row'], slot['col']
+        row, col = slot["row"], slot["col"]
 
-        for i in range(slot['length']):
-            if slot['direction'] == 'across':
+        for i in range(slot["length"]):
+            if slot["direction"] == "across":
                 cell = (row, col + i)
             else:
                 cell = (row + i, col)
 
-            if slot['direction'] == 'across':
+            if slot["direction"] == "across":
                 cell_across[cell] = count
             else:
                 cell_down[cell] = count
@@ -69,25 +69,26 @@ def analyze_constraints(grid, word_list, pattern_matcher) -> Dict[str, Any]:
         min_opts = min(across, down) if across and down else (across or down)
 
         constraints[f"{row},{col}"] = {
-            'across_options': across,
-            'down_options': down,
-            'min_options': min_opts,
+            "across_options": across,
+            "down_options": down,
+            "min_options": min_opts,
         }
 
     # Summary
     total_cells = len(constraints)
-    critical = sum(1 for c in constraints.values() if c['min_options'] < 5)
+    critical = sum(1 for c in constraints.values() if c["min_options"] < 5)
     avg_min = (
-        sum(c['min_options'] for c in constraints.values()) / total_cells
-        if total_cells > 0 else 0
+        sum(c["min_options"] for c in constraints.values()) / total_cells
+        if total_cells > 0
+        else 0
     )
 
     return {
-        'constraints': constraints,
-        'summary': {
-            'total_cells': total_cells,
-            'critical_cells': critical,
-            'average_min_options': round(avg_min, 1),
+        "constraints": constraints,
+        "summary": {
+            "total_cells": total_cells,
+            "critical_cells": critical,
+            "average_min_options": round(avg_min, 1),
         },
     }
 
@@ -110,10 +111,10 @@ def analyze_placement_impact(
     """
     all_slots = grid.get_word_slots()
     target_cells = set()
-    row, col = slot['row'], slot['col']
+    row, col = slot["row"], slot["col"]
 
-    for i in range(slot['length']):
-        if slot['direction'] == 'across':
+    for i in range(slot["length"]):
+        if slot["direction"] == "across":
             target_cells.add((row, col + i))
         else:
             target_cells.add((row + i, col))
@@ -121,17 +122,17 @@ def analyze_placement_impact(
     # Find crossing slots (slots that share at least one cell with target)
     crossing_slots = []
     for s in all_slots:
-        s_key = (s['row'], s['col'], s['direction'])
+        s_id = (s["row"], s["col"], s["direction"])
         # Skip the target slot itself
-        if s_key == (slot['row'], slot['col'], slot['direction']):
+        if s_id == (slot["row"], slot["col"], slot["direction"]):
             continue
 
         s_cells = set()
-        for i in range(s['length']):
-            if s['direction'] == 'across':
-                s_cells.add((s['row'], s['col'] + i))
+        for i in range(s["length"]):
+            if s["direction"] == "across":
+                s_cells.add((s["row"], s["col"] + i))
             else:
-                s_cells.add((s['row'] + i, s['col']))
+                s_cells.add((s["row"] + i, s["col"]))
 
         if s_cells & target_cells:
             crossing_slots.append(s)
@@ -146,7 +147,7 @@ def analyze_placement_impact(
 
     # Place word temporarily in a clone
     cloned_grid = grid.clone()
-    cloned_grid.place_word(word.upper(), slot['row'], slot['col'], slot['direction'])
+    cloned_grid.place_word(word.upper(), slot["row"], slot["col"], slot["direction"])
 
     # Compute after counts
     after_counts = {}
@@ -162,29 +163,33 @@ def analyze_placement_impact(
         before = before_counts[s_key]
         after = after_counts.get(s_key, 0)
         # Find the slot to get its length
-        s_parts = s_key.split(',')
+        s_parts = s_key.split(",")
         s_slot = next(
-            (s for s in crossing_slots
-             if s['row'] == int(s_parts[0]) and s['col'] == int(s_parts[1])
-             and s['direction'] == s_parts[2]),
-            None
+            (
+                s
+                for s in crossing_slots
+                if s["row"] == int(s_parts[0])
+                and s["col"] == int(s_parts[1])
+                and s["direction"] == s_parts[2]
+            ),
+            None,
         )
         impacts[s_key] = {
-            'before': before,
-            'after': after,
-            'delta': after - before,
-            'length': s_slot['length'] if s_slot else 0,
+            "before": before,
+            "after": after,
+            "delta": after - before,
+            "length": s_slot["length"] if s_slot else 0,
         }
 
     # Summary
-    worst_delta = min((i['delta'] for i in impacts.values()), default=0)
-    eliminated = sum(1 for i in impacts.values() if i['after'] == 0)
+    worst_delta = min((i["delta"] for i in impacts.values()), default=0)
+    eliminated = sum(1 for i in impacts.values() if i["after"] == 0)
 
     return {
-        'impacts': impacts,
-        'summary': {
-            'total_crossings': len(impacts),
-            'worst_delta': worst_delta,
-            'crossings_eliminated': eliminated,
+        "impacts": impacts,
+        "summary": {
+            "total_crossings": len(impacts),
+            "worst_delta": worst_delta,
+            "crossings_eliminated": eliminated,
         },
     }

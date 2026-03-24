@@ -6,14 +6,14 @@ All CLI adapter calls are mocked -- no real subprocess invocations.
 
 import json
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_grid(size=5, fill="."):
     """Build a simple size x size grid of strings."""
@@ -39,6 +39,7 @@ def _fill_request(size=5, **overrides):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def client(mocker):
@@ -103,9 +104,7 @@ class TestHealthCheck:
 class TestPatternSearch:
     def test_valid_request(self, client):
         c, mock_adapter = client
-        mock_adapter.pattern.return_value = {
-            "results": [{"word": "CAT", "score": 90}]
-        }
+        mock_adapter.pattern.return_value = {"results": [{"word": "CAT", "score": 90}]}
 
         resp = _post_json(c, "/api/pattern", {"pattern": "C?T"})
         assert resp.status_code == 200
@@ -138,9 +137,7 @@ class TestPatternSearch:
         c, mock_adapter = client
         mock_adapter.pattern.return_value = {"results": []}
 
-        resp = _post_json(
-            c, "/api/pattern", {"pattern": "A?B", "max_results": 10}
-        )
+        resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "max_results": 10})
         assert resp.status_code == 200
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["max_results"] == 10
@@ -149,9 +146,7 @@ class TestPatternSearch:
         c, mock_adapter = client
         mock_adapter.pattern.return_value = {"results": []}
 
-        resp = _post_json(
-            c, "/api/pattern", {"pattern": "A?B", "algorithm": "trie"}
-        )
+        resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "algorithm": "trie"})
         assert resp.status_code == 200
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["algorithm"] == "trie"
@@ -166,7 +161,9 @@ class TestPatternSearch:
 
     def test_adapter_timeout(self, client):
         c, mock_adapter = client
-        mock_adapter.pattern.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=30)
+        mock_adapter.pattern.side_effect = subprocess.TimeoutExpired(
+            cmd="x", timeout=30
+        )
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B"})
         assert resp.status_code == 505
@@ -299,7 +296,9 @@ class TestNormalizeEntry:
 
     def test_adapter_timeout(self, client):
         c, mock_adapter = client
-        mock_adapter.normalize.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
+        mock_adapter.normalize.side_effect = subprocess.TimeoutExpired(
+            cmd="x", timeout=10
+        )
 
         resp = _post_json(c, "/api/normalize", {"text": "foo"})
         assert resp.status_code == 506
@@ -333,7 +332,9 @@ class TestFillGrid:
 
     def test_missing_size(self, client):
         c, _ = client
-        resp = _post_json(c, "/api/fill", {"grid": _make_grid(5), "wordlists": ["comprehensive"]})
+        resp = _post_json(
+            c, "/api/fill", {"grid": _make_grid(5), "wordlists": ["comprehensive"]}
+        )
         assert resp.status_code == 400
 
     def test_no_json_content_type(self, client):
@@ -386,9 +387,7 @@ class TestFillGrid:
         c, mock_adapter = client
         mock_adapter.fill.return_value = {"success": True}
 
-        resp = _post_json(
-            c, "/api/fill", _fill_request(timeout=60, min_score=50)
-        )
+        resp = _post_json(c, "/api/fill", _fill_request(timeout=60, min_score=50))
         assert resp.status_code == 200
         call_kwargs = mock_adapter.fill.call_args[1]
         assert call_kwargs["timeout_seconds"] == 60
@@ -419,7 +418,9 @@ class TestFillWithProgress:
         c, mock_adapter = client
         mock_adapter.cli_path = MagicMock()
         mock_adapter.cli_path.parent = "/fake"
-        mocker.patch("backend.api.routes.create_progress_tracker", return_value="task-123")
+        mocker.patch(
+            "backend.api.routes.create_progress_tracker", return_value="task-123"
+        )
         mock_thread = mocker.patch("backend.api.routes.threading.Thread")
 
         resp = _post_json(c, "/api/fill/with-progress", _fill_request())
@@ -444,9 +445,7 @@ class TestFillWithProgress:
         mocker.patch("backend.api.routes.create_progress_tracker", return_value="t1")
         mock_thread = mocker.patch("backend.api.routes.threading.Thread")
 
-        body = _fill_request(
-            theme_entries={"(0,0,across)": "HELLO"}
-        )
+        body = _fill_request(theme_entries={"(0,0,across)": "HELLO"})
         resp = _post_json(c, "/api/fill/with-progress", body)
         assert resp.status_code == 202
 
@@ -466,7 +465,9 @@ class TestFillWithProgress:
 
         # Check that --adaptive and --max-adaptations appear in cmd_args
         thread_call_args = mock_thread.call_args
-        cmd_args = thread_call_args[1]["args"][1]  # second positional arg to run_cli_with_progress
+        cmd_args = thread_call_args[1]["args"][
+            1
+        ]  # second positional arg to run_cli_with_progress
         assert "--adaptive" in cmd_args
         assert "--max-adaptations" in cmd_args
         assert "5" in cmd_args
@@ -611,7 +612,10 @@ class TestCleanGrid:
         body = resp.get_json()
         # COB is valid across, CAT is valid across
         # Only report on fully filled slots
-        assert body["removed_count"] == 0 or "nothing to clean" in body.get("message", "").lower()
+        assert (
+            body["removed_count"] == 0
+            or "nothing to clean" in body.get("message", "").lower()
+        )
 
     def test_empty_body(self, client):
         c, _ = client
@@ -645,7 +649,9 @@ class TestPatternWithProgress:
 
     def test_missing_pattern_returns_400(self, client):
         c, _ = client
-        resp = _post_json(c, "/api/pattern/with-progress", {"wordlists": ["comprehensive"]})
+        resp = _post_json(
+            c, "/api/pattern/with-progress", {"wordlists": ["comprehensive"]}
+        )
         assert resp.status_code == 400
 
     def test_internal_error(self, client, mocker):

@@ -43,15 +43,13 @@ class GridNumbering:
                     continue
 
                 # Check if starts across word
-                starts_across = (
-                    (col == 0 or grid.is_black(row, col - 1)) and
-                    (col < grid.size - 1 and not grid.is_black(row, col + 1))
+                starts_across = (col == 0 or grid.is_black(row, col - 1)) and (
+                    col < grid.size - 1 and not grid.is_black(row, col + 1)
                 )
 
                 # Check if starts down word
-                starts_down = (
-                    (row == 0 or grid.is_black(row - 1, col)) and
-                    (row < grid.size - 1 and not grid.is_black(row + 1, col))
+                starts_down = (row == 0 or grid.is_black(row - 1, col)) and (
+                    row < grid.size - 1 and not grid.is_black(row + 1, col)
                 )
 
                 # Assign number if starts any word
@@ -85,22 +83,22 @@ class GridNumbering:
         for pos, num in numbering.items():
             row, col = pos
             info = {
-                'position': pos,
-                'has_across': False,
-                'has_down': False,
-                'across_length': None,
-                'down_length': None
+                "position": pos,
+                "has_across": False,
+                "has_down": False,
+                "across_length": None,
+                "down_length": None,
             }
 
             # Find matching slots
             for slot in word_slots:
-                if slot['row'] == row and slot['col'] == col:
-                    if slot['direction'] == 'across':
-                        info['has_across'] = True
-                        info['across_length'] = slot['length']
-                    elif slot['direction'] == 'down':
-                        info['has_down'] = True
-                        info['down_length'] = slot['length']
+                if slot["row"] == row and slot["col"] == col:
+                    if slot["direction"] == "across":
+                        info["has_across"] = True
+                        info["across_length"] = slot["length"]
+                    elif slot["direction"] == "down":
+                        info["has_down"] = True
+                        info["down_length"] = slot["length"]
 
             clue_info[num] = info
 

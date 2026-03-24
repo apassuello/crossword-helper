@@ -16,7 +16,7 @@ from pathlib import Path
 class WordListManager:
     """Enhanced wordlist manager with metadata and category support."""
 
-    def __init__(self, wordlist_dir: str = 'data/wordlists'):
+    def __init__(self, wordlist_dir: str = "data/wordlists"):
         """
         Initialize word list manager.
 
@@ -30,17 +30,17 @@ class WordListManager:
 
     def _load_metadata(self) -> None:
         """Load metadata.json file."""
-        metadata_path = self.wordlist_dir / 'metadata.json'
+        metadata_path = self.wordlist_dir / "metadata.json"
         if metadata_path.exists():
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, "r") as f:
                 self._metadata = json.load(f)
         else:
-            self._metadata = {'wordlists': {}, 'categories': {}, 'tags': {}}
+            self._metadata = {"wordlists": {}, "categories": {}, "tags": {}}
 
     def save_metadata(self) -> None:
         """Save metadata back to file."""
-        metadata_path = self.wordlist_dir / 'metadata.json'
-        with open(metadata_path, 'w') as f:
+        metadata_path = self.wordlist_dir / "metadata.json"
+        with open(metadata_path, "w") as f:
             json.dump(self._metadata, f, indent=2)
 
     def load(self, name: str) -> List[str]:
@@ -64,23 +64,21 @@ class WordListManager:
         # Try direct path first, then with .txt extension
         filepath = self.wordlist_dir / name
         if not filepath.suffix:
-            filepath = filepath.with_suffix('.txt')
+            filepath = filepath.with_suffix(".txt")
 
         # Also try legacy flat structure for backward compatibility
         if not filepath.exists():
             filepath = self.wordlist_dir / f"{name}.txt"
 
         if not filepath.exists():
-            raise FileNotFoundError(
-                f"Wordlist '{name}' not found at {filepath}"
-            )
+            raise FileNotFoundError(f"Wordlist '{name}' not found at {filepath}")
 
         words = []
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 # Skip comments and empty lines
-                if line and not line.startswith('#'):
+                if line and not line.startswith("#"):
                     words.append(line.upper())
 
         self._cache[name] = words
@@ -101,43 +99,49 @@ class WordListManager:
         # Walk through directory structure
         for root, dirs, files in os.walk(self.wordlist_dir):
             # Skip archive and external directories
-            dirs[:] = [d for d in dirs if d not in ('archive', 'external')]
+            dirs[:] = [d for d in dirs if d not in ("archive", "external")]
             root_path = Path(root)
 
-            txt_files = [f for f in files if f.endswith('.txt')]
+            txt_files = [f for f in files if f.endswith(".txt")]
 
             for filename in txt_files:
                 # Get relative path from wordlist_dir
                 rel_path = root_path.relative_to(self.wordlist_dir)
 
                 # Construct wordlist key
-                if rel_path == Path('.'):
+                if rel_path == Path("."):
                     wordlist_key = filename[:-4]
                 else:
                     wordlist_key = str(rel_path / filename[:-4])
 
                 # Normalize path separators
-                wordlist_key = wordlist_key.replace('\\', '/')
+                wordlist_key = wordlist_key.replace("\\", "/")
 
                 # Get metadata if available, with defaults for missing fields
                 default_metadata = {
-                    'name': filename[:-4].replace('_', ' ').title(),
-                    'category': str(rel_path) if rel_path != Path('.') else 'uncategorized',
-                    'description': 'No description available'
+                    "name": filename[:-4].replace("_", " ").title(),
+                    "category": (
+                        str(rel_path) if rel_path != Path(".") else "uncategorized"
+                    ),
+                    "description": "No description available",
                 }
-                actual_metadata = self._metadata['wordlists'].get(wordlist_key, {})
+                actual_metadata = self._metadata["wordlists"].get(wordlist_key, {})
                 # Merge defaults with actual metadata (actual takes precedence)
                 metadata = {**default_metadata, **actual_metadata}
 
                 # Apply category filter if specified
-                if category and metadata.get('category') != category:
+                if category and metadata.get("category") != category:
                     continue
 
                 # Add file info
                 filepath = root_path / filename
-                metadata['key'] = wordlist_key
-                metadata['filepath'] = str(filepath)
-                metadata['word_count'] = len(self.load(wordlist_key)) if wordlist_key in self._cache else None
+                metadata["key"] = wordlist_key
+                metadata["filepath"] = str(filepath)
+                metadata["word_count"] = (
+                    len(self.load(wordlist_key))
+                    if wordlist_key in self._cache
+                    else None
+                )
 
                 wordlists.append(metadata)
 
@@ -150,29 +154,29 @@ class WordListManager:
         Returns:
             List of wordlist keys
         """
-        return [wl['key'] for wl in self.list_all()]
+        return [wl["key"] for wl in self.list_all()]
 
     def get_categories(self) -> Dict[str, Any]:
         """Get all category definitions."""
-        return self._metadata.get('categories', {})
+        return self._metadata.get("categories", {})
 
     def get_tags(self) -> Dict[str, Any]:
         """Get all tag definitions."""
-        return self._metadata.get('tags', {})
+        return self._metadata.get("tags", {})
 
     def get_wordlist_info(self, name: str) -> Dict[str, Any]:
         """Get metadata for a specific wordlist."""
-        info = self._metadata['wordlists'].get(name, {})
-        info['key'] = name
-        info['word_count'] = len(self.load(name))
+        info = self._metadata["wordlists"].get(name, {})
+        info["key"] = name
+        info["word_count"] = len(self.load(name))
 
         # Ensure 'name' field exists (generate from key if missing)
-        if 'name' not in info:
+        if "name" not in info:
             # Generate human-readable name from key
             # e.g., "top_200k" -> "Top 200k", "core/standard" -> "Standard"
-            display_name = name.split('/')[-1]  # Remove path prefix
-            display_name = display_name.replace('_', ' ').title()
-            info['name'] = display_name
+            display_name = name.split("/")[-1]  # Remove path prefix
+            display_name = display_name.replace("_", " ").title()
+            info["name"] = display_name
 
         return info
 
@@ -201,16 +205,18 @@ class WordListManager:
         end_letters = Counter(word[-1] for word in words if word)
 
         return {
-            'total_words': len(words),
-            'length_distribution': dict(length_dist),
-            'letter_frequency': dict(letter_freq.most_common(26)),
-            'most_common_starts': dict(start_letters.most_common(10)),
-            'most_common_ends': dict(end_letters.most_common(10)),
-            'average_length': sum(len(w) for w in words) / len(words) if words else 0,
-            'unique_letters': len(letter_freq)
+            "total_words": len(words),
+            "length_distribution": dict(length_dist),
+            "letter_frequency": dict(letter_freq.most_common(26)),
+            "most_common_starts": dict(start_letters.most_common(10)),
+            "most_common_ends": dict(end_letters.most_common(10)),
+            "average_length": sum(len(w) for w in words) / len(words) if words else 0,
+            "unique_letters": len(letter_freq),
         }
 
-    def search_pattern(self, pattern: str, wordlists: Optional[List[str]] = None) -> List[Tuple[str, str]]:
+    def search_pattern(
+        self, pattern: str, wordlists: Optional[List[str]] = None
+    ) -> List[Tuple[str, str]]:
         """
         Search for words matching a pattern across wordlists.
 
@@ -236,7 +242,7 @@ class WordListManager:
                         continue
 
                     # Check pattern match
-                    if all(p == '?' or p == w for p, w in zip(pattern_upper, word)):
+                    if all(p == "?" or p == w for p, w in zip(pattern_upper, word)):
                         results.append((word, wordlist_name))
             except FileNotFoundError:
                 continue
@@ -254,7 +260,7 @@ class WordListManager:
         """
         filepath = self.wordlist_dir / name
         if not filepath.suffix:
-            filepath = filepath.with_suffix('.txt')
+            filepath = filepath.with_suffix(".txt")
 
         if not filepath.exists() and not create:
             raise FileNotFoundError(f"Wordlist '{name}' not found")
@@ -270,7 +276,7 @@ class WordListManager:
         combined = existing | new_words
 
         # Write back
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             for word in sorted(combined):
                 f.write(f"{word}\n")
 
@@ -278,12 +284,14 @@ class WordListManager:
         self._cache[name] = sorted(combined)
 
         # Update metadata
-        if name not in self._metadata['wordlists']:
-            self._metadata['wordlists'][name] = {
-                'name': name.replace('_', ' ').title(),
-                'category': str(filepath.parent.relative_to(self.wordlist_dir)),
-                'description': 'User-created wordlist',
-                'created': str(Path(filepath).stat().st_mtime if filepath.exists() else 'now')
+        if name not in self._metadata["wordlists"]:
+            self._metadata["wordlists"][name] = {
+                "name": name.replace("_", " ").title(),
+                "category": str(filepath.parent.relative_to(self.wordlist_dir)),
+                "description": "User-created wordlist",
+                "created": str(
+                    Path(filepath).stat().st_mtime if filepath.exists() else "now"
+                ),
             }
-        self._metadata['wordlists'][name]['last_modified'] = 'now'
+        self._metadata["wordlists"][name]["last_modified"] = "now"
         self.save_metadata()

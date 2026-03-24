@@ -6,14 +6,14 @@ from .value_ordering import (
     LCVValueOrdering,
     StratifiedValueOrdering,
     QualityValueOrdering,
-    ThresholdDiverseOrdering
+    ThresholdDiverseOrdering,
 )
 
 __all__ = [
-    'MRVSlotSelector',
-    'CompositeValueOrdering',
-    'LCVValueOrdering',
-    'StratifiedValueOrdering',
-    'QualityValueOrdering',
-    'ThresholdDiverseOrdering'
+    "MRVSlotSelector",
+    "CompositeValueOrdering",
+    "LCVValueOrdering",
+    "StratifiedValueOrdering",
+    "QualityValueOrdering",
+    "ThresholdDiverseOrdering",
 ]

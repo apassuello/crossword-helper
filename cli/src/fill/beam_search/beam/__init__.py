@@ -10,8 +10,8 @@ from .diversity import DiversityStrategy, DiversityManager
 from .manager import BeamManagementStrategy, BeamManager
 
 __all__ = [
-    'DiversityStrategy',
-    'DiversityManager',
-    'BeamManagementStrategy',
-    'BeamManager',
+    "DiversityStrategy",
+    "DiversityManager",
+    "BeamManagementStrategy",
+    "BeamManager",
 ]

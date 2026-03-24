@@ -20,7 +20,7 @@ from .beam_search.state import BeamState
 logger = logging.getLogger(__name__)
 
 # Re-export BeamState for backward compatibility
-__all__ = ['BeamSearchAutofill', 'BeamState']
+__all__ = ["BeamSearchAutofill", "BeamState"]
 
 
 class BeamSearchAutofill(BeamSearchOrchestrator):
@@ -62,7 +62,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         progress_reporter=None,
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
         theme_words=None,
-        partial_fill_mode: bool = False
+        partial_fill_mode: bool = False,
     ):
         """
         Initialize beam search solver.
@@ -98,7 +98,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             progress_reporter=progress_reporter,
             theme_entries=theme_entries,
             theme_words=theme_words,
-            partial_fill_mode=partial_fill_mode
+            partial_fill_mode=partial_fill_mode,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator

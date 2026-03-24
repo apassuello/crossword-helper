@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 from backend.core.edit_merger import EditMerger, GridChanges
 from cli.src.core.grid import Grid
 
-
 # ---------------------------------------------------------------------------
 # Helpers — use size 11 (smallest standard size accepted by Grid.from_dict)
 # ---------------------------------------------------------------------------
@@ -43,7 +42,7 @@ def _make_slot_list_and_id_map(grid_dict):
     slots = grid.get_word_slots()
     slot_id_map = {}
     for idx, slot in enumerate(slots):
-        key = json.dumps([slot['row'], slot['col'], slot['direction']])
+        key = json.dumps([slot["row"], slot["col"], slot["direction"]])
         slot_id_map[key] = idx
     return slots, slot_id_map
 
@@ -67,9 +66,9 @@ def _make_csp_state(
     state.grid_dict = grid_dict
     state.slot_list = slots
     state.slot_id_map = slot_id_map
-    state.domains = domains if domains is not None else {
-        i: [] for i in range(len(slots))
-    }
+    state.domains = (
+        domains if domains is not None else {i: [] for i in range(len(slots))}
+    )
     state.constraints = constraints if constraints is not None else {}
     state.locked_slots = locked_slots if locked_slots is not None else []
     state.used_words = used_words if used_words is not None else []
@@ -91,6 +90,7 @@ def _fill_row(row, word):
 # Tests: get_edit_summary
 # ---------------------------------------------------------------------------
 
+
 class TestGetEditSummary:
     """Tests for EditMerger.get_edit_summary()."""
 
@@ -104,54 +104,55 @@ class TestGetEditSummary:
 
         summary = self.merger.get_edit_summary(gd, gd, slots, sid_map)
 
-        assert summary['filled_count'] == 0
-        assert summary['emptied_count'] == 0
-        assert summary['modified_count'] == 0
-        assert summary['new_words'] == []
-        assert summary['removed_words'] == []
+        assert summary["filled_count"] == 0
+        assert summary["emptied_count"] == 0
+        assert summary["modified_count"] == 0
+        assert summary["new_words"] == []
+        assert summary["removed_words"] == []
 
     def test_added_letters_detected(self):
         """Filling a previously empty slot is detected as filled."""
         saved = _make_grid_dict()
-        word = 'ABCDEFGHIJK'
+        word = "ABCDEFGHIJK"
         edited = _make_grid_dict(letters=_fill_row(0, word))
         slots, sid_map = _make_slot_list_and_id_map(saved)
 
         summary = self.merger.get_edit_summary(saved, edited, slots, sid_map)
 
-        assert summary['filled_count'] >= 1
-        assert word in summary['new_words']
+        assert summary["filled_count"] >= 1
+        assert word in summary["new_words"]
 
     def test_removed_letters_detected(self):
         """Emptying a previously filled slot is detected."""
-        word = 'ABCDEFGHIJK'
+        word = "ABCDEFGHIJK"
         saved = _make_grid_dict(letters=_fill_row(0, word))
         edited = _make_grid_dict()
         slots, sid_map = _make_slot_list_and_id_map(saved)
 
         summary = self.merger.get_edit_summary(saved, edited, slots, sid_map)
 
-        assert summary['emptied_count'] >= 1
-        assert word in summary['removed_words']
+        assert summary["emptied_count"] >= 1
+        assert word in summary["removed_words"]
 
     def test_changed_letters_detected(self):
         """Changing a filled slot to a different word is detected as modified."""
-        old_word = 'ABCDEFGHIJK'
-        new_word = 'ZBCDEFGHIJK'
+        old_word = "ABCDEFGHIJK"
+        new_word = "ZBCDEFGHIJK"
         saved = _make_grid_dict(letters=_fill_row(0, old_word))
         edited = _make_grid_dict(letters=_fill_row(0, new_word))
         slots, sid_map = _make_slot_list_and_id_map(saved)
 
         summary = self.merger.get_edit_summary(saved, edited, slots, sid_map)
 
-        assert summary['modified_count'] >= 1
-        assert old_word in summary['removed_words']
-        assert new_word in summary['new_words']
+        assert summary["modified_count"] >= 1
+        assert old_word in summary["removed_words"]
+        assert new_word in summary["new_words"]
 
 
 # ---------------------------------------------------------------------------
 # Tests: _detect_changes (via internal access)
 # ---------------------------------------------------------------------------
+
 
 class TestDetectChanges:
     """Tests for EditMerger._detect_changes()."""
@@ -163,7 +164,7 @@ class TestDetectChanges:
         """A slot that still has gaps should not appear in filled_slots."""
         saved = _make_grid_dict()
         # Fill only 2 of 11 cells in the across slot at row 0
-        edited = _make_grid_dict(letters={(0, 0): 'A', (0, 1): 'B'})
+        edited = _make_grid_dict(letters={(0, 0): "A", (0, 1): "B"})
         slots, sid_map = _make_slot_list_and_id_map(saved)
 
         saved_grid = Grid.from_dict(saved)
@@ -171,7 +172,7 @@ class TestDetectChanges:
         changes = self.merger._detect_changes(saved_grid, edited_grid, slots, sid_map)
 
         # The across slot at row 0 still has gaps, so not "filled"
-        across_0_id = _find_slot_id(slots, sid_map, 0, 0, 'across')
+        across_0_id = _find_slot_id(slots, sid_map, 0, 0, "across")
         assert across_0_id not in changes.filled_slots
 
     def test_returns_grid_changes_dataclass(self):
@@ -189,6 +190,7 @@ class TestDetectChanges:
 # Tests: _revise (AC-3 arc revision)
 # ---------------------------------------------------------------------------
 
+
 class TestRevise:
     """Tests for EditMerger._revise()."""
 
@@ -199,8 +201,8 @@ class TestRevise:
         """Words that conflict at the crossing position are removed."""
         # slot 0 crosses slot 1: slot 0 position 1 must equal slot 1 position 0
         domains = {
-            0: {'CAT', 'COT', 'CUT'},
-            1: {'APE', 'OWL'},
+            0: {"CAT", "COT", "CUT"},
+            1: {"APE", "OWL"},
         }
         # slot_0[1] must equal slot_1[0]
         # APE[0]='A' -> CAT[1]='A' ok
@@ -209,23 +211,23 @@ class TestRevise:
         revised = self.merger._revise(domains, 0, 1, 1, 0)
 
         assert revised is True
-        assert domains[0] == {'CAT', 'COT'}
+        assert domains[0] == {"CAT", "COT"}
 
     def test_no_pruning_when_compatible(self):
         """No revision when all words are already compatible."""
         domains = {
-            0: {'CAT'},
-            1: {'APE'},
+            0: {"CAT"},
+            1: {"APE"},
         }
         # CAT[1]='A', APE[0]='A' -> compatible
         revised = self.merger._revise(domains, 0, 1, 1, 0)
 
         assert revised is False
-        assert domains[0] == {'CAT'}
+        assert domains[0] == {"CAT"}
 
     def test_missing_slot_returns_false(self):
         """If either slot is missing from domains, return False without error."""
-        domains = {0: {'CAT'}}
+        domains = {0: {"CAT"}}
 
         assert self.merger._revise(domains, 0, 99, 0, 0) is False
         assert self.merger._revise(domains, 99, 0, 0, 0) is False
@@ -235,6 +237,7 @@ class TestRevise:
 # Tests: _validate_state
 # ---------------------------------------------------------------------------
 
+
 class TestValidateState:
     """Tests for EditMerger._validate_state()."""
 
@@ -243,34 +246,35 @@ class TestValidateState:
 
     def test_valid_domains(self):
         """Non-empty domains pass validation."""
-        domains = {0: {'CAT'}, 1: {'DOG'}}
+        domains = {0: {"CAT"}, 1: {"DOG"}}
         slot_list = [
-            {'row': 0, 'col': 0, 'direction': 'across', 'length': 3},
-            {'row': 0, 'col': 0, 'direction': 'down', 'length': 3},
+            {"row": 0, "col": 0, "direction": "across", "length": 3},
+            {"row": 0, "col": 0, "direction": "down", "length": 3},
         ]
 
         result = self.merger._validate_state(domains, {}, slot_list)
 
-        assert result['is_valid'] is True
-        assert result['empty_domains'] == []
+        assert result["is_valid"] is True
+        assert result["empty_domains"] == []
 
     def test_empty_domain_detected(self):
         """An empty domain makes the state invalid."""
-        domains = {0: set(), 1: {'DOG'}}
+        domains = {0: set(), 1: {"DOG"}}
         slot_list = [
-            {'row': 0, 'col': 0, 'direction': 'across', 'length': 3},
-            {'row': 0, 'col': 0, 'direction': 'down', 'length': 3},
+            {"row": 0, "col": 0, "direction": "across", "length": 3},
+            {"row": 0, "col": 0, "direction": "down", "length": 3},
         ]
 
         result = self.merger._validate_state(domains, {}, slot_list)
 
-        assert result['is_valid'] is False
-        assert 0 in result['empty_domains']
+        assert result["is_valid"] is False
+        assert 0 in result["empty_domains"]
 
 
 # ---------------------------------------------------------------------------
 # Tests: merge_edits (integration through the public API)
 # ---------------------------------------------------------------------------
+
 
 class TestMergeEdits:
     """Tests for EditMerger.merge_edits()."""
@@ -285,8 +289,8 @@ class TestMergeEdits:
             # Default: give each slot a list of dummy words of the right length
             domains = {}
             for idx, slot in enumerate(slots):
-                length = slot['length']
-                filler = 'A' * length
+                length = slot["length"]
+                filler = "A" * length
                 domains[idx] = [filler]
         return _make_csp_state(
             grid_dict,
@@ -298,7 +302,7 @@ class TestMergeEdits:
         """merge_edits returns a CSPState with the edited grid_dict."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = 'ABCDEFGHIJK'
+        word = "ABCDEFGHIJK"
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
@@ -309,7 +313,7 @@ class TestMergeEdits:
         """Newly filled slots are added to locked_slots."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = 'ABCDEFGHIJK'
+        word = "ABCDEFGHIJK"
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
@@ -320,7 +324,7 @@ class TestMergeEdits:
         """New words from filled slots appear in used_words."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = 'ABCDEFGHIJK'
+        word = "ABCDEFGHIJK"
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
@@ -333,8 +337,8 @@ class TestMergeEdits:
         slots, sid_map = _make_slot_list_and_id_map(grid_dict)
 
         # Find the across slot at row 0 and the down slot at col 0
-        across_0 = _find_slot_id(slots, sid_map, 0, 0, 'across')
-        down_0 = _find_slot_id(slots, sid_map, 0, 0, 'down')
+        across_0 = _find_slot_id(slots, sid_map, 0, 0, "across")
+        down_0 = _find_slot_id(slots, sid_map, 0, 0, "down")
 
         assert across_0 is not None and down_0 is not None
 
@@ -342,13 +346,13 @@ class TestMergeEdits:
         # down has only words starting with 'Z' -- conflict at (0,0).
         domains = {}
         for idx, slot in enumerate(slots):
-            length = slot['length']
+            length = slot["length"]
             if idx == across_0:
-                domains[idx] = ['A' * length]
+                domains[idx] = ["A" * length]
             elif idx == down_0:
-                domains[idx] = ['Z' * length]
+                domains[idx] = ["Z" * length]
             else:
-                domains[idx] = ['A' * length]
+                domains[idx] = ["A" * length]
 
         # Constraint: across_0[0] must equal down_0[0]
         constraints = {
@@ -363,7 +367,7 @@ class TestMergeEdits:
         )
 
         # Edit: fill row 0 with 'A's, locking across_0
-        edited = _make_grid_dict(letters=_fill_row(0, 'A' * GRID_SIZE))
+        edited = _make_grid_dict(letters=_fill_row(0, "A" * GRID_SIZE))
 
         with pytest.raises(ValueError, match="unsolvable"):
             self.merger.merge_edits(state, edited)

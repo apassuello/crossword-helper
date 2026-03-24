@@ -304,7 +304,7 @@ class TestBeamSearchAutofill:
 
         timeout = 10
         start = time.time()
-        result = autofill.fill(timeout=timeout)
+        autofill.fill(timeout=timeout)
         elapsed = time.time() - start
 
         # Should not exceed timeout by more than 5 seconds (fixed ceiling, not % —

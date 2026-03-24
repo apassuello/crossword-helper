@@ -114,12 +114,14 @@ class Autofill:
 
     def fill(
         self,
-        timeout: Optional[int] = None,  # NEW: For interface compatibility with AdaptiveAutofill
+        timeout: Optional[
+            int
+        ] = None,  # NEW: For interface compatibility with AdaptiveAutofill
         interactive: bool = False,
         use_mac: bool = True,
         random_seed: int = None,
         resume_state: Optional[CSPState] = None,  # NEW: Resume from saved state
-        task_id: Optional[str] = None  # NEW: Task ID for state saving
+        task_id: Optional[str] = None,  # NEW: Task ID for state saving
     ) -> FillResult:
         """
         Fill grid using backtracking CSP.
@@ -216,10 +218,7 @@ class Autofill:
         )
 
     def _resume_fill(
-        self,
-        resume_state: CSPState,
-        task_id: Optional[str],
-        use_mac: bool = True
+        self, resume_state: CSPState, task_id: Optional[str], use_mac: bool = True
     ) -> FillResult:
         """
         Resume fill from saved state.
@@ -245,22 +244,15 @@ class Autofill:
         self.locked_slots = set(resume_state.locked_slots)
 
         # Continue backtracking from saved position
-        slots_list = [
-            self.slot_list[slot_id] for slot_id in resume_state.slots_sorted
-        ]
+        slots_list = [self.slot_list[slot_id] for slot_id in resume_state.slots_sorted]
 
         try:
             if use_mac:
                 success = self._backtrack_with_mac(
-                    slots_list,
-                    resume_state.current_slot_index,
-                    task_id
+                    slots_list, resume_state.current_slot_index, task_id
                 )
             else:
-                success = self._backtrack(
-                    slots_list,
-                    resume_state.current_slot_index
-                )
+                success = self._backtrack(slots_list, resume_state.current_slot_index)
         except TimeoutError:
             success = False
         except PausedException:
@@ -287,7 +279,7 @@ class Autofill:
         attempts: int = 3,
         timeout_per_attempt: int = 100,
         interactive: bool = False,
-        use_mac: bool = True
+        use_mac: bool = True,
     ) -> FillResult:
         """
         Fill grid with randomized restart strategy (Phase 3.2).
@@ -317,18 +309,21 @@ class Autofill:
             self.timeout = timeout_per_attempt
 
             # Use different random seed for each attempt
-            random_seed = attempt + 1 if attempt > 0 else None  # First attempt: no shuffle
+            random_seed = (
+                attempt + 1 if attempt > 0 else None
+            )  # First attempt: no shuffle
 
             # Try filling with this seed
             try:
                 result = self.fill(
-                    interactive=interactive,
-                    use_mac=use_mac,
-                    random_seed=random_seed
+                    interactive=interactive, use_mac=use_mac, random_seed=random_seed
                 )
 
                 # Track best result
-                if best_result is None or result.slots_filled > best_result.slots_filled:
+                if (
+                    best_result is None
+                    or result.slots_filled > best_result.slots_filled
+                ):
                     best_result = result
                     # If perfect solution, stop early
                     if result.success:
@@ -345,14 +340,18 @@ class Autofill:
         if best_result:
             self.grid = best_result.grid
 
-        return best_result if best_result else FillResult(
-            success=False,
-            grid=self.grid,
-            time_elapsed=attempts * timeout_per_attempt,
-            slots_filled=0,
-            total_slots=len(self.grid.get_empty_slots()),
-            problematic_slots=self.grid.get_empty_slots(),
-            iterations=0,
+        return (
+            best_result
+            if best_result
+            else FillResult(
+                success=False,
+                grid=self.grid,
+                time_elapsed=attempts * timeout_per_attempt,
+                slots_filled=0,
+                total_slots=len(self.grid.get_empty_slots()),
+                problematic_slots=self.grid.get_empty_slots(),
+                iterations=0,
+            )
         )
 
     def _initialize_csp(self, slots: List[Dict]) -> None:
@@ -401,14 +400,14 @@ class Autofill:
 
             # Apply stratified sampling if domain too large (Phase 2 optimization)
             if len(candidates) > 10000:
-                self.domains[idx] = self._stratified_sample(candidates, target_size=5000)
+                self.domains[idx] = self._stratified_sample(
+                    candidates, target_size=5000
+                )
             else:
                 self.domains[idx] = {word for word, score in candidates}
 
     def _stratified_sample(
-        self,
-        candidates: List[Tuple[str, int]],
-        target_size: int = 5000
+        self, candidates: List[Tuple[str, int]], target_size: int = 5000
     ) -> Set[str]:
         """
         Sample domain ensuring letter diversity across score ranges (Phase 2).
@@ -451,12 +450,16 @@ class Autofill:
             pattern_length = len(candidates[0][0])
             for pos in range(pattern_length):
                 letters_at_pos = {word[pos] for word in sampled if pos < len(word)}
-                missing = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ') - letters_at_pos
+                missing = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") - letters_at_pos
 
                 # Add highest-scored word with each missing letter
                 if missing:
                     for letter in missing:
-                        matching = [w for w, s in candidates if len(w) > pos and w[pos] == letter]
+                        matching = [
+                            w
+                            for w, s in candidates
+                            if len(w) > pos and w[pos] == letter
+                        ]
                         if matching:
                             sampled.add(matching[0])
 
@@ -479,7 +482,7 @@ class Autofill:
             self.letter_frequency_table[length] = {}
             for pos in range(length):
                 self.letter_frequency_table[length][pos] = {
-                    chr(ord('A') + i): 0 for i in range(26)
+                    chr(ord("A") + i): 0 for i in range(26)
                 }
 
         # Count letter frequencies from word list
@@ -493,7 +496,10 @@ class Autofill:
 
             # Count each letter at each position
             for pos, letter in enumerate(word):
-                if letter.isalpha() and letter in self.letter_frequency_table[length][pos]:
+                if (
+                    letter.isalpha()
+                    and letter in self.letter_frequency_table[length][pos]
+                ):
                     self.letter_frequency_table[length][pos][letter] += 1
 
     def _lcv_score_fast(self, word: str, slot: Dict) -> float:
@@ -514,7 +520,7 @@ class Autofill:
         word = word.upper()
 
         # Find slot ID for this slot
-        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_key = (slot["row"], slot["col"], slot["direction"])
         slot_id = self.slot_id_map.get(slot_key)
 
         if slot_id is None:
@@ -527,7 +533,7 @@ class Autofill:
         for other_slot_id, my_pos, other_pos in crossing_constraints:
             # Get the crossing slot
             other_slot = self.slot_list[other_slot_id]
-            other_length = other_slot['length']
+            other_length = other_slot["length"]
 
             # Get the letter at crossing position
             if my_pos >= len(word):
@@ -538,9 +544,9 @@ class Autofill:
             # Look up frequency of this letter at other slot's position
             if other_length in self.letter_frequency_table:
                 if other_pos in self.letter_frequency_table[other_length]:
-                    frequency = self.letter_frequency_table[other_length][other_pos].get(
-                        crossing_letter, 0
-                    )
+                    frequency = self.letter_frequency_table[other_length][
+                        other_pos
+                    ].get(crossing_letter, 0)
                     score += frequency
 
         # Normalize by number of crossings (or return 0 if no crossings)
@@ -569,7 +575,7 @@ class Autofill:
         word = word.upper()
 
         # Find slot ID for this slot
-        slot_key = (slot['row'], slot['col'], slot['direction'])
+        slot_key = (slot["row"], slot["col"], slot["direction"])
         slot_id = self.slot_id_map.get(slot_key)
 
         if slot_id is None:
@@ -595,13 +601,13 @@ class Autofill:
             crossing_letter = word[my_pos]
             new_pattern = list(current_pattern)
             new_pattern[other_pos] = crossing_letter
-            new_pattern_str = ''.join(new_pattern)
+            new_pattern_str = "".join(new_pattern)
 
             # Count how many words match the new pattern
             matching_words = self.pattern_matcher.find(
                 new_pattern_str,
                 min_score=self.min_score,
-                max_results=None  # Count all matches
+                max_results=None,  # Count all matches
             )
 
             # Add count to score (more matches = less constraining)
@@ -786,13 +792,16 @@ class Autofill:
             current_progress = int((current_index / len(slots)) * 100)
             if current_progress - self.last_progress_report >= 5:
                 self.last_progress_report = current_progress
-                filled_slots = sum(1 for s in slots[:current_index]
-                                 if '?' not in self.grid.get_pattern_for_slot(s))
+                filled_slots = sum(
+                    1
+                    for s in slots[:current_index]
+                    if "?" not in self.grid.get_pattern_for_slot(s)
+                )
                 self.progress_reporter.update(
                     current_progress,
-                    f'Filling slots: {filled_slots}/{len(slots)} filled',
-                    'running',
-                    {'grid': self.grid.to_dict()['grid']}
+                    f"Filling slots: {filled_slots}/{len(slots)} filled",
+                    "running",
+                    {"grid": self.grid.to_dict()["grid"]},
                 )
 
         # Base case: all slots filled
@@ -829,12 +838,16 @@ class Autofill:
             if self._forward_check(slot):
                 # Send incremental grid update
                 if self.progress_reporter:
-                    filled_count = sum(1 for s in slots if '?' not in self.grid.get_pattern_for_slot(s))
+                    filled_count = sum(
+                        1 for s in slots if "?" not in self.grid.get_pattern_for_slot(s)
+                    )
                     self.progress_reporter.update(
                         min(95, int((filled_count / len(slots)) * 100)),
-                        f'Filling slots: {filled_count}/{len(slots)} filled',
-                        'running',
-                        {'grid': self.grid.to_dict()['grid']}  # Send current grid state
+                        f"Filling slots: {filled_count}/{len(slots)} filled",
+                        "running",
+                        {
+                            "grid": self.grid.to_dict()["grid"]
+                        },  # Send current grid state
                     )
 
                 # Recurse
@@ -851,10 +864,7 @@ class Autofill:
         return False
 
     def _backtrack_with_mac(
-        self,
-        slots: List[Dict],
-        current_index: int,
-        task_id: Optional[str] = None
+        self, slots: List[Dict], current_index: int, task_id: Optional[str] = None
     ) -> bool:
         """
         Backtracking with MAC (Maintaining Arc Consistency) - Phase 2.
@@ -891,13 +901,16 @@ class Autofill:
             current_progress = int((current_index / len(slots)) * 100)
             if current_progress - self.last_progress_report >= 5:
                 self.last_progress_report = current_progress
-                filled_slots = sum(1 for s in slots[:current_index]
-                                 if '?' not in self.grid.get_pattern_for_slot(s))
+                filled_slots = sum(
+                    1
+                    for s in slots[:current_index]
+                    if "?" not in self.grid.get_pattern_for_slot(s)
+                )
                 self.progress_reporter.update(
                     current_progress,
-                    f'Filling slots (MAC): {filled_slots}/{len(slots)} filled',
-                    'running',
-                    {'grid': self.grid.to_dict()['grid']}
+                    f"Filling slots (MAC): {filled_slots}/{len(slots)} filled",
+                    "running",
+                    {"grid": self.grid.to_dict()["grid"]},
                 )
 
         # Base case: all slots filled
@@ -956,7 +969,9 @@ class Autofill:
 
         # Phase 3.2: Randomized restart - shuffle candidates if seed provided
         if self.random_seed is not None:
-            rng = random.Random(self.random_seed + current_index)  # Unique seed per slot
+            rng = random.Random(
+                self.random_seed + current_index
+            )  # Unique seed per slot
             rng.shuffle(candidates)
 
         # Try each candidate (now sorted by LCV - least constraining first, or shuffled)
@@ -972,17 +987,21 @@ class Autofill:
             saved_domains = {k: v.copy() for k, v in self.domains.items()}
 
             # Run incremental AC-3 from this slot (KEY MAC STEP!)
-            slot_id = self.slot_id_map.get((slot["row"], slot["col"], slot["direction"]))
+            slot_id = self.slot_id_map.get(
+                (slot["row"], slot["col"], slot["direction"])
+            )
 
             if slot_id is not None and self._ac3_incremental(slot_id):
                 # AC-3 succeeded, send progress update
                 if self.progress_reporter:
-                    filled_count = sum(1 for s in slots if '?' not in self.grid.get_pattern_for_slot(s))
+                    filled_count = sum(
+                        1 for s in slots if "?" not in self.grid.get_pattern_for_slot(s)
+                    )
                     self.progress_reporter.update(
                         min(95, int((filled_count / len(slots)) * 100)),
-                        f'Filling slots (MAC): {filled_count}/{len(slots)} filled',
-                        'running',
-                        {'grid': self.grid.to_dict()['grid']}
+                        f"Filling slots (MAC): {filled_count}/{len(slots)} filled",
+                        "running",
+                        {"grid": self.grid.to_dict()["grid"]},
                     )
 
                 # Recurse
@@ -1053,7 +1072,9 @@ class Autofill:
 
         # Get matching words
         candidates = self.pattern_matcher.find(
-            pattern, min_score=self.min_score, max_results=1000  # FIXED: Was 100, now 1000 for more backtracking options
+            pattern,
+            min_score=self.min_score,
+            max_results=1000,  # FIXED: Was 100, now 1000 for more backtracking options
         )
 
         return candidates
@@ -1183,10 +1204,7 @@ class Autofill:
         return False
 
     def _handle_pause(
-        self,
-        current_index: int,
-        task_id: Optional[str],
-        total_slots: int
+        self, current_index: int, task_id: Optional[str], total_slots: int
     ) -> None:
         """
         Handle pause request by saving current state.
@@ -1204,9 +1222,7 @@ class Autofill:
 
         # Capture current state
         csp_state = self.state_manager.capture_csp_state(
-            self,
-            current_index=current_index,
-            locked_slots=self.locked_slots
+            self, current_index=current_index, locked_slots=self.locked_slots
         )
 
         # Calculate current stats
@@ -1215,32 +1231,26 @@ class Autofill:
 
         # Save state with metadata
         metadata = {
-            'min_score': self.min_score,
-            'timeout': self.timeout,
-            'algorithm': self.algorithm,
-            'grid_size': [self.grid.size, self.grid.size],
-            'total_slots': total_slots,
-            'slots_filled': slots_filled,
-            'time_elapsed': time.time() - self.start_time
+            "min_score": self.min_score,
+            "timeout": self.timeout,
+            "algorithm": self.algorithm,
+            "grid_size": [self.grid.size, self.grid.size],
+            "total_slots": total_slots,
+            "slots_filled": slots_filled,
+            "time_elapsed": time.time() - self.start_time,
         }
 
         state_path = self.state_manager.save_csp_state(
-            task_id=task_id,
-            csp_state=csp_state,
-            metadata=metadata,
-            compress=True
+            task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True
         )
 
         # Report pause via progress reporter
         if self.progress_reporter:
             self.progress_reporter.update(
                 int((slots_filled / total_slots) * 100),
-                f'Paused: {slots_filled}/{total_slots} slots filled',
-                'paused',
-                {
-                    'state_path': str(state_path),
-                    'grid': self.grid.to_dict()['grid']
-                }
+                f"Paused: {slots_filled}/{total_slots} slots filled",
+                "paused",
+                {"state_path": str(state_path), "grid": self.grid.to_dict()["grid"]},
             )
 
     def __repr__(self) -> str:

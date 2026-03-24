@@ -31,25 +31,25 @@ def parse_line(line: str) -> Tuple[Optional[str], Optional[int]]:
     Returns (None, None) if line is invalid.
     """
     line = line.strip()
-    if not line or line.startswith('#'):
+    if not line or line.startswith("#"):
         return None, None
 
     # Skip header lines
-    if line.lower() in ('word', 'word,score', 'word;score'):
+    if line.lower() in ("word", "word,score", "word;score"):
         return None, None
 
     score = None
     word = None
 
     # Try semicolon delimiter first
-    if ';' in line:
-        parts = line.split(';', 1)
+    if ";" in line:
+        parts = line.split(";", 1)
         word = parts[0].strip()
         if len(parts) > 1 and parts[1].strip().isdigit():
             score = int(parts[1].strip())
     # Try comma delimiter
-    elif ',' in line:
-        parts = line.split(',', 1)
+    elif "," in line:
+        parts = line.split(",", 1)
         word = parts[0].strip()
         if len(parts) > 1 and parts[1].strip().isdigit():
             score = int(parts[1].strip())
@@ -62,7 +62,7 @@ def parse_line(line: str) -> Tuple[Optional[str], Optional[int]]:
     # Normalize: uppercase, strip non-alpha characters
     word = word.upper()
     # Remove spaces, hyphens, apostrophes (common in phrase entries)
-    word = re.sub(r'[^A-Z]', '', word)
+    word = re.sub(r"[^A-Z]", "", word)
 
     # Validate: 3-21 letters
     if len(word) < 3 or len(word) > 21:
@@ -75,7 +75,7 @@ def normalize_wordlist(
     input_path: str,
     output_path: str,
     preserve_scores: bool = False,
-    progress_callback=None
+    progress_callback=None,
 ) -> Tuple[int, int]:
     """
     Normalize a wordlist file to the project's standard format.
@@ -93,7 +93,7 @@ def normalize_wordlist(
     output_path = Path(output_path)
 
     # Read all lines
-    with open(input_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(input_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
     total = len(lines)
@@ -124,7 +124,7 @@ def normalize_wordlist(
 
     # Write output
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.writelines(output_lines)
 
     return total, len(seen)
@@ -132,22 +132,22 @@ def normalize_wordlist(
 
 def normalize_all_external():
     """Normalize all external wordlists in the external/ directory."""
-    base_dir = Path(__file__).parent.parent.parent.parent / 'data' / 'wordlists'
-    external_dir = base_dir / 'external'
-    normalized_dir = external_dir / 'normalized'
+    base_dir = Path(__file__).parent.parent.parent.parent / "data" / "wordlists"
+    external_dir = base_dir / "external"
+    normalized_dir = external_dir / "normalized"
     normalized_dir.mkdir(exist_ok=True)
 
     # Wordlist configurations
     # Format: (input_file, output_file, preserve_scores)
     wordlists = [
-        ('christophsjones_scored.txt', 'christophsjones.txt', True),
-        ('ben_crosshatch_scored.txt', 'crosshatch.txt', True),
-        ('broda.owl', 'peter_broda.txt', True),
-        ('common.owl', 'common_5k.txt', False),
-        ('enable1.txt', 'enable.txt', False),
-        ('ospd.txt', 'ospd.txt', False),
-        ('rifkin_300k.txt', 'rifkin_300k.txt', False),
-        ('crossword_nexus.dict', 'crossword_nexus.txt', True),
+        ("christophsjones_scored.txt", "christophsjones.txt", True),
+        ("ben_crosshatch_scored.txt", "crosshatch.txt", True),
+        ("broda.owl", "peter_broda.txt", True),
+        ("common.owl", "common_5k.txt", False),
+        ("enable1.txt", "enable.txt", False),
+        ("ospd.txt", "ospd.txt", False),
+        ("rifkin_300k.txt", "rifkin_300k.txt", False),
+        ("crossword_nexus.dict", "crossword_nexus.txt", True),
     ]
 
     results = []
@@ -164,13 +164,13 @@ def normalize_all_external():
 
         def progress(current, total):
             pct = current * 100 // total
-            print(f"  {pct}% ({current}/{total})", end='\r')
+            print(f"  {pct}% ({current}/{total})", end="\r")
 
         total, unique = normalize_wordlist(
             str(input_path),
             str(output_path),
             preserve_scores=preserve_scores,
-            progress_callback=progress
+            progress_callback=progress,
         )
 
         print(f"  Done: {unique:,} unique words from {total:,} lines")
@@ -183,5 +183,5 @@ def normalize_all_external():
     return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     normalize_all_external()

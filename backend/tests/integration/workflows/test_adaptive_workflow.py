@@ -41,17 +41,19 @@ class TestAdaptiveWorkflow:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 30,
-                "min_score": 10,
-                "algorithm": "beam",
-                "adaptive_mode": True,
-                "max_adaptations": 2
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 30,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                    "adaptive_mode": True,
+                    "max_adaptations": 2,
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -63,8 +65,8 @@ class TestAdaptiveWorkflow:
         assert sse_response.status_code == 200
 
         # Parse SSE stream for completion
-        data_str = sse_response.data.decode('utf-8')
-        assert 'complete' in data_str or 'error' in data_str
+        data_str = sse_response.data.decode("utf-8")
+        assert "complete" in data_str or "error" in data_str
 
     def test_adaptive_with_max_adaptations(self, client):
         """
@@ -77,17 +79,19 @@ class TestAdaptiveWorkflow:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "beam",
-                "adaptive_mode": True,
-                "max_adaptations": 1  # Limit to 1 adaptation
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                    "adaptive_mode": True,
+                    "max_adaptations": 1,  # Limit to 1 adaptation
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -104,16 +108,18 @@ class TestAdaptiveWorkflow:
         # Non-adaptive (may not complete fully)
         response1 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "beam",
-                "adaptive_mode": False
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                    "adaptive_mode": False,
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id_1 = response1.json["task_id"]
@@ -121,17 +127,19 @@ class TestAdaptiveWorkflow:
         # Adaptive (should complete better)
         response2 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "beam",
-                "adaptive_mode": True,
-                "max_adaptations": 2
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                    "adaptive_mode": True,
+                    "max_adaptations": 2,
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id_2 = response2.json["task_id"]

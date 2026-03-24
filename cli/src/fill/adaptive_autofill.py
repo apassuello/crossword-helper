@@ -17,12 +17,14 @@ from ..core.grid import Grid
 try:
     import sys
     import os
+
     # Add backend to path
-    backend_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend')
+    backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend")
     if backend_path not in sys.path:
         sys.path.insert(0, backend_path)
 
     from backend.core.black_square_suggester import BlackSquareSuggester
+
     SUGGESTER_AVAILABLE = True
 except ImportError:
     SUGGESTER_AVAILABLE = False
@@ -54,7 +56,7 @@ class AdaptiveAutofill:
         wordlists: List,
         options: Dict,
         progress_reporter=None,
-        base_autofill=None
+        base_autofill=None,
     ):
         """
         Initialize adaptive autofill.
@@ -74,8 +76,10 @@ class AdaptiveAutofill:
         self.base_autofill = base_autofill  # Store for reuse
 
         # Adaptive behavior settings
-        self.max_adaptations = options.get('max_adaptations', 3)
-        self.adaptation_threshold = options.get('adaptation_threshold', 100)  # Backtracks before adapting
+        self.max_adaptations = options.get("max_adaptations", 3)
+        self.adaptation_threshold = options.get(
+            "adaptation_threshold", 100
+        )  # Backtracks before adapting
         self.min_slot_length = 6  # Don't suggest black squares for short slots
 
         # Tracking
@@ -108,14 +112,14 @@ class AdaptiveAutofill:
             self.autofill = Autofill(
                 grid=self.grid,
                 wordlists=self.wordlists,
-                min_score=self.options.get('min_score', 30),
-                timeout=self.options.get('timeout', 300),
+                min_score=self.options.get("min_score", 30),
+                timeout=self.options.get("timeout", 300),
                 progress_reporter=self.progress_reporter,
-                theme_entries=self.options.get('theme_entries', {})
+                theme_entries=self.options.get("theme_entries", {}),
             )
 
         # Hook into autofill's backtrack callback
-        if hasattr(self.autofill, 'on_backtrack'):
+        if hasattr(self.autofill, "on_backtrack"):
             self.autofill.on_backtrack = self._on_backtrack
 
     def _on_backtrack(self, slot_key: str):
@@ -130,7 +134,9 @@ class AdaptiveAutofill:
 
         # Check if this slot exceeds threshold
         if self.slot_backtrack_counts[slot_key] >= self.adaptation_threshold:
-            logger.info(f"Slot {slot_key} exceeded backtrack threshold ({self.slot_backtrack_counts[slot_key]} backtracks)")
+            logger.info(
+                f"Slot {slot_key} exceeded backtrack threshold ({self.slot_backtrack_counts[slot_key]} backtracks)"
+            )
             # Mark for adaptation
             self.slot_backtrack_counts[slot_key] = -1  # Prevent repeated triggers
 
@@ -154,7 +160,7 @@ class AdaptiveAutofill:
             self.progress_reporter.update(
                 0,
                 f"Adaptive autofill enabled (max {self.max_adaptations} adaptations)",
-                'running'
+                "running",
             )
 
         # Main autofill loop
@@ -170,14 +176,20 @@ class AdaptiveAutofill:
                 # Add adaptation info to FillResult
                 if self.adaptation_count > 0:
                     result.adaptations_applied = self.adaptation_count
-                    result.message = f"Success with {self.adaptation_count} adaptive black square(s)"
+                    result.message = (
+                        f"Success with {self.adaptation_count} adaptive black square(s)"
+                    )
                 return result
 
             # If we've exhausted adaptations, return partial result
             if attempt >= self.max_adaptations:
-                logger.info(f"Max adaptations ({self.max_adaptations}) reached, returning partial result")
+                logger.info(
+                    f"Max adaptations ({self.max_adaptations}) reached, returning partial result"
+                )
                 result.adaptations_applied = self.adaptation_count
-                result.message = f"Partial fill after {self.adaptation_count} adaptations"
+                result.message = (
+                    f"Partial fill after {self.adaptation_count} adaptations"
+                )
                 return result
 
             # Try to adapt the grid
@@ -197,11 +209,15 @@ class AdaptiveAutofill:
                 # Report adaptation
                 if self.progress_reporter:
                     # Calculate progress percentage from fill result
-                    progress = int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0
+                    progress = (
+                        int((result.slots_filled / result.total_slots) * 100)
+                        if result.total_slots > 0
+                        else 0
+                    )
                     self.progress_reporter.update(
                         progress,
                         f"Applied adaptive black square #{self.adaptation_count}, retrying...",
-                        'running'
+                        "running",
                     )
             else:
                 # Can't adapt, return partial result
@@ -231,9 +247,9 @@ class AdaptiveAutofill:
 
         # Get black square suggestions for this slot
         suggestions = self.suggester.suggest_placements(
-            grid=self.grid.to_dict()['grid'],
+            grid=self.grid.to_dict()["grid"],
             problematic_slot=problematic_slot,
-            max_suggestions=3
+            max_suggestions=3,
         )
 
         if not suggestions or len(suggestions) == 0:
@@ -242,7 +258,9 @@ class AdaptiveAutofill:
 
         # Apply the best suggestion (highest score)
         best = suggestions[0]
-        logger.info(f"Applying black square at ({best['row']}, {best['col']}) with score {best['score']}")
+        logger.info(
+            f"Applying black square at ({best['row']}, {best['col']}) with score {best['score']}"
+        )
 
         # Apply to grid
         self._apply_black_square(best)
@@ -255,14 +273,14 @@ class AdaptiveAutofill:
             self.progress_reporter.update(
                 0,
                 f"Adaptation #{self.adaptation_count + 1}: Added black square at ({best['row']}, {best['col']}) - {best['reasoning'][:50]}...",
-                'running',
+                "running",
                 {
-                    'adaptation': {
-                        'count': self.adaptation_count + 1,
-                        'position': (best['row'], best['col']),
-                        'reasoning': best['reasoning']
+                    "adaptation": {
+                        "count": self.adaptation_count + 1,
+                        "position": (best["row"], best["col"]),
+                        "reasoning": best["reasoning"],
                     }
-                }
+                },
             )
 
         return True
@@ -282,8 +300,7 @@ class AdaptiveAutofill:
         """
         # Find slots marked as problematic (backtrack count = -1)
         problematic_keys = [
-            key for key, count in self.slot_backtrack_counts.items()
-            if count == -1
+            key for key, count in self.slot_backtrack_counts.items() if count == -1
         ]
 
         if not problematic_keys:
@@ -294,14 +311,14 @@ class AdaptiveAutofill:
         slots = []
         for key in problematic_keys:
             slot_info = self._get_slot_info(key)
-            if slot_info and slot_info['length'] >= self.min_slot_length:
+            if slot_info and slot_info["length"] >= self.min_slot_length:
                 slots.append(slot_info)
 
         if not slots:
             return None
 
         # Return longest slot (most likely to benefit from splitting)
-        slots.sort(key=lambda s: s['length'], reverse=True)
+        slots.sort(key=lambda s: s["length"], reverse=True)
         return slots[0]
 
     def _find_most_constrained_slot(self) -> Optional[Dict]:
@@ -312,31 +329,39 @@ class AdaptiveAutofill:
             Slot dict or None
         """
         slots = []
-        grid_dict = self.grid.to_dict()['grid']
+        grid_dict = self.grid.to_dict()["grid"]
 
         # Scan grid for empty slots
         for row in range(self.grid.size):
             for col in range(self.grid.size):
-                if grid_dict[row][col] == '#':
+                if grid_dict[row][col] == "#":
                     continue
 
                 # Check if start of across word
-                if col == 0 or grid_dict[row][col - 1] == '#':
-                    slot = self._extract_slot(row, col, 'across', grid_dict)
-                    if slot and slot['length'] >= self.min_slot_length and '?' in slot['pattern']:
+                if col == 0 or grid_dict[row][col - 1] == "#":
+                    slot = self._extract_slot(row, col, "across", grid_dict)
+                    if (
+                        slot
+                        and slot["length"] >= self.min_slot_length
+                        and "?" in slot["pattern"]
+                    ):
                         slots.append(slot)
 
                 # Check if start of down word
-                if row == 0 or grid_dict[row - 1][col] == '#':
-                    slot = self._extract_slot(row, col, 'down', grid_dict)
-                    if slot and slot['length'] >= self.min_slot_length and '?' in slot['pattern']:
+                if row == 0 or grid_dict[row - 1][col] == "#":
+                    slot = self._extract_slot(row, col, "down", grid_dict)
+                    if (
+                        slot
+                        and slot["length"] >= self.min_slot_length
+                        and "?" in slot["pattern"]
+                    ):
                         slots.append(slot)
 
         if not slots:
             return None
 
         # Return longest slot
-        slots.sort(key=lambda s: s['length'], reverse=True)
+        slots.sort(key=lambda s: s["length"], reverse=True)
         return slots[0]
 
     def _get_slot_info(self, slot_key: str) -> Optional[Dict]:
@@ -350,49 +375,51 @@ class AdaptiveAutofill:
             Slot dict or None
         """
         try:
-            parts = slot_key.strip('()').split(',')
+            parts = slot_key.strip("()").split(",")
             row = int(parts[0])
             col = int(parts[1])
             direction = parts[2]
 
-            grid_dict = self.grid.to_dict()['grid']
+            grid_dict = self.grid.to_dict()["grid"]
             return self._extract_slot(row, col, direction, grid_dict)
         except (ValueError, IndexError):
             logger.warning(f"Invalid slot key: {slot_key}")
             return None
 
-    def _extract_slot(self, row: int, col: int, direction: str, grid: List[List]) -> Optional[Dict]:
+    def _extract_slot(
+        self, row: int, col: int, direction: str, grid: List[List]
+    ) -> Optional[Dict]:
         """
         Extract slot info from grid.
 
         Returns:
             Dict with keys: row, col, direction, length, pattern, candidate_count
         """
-        pattern = ''
+        pattern = ""
 
-        if direction == 'across':
+        if direction == "across":
             c = col
-            while c < len(grid[row]) and grid[row][c] != '#':
+            while c < len(grid[row]) and grid[row][c] != "#":
                 letter = grid[row][c]
-                pattern += letter if letter not in ['.', ''] else '?'
+                pattern += letter if letter not in [".", ""] else "?"
                 c += 1
         else:  # down
             r = row
-            while r < len(grid) and grid[r][col] != '#':
+            while r < len(grid) and grid[r][col] != "#":
                 letter = grid[r][col]
-                pattern += letter if letter not in ['.', ''] else '?'
+                pattern += letter if letter not in [".", ""] else "?"
                 r += 1
 
         if len(pattern) < 3:
             return None
 
         return {
-            'row': row,
-            'col': col,
-            'direction': direction,
-            'length': len(pattern),
-            'pattern': pattern,
-            'candidate_count': 0  # Will be calculated by suggester
+            "row": row,
+            "col": col,
+            "direction": direction,
+            "length": len(pattern),
+            "pattern": pattern,
+            "candidate_count": 0,  # Will be calculated by suggester
         }
 
     def _apply_black_square(self, suggestion: Dict):
@@ -404,12 +431,14 @@ class AdaptiveAutofill:
         """
         # Apply primary black square (with symmetry handled automatically by Grid class)
         self.grid.set_black_square(
-            suggestion['row'],
-            suggestion['col'],
-            enforce_symmetry=True  # Grid class will handle symmetric position
+            suggestion["row"],
+            suggestion["col"],
+            enforce_symmetry=True,  # Grid class will handle symmetric position
         )
 
-        sym_row = suggestion['symmetric_position']['row']
-        sym_col = suggestion['symmetric_position']['col']
+        sym_row = suggestion["symmetric_position"]["row"]
+        sym_col = suggestion["symmetric_position"]["col"]
 
-        logger.info(f"Applied black squares at ({suggestion['row']}, {suggestion['col']}) and ({sym_row}, {sym_col})")
+        logger.info(
+            f"Applied black squares at ({suggestion['row']}, {suggestion['col']}) and ({sym_row}, {sym_col})"
+        )

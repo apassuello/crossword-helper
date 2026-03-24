@@ -16,7 +16,9 @@ import json
 
 def create_empty_grid(size=11):
     """Helper to create empty grid."""
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+    return [
+        [{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)
+    ]
 
 
 class TestCreateFillExportWorkflow:
@@ -38,15 +40,17 @@ class TestCreateFillExportWorkflow:
         # Step 2: Run autofill
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -74,19 +78,21 @@ class TestCreateFillExportWorkflow:
         # Get black square suggestions for a problematic slot
         response = client.post(
             "/api/grid/suggest-black-square",
-            data=json.dumps({
-                "grid": grid,
-                "grid_size": 11,
-                "problematic_slot": {
-                    "row": 0,
-                    "col": 0,
-                    "direction": "across",
-                    "length": 11,
-                    "pattern": "???????????"
-                },
-                "max_suggestions": 3
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "grid": grid,
+                    "grid_size": 11,
+                    "problematic_slot": {
+                        "row": 0,
+                        "col": 0,
+                        "direction": "across",
+                        "length": 11,
+                        "pattern": "???????????",
+                    },
+                    "max_suggestions": 3,
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -95,15 +101,20 @@ class TestCreateFillExportWorkflow:
         if suggestions:
             # Apply first suggestion (with symmetric pair)
             suggestion = suggestions[0]
-            sym = suggestion.get("symmetric_position", {"row": 10 - suggestion["row"], "col": 10 - suggestion["col"]})
+            sym = suggestion.get(
+                "symmetric_position",
+                {"row": 10 - suggestion["row"], "col": 10 - suggestion["col"]},
+            )
             response = client.post(
                 "/api/grid/apply-black-squares",
-                data=json.dumps({
-                    "grid": grid,
-                    "primary": {"row": suggestion["row"], "col": suggestion["col"]},
-                    "symmetric": sym
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {
+                        "grid": grid,
+                        "primary": {"row": suggestion["row"], "col": suggestion["col"]},
+                        "symmetric": sym,
+                    }
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 200
@@ -112,15 +123,17 @@ class TestCreateFillExportWorkflow:
             # Run autofill on modified grid
             response = client.post(
                 "/api/fill/with-progress",
-                data=json.dumps({
-                    "size": 11,
-                    "grid": modified_grid,
-                    "wordlists": ["comprehensive"],
-                    "timeout": 15,
-                    "min_score": 10,
-                    "algorithm": "trie"
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {
+                        "size": 11,
+                        "grid": modified_grid,
+                        "wordlists": ["comprehensive"],
+                        "timeout": 15,
+                        "min_score": 10,
+                        "algorithm": "trie",
+                    }
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 202
@@ -136,15 +149,17 @@ class TestCreateFillExportWorkflow:
 
             response = client.post(
                 "/api/fill/with-progress",
-                data=json.dumps({
-                    "size": size,
-                    "grid": grid,
-                    "wordlists": ["comprehensive"],
-                    "timeout": 20 if size == 15 else 15,
-                    "min_score": 10,
-                    "algorithm": "trie"
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {
+                        "size": size,
+                        "grid": grid,
+                        "wordlists": ["comprehensive"],
+                        "timeout": 20 if size == 15 else 15,
+                        "min_score": 10,
+                        "algorithm": "trie",
+                    }
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 202

@@ -24,7 +24,7 @@ class DiversityStrategy(ABC):
         slot: Dict,
         beam_width: int,
         num_groups: int = 4,
-        diversity_lambda: float = 0.5
+        diversity_lambda: float = 0.5,
     ) -> List[BeamState]:
         """
         Select diverse states from expanded beam.
@@ -41,7 +41,9 @@ class DiversityStrategy(ABC):
         """
 
     @abstractmethod
-    def apply_diversity_bonus(self, beam: List[BeamState], diversity_bonus: float) -> List[BeamState]:
+    def apply_diversity_bonus(
+        self, beam: List[BeamState], diversity_bonus: float
+    ) -> List[BeamState]:
         """
         Apply bonus to states that differ from others in beam.
 
@@ -73,7 +75,7 @@ class DiversityManager(DiversityStrategy):
         slot: Dict,
         beam_width: int,
         num_groups: int = 4,
-        diversity_lambda: float = 0.5
+        diversity_lambda: float = 0.5,
     ) -> List[BeamState]:
         """
         Select diverse states from expanded beam using Diverse Beam Search principles.
@@ -140,7 +142,9 @@ class DiversityManager(DiversityStrategy):
 
         # Debug output
         if len(result) > 0:
-            logger.debug(f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates")
+            logger.debug(
+                f"  DEBUG DIVERSE PRUNE: Selected {len(result)} diverse states from {len(expanded_beam)} candidates"
+            )
             logger.debug(f"    Groups={num_groups}, Lambda={diversity_lambda}")
 
         return result[:beam_width]
@@ -159,7 +163,9 @@ class DiversityManager(DiversityStrategy):
             Diversity score (higher = more different)
         """
         # Count different word assignments
-        all_slots = set(state1.slot_assignments.keys()) | set(state2.slot_assignments.keys())
+        all_slots = set(state1.slot_assignments.keys()) | set(
+            state2.slot_assignments.keys()
+        )
 
         different_count = 0
         for slot_id in all_slots:
@@ -178,7 +184,7 @@ class DiversityManager(DiversityStrategy):
         candidates: List[Tuple[str, int]],
         beam_width: int,
         num_groups: int = 4,
-        diversity_lambda: float = 0.5
+        diversity_lambda: float = 0.5,
     ) -> List[BeamState]:
         """
         Diverse Beam Search (Vijayakumar et al., 2016 AAAI).
@@ -239,11 +245,15 @@ class DiversityManager(DiversityStrategy):
 
                     # Create new state
                     new_state = state.clone()
-                    new_state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    new_state.grid.place_word(
+                        word, slot["row"], slot["col"], slot["direction"]
+                    )
                     new_state.slots_filled += 1
                     new_state.score += augmented_score
                     new_state.used_words.add(word)
-                    new_state.slot_assignments[(slot['row'], slot['col'], slot['direction'])] = word
+                    new_state.slot_assignments[
+                        (slot["row"], slot["col"], slot["direction"])
+                    ] = word
 
                     group_states.append((new_state, augmented_score))
 
@@ -261,8 +271,12 @@ class DiversityManager(DiversityStrategy):
 
         # DEBUG: Show diversity effect
         if result:
-            logger.debug(f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups")
-            logger.debug(f"    Diversity lambda={diversity_lambda} applied to prevent collapse")
+            logger.debug(
+                f"  DEBUG DIVERSE BEAM: Generated {len(result)} diverse candidates from {num_groups} groups"
+            )
+            logger.debug(
+                f"    Diversity lambda={diversity_lambda} applied to prevent collapse"
+            )
 
         return result[:beam_width]  # Maintain constant beam width
 
@@ -287,14 +301,18 @@ class DiversityManager(DiversityStrategy):
 
         # Get all crossing slots for this slot
         for other_slot in state.grid.slots:
-            if other_slot['direction'] != slot['direction']:
+            if other_slot["direction"] != slot["direction"]:
                 # Check if they intersect
                 intersection = self._get_slot_intersection(slot, other_slot)
                 if intersection:
                     my_pos, their_pos = intersection
 
                     # Check if other slot is filled
-                    other_id = (other_slot['row'], other_slot['col'], other_slot['direction'])
+                    other_id = (
+                        other_slot["row"],
+                        other_slot["col"],
+                        other_slot["direction"],
+                    )
                     if other_id in state.slot_assignments:
                         other_word = state.slot_assignments[other_id]
                         # Count if letters differ
@@ -305,9 +323,7 @@ class DiversityManager(DiversityStrategy):
         return diff_count
 
     def apply_diversity_bonus(
-        self,
-        beam: List[BeamState],
-        diversity_bonus: float
+        self, beam: List[BeamState], diversity_bonus: float
     ) -> List[BeamState]:
         """
         Apply bonus to states that differ from others in beam.
@@ -348,11 +364,7 @@ class DiversityManager(DiversityStrategy):
 
         return beam
 
-    def count_differences(
-        self,
-        state1: BeamState,
-        state2: BeamState
-    ) -> int:
+    def count_differences(self, state1: BeamState, state2: BeamState) -> int:
         """
         Count number of slots with different words between two states.
 
@@ -394,7 +406,9 @@ class DiversityManager(DiversityStrategy):
         # Symmetric difference: words in one but not both
         return len(words1 ^ words2)
 
-    def _get_slot_intersection(self, slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
+    def _get_slot_intersection(
+        self, slot1: Dict, slot2: Dict
+    ) -> Optional[Tuple[int, int]]:
         """
         Get intersection positions between two slots.
 
@@ -405,26 +419,26 @@ class DiversityManager(DiversityStrategy):
         Returns:
             (slot1_position, slot2_position) if they intersect, None otherwise
         """
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None  # Parallel slots don't intersect
 
         # Get cell coordinates for each slot
         cells1 = set()
         cells2 = set()
 
-        if slot1['direction'] == 'across':
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'], slot1['col'] + i, i))
+        if slot1["direction"] == "across":
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"], slot1["col"] + i, i))
         else:  # down
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'] + i, slot1['col'], i))
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"] + i, slot1["col"], i))
 
-        if slot2['direction'] == 'across':
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'], slot2['col'] + i, i))
+        if slot2["direction"] == "across":
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"], slot2["col"] + i, i))
         else:  # down
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'] + i, slot2['col'], i))
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"] + i, slot2["col"], i))
 
         # Find intersection
         for r1, c1, pos1 in cells1:

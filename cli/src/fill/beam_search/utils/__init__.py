@@ -8,5 +8,5 @@ and other helper functionality.
 from .slot_utils import SlotIntersectionHelper
 
 __all__ = [
-    'SlotIntersectionHelper',
+    "SlotIntersectionHelper",
 ]

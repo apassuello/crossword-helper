@@ -20,7 +20,9 @@ class SlotSelectionStrategy(ABC):
     """Abstract base class for slot selection strategies."""
 
     @abstractmethod
-    def select_next_slot(self, unfilled_slots: List[Dict], state: BeamState) -> Optional[Dict]:
+    def select_next_slot(
+        self, unfilled_slots: List[Dict], state: BeamState
+    ) -> Optional[Dict]:
         """Select the next slot to fill."""
 
     @abstractmethod
@@ -36,7 +38,9 @@ class MRVSlotSelector(SlotSelectionStrategy):
     the most constrained and likely to fail if delayed.
     """
 
-    def __init__(self, pattern_matcher, word_list, theme_entries: Optional[Dict] = None):
+    def __init__(
+        self, pattern_matcher, word_list, theme_entries: Optional[Dict] = None
+    ):
         """
         Initialize MRV selector.
 
@@ -49,7 +53,12 @@ class MRVSlotSelector(SlotSelectionStrategy):
         self.word_list = word_list
         self.theme_entries = theme_entries or {}
 
-    def select_next_slot(self, unfilled_slots: List[Dict], state: BeamState, recently_failed: Optional[List[Tuple]] = None) -> Optional[Dict]:
+    def select_next_slot(
+        self,
+        unfilled_slots: List[Dict],
+        state: BeamState,
+        recently_failed: Optional[List[Tuple]] = None,
+    ) -> Optional[Dict]:
         """
         Select next slot using Dynamic MRV with intelligent tie-breaking.
 
@@ -78,7 +87,7 @@ class MRVSlotSelector(SlotSelectionStrategy):
             pattern = state.grid.get_pattern_for_slot(slot)
 
             # Count valid candidates (domain size)
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
             valid_words = self.pattern_matcher.find(pattern, min_score=min_score)
             domain_size = len(valid_words)
 
@@ -88,17 +97,19 @@ class MRVSlotSelector(SlotSelectionStrategy):
             for other_slot in all_slots:
                 if self._slots_intersect(slot, other_slot):
                     other_pattern = state.grid.get_pattern_for_slot(other_slot)
-                    if '?' in other_pattern:  # Still has empty cells
+                    if "?" in other_pattern:  # Still has empty cells
                         degree += 1
 
             # Track candidate with metrics
-            candidates.append({
-                'slot': slot,
-                'domain_size': domain_size,
-                'degree': degree,
-                'direction': slot['direction'],
-                'length': slot['length']
-            })
+            candidates.append(
+                {
+                    "slot": slot,
+                    "domain_size": domain_size,
+                    "degree": degree,
+                    "direction": slot["direction"],
+                    "length": slot["length"],
+                }
+            )
 
         # Sort by MRV heuristic with tie-breaking
         # Primary: domain size (ascending - smallest first)
@@ -113,11 +124,15 @@ class MRVSlotSelector(SlotSelectionStrategy):
             last_direction = last_slot_key[2]
 
         def mrv_key(candidate):
-            domain = candidate['domain_size']
-            degree = candidate['degree']
-            length = candidate['length']
-            direction = candidate['direction']
-            slot_id = (candidate['slot']['row'], candidate['slot']['col'], candidate['slot']['direction'])
+            domain = candidate["domain_size"]
+            degree = candidate["degree"]
+            length = candidate["length"]
+            direction = candidate["direction"]
+            slot_id = (
+                candidate["slot"]["row"],
+                candidate["slot"]["col"],
+                candidate["slot"]["direction"],
+            )
 
             # Calculate failure penalty to prevent thrashing
             failure_penalty = 0
@@ -128,13 +143,17 @@ class MRVSlotSelector(SlotSelectionStrategy):
                 recency_index = recently_failed.index(slot_id)
                 # Most recent failure gets highest penalty
                 failure_penalty = 1000 * (len(recently_failed) - recency_index)
-                logger.debug(f"    Slot {slot_id} has recent failure (recency={recency_index}), penalty={failure_penalty}")
+                logger.debug(
+                    f"    Slot {slot_id} has recent failure (recency={recency_index}), penalty={failure_penalty}"
+                )
 
             # Extremely high penalty for impossible slots (domain_size=0)
             # These should almost never be selected as they will always fail
             if domain == 0:
                 failure_penalty += 10000
-                logger.debug(f"    Slot {slot_id} has zero domain, adding 10000 penalty")
+                logger.debug(
+                    f"    Slot {slot_id} has zero domain, adding 10000 penalty"
+                )
 
             # Prefer alternating directions for natural fill
             direction_bonus = 0
@@ -143,10 +162,12 @@ class MRVSlotSelector(SlotSelectionStrategy):
                     direction_bonus = -0.1  # Small bonus for alternating
 
             # Primary key is domain + failure penalty (prevents selecting impossible/failed slots)
-            return (domain + failure_penalty,  # Primary: domain + penalties
-                   -degree,                    # Secondary: highest degree first
-                   -length,                    # Tertiary: longest slots first
-                   direction_bonus)            # Quaternary: alternate directions
+            return (
+                domain + failure_penalty,  # Primary: domain + penalties
+                -degree,  # Secondary: highest degree first
+                -length,  # Tertiary: longest slots first
+                direction_bonus,
+            )  # Quaternary: alternate directions
 
         candidates.sort(key=mrv_key)
 
@@ -155,12 +176,14 @@ class MRVSlotSelector(SlotSelectionStrategy):
         # Debug: Verify direction interleaving
         # Always show MRV selection for first 10 slots to verify interleaving
         if len(state.slot_assignments) <= 10:
-            directions = [c['direction'] for c in candidates[:5]]
-            domain_sizes = [c['domain_size'] for c in candidates[:5]]
+            directions = [c["direction"] for c in candidates[:5]]
+            domain_sizes = [c["domain_size"] for c in candidates[:5]]
             logger.debug(f"  MRV top 5: {list(zip(directions, domain_sizes))}")
-            logger.debug(f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})")
+            logger.debug(
+                f"  → Selected: {selected['direction'].upper()} (domain={selected['domain_size']})"
+            )
 
-        return selected['slot']
+        return selected["slot"]
 
     def order_slots(self, slots: List[Dict], grid: Grid) -> List[Dict]:
         """
@@ -177,22 +200,21 @@ class MRVSlotSelector(SlotSelectionStrategy):
         Returns:
             Ordered list of slots (most constrained first)
         """
+
         def constraint_key(slot: Dict):
             pattern = grid.get_pattern_for_slot(slot)
 
             # Get minimum score for this slot length
-            min_score = self._get_min_score_for_length(slot['length'])
+            min_score = self._get_min_score_for_length(slot["length"])
 
             # Count candidates (domain size)
             candidates = self.pattern_matcher.find(
-                pattern,
-                min_score=min_score,
-                max_results=1000  # Limit for performance
+                pattern, min_score=min_score, max_results=1000  # Limit for performance
             )
             domain_size = len(candidates)
 
             # Count empty cells
-            empty_count = pattern.count('?')
+            empty_count = pattern.count("?")
 
             # Primary: domain size (fewer candidates = more constrained)
             # Secondary: empty count (more filled = more constrained)
@@ -202,7 +224,9 @@ class MRVSlotSelector(SlotSelectionStrategy):
         sorted_slots = sorted(slots, key=constraint_key)
         return sorted_slots
 
-    def order_by_secondary_constraint(self, slots: List[Dict], grid: Grid) -> List[Dict]:
+    def order_by_secondary_constraint(
+        self, slots: List[Dict], grid: Grid
+    ) -> List[Dict]:
         """
         Secondary ordering by crossing constraints.
 
@@ -216,13 +240,14 @@ class MRVSlotSelector(SlotSelectionStrategy):
         Returns:
             Ordered list of slots
         """
+
         def crossing_key(slot: Dict):
             # Count number of crossing slots that are still unfilled
             crossing_count = 0
             for other_slot in slots:
                 if slot != other_slot and self._slots_intersect(slot, other_slot):
                     other_pattern = grid.get_pattern_for_slot(other_slot)
-                    if '?' in other_pattern:
+                    if "?" in other_pattern:
                         crossing_count += 1
 
             # Higher crossing count = fill first (more constraint propagation)
@@ -230,7 +255,9 @@ class MRVSlotSelector(SlotSelectionStrategy):
 
         return sorted(slots, key=crossing_key)
 
-    def prioritize_theme_entries(self, slots: List[Dict]) -> Tuple[List[Dict], Set[str]]:
+    def prioritize_theme_entries(
+        self, slots: List[Dict]
+    ) -> Tuple[List[Dict], Set[str]]:
         """
         Separate and prioritize theme entry slots.
 
@@ -253,7 +280,7 @@ class MRVSlotSelector(SlotSelectionStrategy):
         theme_words = set()
 
         for slot in slots:
-            slot_key = (slot['row'], slot['col'], slot['direction'])
+            slot_key = (slot["row"], slot["col"], slot["direction"])
             if slot_key in self.theme_entries:
                 theme_slots.append(slot)
                 theme_words.add(self.theme_entries[slot_key])
@@ -261,7 +288,7 @@ class MRVSlotSelector(SlotSelectionStrategy):
                 regular_slots.append(slot)
 
         # Sort theme slots by length (longest first)
-        theme_slots.sort(key=lambda s: -s['length'])
+        theme_slots.sort(key=lambda s: -s["length"])
 
         # Return theme slots first, then regular slots
         return theme_slots + regular_slots, theme_words
@@ -301,11 +328,11 @@ class MRVSlotSelector(SlotSelectionStrategy):
             True if slots intersect, False otherwise
         """
         # Quick rejection: parallel slots can't intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Get slot ranges
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
         else:
@@ -313,14 +340,16 @@ class MRVSlotSelector(SlotSelectionStrategy):
             down_slot = slot1
 
         # Check if ranges overlap
-        across_row = across_slot['row']
-        across_col_start = across_slot['col']
-        across_col_end = across_col_start + across_slot['length'] - 1
+        across_row = across_slot["row"]
+        across_col_start = across_slot["col"]
+        across_col_end = across_col_start + across_slot["length"] - 1
 
-        down_col = down_slot['col']
-        down_row_start = down_slot['row']
-        down_row_end = down_row_start + down_slot['length'] - 1
+        down_col = down_slot["col"]
+        down_row_start = down_slot["row"]
+        down_row_end = down_row_start + down_slot["length"] - 1
 
         # Check intersection
-        return (down_row_start <= across_row <= down_row_end and
-                across_col_start <= down_col <= across_col_end)
+        return (
+            down_row_start <= across_row <= down_row_end
+            and across_col_start <= down_col <= across_col_end
+        )

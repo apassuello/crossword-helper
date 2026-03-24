@@ -24,11 +24,15 @@ def wordlist_dir(tmp_path):
 
     # metadata.json (empty structure)
     metadata = tmp_path / "metadata.json"
-    metadata.write_text(json.dumps({
-        "wordlists": {},
-        "categories": {"core": {"description": "Core wordlists"}},
-        "tags": {"common": {"description": "Common words"}},
-    }))
+    metadata.write_text(
+        json.dumps(
+            {
+                "wordlists": {},
+                "categories": {"core": {"description": "Core wordlists"}},
+                "tags": {"common": {"description": "Common words"}},
+            }
+        )
+    )
 
     return tmp_path
 
@@ -231,7 +235,9 @@ class TestEdgeCases:
         assert words == ["FOO", "BAR"]
 
     def test_wordlist_with_comments(self, wordlist_dir):
-        (wordlist_dir / "commented.txt").write_text("# header comment\nWORD\n# another\nTEST\n")
+        (wordlist_dir / "commented.txt").write_text(
+            "# header comment\nWORD\n# another\nTEST\n"
+        )
         mgr = WordListManager(wordlist_dir=str(wordlist_dir))
         words = mgr.load("commented")
         assert words == ["WORD", "TEST"]

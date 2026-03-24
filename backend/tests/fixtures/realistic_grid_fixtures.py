@@ -22,12 +22,33 @@ def cli_to_frontend_grid(cli_grid: List[List[str]]) -> List[List[Dict[str, Any]]
         frontend_row = []
         for cell in row:
             if cell == "#":
-                frontend_row.append({"letter": "", "isBlack": True, "number": None, "isThemeLocked": False})
+                frontend_row.append(
+                    {
+                        "letter": "",
+                        "isBlack": True,
+                        "number": None,
+                        "isThemeLocked": False,
+                    }
+                )
             elif cell == "." or cell == "":
-                frontend_row.append({"letter": "", "isBlack": False, "number": None, "isThemeLocked": False})
+                frontend_row.append(
+                    {
+                        "letter": "",
+                        "isBlack": False,
+                        "number": None,
+                        "isThemeLocked": False,
+                    }
+                )
             else:
                 # It's a letter
-                frontend_row.append({"letter": cell, "isBlack": False, "number": None, "isThemeLocked": False})
+                frontend_row.append(
+                    {
+                        "letter": cell,
+                        "isBlack": False,
+                        "number": None,
+                        "isThemeLocked": False,
+                    }
+                )
         frontend_grid.append(frontend_row)
     return frontend_grid
 
@@ -75,6 +96,7 @@ def load_cli_grid(filename: str) -> Dict[str, Any]:
 # 11x11 GRIDS
 # ============================================================================
 
+
 def get_11x11_empty_cli():
     """11x11 empty grid in CLI format."""
     return load_cli_grid("demo_11x11_EMPTY.json")
@@ -83,10 +105,7 @@ def get_11x11_empty_cli():
 def get_11x11_empty_frontend():
     """11x11 empty grid in frontend format."""
     cli_data = get_11x11_empty_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 def get_11x11_filled_cli():
@@ -97,10 +116,7 @@ def get_11x11_filled_cli():
 def get_11x11_filled_frontend():
     """11x11 filled grid in frontend format."""
     cli_data = get_11x11_filled_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 def get_11x11_test_cli():
@@ -111,15 +127,13 @@ def get_11x11_test_cli():
 def get_11x11_test_frontend():
     """11x11 test grid in frontend format."""
     cli_data = get_11x11_test_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 # ============================================================================
 # 15x15 GRIDS
 # ============================================================================
+
 
 def get_15x15_empty_cli():
     """15x15 empty grid in CLI format."""
@@ -128,17 +142,31 @@ def get_15x15_empty_cli():
 
     # Add black squares in rotational symmetry pattern
     blacks = [
-        (0, 4), (0, 9), (1, 4), (1, 9),
-        (2, 4), (2, 9), (3, 3), (3, 10),
-        (4, 0), (4, 1), (4, 2), (4, 7), (4, 8),
-        (6, 5), (6, 6), (6, 7), (6, 8), (6, 9),
+        (0, 4),
+        (0, 9),
+        (1, 4),
+        (1, 9),
+        (2, 4),
+        (2, 9),
+        (3, 3),
+        (3, 10),
+        (4, 0),
+        (4, 1),
+        (4, 2),
+        (4, 7),
+        (4, 8),
+        (6, 5),
+        (6, 6),
+        (6, 7),
+        (6, 8),
+        (6, 9),
         (7, 6),
     ]
 
     for row, col in blacks:
         grid[row][col] = "#"
         # Rotational symmetry
-        grid[14-row][14-col] = "#"
+        grid[14 - row][14 - col] = "#"
 
     return {"size": 15, "grid": grid}
 
@@ -146,10 +174,7 @@ def get_15x15_empty_cli():
 def get_15x15_empty_frontend():
     """15x15 empty grid in frontend format."""
     cli_data = get_15x15_empty_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 def get_15x15_my_puzzle_cli():
@@ -160,10 +185,7 @@ def get_15x15_my_puzzle_cli():
 def get_15x15_my_puzzle_frontend():
     """15x15 'my_puzzle' in frontend format."""
     cli_data = get_15x15_my_puzzle_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 def get_15x15_sarahs_puzzle_cli():
@@ -174,15 +196,13 @@ def get_15x15_sarahs_puzzle_cli():
 def get_15x15_sarahs_puzzle_frontend():
     """15x15 'sarahs_puzzle' in frontend format."""
     cli_data = get_15x15_sarahs_puzzle_cli()
-    return {
-        "size": cli_data["size"],
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": cli_data["size"], "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 # ============================================================================
 # 21x21 GRIDS
 # ============================================================================
+
 
 def get_21x21_empty_cli():
     """21x21 empty grid in CLI format."""
@@ -196,17 +216,17 @@ def get_21x21_empty_cli():
 def get_21x21_empty_frontend():
     """21x21 empty grid in frontend format."""
     cli_data = get_21x21_empty_cli()
-    return {
-        "size": 21,
-        "grid": cli_to_frontend_grid(cli_data["grid"])
-    }
+    return {"size": 21, "grid": cli_to_frontend_grid(cli_data["grid"])}
 
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def validate_transformation(frontend_grid: List[List[Dict]], expected_cli: List[List[str]]) -> bool:
+
+def validate_transformation(
+    frontend_grid: List[List[Dict]], expected_cli: List[List[str]]
+) -> bool:
     """
     Validate that frontend → CLI transformation is correct.
 

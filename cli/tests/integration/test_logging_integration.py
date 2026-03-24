@@ -39,7 +39,7 @@ class TestLoggingIntegration:
         word_list = Mock(spec=WordList)
         pattern_matcher = Mock(spec=PatternMatcher)
 
-        autofill = BeamSearchAutofill(
+        BeamSearchAutofill(
             grid, word_list, pattern_matcher,
             beam_width=2
         )
@@ -154,13 +154,13 @@ class TestGibberishFiltering:
         assert autofill._is_gibberish_pattern('NNN')
 
         # Test valid patterns
-        assert autofill._is_gibberish_pattern('HELLO') == False
-        assert autofill._is_gibberish_pattern('VISA') == False
-        assert autofill._is_gibberish_pattern('AREA') == False
+        assert not autofill._is_gibberish_pattern('HELLO')
+        assert not autofill._is_gibberish_pattern('VISA')
+        assert not autofill._is_gibberish_pattern('AREA')
 
         # Test patterns with wildcards
         assert autofill._is_gibberish_pattern('AAA??')
-        assert autofill._is_gibberish_pattern('HE??O') == False
+        assert not autofill._is_gibberish_pattern('HE??O')
 
     def test_is_quality_word(self):
         """Test _is_quality_word method filters gibberish."""
@@ -171,9 +171,9 @@ class TestGibberishFiltering:
         autofill = BeamSearchAutofill(grid, word_list, pattern_matcher)
 
         # Test gibberish words
-        assert autofill._is_quality_word('QZXRTPL') == False  # No vowels
-        assert autofill._is_quality_word('AAAAAN') == False   # Repeated letters
-        assert autofill._is_quality_word('NNRRRN') == False   # Excessive repetition
+        assert not autofill._is_quality_word('QZXRTPL')  # No vowels
+        assert not autofill._is_quality_word('AAAAAN')   # Repeated letters
+        assert not autofill._is_quality_word('NNRRRN')   # Excessive repetition
 
         # Test valid words
         assert autofill._is_quality_word('HELLO')

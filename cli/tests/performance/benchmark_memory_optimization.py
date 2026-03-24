@@ -261,7 +261,7 @@ def benchmark_domain_manager(results: BenchmarkResults):
     tracemalloc.start()
 
     start_memory = tracemalloc.get_traced_memory()[0]
-    small_domain = manager.create_domain_for_pattern('?AT', min_score=0)
+    manager.create_domain_for_pattern('?AT', min_score=0)
     end_memory = tracemalloc.get_traced_memory()[0]
 
     bitset_memory = end_memory - start_memory
@@ -275,7 +275,7 @@ def benchmark_domain_manager(results: BenchmarkResults):
     tracemalloc.start()
 
     start_memory = tracemalloc.get_traced_memory()[0]
-    large_domain = manager.create_domain_for_pattern('???????', min_score=0)
+    manager.create_domain_for_pattern('???????', min_score=0)
     end_memory = tracemalloc.get_traced_memory()[0]
 
     set_memory = end_memory - start_memory
@@ -319,7 +319,7 @@ def benchmark_overall_memory_impact(results: BenchmarkResults):
 
     start_memory = tracemalloc.get_traced_memory()[0]
 
-    grid_pool = GridPool(grid_size=grid_size, pool_size=50)
+    GridPool(grid_size=grid_size, pool_size=50)
     state_pool = StatePool(pool_size=100)
 
     # Create initial beam with snapshots

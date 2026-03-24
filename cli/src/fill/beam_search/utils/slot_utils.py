@@ -30,18 +30,18 @@ class SlotIntersectionHelper:
             True if slots intersect, False otherwise
         """
         # Same direction can't intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Get cell positions for each slot
         def get_positions(slot):
             positions = []
-            if slot['direction'] == 'across':
-                for i in range(slot['length']):
-                    positions.append((slot['row'], slot['col'] + i))
+            if slot["direction"] == "across":
+                for i in range(slot["length"]):
+                    positions.append((slot["row"], slot["col"] + i))
             else:  # down
-                for i in range(slot['length']):
-                    positions.append((slot['row'] + i, slot['col']))
+                for i in range(slot["length"]):
+                    positions.append((slot["row"] + i, slot["col"]))
             return set(positions)
 
         pos1 = get_positions(slot1)
@@ -62,26 +62,26 @@ class SlotIntersectionHelper:
         Returns:
             (slot1_position, slot2_position) if they intersect, None otherwise
         """
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None  # Parallel slots don't intersect
 
         # Get cell coordinates for each slot
         cells1 = set()
         cells2 = set()
 
-        if slot1['direction'] == 'across':
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'], slot1['col'] + i, i))
+        if slot1["direction"] == "across":
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"], slot1["col"] + i, i))
         else:  # down
-            for i in range(slot1['length']):
-                cells1.add((slot1['row'] + i, slot1['col'], i))
+            for i in range(slot1["length"]):
+                cells1.add((slot1["row"] + i, slot1["col"], i))
 
-        if slot2['direction'] == 'across':
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'], slot2['col'] + i, i))
+        if slot2["direction"] == "across":
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"], slot2["col"] + i, i))
         else:  # down
-            for i in range(slot2['length']):
-                cells2.add((slot2['row'] + i, slot2['col'], i))
+            for i in range(slot2["length"]):
+                cells2.add((slot2["row"] + i, slot2["col"], i))
 
         # Find intersection
         for r1, c1, pos1 in cells1:
@@ -104,11 +104,11 @@ class SlotIntersectionHelper:
             (pos_in_slot1, pos_in_slot2) or None if no crossing
         """
         # Slots must be perpendicular to intersect
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return None
 
         # Determine which is across and which is down
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
             across_is_first = True
@@ -118,16 +118,16 @@ class SlotIntersectionHelper:
             across_is_first = False
 
         # Calculate intersection point
-        across_row = across_slot['row']
-        across_col = across_slot['col']
-        down_row = down_slot['row']
-        down_col = down_slot['col']
+        across_row = across_slot["row"]
+        across_col = across_slot["col"]
+        down_row = down_slot["row"]
+        down_col = down_slot["col"]
 
         # Check if they intersect
-        if down_col < across_col or down_col >= across_col + across_slot['length']:
+        if down_col < across_col or down_col >= across_col + across_slot["length"]:
             return None  # Down slot doesn't cross across slot horizontally
 
-        if across_row < down_row or across_row >= down_row + down_slot['length']:
+        if across_row < down_row or across_row >= down_row + down_slot["length"]:
             return None  # Across slot doesn't cross down slot vertically
 
         # Calculate positions within each word
@@ -156,31 +156,39 @@ class SlotIntersectionHelper:
 
         for other_slot in all_slots:
             # Skip same slot
-            if (other_slot['row'] == slot['row'] and
-                other_slot['col'] == slot['col'] and
-                other_slot['direction'] == slot['direction']):
+            if (
+                other_slot["row"] == slot["row"]
+                and other_slot["col"] == slot["col"]
+                and other_slot["direction"] == slot["direction"]
+            ):
                 continue
 
             # Check for intersection
-            if slot['direction'] == 'across' and other_slot['direction'] == 'down':
+            if slot["direction"] == "across" and other_slot["direction"] == "down":
                 # This slot is horizontal, other is vertical
-                if (slot['row'] >= other_slot['row'] and
-                    slot['row'] < other_slot['row'] + other_slot['length'] and
-                    other_slot['col'] >= slot['col'] and
-                    other_slot['col'] < slot['col'] + slot['length']):
+                if (
+                    slot["row"] >= other_slot["row"]
+                    and slot["row"] < other_slot["row"] + other_slot["length"]
+                    and other_slot["col"] >= slot["col"]
+                    and other_slot["col"] < slot["col"] + slot["length"]
+                ):
                     crossings.append(other_slot)
-            elif slot['direction'] == 'down' and other_slot['direction'] == 'across':
+            elif slot["direction"] == "down" and other_slot["direction"] == "across":
                 # This slot is vertical, other is horizontal
-                if (slot['col'] >= other_slot['col'] and
-                    slot['col'] < other_slot['col'] + other_slot['length'] and
-                    other_slot['row'] >= slot['row'] and
-                    other_slot['row'] < slot['row'] + slot['length']):
+                if (
+                    slot["col"] >= other_slot["col"]
+                    and slot["col"] < other_slot["col"] + other_slot["length"]
+                    and other_slot["row"] >= slot["row"]
+                    and other_slot["row"] < slot["row"] + slot["length"]
+                ):
                     crossings.append(other_slot)
 
         return crossings
 
     @staticmethod
-    def get_intersecting_slots(grid: Grid, reference_slot: Optional[Dict] = None) -> List[Dict]:
+    def get_intersecting_slots(
+        grid: Grid, reference_slot: Optional[Dict] = None
+    ) -> List[Dict]:
         """
         Get slots that intersect with reference_slot.
 
@@ -203,9 +211,11 @@ class SlotIntersectionHelper:
 
         for slot in all_slots:
             # Skip same slot
-            if (slot['row'] == reference_slot['row'] and
-                slot['col'] == reference_slot['col'] and
-                slot['direction'] == reference_slot['direction']):
+            if (
+                slot["row"] == reference_slot["row"]
+                and slot["col"] == reference_slot["col"]
+                and slot["direction"] == reference_slot["direction"]
+            ):
                 continue
 
             # Check if they intersect
@@ -228,8 +238,10 @@ class SlotIntersectionHelper:
         """
         row, col, direction = slot_id
         for slot in slots:
-            if (slot['row'] == row and
-                slot['col'] == col and
-                slot['direction'] == direction):
+            if (
+                slot["row"] == row
+                and slot["col"] == col
+                and slot["direction"] == direction
+            ):
                 return slot
         return None

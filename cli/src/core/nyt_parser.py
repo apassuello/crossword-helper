@@ -17,22 +17,26 @@ from .numbering import GridNumbering
 
 class NytParseError(Exception):
     """Base exception for NYT parsing errors."""
+
     pass
 
 
 class NytFormatError(NytParseError):
     """JSON structure is malformed (missing keys, wrong types)."""
+
     pass
 
 
 class NytDataError(NytParseError):
     """Data is internally inconsistent."""
+
     pass
 
 
 @dataclass
 class NytWord:
     """A single extracted word with positional and clue data."""
+
     number: int
     direction: str  # 'across' or 'down'
     answer: str
@@ -45,6 +49,7 @@ class NytWord:
 @dataclass
 class VerificationResult:
     """Result of the self-verification pass."""
+
     success: bool
     conflicts: List[str]
     grid_match: bool
@@ -56,6 +61,7 @@ class VerificationResult:
 @dataclass
 class NytParseResult:
     """Complete result of parsing an NYT crossword JSON file."""
+
     size: int
     empty_grid: Grid
     filled_grid: Grid
@@ -83,53 +89,57 @@ def load_nyt_file(file_path: str) -> dict:
         raise NytParseError(f"File not found: {file_path}")
 
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise NytFormatError(f"Invalid JSON: {e}")
 
     # Validate required keys
-    required_keys = ['size', 'grid', 'gridnums', 'clues', 'answers']
+    required_keys = ["size", "grid", "gridnums", "clues", "answers"]
     missing = [k for k in required_keys if k not in data]
     if missing:
         raise NytFormatError(f"Missing required keys: {missing}")
 
     # Validate size
-    size_data = data['size']
-    if not isinstance(size_data, dict) or 'rows' not in size_data or 'cols' not in size_data:
+    size_data = data["size"]
+    if (
+        not isinstance(size_data, dict)
+        or "rows" not in size_data
+        or "cols" not in size_data
+    ):
         raise NytFormatError("'size' must be dict with 'rows' and 'cols'")
 
-    rows, cols = size_data['rows'], size_data['cols']
+    rows, cols = size_data["rows"], size_data["cols"]
     if rows != cols:
         raise NytFormatError(f"Non-square grids not supported: {rows}x{cols}")
 
     # Validate grid length
     expected_len = rows * cols
-    if not isinstance(data['grid'], list) or len(data['grid']) != expected_len:
-        actual = len(data['grid']) if isinstance(data['grid'], list) else 0
-        raise NytDataError(f"Grid length {actual} != expected {expected_len} ({rows}x{cols})")
+    if not isinstance(data["grid"], list) or len(data["grid"]) != expected_len:
+        actual = len(data["grid"]) if isinstance(data["grid"], list) else 0
+        raise NytDataError(
+            f"Grid length {actual} != expected {expected_len} ({rows}x{cols})"
+        )
 
-    if not isinstance(data['gridnums'], list) or len(data['gridnums']) != expected_len:
+    if not isinstance(data["gridnums"], list) or len(data["gridnums"]) != expected_len:
         raise NytDataError("gridnums length doesn't match grid")
 
     # Validate clues/answers structure
-    for section in ['clues', 'answers']:
+    for section in ["clues", "answers"]:
         if not isinstance(data[section], dict):
             raise NytFormatError(f"'{section}' must be a dict")
-        for direction in ['across', 'down']:
+        for direction in ["across", "down"]:
             if direction not in data[section]:
                 raise NytFormatError(f"'{section}' missing '{direction}'")
             if not isinstance(data[section][direction], list):
                 raise NytFormatError(f"'{section}.{direction}' must be a list")
 
     # Validate clue/answer count match
-    for direction in ['across', 'down']:
-        n_clues = len(data['clues'][direction])
-        n_answers = len(data['answers'][direction])
+    for direction in ["across", "down"]:
+        n_clues = len(data["clues"][direction])
+        n_answers = len(data["answers"][direction])
         if n_clues != n_answers:
-            raise NytDataError(
-                f"{direction}: {n_clues} clues but {n_answers} answers"
-            )
+            raise NytDataError(f"{direction}: {n_clues} clues but {n_answers} answers")
 
     return data
 
@@ -144,8 +154,8 @@ def nyt_grid_to_internal(nyt_data: dict) -> Tuple[Grid, Grid]:
         Tuple of (empty_grid, filled_grid).
         empty_grid has black squares only; filled_grid has all letters.
     """
-    size = nyt_data['size']['rows']
-    flat_grid = nyt_data['grid']
+    size = nyt_data["size"]["rows"]
+    flat_grid = nyt_data["grid"]
 
     # Build 2D arrays for both grids
     empty_2d = []
@@ -158,28 +168,28 @@ def nyt_grid_to_internal(nyt_data: dict) -> Tuple[Grid, Grid]:
         for col in range(size):
             cell = flat_grid[row * size + col]
 
-            if cell == '.':
+            if cell == ".":
                 # NYT "." = black square -> internal "#"
-                empty_row.append('#')
-                filled_row.append('#')
+                empty_row.append("#")
+                filled_row.append("#")
             elif isinstance(cell, str) and len(cell) == 1 and cell.isalpha():
-                empty_row.append('.')  # Empty in the empty grid
+                empty_row.append(".")  # Empty in the empty grid
                 filled_row.append(cell.upper())
             elif isinstance(cell, str) and len(cell) > 1:
                 # Rebus cell - take first letter with warning
                 has_rebus = True
-                empty_row.append('.')
-                filled_row.append(cell[0].upper() if cell[0].isalpha() else '.')
+                empty_row.append(".")
+                filled_row.append(cell[0].upper() if cell[0].isalpha() else ".")
             else:
                 # Unknown cell type
-                empty_row.append('.')
-                filled_row.append('.')
+                empty_row.append(".")
+                filled_row.append(".")
 
         empty_2d.append(empty_row)
         filled_2d.append(filled_row)
 
-    empty_grid = Grid.from_dict({'size': size, 'grid': empty_2d}, strict_size=False)
-    filled_grid = Grid.from_dict({'size': size, 'grid': filled_2d}, strict_size=False)
+    empty_grid = Grid.from_dict({"size": size, "grid": empty_2d}, strict_size=False)
+    filled_grid = Grid.from_dict({"size": size, "grid": filled_2d}, strict_size=False)
 
     return empty_grid, filled_grid, has_rebus
 
@@ -189,12 +199,12 @@ def parse_clue_string(clue_str: str) -> Tuple[int, str]:
 
     Handles formats: '1. text', '1) text', '1 text'
     """
-    match = re.match(r'^(\d+)[.)\s]\s*(.*)', clue_str)
+    match = re.match(r"^(\d+)[.)\s]\s*(.*)", clue_str)
     if match:
         return int(match.group(1)), match.group(2).strip()
 
     # Fallback: try to find leading number
-    match = re.match(r'^(\d+)(.*)', clue_str)
+    match = re.match(r"^(\d+)(.*)", clue_str)
     if match:
         return int(match.group(1)), match.group(2).strip()
 
@@ -207,7 +217,7 @@ def _compute_word_length(grid: Grid, row: int, col: int, direction: str) -> int:
     r, c = row, col
     while r < grid.size and c < grid.size and not grid.is_black(r, c):
         length += 1
-        if direction == 'across':
+        if direction == "across":
             c += 1
         else:
             r += 1
@@ -233,13 +243,13 @@ def extract_words(
     num_to_pos = {v: k for k, v in numbering.items()}
 
     # Determine which numbers start across/down words
-    clue_positions = GridNumbering.get_clue_positions(grid)
+    GridNumbering.get_clue_positions(grid)
 
     words = []
 
-    for direction in ['across', 'down']:
-        clues = nyt_data['clues'][direction]
-        answers = nyt_data['answers'][direction]
+    for direction in ["across", "down"]:
+        clues = nyt_data["clues"][direction]
+        answers = nyt_data["answers"][direction]
 
         for i, (clue_str, answer) in enumerate(zip(clues, answers)):
             try:
@@ -254,15 +264,17 @@ def extract_words(
             row, col = num_to_pos[number]
             length = _compute_word_length(grid, row, col, direction)
 
-            words.append(NytWord(
-                number=number,
-                direction=direction,
-                answer=answer.upper(),
-                clue=clue_text,
-                row=row,
-                col=col,
-                length=length,
-            ))
+            words.append(
+                NytWord(
+                    number=number,
+                    direction=direction,
+                    answer=answer.upper(),
+                    clue=clue_text,
+                    row=row,
+                    col=col,
+                    length=length,
+                )
+            )
 
     return words
 
@@ -287,13 +299,15 @@ def verify_extraction(
     total_words = len(words)
 
     # Sort: by number, across before down
-    sorted_words = sorted(words, key=lambda w: (w.number, 0 if w.direction == 'across' else 1))
+    sorted_words = sorted(
+        words, key=lambda w: (w.number, 0 if w.direction == "across" else 1)
+    )
 
     # Phase A: Place words, check crossing consistency
     for word in sorted_words:
         word_ok = True
         for i, letter in enumerate(word.answer):
-            if word.direction == 'across':
+            if word.direction == "across":
                 r, c = word.row, word.col + i
             else:
                 r, c = word.row + i, word.col
@@ -307,13 +321,13 @@ def verify_extraction(
                 break
 
             existing = recon.get_cell(r, c)
-            if existing == '#':
+            if existing == "#":
                 conflicts.append(
                     f"{word.number}-{word.direction} '{word.answer}' hits black square at ({r},{c})"
                 )
                 word_ok = False
                 break
-            elif existing != '.' and existing != letter:
+            elif existing != "." and existing != letter:
                 conflicts.append(
                     f"Conflict at ({r},{c}): {word.number}-{word.direction} "
                     f"wants '{letter}' but '{existing}' already placed"
@@ -326,11 +340,11 @@ def verify_extraction(
             words_placed += 1
 
     # Phase B: Compare against original NYT grid
-    flat_grid = nyt_data['grid']
+    flat_grid = nyt_data["grid"]
     mismatched = []
 
     for idx, nyt_cell in enumerate(flat_grid):
-        if nyt_cell == '.':
+        if nyt_cell == ".":
             continue  # Black square, skip
         row, col = divmod(idx, size)
         recon_cell = recon.get_cell(row, col)
@@ -340,8 +354,8 @@ def verify_extraction(
         if len(expected) > 1:
             expected = expected[0]
 
-        if recon_cell == '.':
-            mismatched.append((row, col, expected, '(empty)'))
+        if recon_cell == ".":
+            mismatched.append((row, col, expected, "(empty)"))
         elif recon_cell != expected:
             mismatched.append((row, col, expected, recon_cell))
 
@@ -365,7 +379,7 @@ def _crosscheck_numbering(
 ) -> List[str]:
     """Cross-check computed numbering against NYT gridnums. Returns warnings."""
     warnings = []
-    gridnums = nyt_data['gridnums']
+    gridnums = nyt_data["gridnums"]
 
     for idx, nyt_num in enumerate(gridnums):
         if nyt_num == 0:
@@ -373,7 +387,9 @@ def _crosscheck_numbering(
         row, col = divmod(idx, size)
         computed = computed_numbering.get((row, col))
         if computed is None:
-            warnings.append(f"NYT has number {nyt_num} at ({row},{col}) but auto_number doesn't")
+            warnings.append(
+                f"NYT has number {nyt_num} at ({row},{col}) but auto_number doesn't"
+            )
         elif computed != nyt_num:
             warnings.append(
                 f"Number mismatch at ({row},{col}): NYT={nyt_num}, computed={computed}"
@@ -397,7 +413,7 @@ def parse_nyt_json(file_path: str, verify: bool = True) -> NytParseResult:
     """
     # Load and validate
     nyt_data = load_nyt_file(file_path)
-    size = nyt_data['size']['rows']
+    size = nyt_data["size"]["rows"]
 
     # Convert grids
     empty_grid, filled_grid, has_rebus = nyt_grid_to_internal(nyt_data)
@@ -413,13 +429,13 @@ def parse_nyt_json(file_path: str, verify: bool = True) -> NytParseResult:
 
     # Build metadata
     metadata = {
-        'title': nyt_data.get('title', ''),
-        'author': nyt_data.get('author', ''),
-        'editor': nyt_data.get('editor', ''),
-        'date': nyt_data.get('date', ''),
-        'dow': nyt_data.get('dow', ''),
-        'has_rebus': has_rebus,
-        'numbering_warnings': numbering_warnings,
+        "title": nyt_data.get("title", ""),
+        "author": nyt_data.get("author", ""),
+        "editor": nyt_data.get("editor", ""),
+        "date": nyt_data.get("date", ""),
+        "dow": nyt_data.get("dow", ""),
+        "has_rebus": has_rebus,
+        "numbering_warnings": numbering_warnings,
     }
 
     # Verify

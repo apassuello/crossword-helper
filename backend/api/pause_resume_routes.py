@@ -55,11 +55,16 @@ def pause_autofill(task_id: str):
 
         logger.info(f"Pause requested for task: {task_id}")
 
-        return jsonify({
-            "success": True,
-            "message": f"Pause requested for task {task_id}",
-            "task_id": task_id
-        }), 200
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": f"Pause requested for task {task_id}",
+                    "task_id": task_id,
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error requesting pause for task {task_id}: {e}")
@@ -108,16 +113,22 @@ def cancel_autofill(task_id: str):
 
         # Also terminate the subprocess directly as a fallback
         from .progress_routes import cleanup_process
+
         cleanup_process(task_id)
 
         logger.info(f"Cancel requested for task: {task_id}")
 
-        return jsonify({
-            "success": True,
-            "task_id": task_id,
-            "message": "Autofill cancelled",
-            "state_saved": True  # CLI saves state before exiting
-        }), 200
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "message": "Autofill cancelled",
+                    "state_saved": True,  # CLI saves state before exiting
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error cancelling task {task_id}: {e}")
@@ -168,14 +179,12 @@ def resume_autofill():
         data = request.get_json()
 
         # Validate request
-        if not data or 'task_id' not in data:
-            return jsonify({
-                "error": "Missing required field: task_id"
-            }), 400
+        if not data or "task_id" not in data:
+            return jsonify({"error": "Missing required field: task_id"}), 400
 
-        task_id = data['task_id']
-        edited_grid = data.get('edited_grid')
-        options = data.get('options', {})
+        task_id = data["task_id"]
+        edited_grid = data.get("edited_grid")
+        options = data.get("options", {})
 
         # Load saved state
         from cli.src.fill.state_manager import StateManager
@@ -185,23 +194,20 @@ def resume_autofill():
         try:
             saved_state, metadata = state_manager.load_csp_state(task_id)
         except FileNotFoundError:
-            return jsonify({
-                "error": f"Saved state not found for task_id: {task_id}"
-            }), 404
+            return (
+                jsonify({"error": f"Saved state not found for task_id: {task_id}"}),
+                404,
+            )
 
         # If user provided edited grid, merge edits
         if edited_grid is not None:
             try:
                 # Convert edited_grid to proper dict format
-                edited_grid_dict = {
-                    'size': len(edited_grid),
-                    'grid': edited_grid
-                }
+                edited_grid_dict = {"size": len(edited_grid), "grid": edited_grid}
 
                 # Merge edits into saved state
                 updated_state = edit_merger.merge_edits(
-                    saved_state=saved_state,
-                    edited_grid_dict=edited_grid_dict
+                    saved_state=saved_state, edited_grid_dict=edited_grid_dict
                 )
 
                 logger.info(f"Merged user edits into state for task {task_id}")
@@ -209,10 +215,15 @@ def resume_autofill():
             except ValueError as e:
                 # Edits create unsolvable state
                 logger.warning(f"User edits create unsolvable state: {e}")
-                return jsonify({
-                    "error": "User edits create unsolvable configuration",
-                    "details": str(e)
-                }), 409
+                return (
+                    jsonify(
+                        {
+                            "error": "User edits create unsolvable configuration",
+                            "details": str(e),
+                        }
+                    ),
+                    409,
+                )
 
         else:
             # No edits, use saved state as-is
@@ -220,31 +231,33 @@ def resume_autofill():
 
         # Generate new task ID for resume
         import uuid
+
         new_task_id = f"resume_{uuid.uuid4().hex[:8]}"
 
         # Save updated state with new task ID
         state_manager.save_csp_state(
             task_id=new_task_id,
             csp_state=updated_state,
-            metadata={
-                **metadata,
-                'resumed_from': task_id,
-                'resume_options': options
-            },
-            compress=True
+            metadata={**metadata, "resumed_from": task_id, "resume_options": options},
+            compress=True,
         )
 
         logger.info(f"Resume prepared: {task_id} -> {new_task_id}")
 
         # Return new task ID for client to start autofill
-        return jsonify({
-            "success": True,
-            "new_task_id": new_task_id,
-            "original_task_id": task_id,
-            "message": "Resume state prepared",
-            "slots_filled": metadata.get('slots_filled', 0),
-            "total_slots": metadata.get('total_slots', 0)
-        }), 200
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "new_task_id": new_task_id,
+                    "original_task_id": task_id,
+                    "message": "Resume state prepared",
+                    "slots_filled": metadata.get("slots_filled", 0),
+                    "total_slots": metadata.get("total_slots", 0),
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error resuming autofill: {e}", exc_info=True)
@@ -294,15 +307,10 @@ def get_saved_state(task_id: str):
             Grid.from_dict(saved_state.grid_dict)
 
             # Return info with grid preview
-            return jsonify({
-                **info,
-                "grid_preview": saved_state.grid_dict['grid']
-            }), 200
+            return jsonify({**info, "grid_preview": saved_state.grid_dict["grid"]}), 200
 
         except FileNotFoundError:
-            return jsonify({
-                "error": f"State not found for task_id: {task_id}"
-            }), 404
+            return jsonify({"error": f"State not found for task_id: {task_id}"}), 404
 
     except Exception as e:
         logger.error(f"Error getting state info for {task_id}: {e}")
@@ -337,14 +345,14 @@ def delete_saved_state(task_id: str):
 
         if deleted:
             logger.info(f"Deleted state for task: {task_id}")
-            return jsonify({
-                "success": True,
-                "message": f"State deleted for task {task_id}"
-            }), 200
+            return (
+                jsonify(
+                    {"success": True, "message": f"State deleted for task {task_id}"}
+                ),
+                200,
+            )
         else:
-            return jsonify({
-                "error": f"State not found for task_id: {task_id}"
-            }), 404
+            return jsonify({"error": f"State not found for task_id: {task_id}"}), 404
 
     except Exception as e:
         logger.error(f"Error deleting state for {task_id}: {e}")
@@ -387,15 +395,12 @@ def list_saved_states():
         state_manager = StateManager(storage_dir=STATE_STORAGE_DIR)
 
         # Get optional max_age parameter
-        max_age_days = request.args.get('max_age_days', type=int)
+        max_age_days = request.args.get("max_age_days", type=int)
 
         # List states
         states = state_manager.list_states(max_age_days=max_age_days)
 
-        return jsonify({
-            "states": states,
-            "count": len(states)
-        }), 200
+        return jsonify({"states": states, "count": len(states)}), 200
 
     except Exception as e:
         logger.error(f"Error listing states: {e}")
@@ -431,7 +436,7 @@ def cleanup_old_states():
         from cli.src.fill.state_manager import StateManager
 
         data = request.get_json() or {}
-        max_age_days = data.get('max_age_days', 7)
+        max_age_days = data.get("max_age_days", 7)
 
         state_manager = StateManager(storage_dir=STATE_STORAGE_DIR)
 
@@ -439,11 +444,16 @@ def cleanup_old_states():
 
         logger.info(f"Cleaned up {deleted_count} old state files")
 
-        return jsonify({
-            "success": True,
-            "deleted_count": deleted_count,
-            "message": f"Deleted {deleted_count} old state files"
-        }), 200
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "deleted_count": deleted_count,
+                    "message": f"Deleted {deleted_count} old state files",
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Error cleaning up states: {e}")
@@ -479,13 +489,14 @@ def get_edit_summary():
     try:
         data = request.get_json()
 
-        if not data or 'task_id' not in data or 'edited_grid' not in data:
-            return jsonify({
-                "error": "Missing required fields: task_id, edited_grid"
-            }), 400
+        if not data or "task_id" not in data or "edited_grid" not in data:
+            return (
+                jsonify({"error": "Missing required fields: task_id, edited_grid"}),
+                400,
+            )
 
-        task_id = data['task_id']
-        edited_grid = data['edited_grid']
+        task_id = data["task_id"]
+        edited_grid = data["edited_grid"]
 
         # Load saved state
         from cli.src.fill.state_manager import StateManager
@@ -495,22 +506,20 @@ def get_edit_summary():
         try:
             saved_state, _ = state_manager.load_csp_state(task_id)
         except FileNotFoundError:
-            return jsonify({
-                "error": f"Saved state not found for task_id: {task_id}"
-            }), 404
+            return (
+                jsonify({"error": f"Saved state not found for task_id: {task_id}"}),
+                404,
+            )
 
         # Convert edited_grid to proper dict format
-        edited_grid_dict = {
-            'size': len(edited_grid),
-            'grid': edited_grid
-        }
+        edited_grid_dict = {"size": len(edited_grid), "grid": edited_grid}
 
         # Get edit summary
         summary = edit_merger.get_edit_summary(
             saved_grid_dict=saved_state.grid_dict,
             edited_grid_dict=edited_grid_dict,
             slot_list=saved_state.slot_list,
-            slot_id_map=saved_state.slot_id_map
+            slot_id_map=saved_state.slot_id_map,
         )
 
         return jsonify(summary), 200

@@ -149,7 +149,7 @@ class TestHybridIntegration:
 
         timeout = 30
         start = time.time()
-        result = hybrid.fill(timeout=timeout)
+        hybrid.fill(timeout=timeout)
         elapsed = time.time() - start
 
         # Should not exceed timeout by more than 20% (some overhead expected)

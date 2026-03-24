@@ -13,11 +13,11 @@ from .pools import GridPool, StatePool
 from .domain_manager import DomainManager, Domain, SetDomain, BitsetDomain
 
 __all__ = [
-    'GridSnapshot',
-    'GridPool',
-    'StatePool',
-    'DomainManager',
-    'Domain',
-    'SetDomain',
-    'BitsetDomain'
+    "GridSnapshot",
+    "GridPool",
+    "StatePool",
+    "DomainManager",
+    "Domain",
+    "SetDomain",
+    "BitsetDomain",
 ]

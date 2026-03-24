@@ -51,14 +51,19 @@ def transform_grid_frontend_to_cli(frontend_grid):
 class TestGridTransformationLogic:
     """Test the grid transformation function in isolation."""
 
-    @pytest.mark.parametrize("test_name,frontend_data,expected_cli_data", TRANSFORMATION_TEST_CASES)
-    def test_all_transformation_cases(self, test_name, frontend_data, expected_cli_data):
+    @pytest.mark.parametrize(
+        "test_name,frontend_data,expected_cli_data", TRANSFORMATION_TEST_CASES
+    )
+    def test_all_transformation_cases(
+        self, test_name, frontend_data, expected_cli_data
+    ):
         """Test all predefined transformation cases."""
         result = transform_grid_frontend_to_cli(frontend_data["grid"])
         expected = expected_cli_data["grid"]
 
-        assert result == expected, \
-            f"Transformation failed for {test_name}.\nGot: {result}\nExpected: {expected}"
+        assert (
+            result == expected
+        ), f"Transformation failed for {test_name}.\nGot: {result}\nExpected: {expected}"
 
     def test_empty_cell_transformation(self):
         """Test that empty cells (letter='') become '.'"""
@@ -94,7 +99,7 @@ class TestGridTransformationLogic:
             [
                 {"letter": "a", "isBlack": False},
                 {"letter": "B", "isBlack": False},
-                {"letter": "c", "isBlack": False}
+                {"letter": "c", "isBlack": False},
             ]
         ]
         result = transform_grid_frontend_to_cli(frontend_grid)
@@ -108,9 +113,7 @@ class TestGridTransformationEdgeCases:
     def test_string_passthrough(self):
         """Test that string cells pass through unchanged."""
         # Sometimes grid might already be in CLI format
-        mixed_grid = [
-            ["A", {"letter": "B", "isBlack": False}, "#"]
-        ]
+        mixed_grid = [["A", {"letter": "B", "isBlack": False}, "#"]]
         result = transform_grid_frontend_to_cli(mixed_grid)
 
         assert result == [["A", "B", "#"]], "String cells should pass through"
@@ -133,7 +136,7 @@ class TestGridTransformationEdgeCases:
         """Test transformation of grid with all black squares."""
         frontend_grid = [
             [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}],
-            [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}]
+            [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}],
         ]
         result = transform_grid_frontend_to_cli(frontend_grid)
 
@@ -143,7 +146,7 @@ class TestGridTransformationEdgeCases:
         """Test transformation of completely filled grid."""
         frontend_grid = [
             [{"letter": "A", "isBlack": False}, {"letter": "B", "isBlack": False}],
-            [{"letter": "C", "isBlack": False}, {"letter": "D", "isBlack": False}]
+            [{"letter": "C", "isBlack": False}, {"letter": "D", "isBlack": False}],
         ]
         result = transform_grid_frontend_to_cli(frontend_grid)
 
@@ -241,49 +244,39 @@ class TestGridTransformationBugRegression:
         Without transformation, CLI crashes with AttributeError.
         """
         # Frontend format
-        frontend_grid = [
-            [{"letter": "A", "isBlack": False}]
-        ]
+        frontend_grid = [[{"letter": "A", "isBlack": False}]]
 
         # Transform
         result = transform_grid_frontend_to_cli(frontend_grid)
 
         # Result should be string, not dict
-        assert isinstance(result[0][0], str), \
-            "Cell should be transformed to string, not remain as dict"
+        assert isinstance(
+            result[0][0], str
+        ), "Cell should be transformed to string, not remain as dict"
 
-        assert result[0][0] == "A", \
-            "Cell should contain letter 'A' as string"
+        assert result[0][0] == "A", "Cell should contain letter 'A' as string"
 
     def test_bug_empty_dict_format_is_transformed(self):
         """Test that empty cell dict is transformed to '.' string."""
-        frontend_grid = [
-            [{"letter": "", "isBlack": False}]
-        ]
+        frontend_grid = [[{"letter": "", "isBlack": False}]]
 
         result = transform_grid_frontend_to_cli(frontend_grid)
 
         # Should be string ".", not dict
-        assert isinstance(result[0][0], str), \
-            "Cell should be string, not dict"
+        assert isinstance(result[0][0], str), "Cell should be string, not dict"
 
-        assert result[0][0] == ".", \
-            "Empty cell should be '.'"
+        assert result[0][0] == ".", "Empty cell should be '.'"
 
     def test_bug_black_dict_format_is_transformed(self):
         """Test that black cell dict is transformed to '#' string."""
-        frontend_grid = [
-            [{"letter": "", "isBlack": True}]
-        ]
+        frontend_grid = [[{"letter": "", "isBlack": True}]]
 
         result = transform_grid_frontend_to_cli(frontend_grid)
 
         # Should be string "#", not dict
-        assert isinstance(result[0][0], str), \
-            "Cell should be string, not dict"
+        assert isinstance(result[0][0], str), "Cell should be string, not dict"
 
-        assert result[0][0] == "#", \
-            "Black cell should be '#'"
+        assert result[0][0] == "#", "Black cell should be '#'"
 
     def test_bug_cli_would_crash_on_dict(self):
         """
@@ -313,18 +306,22 @@ class TestGridTransformationBugRegression:
             [
                 {"letter": "A", "isBlack": False},
                 "B",  # Already a string
-                {"letter": "", "isBlack": True}
+                {"letter": "", "isBlack": True},
             ]
         ]
 
         result = transform_grid_frontend_to_cli(frontend_grid)
 
         # All should be strings
-        assert all(isinstance(cell, str) for cell in result[0]), \
-            "All cells should be strings after transformation"
+        assert all(
+            isinstance(cell, str) for cell in result[0]
+        ), "All cells should be strings after transformation"
 
-        assert result[0] == ["A", "B", "#"], \
-            "Mixed format should be normalized to strings"
+        assert result[0] == [
+            "A",
+            "B",
+            "#",
+        ], "Mixed format should be normalized to strings"
 
 
 class TestGridTransformationInvariance:
@@ -341,8 +338,7 @@ class TestGridTransformationInvariance:
         result2 = transform_grid_frontend_to_cli(result1)
 
         # Should be the same (strings pass through)
-        assert result1 == result2, \
-            "Transformation should be idempotent"
+        assert result1 == result2, "Transformation should be idempotent"
 
     def test_grid_dimensions_preserved(self):
         """Test that transformation preserves grid dimensions."""
@@ -362,8 +358,9 @@ class TestGridTransformationInvariance:
         result = transform_grid_frontend_to_cli(frontend_grid)
         result_cell_count = sum(len(row) for row in result)
 
-        assert original_cell_count == result_cell_count, \
-            "Cell count should be preserved"
+        assert (
+            original_cell_count == result_cell_count
+        ), "Cell count should be preserved"
 
     def test_black_square_positions_preserved(self):
         """Test that black square positions are preserved."""

@@ -16,13 +16,11 @@ from .cell_types import (
     WILDCARD,  # '?'
     is_empty,
     is_black,
-    is_letter,
-    grid_to_pattern,
 )
 
 # Cell encoding constants for NumPy array
 BLACK_SQUARE = -1  # Internal encoding for black squares
-EMPTY_CELL = 0     # Internal encoding for empty cells
+EMPTY_CELL = 0  # Internal encoding for empty cells
 
 
 class Grid:
@@ -93,11 +91,11 @@ class Grid:
             raise ValueError(f"Letter must be single character A-Z, got '{letter}'")
 
         upper = letter.upper()
-        if not ('A' <= upper <= 'Z'):
+        if not ("A" <= upper <= "Z"):
             raise ValueError(f"Letter must be A-Z, got '{letter}' (non-ASCII)")
 
         # Encode: A=1, B=2, ..., Z=26
-        self.cells[row, col] = ord(upper) - ord('A') + 1
+        self.cells[row, col] = ord(upper) - ord("A") + 1
 
         # Lock cell if requested (theme words)
         if lock:
@@ -129,7 +127,7 @@ class Grid:
             return EMPTY_STR  # '.'
         else:
             # Decode: 1=A, 2=B, ..., 26=Z
-            return chr(value - 1 + ord('A'))
+            return chr(value - 1 + ord("A"))
 
     def is_black(self, row: int, col: int) -> bool:
         """Check if position is a black square."""
@@ -214,13 +212,15 @@ class Grid:
 
                     # Only add if length >= 3
                     if length >= 3:
-                        slots.append({
-                            'direction': 'across',
-                            'row': row,
-                            'col': start_col,
-                            'length': length,
-                            'pattern': ''.join(pattern)
-                        })
+                        slots.append(
+                            {
+                                "direction": "across",
+                                "row": row,
+                                "col": start_col,
+                                "length": length,
+                                "pattern": "".join(pattern),
+                            }
+                        )
                 else:
                     col += 1
 
@@ -241,13 +241,15 @@ class Grid:
 
                     # Only add if length >= 3
                     if length >= 3:
-                        slots.append({
-                            'direction': 'down',
-                            'row': start_row,
-                            'col': col,
-                            'length': length,
-                            'pattern': ''.join(pattern)
-                        })
+                        slots.append(
+                            {
+                                "direction": "down",
+                                "row": start_row,
+                                "col": col,
+                                "length": length,
+                                "pattern": "".join(pattern),
+                            }
+                        )
                 else:
                     row += 1
 
@@ -268,14 +270,14 @@ class Grid:
             grid_2d.append(row_data)
 
         return {
-            'size': self.size,
-            'grid': grid_2d,
-            'black_squares': len(self.get_black_squares()),
-            'is_symmetric': self.check_symmetry()
+            "size": self.size,
+            "grid": grid_2d,
+            "black_squares": len(self.get_black_squares()),
+            "is_symmetric": self.check_symmetry(),
         }
 
     @classmethod
-    def from_dict(cls, data: Dict, strict_size: bool = True) -> 'Grid':
+    def from_dict(cls, data: Dict, strict_size: bool = True) -> "Grid":
         """
         Create grid from dictionary format.
 
@@ -294,14 +296,14 @@ class Grid:
             ValueError: If grid data is invalid or incompatible with size
         """
         # Get grid data
-        if 'grid' not in data:
+        if "grid" not in data:
             raise ValueError("Dictionary must contain 'grid' key")
 
-        grid_data = data['grid']
+        grid_data = data["grid"]
 
         # Determine size
-        if 'size' in data:
-            size = data['size']
+        if "size" in data:
+            size = data["size"]
         else:
             # Auto-detect from grid dimensions
             if not grid_data or not isinstance(grid_data, list):
@@ -337,13 +339,13 @@ class Grid:
         for row in range(size):
             for col in range(size):
                 cell = grid_data[row][col]
-                if cell == '#':
+                if cell == "#":
                     grid.cells[row, col] = BLACK_SQUARE
-                elif cell == '.':
+                elif cell == ".":
                     grid.cells[row, col] = EMPTY_CELL
                 elif cell.isalpha():
-                    grid.cells[row, col] = ord(cell.upper()) - ord('A') + 1
-                elif cell == '':
+                    grid.cells[row, col] = ord(cell.upper()) - ord("A") + 1
+                elif cell == "":
                     # Handle empty string as empty cell
                     grid.cells[row, col] = EMPTY_CELL
                 else:
@@ -370,12 +372,12 @@ class Grid:
             Pattern string (e.g., "?I?A" where ? is empty, letters are filled)
         """
         pattern = []
-        row, col = slot['row'], slot['col']
-        length = slot['length']
-        direction = slot['direction']
+        row, col = slot["row"], slot["col"]
+        length = slot["length"]
+        direction = slot["direction"]
 
         for i in range(length):
-            if direction == 'across':
+            if direction == "across":
                 cell = self.get_cell(row, col + i)
             else:  # down
                 cell = self.get_cell(row + i, col)
@@ -389,9 +391,11 @@ class Grid:
                 # Letter
                 pattern.append(cell)
 
-        return ''.join(pattern)
+        return "".join(pattern)
 
-    def place_word(self, word: str, row: int, col: int, direction: str, lock: bool = False) -> None:
+    def place_word(
+        self, word: str, row: int, col: int, direction: str, lock: bool = False
+    ) -> None:
         """
         Place word in grid.
 
@@ -409,18 +413,22 @@ class Grid:
 
         # CRITICAL: Ensure word contains only letters (no wildcards or empty markers)
         if WILDCARD in word:
-            raise ValueError(f"Cannot place wildcard '{WILDCARD}' in grid. Word: {word}")
+            raise ValueError(
+                f"Cannot place wildcard '{WILDCARD}' in grid. Word: {word}"
+            )
         if EMPTY_STR in word:
-            raise ValueError(f"Cannot place empty marker '{EMPTY_STR}' in grid. Word: {word}")
+            raise ValueError(
+                f"Cannot place empty marker '{EMPTY_STR}' in grid. Word: {word}"
+            )
         if not all(c.isalpha() for c in word):
             raise ValueError(f"Word must contain only letters A-Z. Got: {word}")
 
         # Validate direction
-        if direction not in ('across', 'down'):
+        if direction not in ("across", "down"):
             raise ValueError(f"Direction must be 'across' or 'down', got '{direction}'")
 
         # Validate word fits in grid bounds
-        if direction == 'across':
+        if direction == "across":
             end_col = col + len(word) - 1
             if end_col >= self.size:
                 raise ValueError(
@@ -439,7 +447,7 @@ class Grid:
 
         # THEME PRESERVATION: Check if any cell is locked
         for i in range(len(word)):
-            if direction == 'across':
+            if direction == "across":
                 cell_pos = (row, col + i)
             else:  # down
                 cell_pos = (row + i, col)
@@ -457,7 +465,7 @@ class Grid:
 
         # Place word (now safe)
         for i, letter in enumerate(word):
-            if direction == 'across':
+            if direction == "across":
                 self.set_letter(row, col + i, letter, lock=lock)
             else:  # down
                 self.set_letter(row + i, col, letter, lock=lock)
@@ -486,11 +494,11 @@ class Grid:
             ValueError: If removal would extend beyond grid or direction is invalid
         """
         # Validate direction
-        if direction not in ('across', 'down'):
+        if direction not in ("across", "down"):
             raise ValueError(f"Direction must be 'across' or 'down', got '{direction}'")
 
         # Validate removal fits in grid bounds
-        if direction == 'across':
+        if direction == "across":
             end_col = col + length - 1
             if end_col >= self.size:
                 raise ValueError(
@@ -512,7 +520,7 @@ class Grid:
         # 1. Locked cells (theme words)
         # 2. Cells shared with filled perpendicular slots
         for i in range(length):
-            if direction == 'across':
+            if direction == "across":
                 cell_pos = (row, col + i)
             else:  # down
                 cell_pos = (row + i, col)
@@ -520,13 +528,17 @@ class Grid:
             # Skip locked cells (theme words)
             if cell_pos not in self.locked_cells:
                 # Check if this cell is used by a filled perpendicular slot
-                if not self._is_cell_in_filled_perpendicular_slot(cell_pos[0], cell_pos[1], direction):
+                if not self._is_cell_in_filled_perpendicular_slot(
+                    cell_pos[0], cell_pos[1], direction
+                ):
                     self.cells[cell_pos] = EMPTY_CELL
 
         # Invalidate cached numbering
         self._numbering = None
 
-    def _is_cell_in_filled_perpendicular_slot(self, row: int, col: int, original_direction: str) -> bool:
+    def _is_cell_in_filled_perpendicular_slot(
+        self, row: int, col: int, original_direction: str
+    ) -> bool:
         """
         Check if a cell is part of a completely filled perpendicular slot.
 
@@ -542,22 +554,22 @@ class Grid:
             True if the cell is part of a filled perpendicular slot, False otherwise
         """
         # Determine perpendicular direction
-        perpendicular_direction = 'down' if original_direction == 'across' else 'across'
+        perpendicular_direction = "down" if original_direction == "across" else "across"
 
         # Get all slots in the perpendicular direction
         all_slots = self.get_word_slots()
 
         for slot in all_slots:
-            if slot['direction'] != perpendicular_direction:
+            if slot["direction"] != perpendicular_direction:
                 continue
 
-            slot_row = slot['row']
-            slot_col = slot['col']
-            slot_length = slot['length']
+            slot_row = slot["row"]
+            slot_col = slot["col"]
+            slot_length = slot["length"]
 
             # Check if this cell is part of this slot
             is_in_slot = False
-            if perpendicular_direction == 'across':
+            if perpendicular_direction == "across":
                 if slot_row == row and slot_col <= col < slot_col + slot_length:
                     is_in_slot = True
             else:  # down
@@ -570,7 +582,7 @@ class Grid:
             # Check if this slot is completely filled
             is_filled = True
             for i in range(slot_length):
-                if perpendicular_direction == 'across':
+                if perpendicular_direction == "across":
                     cell_value = self.cells[slot_row, slot_col + i]
                 else:  # down
                     cell_value = self.cells[slot_row + i, slot_col]
@@ -602,13 +614,13 @@ class Grid:
             # Check actual cell values, not pattern strings
             # A cell is filled if it's a black square (-1) OR a positive value (letter)
             # Anything else (0, None, unexpected values) = empty
-            row, col = slot['row'], slot['col']
-            length = slot['length']
-            direction = slot['direction']
+            row, col = slot["row"], slot["col"]
+            length = slot["length"]
+            direction = slot["direction"]
 
             has_empty = False
             for i in range(length):
-                if direction == 'across':
+                if direction == "across":
                     cell_value = self.cells[row, col + i]
                 else:  # down
                     cell_value = self.cells[row + i, col]
@@ -623,7 +635,7 @@ class Grid:
 
         return empty_slots
 
-    def clone(self) -> 'Grid':
+    def clone(self) -> "Grid":
         """
         Create deep copy of grid.
 
@@ -663,5 +675,5 @@ class Grid:
             line = []
             for col in range(self.size):
                 line.append(self.get_cell(row, col))
-            lines.append(' '.join(line))
-        return '\n'.join(lines)
+            lines.append(" ".join(line))
+        return "\n".join(lines)

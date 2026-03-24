@@ -120,7 +120,7 @@ class HTMLExporter:
             for col in range(grid.size):
                 cell = grid.get_cell(row, col)
 
-                if cell == '#':
+                if cell == "#":
                     html += '            <div class="cell black"></div>\n'
                 else:
                     html += '            <div class="cell">\n'
@@ -128,13 +128,17 @@ class HTMLExporter:
                     # Add number if present
                     if (row, col) in numbering:
                         num = numbering[(row, col)]
-                        html += f'                <span class="cell-number">{num}</span>\n'
+                        html += (
+                            f'                <span class="cell-number">{num}</span>\n'
+                        )
 
                     # Add letter if filled
-                    if cell != '.':
-                        html += f'                <span class="cell-letter">{cell}</span>\n'
+                    if cell != ".":
+                        html += (
+                            f'                <span class="cell-letter">{cell}</span>\n'
+                        )
 
-                    html += '            </div>\n'
+                    html += "            </div>\n"
 
         html += """        </div>
     </div>
@@ -145,14 +149,16 @@ class HTMLExporter:
 """
 
         # Generate across clues
-        across_clues = [(num, info) for num, info in clue_positions.items() if info['has_across']]
+        across_clues = [
+            (num, info) for num, info in clue_positions.items() if info["has_across"]
+        ]
         across_clues.sort(key=lambda x: x[0])
 
         for num, info in across_clues:
-            html += f'            <div class="clue">\n'
+            html += '            <div class="clue">\n'
             html += f'                <span class="clue-number">{num}.</span>\n'
             html += f'                <span>({info["across_length"]} letters)</span>\n'
-            html += '            </div>\n'
+            html += "            </div>\n"
 
         html += """        </div>
 
@@ -161,14 +167,16 @@ class HTMLExporter:
 """
 
         # Generate down clues
-        down_clues = [(num, info) for num, info in clue_positions.items() if info['has_down']]
+        down_clues = [
+            (num, info) for num, info in clue_positions.items() if info["has_down"]
+        ]
         down_clues.sort(key=lambda x: x[0])
 
         for num, info in down_clues:
-            html += f'            <div class="clue">\n'
+            html += '            <div class="clue">\n'
             html += f'                <span class="clue-number">{num}.</span>\n'
             html += f'                <span>({info["down_length"]} letters)</span>\n'
-            html += '            </div>\n'
+            html += "            </div>\n"
 
         html += """        </div>
     </div>
@@ -178,7 +186,9 @@ class HTMLExporter:
         return html
 
     @staticmethod
-    def export_to_file(grid: Grid, filepath: str, title: str = "Crossword Puzzle") -> None:
+    def export_to_file(
+        grid: Grid, filepath: str, title: str = "Crossword Puzzle"
+    ) -> None:
         """
         Export grid to HTML file.
 
@@ -189,5 +199,5 @@ class HTMLExporter:
         """
         html = HTMLExporter.export(grid, title)
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)

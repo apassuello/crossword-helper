@@ -16,7 +16,9 @@ pytestmark = pytest.mark.slow
 
 
 def create_empty_grid(size=15):
-    return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
+    return [
+        [{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)
+    ]
 
 
 class TestThemePlacementWorkflow:
@@ -35,10 +37,8 @@ class TestThemePlacementWorkflow:
         # Step 1: Upload theme words
         response = client.post(
             "/api/theme/upload",
-            data=json.dumps({
-                "content": "BIRTHDAY\nCELEBRATION\nPARTY"
-            }),
-            content_type="application/json"
+            data=json.dumps({"content": "BIRTHDAY\nCELEBRATION\nPARTY"}),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -48,12 +48,8 @@ class TestThemePlacementWorkflow:
         # Step 2: Get placement suggestions
         response = client.post(
             "/api/theme/suggest-placements",
-            data=json.dumps({
-                "grid": grid,
-                "size": 15,
-                "theme_words": theme_words
-            }),
-            content_type="application/json"
+            data=json.dumps({"grid": grid, "size": 15, "theme_words": theme_words}),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -67,20 +63,22 @@ class TestThemePlacementWorkflow:
         placement = suggestions[0]["suggestions"][0]
         response = client.post(
             "/api/theme/apply-placement",
-            data=json.dumps({
-                "grid": grid,
-                "placement": {
-                    "word": placement["word"],
-                    "row": placement["row"],
-                    "col": placement["col"],
-                    "direction": placement["direction"]
+            data=json.dumps(
+                {
+                    "grid": grid,
+                    "placement": {
+                        "word": placement["word"],
+                        "row": placement["row"],
+                        "col": placement["col"],
+                        "direction": placement["direction"],
+                    },
                 }
-            }),
-            content_type="application/json"
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
-        assert response.json["applied"] == True
+        assert response.json["applied"]
         modified_grid = response.json["grid"]
 
         # Step 4: Verify theme word is in grid
@@ -88,7 +86,9 @@ class TestThemePlacementWorkflow:
         if placement["direction"] == "across":
             row = placement["row"]
             col = placement["col"]
-            grid_word = "".join([modified_grid[row][col + i]["letter"] for i in range(len(word))])
+            grid_word = "".join(
+                [modified_grid[row][col + i]["letter"] for i in range(len(word))]
+            )
             assert grid_word == word
 
     def test_theme_preservation_during_autofill(self, client):
@@ -108,18 +108,18 @@ class TestThemePlacementWorkflow:
         # Run autofill with theme preservation
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 15,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "trie",
-                "theme_entries": {
-                    "(0,0,across)": theme_word
+            data=json.dumps(
+                {
+                    "size": 15,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                    "theme_entries": {"(0,0,across)": theme_word},
                 }
-            }),
-            content_type="application/json"
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202

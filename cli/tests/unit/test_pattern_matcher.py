@@ -207,7 +207,7 @@ class TestPatternMatcher:
         """Test that finding with large patterns is reasonably fast."""
         import time
         start = time.time()
-        matches = matcher.find('?' * 6, max_results=100)
+        matcher.find('?' * 6, max_results=100)
         elapsed = time.time() - start
         # Should complete in reasonable time (< 1 second)
         assert elapsed < 1.0

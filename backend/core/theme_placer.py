@@ -11,7 +11,9 @@ from typing import List, Dict, Optional
 class ThemePlacementSuggestion:
     """A single placement suggestion for a theme word."""
 
-    def __init__(self, word: str, row: int, col: int, direction: str, score: int, reasoning: str):
+    def __init__(
+        self, word: str, row: int, col: int, direction: str, score: int, reasoning: str
+    ):
         self.word = word
         self.row = row
         self.col = col
@@ -21,12 +23,12 @@ class ThemePlacementSuggestion:
 
     def to_dict(self):
         return {
-            'word': self.word,
-            'row': self.row,
-            'col': self.col,
-            'direction': self.direction,
-            'score': self.score,
-            'reasoning': self.reasoning
+            "word": self.word,
+            "row": self.row,
+            "col": self.col,
+            "direction": self.direction,
+            "score": self.score,
+            "reasoning": self.reasoning,
         }
 
 
@@ -43,14 +45,14 @@ class ThemePlacer:
 
     def __init__(self, grid_size: int):
         self.grid_size = grid_size
-        self.grid = [['' for _ in range(grid_size)] for _ in range(grid_size)]
+        self.grid = [["" for _ in range(grid_size)] for _ in range(grid_size)]
         self.placed_words = []
 
     def suggest_placements(
         self,
         theme_words: List[str],
         existing_grid: Optional[List[List]] = None,
-        max_suggestions_per_word: int = 3
+        max_suggestions_per_word: int = 3,
     ) -> List[Dict]:
         """
         Suggest placements for all theme words.
@@ -70,17 +72,15 @@ class ThemePlacer:
             for row in existing_grid:
                 normalized_row = []
                 for cell in row:
-                    if cell == '.':
-                        normalized_row.append('')
+                    if cell == ".":
+                        normalized_row.append("")
                     else:
                         normalized_row.append(cell)
                 self.grid.append(normalized_row)
 
         # Sort words by length (longest first)
         words_sorted = sorted(
-            [(w.upper(), len(w)) for w in theme_words],
-            key=lambda x: x[1],
-            reverse=True
+            [(w.upper(), len(w)) for w in theme_words], key=lambda x: x[1], reverse=True
         )
 
         results = []
@@ -89,7 +89,7 @@ class ThemePlacer:
         occupied_cells = set()
         for row_idx, row in enumerate(self.grid):
             for col_idx, cell in enumerate(row):
-                if cell and cell not in ('', '.', None):
+                if cell and cell not in ("", ".", None):
                     occupied_cells.add((row_idx, col_idx))
 
         for idx, (word, word_len) in enumerate(words_sorted):
@@ -131,11 +131,11 @@ class ThemePlacer:
                 suggestions.append(
                     ThemePlacementSuggestion(
                         word=word,
-                        row=placement['row'],
-                        col=placement['col'],
-                        direction=placement['direction'],
+                        row=placement["row"],
+                        col=placement["col"],
+                        direction=placement["direction"],
                         score=score,
-                        reasoning=reasoning
+                        reasoning=reasoning,
                     ).to_dict()
                 )
 
@@ -143,22 +143,20 @@ class ThemePlacer:
                 if not has_overlap and best_placement is None:
                     best_placement = placement
 
-            results.append({
-                'word': word,
-                'length': word_len,
-                'suggestions': suggestions
-            })
+            results.append(
+                {"word": word, "length": word_len, "suggestions": suggestions}
+            )
 
             # Apply the best placement to the grid to avoid future overlaps
             # Only apply if we have a valid non-overlapping placement
             if best_placement:
                 self.apply_placement(best_placement)
                 # Update occupied cells
-                row = best_placement['row']
-                col = best_placement['col']
-                direction = best_placement['direction']
+                row = best_placement["row"]
+                col = best_placement["col"]
+                direction = best_placement["direction"]
                 for i in range(word_len):
-                    if direction == 'across':
+                    if direction == "across":
                         occupied_cells.add((row, col + i))
                     else:
                         occupied_cells.add((row + i, col))
@@ -175,23 +173,22 @@ class ThemePlacer:
             for col in range(self.grid_size):
                 # Across
                 if col + word_len <= self.grid_size:
-                    if self._fits(word, row, col, 'across'):
-                        placements.append({
-                            'row': row,
-                            'col': col,
-                            'direction': 'across',
-                            'word': word
-                        })
+                    if self._fits(word, row, col, "across"):
+                        placements.append(
+                            {
+                                "row": row,
+                                "col": col,
+                                "direction": "across",
+                                "word": word,
+                            }
+                        )
 
                 # Down
                 if row + word_len <= self.grid_size:
-                    if self._fits(word, row, col, 'down'):
-                        placements.append({
-                            'row': row,
-                            'col': col,
-                            'direction': 'down',
-                            'word': word
-                        })
+                    if self._fits(word, row, col, "down"):
+                        placements.append(
+                            {"row": row, "col": col, "direction": "down", "word": word}
+                        )
 
         return placements
 
@@ -200,30 +197,32 @@ class ThemePlacer:
         word_len = len(word)
 
         for i in range(word_len):
-            if direction == 'across':
+            if direction == "across":
                 cell = self.grid[row][col + i]
             else:  # down
                 cell = self.grid[row + i][col]
 
             # Check for conflicts
             # Empty cells can be '', '.', or None
-            if cell and cell not in ('', '.', None) and cell != word[i]:
+            if cell and cell not in ("", ".", None) and cell != word[i]:
                 return False
 
         return True
 
-    def _has_invalid_overlap(self, placement: Dict, word: str, occupied_cells: set) -> bool:
+    def _has_invalid_overlap(
+        self, placement: Dict, word: str, occupied_cells: set
+    ) -> bool:
         """
         Check if placement has invalid overlap with occupied cells.
         Valid overlaps are when the same letter appears at the intersection.
         """
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
         word_len = len(word)
 
         for i in range(word_len):
-            if direction == 'across':
+            if direction == "across":
                 cell_pos = (row, col + i)
             else:
                 cell_pos = (row + i, col)
@@ -236,7 +235,9 @@ class ThemePlacer:
                     return True  # Invalid overlap - different letters
         return False  # No invalid overlap
 
-    def _score_placement_with_diversity(self, placement: Dict, word: str, word_index: int) -> int:
+    def _score_placement_with_diversity(
+        self, placement: Dict, word: str, word_index: int
+    ) -> int:
         """
         Score a placement with diversity factor to spread words across the grid.
 
@@ -250,9 +251,9 @@ class ThemePlacer:
 
         # Add diversity bonus based on word index and position
         diversity_score = 0
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
 
         # Divide grid into regions (quadrants + center)
         third = self.grid_size // 3
@@ -271,13 +272,15 @@ class ThemePlacer:
                 diversity_score = 15
         # Subsequent words get bonus for being away from center
         else:
-            distance_from_center = max(abs(row - self.grid_size // 2), abs(col - self.grid_size // 2))
+            distance_from_center = max(
+                abs(row - self.grid_size // 2), abs(col - self.grid_size // 2)
+            )
             diversity_score = min(15, distance_from_center)
 
         # Alternate between horizontal and vertical preferences
-        if word_index % 2 == 0 and direction == 'across':
+        if word_index % 2 == 0 and direction == "across":
             diversity_score += 5
-        elif word_index % 2 == 1 and direction == 'down':
+        elif word_index % 2 == 1 and direction == "down":
             diversity_score += 5
 
         return base_score + diversity_score
@@ -290,9 +293,9 @@ class ThemePlacer:
         """
         score = 50  # Base score
 
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
         word_len = len(word)
 
         # ===============================
@@ -313,7 +316,7 @@ class ThemePlacer:
         # FACTOR 3: Position Preference (0-15 points) - Reduced from 20
         # ===============================
         # Moderate preference for middle positions (not too strong)
-        if direction == 'across':
+        if direction == "across":
             # Prefer rows near middle but with gentler gradient
             distance_from_middle = abs(row - self.grid_size // 2)
             position_score = 15 - (distance_from_middle * 1.5)
@@ -356,7 +359,7 @@ class ThemePlacer:
 
     def _is_centered(self, row: int, col: int, word_len: int, direction: str) -> bool:
         """Check if placement is centered in the grid."""
-        if direction == 'across':
+        if direction == "across":
             # Horizontally centered
             expected_col = (self.grid_size - word_len) // 2
             expected_row = self.grid_size // 2
@@ -372,7 +375,7 @@ class ThemePlacer:
         # Rotational symmetry: (r, c) ↔ (grid_size-1-r, grid_size-1-c)
         center = self.grid_size // 2
 
-        if direction == 'across':
+        if direction == "across":
             # Check if row is symmetric
             return abs(row - center) == abs((self.grid_size - 1 - row) - center)
         else:  # down
@@ -382,12 +385,12 @@ class ThemePlacer:
     def _count_intersections(self, placement: Dict, word: str) -> int:
         """Count how many letters intersect with placed words."""
         count = 0
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
 
         for i in range(len(word)):
-            if direction == 'across':
+            if direction == "across":
                 cell = self.grid[row][col + i]
             else:
                 cell = self.grid[row + i][col]
@@ -403,12 +406,12 @@ class ThemePlacer:
             return 999  # No placed words yet
 
         min_dist = 999
-        row = placement['row']
-        col = placement['col']
+        row = placement["row"]
+        col = placement["col"]
 
         for placed in self.placed_words:
             # Calculate Manhattan distance
-            dist = abs(row - placed['row']) + abs(col - placed['col'])
+            dist = abs(row - placed["row"]) + abs(col - placed["col"])
             min_dist = min(min_dist, dist)
 
         return min_dist
@@ -417,9 +420,9 @@ class ThemePlacer:
         """Generate human-readable reasoning for the suggestion."""
         reasons = []
 
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
         word_len = len(word)
 
         # Check what contributed to score
@@ -432,7 +435,7 @@ class ThemePlacer:
         if intersections > 0:
             reasons.append(f"Intersects {intersections} letters")
 
-        if direction == 'across':
+        if direction == "across":
             if abs(row - self.grid_size // 2) <= 2:
                 reasons.append("Good horizontal position")
         else:
@@ -449,14 +452,14 @@ class ThemePlacer:
 
     def apply_placement(self, placement: Dict):
         """Apply a placement to the internal grid (for multi-word analysis)."""
-        word = placement['word']
-        row = placement['row']
-        col = placement['col']
-        direction = placement['direction']
+        word = placement["word"]
+        row = placement["row"]
+        col = placement["col"]
+        direction = placement["direction"]
 
         # Place word in grid
         for i, letter in enumerate(word):
-            if direction == 'across':
+            if direction == "across":
                 self.grid[row][col + i] = letter
             else:
                 self.grid[row + i][col] = letter
@@ -479,7 +482,9 @@ class ThemePlacer:
 
             # Check length
             if len(word_clean) > self.grid_size:
-                errors.append(f"{word}: Too long for {self.grid_size}×{self.grid_size} grid")
+                errors.append(
+                    f"{word}: Too long for {self.grid_size}×{self.grid_size} grid"
+                )
             elif len(word_clean) < 3:
                 errors.append(f"{word}: Too short (minimum 3 letters)")
 
@@ -489,10 +494,8 @@ class ThemePlacer:
 
             # Warnings for very long words
             if len(word_clean) > self.grid_size * 0.8:
-                warnings.append(f"{word}: Very long ({len(word_clean)} letters), may be hard to place")
+                warnings.append(
+                    f"{word}: Very long ({len(word_clean)} letters), may be hard to place"
+                )
 
-        return {
-            'valid': len(errors) == 0,
-            'errors': errors,
-            'warnings': warnings
-        }
+        return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}

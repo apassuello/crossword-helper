@@ -23,6 +23,7 @@ import time
 
 try:
     import ahocorasick
+
     AHOCORASICK_AVAILABLE = True
 except ImportError:
     AHOCORASICK_AVAILABLE = False
@@ -34,6 +35,7 @@ from .word_list import WordList, ScoredWord
 @dataclass
 class MatcherStats:
     """Statistics for the Aho-Corasick matcher."""
+
     build_time_ms: float
     total_words: int
     automaton_count: int
@@ -129,7 +131,11 @@ class AhoCorasickMatcher:
         # Build automaton for each length
         for length, words in sorted(words_by_length.items()):
             if progress_callback:
-                progress_callback(processed, total_lengths, f"Building automaton for {length}-letter words...")
+                progress_callback(
+                    processed,
+                    total_lengths,
+                    f"Building automaton for {length}-letter words...",
+                )
 
             # Create automaton
             automaton = ahocorasick.Automaton()
@@ -156,7 +162,7 @@ class AhoCorasickMatcher:
         pattern: str,
         min_score: int = 30,
         max_results: Optional[int] = None,
-        progress_callback=None
+        progress_callback=None,
     ) -> List[Tuple[str, int]]:
         """
         Find words matching pattern with wildcards.
@@ -182,7 +188,7 @@ class AhoCorasickMatcher:
         self._query_count += 1
 
         # Normalize pattern
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
         length = len(pattern)
 
         # Check cache
@@ -201,11 +207,13 @@ class AhoCorasickMatcher:
         results: List[Tuple[str, int]] = []
 
         # Check if pattern has wildcards
-        if '?' in pattern:
+        if "?" in pattern:
             # Use pyahocorasick's wildcard matching
             # keys() with wildcard returns matching words
             try:
-                for word in automaton.keys(pattern, '?', ahocorasick.MATCH_EXACT_LENGTH):
+                for word in automaton.keys(
+                    pattern, "?", ahocorasick.MATCH_EXACT_LENGTH
+                ):
                     word_obj = self._words_by_length[length].get(word)
                     if word_obj and word_obj.score >= min_score:
                         results.append((word, word_obj.score))
@@ -237,9 +245,7 @@ class AhoCorasickMatcher:
         return results
 
     def _fallback_wildcard_match(
-        self,
-        pattern: str,
-        min_score: int
+        self, pattern: str, min_score: int
     ) -> List[Tuple[str, int]]:
         """
         Fallback wildcard matching for older pyahocorasick versions.
@@ -257,7 +263,7 @@ class AhoCorasickMatcher:
             if len(word) != len(pattern):
                 return False
             for p, w in zip(pattern, word):
-                if p != '?' and p != w:
+                if p != "?" and p != w:
                     return False
             return True
 
@@ -344,7 +350,7 @@ class AhoCorasickMatcher:
             query_count=self._query_count,
             cache_hits=self._cache_hits,
             cache_misses=self._cache_misses,
-            avg_query_time_ms=avg_query_time
+            avg_query_time_ms=avg_query_time,
         )
 
     def get_performance_report(self) -> str:
@@ -364,7 +370,9 @@ class AhoCorasickMatcher:
         report.append("Build Statistics:")
         report.append(f"  Build time: {stats.build_time_ms:.1f}ms")
         report.append(f"  Total words: {stats.total_words:,}")
-        report.append(f"  Automata count: {stats.automaton_count} (one per word length)")
+        report.append(
+            f"  Automata count: {stats.automaton_count} (one per word length)"
+        )
         report.append("")
         report.append("Query Statistics:")
         report.append(f"  Total queries: {stats.query_count}")
@@ -417,4 +425,5 @@ def create_matcher(word_list: WordList, progress_callback=None):
         return AhoCorasickMatcher(word_list, progress_callback)
     else:
         from .trie_pattern_matcher import TriePatternMatcher
+
         return TriePatternMatcher(word_list)

@@ -38,7 +38,7 @@ class TestBeamSearchStateSerialization:
     @pytest.fixture
     def word_list(self):
         """Create test word list."""
-        words = ['CAT', 'DOG', 'BIRD', 'FISH', 'CATS', 'DOGS', 'BIRDS']
+        words = ["CAT", "DOG", "BIRD", "FISH", "CATS", "DOGS", "BIRDS"]
         word_list = WordList(words=words)
         return word_list
 
@@ -55,25 +55,25 @@ class TestBeamSearchStateSerialization:
             slots_filled=5,
             total_slots=20,
             score=75.5,
-            used_words={'CAT', 'DOG', 'BIRD'},
-            slot_assignments={(0, 1, 'across'): 'CAT', (1, 0, 'down'): 'DOG'},
-            domains={(2, 3, 'across'): ['FISH', 'BIRD']},
-            domain_reductions={}
+            used_words={"CAT", "DOG", "BIRD"},
+            slot_assignments={(0, 1, "across"): "CAT", (1, 0, "down"): "DOG"},
+            domains={(2, 3, "across"): ["FISH", "BIRD"]},
+            domain_reductions={},
         )
 
         # Serialize
         serialized = StateManager.serialize_beam_state(beam_state)
 
         # Verify structure
-        assert 'grid_dict' in serialized
-        assert serialized['slots_filled'] == 5
-        assert serialized['total_slots'] == 20
-        assert serialized['score'] == 75.5
-        assert set(serialized['used_words']) == {'CAT', 'DOG', 'BIRD'}
+        assert "grid_dict" in serialized
+        assert serialized["slots_filled"] == 5
+        assert serialized["total_slots"] == 20
+        assert serialized["score"] == 75.5
+        assert set(serialized["used_words"]) == {"CAT", "DOG", "BIRD"}
 
         # Verify tuple keys are JSON-encoded
-        assert '[0, 1, "across"]' in serialized['slot_assignments']
-        assert serialized['slot_assignments']['[0, 1, "across"]'] == 'CAT'
+        assert '[0, 1, "across"]' in serialized["slot_assignments"]
+        assert serialized["slot_assignments"]['[0, 1, "across"]'] == "CAT"
 
     def test_deserialize_beam_state(self, simple_grid):
         """Test deserialization of a BeamState object."""
@@ -83,10 +83,10 @@ class TestBeamSearchStateSerialization:
             slots_filled=5,
             total_slots=20,
             score=75.5,
-            used_words={'CAT', 'DOG'},
-            slot_assignments={(0, 1, 'across'): 'CAT'},
-            domains={(2, 3, 'across'): ['FISH']},
-            domain_reductions={}
+            used_words={"CAT", "DOG"},
+            slot_assignments={(0, 1, "across"): "CAT"},
+            domains={(2, 3, "across"): ["FISH"]},
+            domain_reductions={},
         )
 
         serialized = StateManager.serialize_beam_state(original_state)
@@ -112,54 +112,56 @@ class TestBeamSearchStateSerialization:
                 slots_filled=5,
                 total_slots=20,
                 score=75.0,
-                used_words={'CAT', 'DOG'},
-                slot_assignments={(0, 1, 'across'): 'CAT'},
+                used_words={"CAT", "DOG"},
+                slot_assignments={(0, 1, "across"): "CAT"},
                 domains={},
-                domain_reductions={}
+                domain_reductions={},
             ),
             BeamState(
                 grid=simple_grid.clone(),
                 slots_filled=5,
                 total_slots=20,
                 score=72.0,
-                used_words={'BIRD', 'FISH'},
-                slot_assignments={(0, 1, 'across'): 'BIRD'},
+                used_words={"BIRD", "FISH"},
+                slot_assignments={(0, 1, "across"): "BIRD"},
                 domains={},
-                domain_reductions={}
-            )
+                domain_reductions={},
+            ),
         ]
 
         # Create BeamSearchState
         beam_search_state = BeamSearchState(
             beam=[StateManager.serialize_beam_state(state) for state in beam],
-            filled_slots=[[0, 1, 'across'], [1, 0, 'down']],
+            filled_slots=[[0, 1, "across"], [1, 0, "down"]],
             slot_idx=2,
             iterations=150,
             slot_attempt_history={'["hash123", [2, 3, "across"]]': 2},
-            recently_failed=[[3, 4, 'down']],
+            recently_failed=[[3, 4, "down"]],
             beam_width=5,
             candidates_per_slot=10,
             min_score=30,
             diversity_bonus=0.1,
-            theme_entries={'[0, 0, "across"]': 'THEME'},
-            all_slots=[{'row': 0, 'col': 1, 'direction': 'across', 'length': 4}],
+            theme_entries={'[0, 0, "across"]': "THEME"},
+            all_slots=[{"row": 0, "col": 1, "direction": "across", "length": 4}],
             total_slots=20,
-            timestamp='2025-12-27T10:00:00Z'
+            timestamp="2025-12-27T10:00:00Z",
         )
 
         # Save
-        metadata = {'min_score': 30, 'beam_width': 5}
+        metadata = {"min_score": 30, "beam_width": 5}
         file_path = state_manager.save_beam_search_state(
-            task_id='test_beam_task',
+            task_id="test_beam_task",
             beam_state=beam_search_state,
             metadata=metadata,
-            compress=True
+            compress=True,
         )
 
         assert file_path.exists()
 
         # Load
-        loaded_state, loaded_metadata = state_manager.load_beam_search_state('test_beam_task')
+        loaded_state, loaded_metadata = state_manager.load_beam_search_state(
+            "test_beam_task"
+        )
 
         # Verify
         assert loaded_state.slot_idx == 2
@@ -167,7 +169,7 @@ class TestBeamSearchStateSerialization:
         assert loaded_state.beam_width == 5
         assert loaded_state.total_slots == 20
         assert len(loaded_state.beam) == 2
-        assert loaded_metadata['min_score'] == 30
+        assert loaded_metadata["min_score"] == 30
 
 
 class TestBeamSearchPauseResume:
@@ -189,14 +191,14 @@ class TestBeamSearchPauseResume:
         """Create comprehensive word list for testing."""
         # Use real wordlist if available for realistic fill behavior,
         # fall back to small list for basic functionality testing
-        wordlist_path = Path('data/wordlists/comprehensive.txt')
+        wordlist_path = Path("data/wordlists/comprehensive.txt")
         if wordlist_path.exists():
             word_list = WordList.from_file(str(wordlist_path))
         else:
             words = (
-                ['CAT', 'DOG', 'BAT', 'RAT', 'HAT', 'MAT'] +
-                ['CATS', 'DOGS', 'BIRD', 'FISH', 'WORD'] +
-                ['HOUSE', 'MOUSE', 'PHONE', 'PLANT', 'CRAFT']
+                ["CAT", "DOG", "BAT", "RAT", "HAT", "MAT"]
+                + ["CATS", "DOGS", "BIRD", "FISH", "WORD"]
+                + ["HOUSE", "MOUSE", "PHONE", "PLANT", "CRAFT"]
             )
             word_list = WordList(words=words)
         return word_list
@@ -210,7 +212,7 @@ class TestBeamSearchPauseResume:
     def test_pause_during_search(self, tmp_path, test_grid, word_list, pattern_matcher):
         """Test pausing beam search during active search."""
         # Create pause controller
-        task_id = 'test_pause_task'
+        task_id = "test_pause_task"
         pause_controller = PauseController(task_id)
         pause_controller.cleanup()  # Clear any existing flags
 
@@ -223,7 +225,7 @@ class TestBeamSearchPauseResume:
             candidates_per_slot=5,
             min_score=0,
             pause_controller=pause_controller,
-            task_id=task_id
+            task_id=task_id,
         )
 
         # Request pause after short delay
@@ -249,9 +251,9 @@ class TestBeamSearchPauseResume:
         assert result.iterations >= 0
 
         # Verify state was saved if it paused
-        if hasattr(result, 'paused') and result.paused:
+        if hasattr(result, "paused") and result.paused:
             StateManager()
-            list(Path('/tmp/crossword_states').glob(f'{task_id}*'))
+            list(Path("/tmp/crossword_states").glob(f"{task_id}*"))
             # State might have been saved
             # (not critical if puzzle completed before pause took effect)
 
@@ -259,7 +261,9 @@ class TestBeamSearchPauseResume:
         pause_controller.cleanup()
 
     @pytest.mark.slow
-    def test_resume_from_paused_state(self, tmp_path, test_grid, word_list, pattern_matcher):
+    def test_resume_from_paused_state(
+        self, tmp_path, test_grid, word_list, pattern_matcher
+    ):
         """Test resuming beam search from saved state."""
         state_manager = StateManager(storage_dir=tmp_path)
 
@@ -277,10 +281,10 @@ class TestBeamSearchPauseResume:
                 slots_filled=1,
                 total_slots=8,
                 score=60.0,
-                used_words={'CAT'},
-                slot_assignments={(0, 0, 'across'): 'CAT'},
+                used_words={"CAT"},
+                slot_assignments={(0, 0, "across"): "CAT"},
                 domains={},
-                domain_reductions={}
+                domain_reductions={},
             )
         ]
 
@@ -288,7 +292,7 @@ class TestBeamSearchPauseResume:
 
         beam_search_state = BeamSearchState(
             beam=[StateManager.serialize_beam_state(state) for state in beam],
-            filled_slots=[[0, 0, 'across']],
+            filled_slots=[[0, 0, "across"]],
             slot_idx=1,
             iterations=50,
             slot_attempt_history={},
@@ -300,16 +304,16 @@ class TestBeamSearchPauseResume:
             theme_entries={},
             all_slots=all_slots,
             total_slots=len(all_slots),
-            timestamp='2025-12-27T10:00:00Z'
+            timestamp="2025-12-27T10:00:00Z",
         )
 
         # Save state
-        task_id = 'resume_test_task'
+        task_id = "resume_test_task"
         state_manager.save_beam_search_state(
             task_id=task_id,
             beam_state=beam_search_state,
-            metadata={'min_score': 0},
-            compress=True
+            metadata={"min_score": 0},
+            compress=True,
         )
 
         # Load state
@@ -323,7 +327,7 @@ class TestBeamSearchPauseResume:
             beam_width=3,
             candidates_per_slot=5,
             min_score=0,
-            task_id=task_id
+            task_id=task_id,
         )
 
         # Resume (minimum 10 second timeout required)
@@ -341,7 +345,7 @@ class TestBeamSearchPauseResume:
             beam_width=3,
             candidates_per_slot=5,
             min_score=0,
-            task_id='capture_test'
+            task_id="capture_test",
         )
 
         # Create mock beam and filled_slots
@@ -351,25 +355,25 @@ class TestBeamSearchPauseResume:
                 slots_filled=2,
                 total_slots=20,
                 score=50.0,
-                used_words={'CAT'},
-                slot_assignments={(0, 1, 'across'): 'CAT'},
+                used_words={"CAT"},
+                slot_assignments={(0, 1, "across"): "CAT"},
                 domains={},
-                domain_reductions={}
+                domain_reductions={},
             )
         ]
-        filled_slots = {(0, 1, 'across')}
+        filled_slots = {(0, 1, "across")}
 
         # Simulate some progress
         orchestrator.iterations = 100
-        orchestrator.slot_attempt_history = {(12345, (2, 3, 'across')): 2}
-        orchestrator.recently_failed = [(4, 5, 'down')]
+        orchestrator.slot_attempt_history = {(12345, (2, 3, "across")): 2}
+        orchestrator.recently_failed = [(4, 5, "down")]
 
         # Capture state
         captured_state = StateManager.capture_beam_search_state(
             orchestrator_instance=orchestrator,
             beam=beam,
             filled_slots=filled_slots,
-            slot_idx=5
+            slot_idx=5,
         )
 
         # Verify capture
@@ -380,10 +384,12 @@ class TestBeamSearchPauseResume:
         assert len(captured_state.beam) == 1
         assert len(captured_state.filled_slots) == 1
 
-    def test_multiple_pause_resume_cycles(self, tmp_path, test_grid, word_list, pattern_matcher):
+    def test_multiple_pause_resume_cycles(
+        self, tmp_path, test_grid, word_list, pattern_matcher
+    ):
         """Test multiple pause/resume cycles maintain state consistency."""
         state_manager = StateManager(storage_dir=tmp_path)
-        task_id = 'multi_pause_task'
+        task_id = "multi_pause_task"
 
         # Initial state
         beam = [
@@ -395,7 +401,7 @@ class TestBeamSearchPauseResume:
                 used_words=set(),
                 slot_assignments={},
                 domains={},
-                domain_reductions={}
+                domain_reductions={},
             )
         ]
 
@@ -414,7 +420,7 @@ class TestBeamSearchPauseResume:
             theme_entries={},
             all_slots=test_grid.get_empty_slots(),
             total_slots=20,
-            timestamp='2025-12-27T10:00:00Z'
+            timestamp="2025-12-27T10:00:00Z",
         )
         state_manager.save_beam_search_state(task_id, state1, {}, compress=True)
 
@@ -424,10 +430,10 @@ class TestBeamSearchPauseResume:
 
         # Cycle 2: Modify and save
         loaded1.iterations = 25
-        state_manager.save_beam_search_state(task_id + '_2', loaded1, {}, compress=True)
+        state_manager.save_beam_search_state(task_id + "_2", loaded1, {}, compress=True)
 
         # Cycle 2: Load
-        loaded2, _ = state_manager.load_beam_search_state(task_id + '_2')
+        loaded2, _ = state_manager.load_beam_search_state(task_id + "_2")
         assert loaded2.iterations == 25
 
         # Verify consistency
@@ -450,16 +456,16 @@ class TestBeamSearchEditMerging:
                 slots_filled=1,
                 total_slots=10,
                 score=50.0,
-                used_words={'WORD'},
-                slot_assignments={(0, 1, 'across'): 'WORD'},
-                domains={(1, 0, 'down'): ['CATS', 'DOGS']},
-                domain_reductions={}
+                used_words={"WORD"},
+                slot_assignments={(0, 1, "across"): "WORD"},
+                domains={(1, 0, "down"): ["CATS", "DOGS"]},
+                domain_reductions={},
             )
         ]
 
         beam_search_state = BeamSearchState(
             beam=[StateManager.serialize_beam_state(beam[0])],
-            filled_slots=[[0, 1, 'across']],
+            filled_slots=[[0, 1, "across"]],
             slot_idx=1,
             iterations=50,
             slot_attempt_history={},
@@ -470,11 +476,11 @@ class TestBeamSearchEditMerging:
             diversity_bonus=0.1,
             theme_entries={},
             all_slots=[
-                {'row': 0, 'col': 1, 'direction': 'across', 'length': 4},
-                {'row': 1, 'col': 0, 'direction': 'down', 'length': 4}
+                {"row": 0, "col": 1, "direction": "across", "length": 4},
+                {"row": 1, "col": 0, "direction": "down", "length": 4},
             ],
             total_slots=10,
-            timestamp='2025-12-27T10:00:00Z'
+            timestamp="2025-12-27T10:00:00Z",
         )
 
         return grid, beam_search_state
@@ -488,27 +494,27 @@ class TestBeamSearchEditMerging:
 
         # Deserialize first beam state to get grid
         first_beam_dict = beam_state.beam[0]
-        saved_grid = Grid.from_dict(first_beam_dict['grid_dict'])
+        saved_grid = Grid.from_dict(first_beam_dict["grid_dict"])
 
         # Create edited grid (add a new word)
         edited_grid = saved_grid.clone()
-        edited_grid.set_letter(1, 0, 'C')
-        edited_grid.set_letter(2, 0, 'A')
-        edited_grid.set_letter(3, 0, 'T')
-        edited_grid.set_letter(4, 0, 'S')
+        edited_grid.set_letter(1, 0, "C")
+        edited_grid.set_letter(2, 0, "A")
+        edited_grid.set_letter(3, 0, "T")
+        edited_grid.set_letter(4, 0, "S")
 
         # Get edit summary
         summary = merger.get_edit_summary(
             saved_grid_dict=saved_grid.to_dict(),
             edited_grid_dict=edited_grid.to_dict(),
             slot_list=beam_state.all_slots,
-            slot_id_map={'[1, 0, "down"]': 1}
+            slot_id_map={'[1, 0, "down"]': 1},
         )
 
         # Verify edit detected
-        assert summary['filled_count'] >= 0
-        assert 'new_words' in summary
+        assert summary["filled_count"] >= 0
+        assert "new_words" in summary
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -17,7 +17,6 @@ leaving orphaned processes.
 import pytest
 import json
 import time
-import os
 from backend.tests.integration.conftest import create_test_grid
 
 
@@ -38,15 +37,17 @@ class TestSSECLIErrorHandling:
         # Start autofill with nonexistent wordlist
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["nonexistent_wordlist_xyz"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["nonexistent_wordlist_xyz"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Should still accept request (error occurs during execution)
@@ -62,10 +63,11 @@ class TestSSECLIErrorHandling:
         last_msg = messages[-1]
 
         # Should indicate error
-        assert last_msg.get("status") == "error" or \
-               "error" in last_msg.get("message", "").lower() or \
-               "not found" in last_msg.get("message", "").lower(), \
-            f"Expected error status, got: {last_msg}"
+        assert (
+            last_msg.get("status") == "error"
+            or "error" in last_msg.get("message", "").lower()
+            or "not found" in last_msg.get("message", "").lower()
+        ), f"Expected error status, got: {last_msg}"
 
     def test_sse_reports_malformed_grid_error(self, client, sse_parser):
         """
@@ -76,19 +78,23 @@ class TestSSECLIErrorHandling:
         - Invalid cell format
         """
         # Grid with size mismatch
-        malformed_grid = [[{"letter": "", "isBlack": False} for _ in range(10)] for _ in range(10)]
+        malformed_grid = [
+            [{"letter": "", "isBlack": False} for _ in range(10)] for _ in range(10)
+        ]
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,  # Says 11x11
-                "grid": malformed_grid,  # But grid is 10x10
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,  # Says 11x11
+                    "grid": malformed_grid,  # But grid is 10x10
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Might be rejected at API validation or during CLI execution
@@ -105,8 +111,10 @@ class TestSSECLIErrorHandling:
 
             if len(messages) > 0:
                 last_msg = messages[-1]
-                assert last_msg.get("status") == "error" or \
-                       "error" in last_msg.get("message", "").lower()
+                assert (
+                    last_msg.get("status") == "error"
+                    or "error" in last_msg.get("message", "").lower()
+                )
 
     def test_sse_handles_cli_subprocess_crash(self, client, sse_parser):
         """
@@ -120,15 +128,17 @@ class TestSSECLIErrorHandling:
         # Use very short timeout to force early termination
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 1,  # Very short
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 1,  # Very short
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject very short timeout at validation (400) or accept it (202)
@@ -151,8 +161,10 @@ class TestSSECLIErrorHandling:
 
         # Should indicate completion or error (timeout might result in partial fill)
         last_msg = messages[-1]
-        assert last_msg.get("status") in ["complete", "error"], \
-            f"Expected complete or error status, got: {last_msg}"
+        assert last_msg.get("status") in [
+            "complete",
+            "error",
+        ], f"Expected complete or error status, got: {last_msg}"
 
 
 class TestSSETimeoutHandling:
@@ -174,15 +186,17 @@ class TestSSETimeoutHandling:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,  # Short timeout for difficult grid
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,  # Short timeout for difficult grid
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject grid with too many black squares at validation (400) or accept it (202)
@@ -203,8 +217,10 @@ class TestSSETimeoutHandling:
 
         # Should indicate timeout or partial completion
         last_msg = messages[-1]
-        assert last_msg.get("status") in ["error", "complete"], \
-            f"Expected error or complete after timeout, got: {last_msg}"
+        assert last_msg.get("status") in [
+            "error",
+            "complete",
+        ], f"Expected error or complete after timeout, got: {last_msg}"
 
     def test_sse_respects_timeout_parameter(self, client, sse_parser):
         """
@@ -218,15 +234,17 @@ class TestSSETimeoutHandling:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 2,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 2,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject very short timeout at validation (400) or accept it (202)
@@ -245,8 +263,7 @@ class TestSSETimeoutHandling:
 
         # Operation should not run significantly longer than timeout
         # (allowing 3s buffer for subprocess overhead)
-        assert elapsed < 8, \
-            f"Operation ran too long ({elapsed}s) for 2s timeout"
+        assert elapsed < 8, f"Operation ran too long ({elapsed}s) for 2s timeout"
 
         # Verify SSE stream completed
         sse_response = client.get(f"/api/progress/{task_id}")
@@ -267,14 +284,16 @@ class TestSSEValidationErrors:
         # Missing 'grid' parameter
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                # 'grid' missing
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    # 'grid' missing
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Should reject at validation
@@ -295,15 +314,17 @@ class TestSSEValidationErrors:
         # Invalid timeout type
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": "not_a_number",  # Invalid
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": "not_a_number",  # Invalid
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Should reject
@@ -317,15 +338,17 @@ class TestSSEValidationErrors:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "invalid_algo_xyz"  # Invalid
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "invalid_algo_xyz",  # Invalid
+                }
+            ),
+            content_type="application/json",
         )
 
         # Should reject at validation OR during CLI execution
@@ -337,7 +360,7 @@ class TestSSEValidationErrors:
             time.sleep(2)
 
             sse_response = client.get(f"/api/progress/{task_id}")
-            data_str = sse_response.data.decode('utf-8')
+            data_str = sse_response.data.decode("utf-8")
 
             # Should have error message
             assert "error" in data_str.lower() or "invalid" in data_str.lower()
@@ -357,15 +380,17 @@ class TestSSEClientDisconnection:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -397,15 +422,17 @@ class TestSSEEdgeCases:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -433,15 +460,17 @@ class TestSSEEdgeCases:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -464,15 +493,17 @@ class TestSSEEdgeCases:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 5,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 5,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Might be rejected at validation
@@ -496,15 +527,17 @@ class TestSSEEdgeCases:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 3,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 5,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 3,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 5,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject non-standard grid size at validation (400) or accept it (202)
@@ -537,17 +570,19 @@ class TestSSEEdgeCases:
 
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "beam",
-                "adaptive_mode": True,
-                "max_adaptations": 2
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                    "adaptive_mode": True,
+                    "max_adaptations": 2,
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -578,15 +613,17 @@ class TestSSEUserFriendlyMessages:
         # Trigger error with invalid wordlist
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["nonexistent_wordlist"],
-                "timeout": 5,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["nonexistent_wordlist"],
+                    "timeout": 5,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject invalid wordlist at validation (400) or accept and fail during CLI (202)
@@ -602,10 +639,12 @@ class TestSSEUserFriendlyMessages:
             assert len(message_text) > 0, "Error message should not be empty"
 
             # Message should not contain Python stack traces
-            assert "Traceback" not in message_text, \
-                "Error message should not include Python traceback"
-            assert "File \"" not in message_text, \
-                "Error message should not include file paths from traceback"
+            assert (
+                "Traceback" not in message_text
+            ), "Error message should not include Python traceback"
+            assert (
+                'File "' not in message_text
+            ), "Error message should not include file paths from traceback"
             return  # Test passes - validation error message is good
 
         # If accepted, verify SSE error message quality
@@ -629,10 +668,12 @@ class TestSSEUserFriendlyMessages:
 
             # Message should not contain Python stack traces
             # (Those should be logged server-side, not sent to client)
-            assert "Traceback" not in message_text, \
-                "Error message should not include Python traceback"
-            assert "File \"" not in message_text, \
-                "Error message should not include file paths from traceback"
+            assert (
+                "Traceback" not in message_text
+            ), "Error message should not include Python traceback"
+            assert (
+                'File "' not in message_text
+            ), "Error message should not include file paths from traceback"
 
 
 # Mark slow tests

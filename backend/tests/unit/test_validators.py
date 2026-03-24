@@ -293,4 +293,6 @@ class TestValidateFillRequest:
 
     def test_theme_entries_key_too_many_parts_raises(self):
         with pytest.raises(ValueError, match="must have format"):
-            validate_fill_request(self._valid(theme_entries={"(0,0,across,extra)": "CAT"}))
+            validate_fill_request(
+                self._valid(theme_entries={"(0,0,across,extra)": "CAT"})
+            )

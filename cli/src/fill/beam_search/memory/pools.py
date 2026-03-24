@@ -111,7 +111,9 @@ class GridPool:
         grid_id = id(grid)
 
         if grid_id not in self._in_use:
-            logger.warning(f"GridPool.release(): Grid {grid_id} was not acquired from this pool")
+            logger.warning(
+                f"GridPool.release(): Grid {grid_id} was not acquired from this pool"
+            )
             return
 
         # Reset grid to empty state
@@ -173,12 +175,12 @@ class GridPool:
         )
 
         return {
-            'total_created': self._total_created,
-            'total_reused': self._total_reused,
-            'available': len(self._available),
-            'in_use': len(self._in_use),
-            'pool_size': self.pool_size,
-            'hit_rate': round(hit_rate, 2)
+            "total_created": self._total_created,
+            "total_reused": self._total_reused,
+            "available": len(self._available),
+            "in_use": len(self._in_use),
+            "pool_size": self.pool_size,
+            "hit_rate": round(hit_rate, 2),
         }
 
     def __repr__(self) -> str:
@@ -253,7 +255,7 @@ class StatePool:
             total_slots=0,
             score=0.0,
             used_words=set(),
-            slot_assignments={}
+            slot_assignments={},
         )
         self._in_use.add(id(state))
         self._total_created += 1
@@ -286,9 +288,9 @@ class StatePool:
         state.slot_assignments = template.slot_assignments.copy()
 
         # Copy optional fields if present
-        if hasattr(template, 'domains'):
+        if hasattr(template, "domains"):
             state.domains = template.domains.copy() if template.domains else None
-        if hasattr(template, 'domain_reductions'):
+        if hasattr(template, "domain_reductions"):
             state.domain_reductions = (
                 template.domain_reductions.copy()
                 if template.domain_reductions
@@ -309,7 +311,9 @@ class StatePool:
         state_id = id(state)
 
         if state_id not in self._in_use:
-            logger.warning(f"StatePool.release(): State {state_id} was not acquired from this pool")
+            logger.warning(
+                f"StatePool.release(): State {state_id} was not acquired from this pool"
+            )
             return
 
         # Reset state
@@ -335,9 +339,9 @@ class StatePool:
         state.used_words.clear()
         state.slot_assignments.clear()
 
-        if hasattr(state, 'domains'):
+        if hasattr(state, "domains"):
             state.domains = None
-        if hasattr(state, 'domain_reductions'):
+        if hasattr(state, "domain_reductions"):
             state.domain_reductions = None
 
     def clear(self) -> None:
@@ -360,12 +364,12 @@ class StatePool:
         )
 
         return {
-            'total_created': self._total_created,
-            'total_reused': self._total_reused,
-            'available': len(self._available),
-            'in_use': len(self._in_use),
-            'pool_size': self.pool_size,
-            'hit_rate': round(hit_rate, 2)
+            "total_created": self._total_created,
+            "total_reused": self._total_reused,
+            "available": len(self._available),
+            "in_use": len(self._in_use),
+            "pool_size": self.pool_size,
+            "hit_rate": round(hit_rate, 2),
         }
 
     def __repr__(self) -> str:

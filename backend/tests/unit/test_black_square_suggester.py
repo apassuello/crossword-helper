@@ -2,7 +2,6 @@
 
 from typing import Optional
 
-import pytest
 
 from backend.core.black_square_suggester import (
     BlackSquareSuggester,
@@ -10,10 +9,10 @@ from backend.core.black_square_suggester import (
     validate_grid_for_black_squares,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _empty_cell():
     return {"letter": "", "isBlack": False}
@@ -32,28 +31,51 @@ def _empty_grid(size: int):
     return [[_empty_cell() for _ in range(size)] for _ in range(size)]
 
 
-def _slot(row: int, col: int, direction: str, length: int, pattern: Optional[str] = None):
+def _slot(
+    row: int, col: int, direction: str, length: int, pattern: Optional[str] = None
+):
     if pattern is None:
         pattern = "?" * length
-    return {"row": row, "col": col, "direction": direction, "length": length, "pattern": pattern}
+    return {
+        "row": row,
+        "col": col,
+        "direction": direction,
+        "length": length,
+        "pattern": pattern,
+    }
 
 
 # ---------------------------------------------------------------------------
 # BlackSquareSuggestion.to_dict
 # ---------------------------------------------------------------------------
 
+
 class TestBlackSquareSuggestionToDict:
     def test_to_dict_keys(self):
         s = BlackSquareSuggestion(
-            position=2, row=0, col=2, score=350, reasoning="test",
-            left_length=2, right_length=4, symmetric_position={"row": 14, "col": 12},
-            new_word_count=74, constraint_reduction=3,
+            position=2,
+            row=0,
+            col=2,
+            score=350,
+            reasoning="test",
+            left_length=2,
+            right_length=4,
+            symmetric_position={"row": 14, "col": 12},
+            new_word_count=74,
+            constraint_reduction=3,
         )
         d = s.to_dict()
         assert set(d.keys()) == {
-            "position", "row", "col", "score", "reasoning",
-            "left_length", "right_length", "symmetric_position",
-            "new_word_count", "constraint_reduction",
+            "position",
+            "row",
+            "col",
+            "score",
+            "reasoning",
+            "left_length",
+            "right_length",
+            "symmetric_position",
+            "new_word_count",
+            "constraint_reduction",
         }
         assert d["score"] == 350
         assert d["row"] == 0
@@ -62,6 +84,7 @@ class TestBlackSquareSuggestionToDict:
 # ---------------------------------------------------------------------------
 # suggest_placements
 # ---------------------------------------------------------------------------
+
 
 class TestSuggestPlacements:
     def test_across_slot_returns_suggestions(self):
@@ -129,6 +152,7 @@ class TestSuggestPlacements:
 # Symmetric position calculation
 # ---------------------------------------------------------------------------
 
+
 class TestSymmetricPosition:
     def test_across_center(self):
         """Center of 15x15: (7, 7) should map to itself."""
@@ -174,6 +198,7 @@ class TestSymmetricPosition:
 # Cell type detection (_is_black / _is_black_cell)
 # ---------------------------------------------------------------------------
 
+
 class TestCellTypeDetection:
     def setup_method(self):
         self.suggester = BlackSquareSuggester(grid_size=5)
@@ -209,6 +234,7 @@ class TestCellTypeDetection:
 # Word counting
 # ---------------------------------------------------------------------------
 
+
 class TestWordCounting:
     def test_empty_grid_full_rows_and_cols(self):
         """5x5 empty grid: 5 across words + 5 down words = 10."""
@@ -243,6 +269,7 @@ class TestWordCounting:
 # ---------------------------------------------------------------------------
 # validate_grid_for_black_squares
 # ---------------------------------------------------------------------------
+
 
 class TestValidateGridForBlackSquares:
     def test_valid_grid(self):

@@ -27,17 +27,17 @@ class TestOneLookClientSuccess:
         # Mock successful API response
         mock_response = Mock()
         mock_response.json.return_value = [
-            {'word': 'visa', 'score': 1000},
-            {'word': 'vita', 'score': 950},
-            {'word': 'diva', 'score': 900}
+            {"word": "visa", "score": 1000},
+            {"word": "vita", "score": 950},
+            {"word": "diva", "score": 900},
         ]
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response):
-            results = client.search('?i?a')
+        with patch("requests.get", return_value=mock_response):
+            results = client.search("?i?a")
 
         # Verify words are uppercase
-        assert results == ['VISA', 'VITA', 'DIVA']
+        assert results == ["VISA", "VITA", "DIVA"]
         assert all(word.isupper() for word in results)
 
     def test_search_sends_lowercase_pattern(self):
@@ -50,13 +50,13 @@ class TestOneLookClientSuccess:
         mock_response.json.return_value = []
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response) as mock_get:
-            client.search('PATTERN')
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            client.search("PATTERN")
 
         # Verify pattern was lowercased in request
         mock_get.assert_called_once()
         call_kwargs = mock_get.call_args[1]
-        assert call_kwargs['params']['sp'] == 'pattern'
+        assert call_kwargs["params"]["sp"] == "pattern"
 
     def test_search_respects_max_results_parameter(self):
         """Verify max_results parameter is passed to API."""
@@ -68,12 +68,12 @@ class TestOneLookClientSuccess:
         mock_response.json.return_value = []
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response) as mock_get:
-            client.search('test', max_results=50)
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            client.search("test", max_results=50)
 
         # Verify max parameter sent correctly
         call_kwargs = mock_get.call_args[1]
-        assert call_kwargs['params']['max'] == 50
+        assert call_kwargs["params"]["max"] == 50
 
     def test_search_uses_correct_timeout(self):
         """Verify timeout parameter is passed to requests.get()."""
@@ -85,12 +85,12 @@ class TestOneLookClientSuccess:
         mock_response.json.return_value = []
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response) as mock_get:
-            client.search('test')
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            client.search("test")
 
         # Verify timeout passed to requests
         call_kwargs = mock_get.call_args[1]
-        assert call_kwargs['timeout'] == 10
+        assert call_kwargs["timeout"] == 10
 
     def test_search_handles_empty_results(self):
         """Verify empty API response returns empty list."""
@@ -102,8 +102,8 @@ class TestOneLookClientSuccess:
         mock_response.json.return_value = []
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response):
-            results = client.search('xyz')
+        with patch("requests.get", return_value=mock_response):
+            results = client.search("xyz")
 
         assert results == []
         assert isinstance(results, list)
@@ -118,8 +118,8 @@ class TestOneLookClientErrorHandling:
 
         client = OneLookClient(timeout=1)
 
-        with patch('requests.get', side_effect=requests.Timeout):
-            results = client.search('?i?a')
+        with patch("requests.get", side_effect=requests.Timeout):
+            results = client.search("?i?a")
 
         # Should return empty list, not raise exception
         assert results == []
@@ -130,8 +130,10 @@ class TestOneLookClientErrorHandling:
 
         client = OneLookClient()
 
-        with patch('requests.get', side_effect=requests.RequestException("Network error")):
-            results = client.search('?i?a')
+        with patch(
+            "requests.get", side_effect=requests.RequestException("Network error")
+        ):
+            results = client.search("?i?a")
 
         # Should return empty list, not raise exception
         assert results == []
@@ -145,8 +147,8 @@ class TestOneLookClientErrorHandling:
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
 
-        with patch('requests.get', return_value=mock_response):
-            results = client.search('?i?a')
+        with patch("requests.get", return_value=mock_response):
+            results = client.search("?i?a")
 
         assert results == []
 
@@ -160,8 +162,8 @@ class TestOneLookClientErrorHandling:
         mock_response.json.side_effect = ValueError("Invalid JSON")
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response):
-            results = client.search('?i?a')
+        with patch("requests.get", return_value=mock_response):
+            results = client.search("?i?a")
 
         assert results == []
 
@@ -174,13 +176,13 @@ class TestOneLookClientErrorHandling:
         # Response with entry missing 'word' field
         mock_response = Mock()
         mock_response.json.return_value = [
-            {'score': 1000},  # Missing 'word' field
-            {'word': 'test', 'score': 900}
+            {"score": 1000},  # Missing 'word' field
+            {"word": "test", "score": 900},
         ]
         mock_response.raise_for_status = Mock()
 
-        with patch('requests.get', return_value=mock_response):
-            results = client.search('?i?a')
+        with patch("requests.get", return_value=mock_response):
+            results = client.search("?i?a")
 
         # Should gracefully handle KeyError and return empty list
         assert results == []
@@ -209,4 +211,4 @@ class TestOneLookClientIntegration:
         """Verify BASE_URL points to OneLook API."""
         from backend.data.onelook_client import OneLookClient
 
-        assert OneLookClient.BASE_URL == 'https://api.onelook.com/words'
+        assert OneLookClient.BASE_URL == "https://api.onelook.com/words"

@@ -35,14 +35,30 @@ class TestEndToEndPauseResume:
 
         # Create realistic black square pattern (symmetric)
         black_squares = [
-            (0, 3), (0, 7),
-            (1, 3), (1, 7),
-            (2, 3), (2, 7),
-            (3, 0), (3, 1), (3, 2), (3, 8), (3, 9), (3, 10),
-            (7, 0), (7, 1), (7, 2), (7, 8), (7, 9), (7, 10),
-            (8, 3), (8, 7),
-            (9, 3), (9, 7),
-            (10, 3), (10, 7)
+            (0, 3),
+            (0, 7),
+            (1, 3),
+            (1, 7),
+            (2, 3),
+            (2, 7),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+            (3, 8),
+            (3, 9),
+            (3, 10),
+            (7, 0),
+            (7, 1),
+            (7, 2),
+            (7, 8),
+            (7, 9),
+            (7, 10),
+            (8, 3),
+            (8, 7),
+            (9, 3),
+            (9, 7),
+            (10, 3),
+            (10, 7),
         ]
 
         for row, col in black_squares:
@@ -56,37 +72,43 @@ class TestEndToEndPauseResume:
         words = []
 
         # 3-letter words
-        words.extend(['CAT', 'DOG', 'BAT', 'RAT', 'HAT', 'MAT', 'PAT', 'SAT', 'FAT', 'VAT'])
-        words.extend(['ACE', 'AGE', 'ALE', 'APE', 'ARE', 'ATE', 'AWE', 'AXE', 'EAR', 'EAT'])
-        words.extend(['ERA', 'ERR', 'ORE', 'OWE', 'ICE', 'IRE', 'USE'])
+        words.extend(
+            ["CAT", "DOG", "BAT", "RAT", "HAT", "MAT", "PAT", "SAT", "FAT", "VAT"]
+        )
+        words.extend(
+            ["ACE", "AGE", "ALE", "APE", "ARE", "ATE", "AWE", "AXE", "EAR", "EAT"]
+        )
+        words.extend(["ERA", "ERR", "ORE", "OWE", "ICE", "IRE", "USE"])
 
         # 4-letter words
-        words.extend(['ABLE', 'ACRE', 'AREA', 'BARE', 'BASE', 'BEAR', 'BEAT', 'BEEN'])
-        words.extend(['BIRD', 'BLUE', 'BOAT', 'BONE', 'BOOK', 'BORN', 'BOTH', 'CARE'])
-        words.extend(['CASE', 'CITE', 'COME', 'CORE', 'DARE', 'DARK', 'DATE', 'DEAR'])
-        words.extend(['DONE', 'DOOR', 'EACH', 'EARN', 'EASE', 'EAST', 'EDGE', 'EVEN'])
-        words.extend(['FACE', 'FACT', 'FAIR', 'FALL', 'FARE', 'FARM', 'FAST', 'FEAR'])
-        words.extend(['FINE', 'FIRE', 'FIRM', 'FISH', 'FIVE', 'FLAT', 'FLOW', 'FOUR'])
+        words.extend(["ABLE", "ACRE", "AREA", "BARE", "BASE", "BEAR", "BEAT", "BEEN"])
+        words.extend(["BIRD", "BLUE", "BOAT", "BONE", "BOOK", "BORN", "BOTH", "CARE"])
+        words.extend(["CASE", "CITE", "COME", "CORE", "DARE", "DARK", "DATE", "DEAR"])
+        words.extend(["DONE", "DOOR", "EACH", "EARN", "EASE", "EAST", "EDGE", "EVEN"])
+        words.extend(["FACE", "FACT", "FAIR", "FALL", "FARE", "FARM", "FAST", "FEAR"])
+        words.extend(["FINE", "FIRE", "FIRM", "FISH", "FIVE", "FLAT", "FLOW", "FOUR"])
 
         # 5-letter words
-        words.extend(['ABOUT', 'ABOVE', 'ALONE', 'ALONG', 'AREA', 'AROSE', 'ASIDE'])
-        words.extend(['BASIC', 'BEGAN', 'BEING', 'BELOW', 'BIRTH', 'BLACK', 'BOARD'])
-        words.extend(['BRING', 'BUILT', 'CAUSE', 'CHAIR', 'CHANGE', 'CHIEF', 'CLEAR'])
-        words.extend(['CLOSE', 'COMES', 'COULD', 'CRAFT', 'DEALT', 'DEATH', 'DOING'])
-        words.extend(['EARLY', 'EARTH', 'EIGHT', 'ENTER', 'EQUAL', 'ERROR', 'EVENT'])
+        words.extend(["ABOUT", "ABOVE", "ALONE", "ALONG", "AREA", "AROSE", "ASIDE"])
+        words.extend(["BASIC", "BEGAN", "BEING", "BELOW", "BIRTH", "BLACK", "BOARD"])
+        words.extend(["BRING", "BUILT", "CAUSE", "CHAIR", "CHANGE", "CHIEF", "CLEAR"])
+        words.extend(["CLOSE", "COMES", "COULD", "CRAFT", "DEALT", "DEATH", "DOING"])
+        words.extend(["EARLY", "EARTH", "EIGHT", "ENTER", "EQUAL", "ERROR", "EVENT"])
 
         # 6-letter words
-        words.extend(['ACROSS', 'ACTION', 'AMOUNT', 'ANSWER', 'AROUND', 'BECAME'])
-        words.extend(['BECOME', 'BEFORE', 'BETTER', 'BEYOND', 'CHANGE', 'CHANCE'])
-        words.extend(['CHARGE', 'CHOICE', 'CHOSEN', 'CLOSED', 'COMMON', 'COURSE'])
+        words.extend(["ACROSS", "ACTION", "AMOUNT", "ANSWER", "AROUND", "BECAME"])
+        words.extend(["BECOME", "BEFORE", "BETTER", "BEYOND", "CHANGE", "CHANCE"])
+        words.extend(["CHARGE", "CHOICE", "CHOSEN", "CLOSED", "COMMON", "COURSE"])
 
         # 7-letter words
-        words.extend(['ABILITY', 'ACCOUNT', 'ACHIEVE', 'ADDRESS', 'ADVANCE', 'AGAINST'])
-        words.extend(['ALREADY', 'ANOTHER', 'APPEARS', 'ARRANGE', 'ARTICLE', 'ATTEMPT'])
+        words.extend(["ABILITY", "ACCOUNT", "ACHIEVE", "ADDRESS", "ADVANCE", "AGAINST"])
+        words.extend(["ALREADY", "ANOTHER", "APPEARS", "ARRANGE", "ARTICLE", "ATTEMPT"])
 
         return WordList(words=words)
 
-    def test_full_pause_resume_workflow(self, tmp_path, crossword_grid, comprehensive_word_list):
+    def test_full_pause_resume_workflow(
+        self, tmp_path, crossword_grid, comprehensive_word_list
+    ):
         """
         Test complete pause/resume workflow with realistic crossword grid.
 
@@ -98,7 +120,7 @@ class TestEndToEndPauseResume:
         5. Resume from saved state
         6. Verify completion
         """
-        task_id = 'e2e_test_task'
+        task_id = "e2e_test_task"
         pause_controller = PauseController(task_id)
         pause_controller.cleanup()
 
@@ -113,7 +135,7 @@ class TestEndToEndPauseResume:
             candidates_per_slot=10,
             min_score=30,
             pause_controller=pause_controller,
-            task_id=task_id
+            task_id=task_id,
         )
 
         # Step 2: Request pause after delay
@@ -129,7 +151,9 @@ class TestEndToEndPauseResume:
         pause_thread.join()
 
         # Verify pause occurred
-        assert hasattr(result1, 'paused') and result1.paused is True, "Fill should have paused"
+        assert (
+            hasattr(result1, "paused") and result1.paused is True
+        ), "Fill should have paused"
         assert result1.iterations > 0, "Should have made some progress before pausing"
 
         print(f"\n✓ Paused after {result1.iterations} iterations")
@@ -139,10 +163,10 @@ class TestEndToEndPauseResume:
         state_manager = StateManager()
         saved_states = state_manager.list_states()
 
-        task_states = [s for s in saved_states if s['task_id'].startswith(task_id)]
+        task_states = [s for s in saved_states if s["task_id"].startswith(task_id)]
         assert len(task_states) > 0, "State should have been saved"
 
-        saved_task_id = task_states[0]['task_id']
+        saved_task_id = task_states[0]["task_id"]
         print(f"✓ State saved: {saved_task_id}")
 
         # Step 4: Load and inspect state
@@ -164,14 +188,16 @@ class TestEndToEndPauseResume:
             beam_width=5,
             candidates_per_slot=10,
             min_score=30,
-            task_id=task_id + '_resume'
+            task_id=task_id + "_resume",
         )
 
         # Resume (beam search minimum is 10s)
         result2 = orchestrator2.fill(timeout=10, resume_state=loaded_state)
 
         # Step 6: Verify resume worked
-        assert result2.iterations >= result1.iterations, "Should continue from previous iteration count"
+        assert (
+            result2.iterations >= result1.iterations
+        ), "Should continue from previous iteration count"
 
         print("✓ Resumed successfully")
         print(f"  Total iterations: {result2.iterations}")
@@ -181,7 +207,9 @@ class TestEndToEndPauseResume:
         pause_controller.cleanup()
         state_manager.delete_state(saved_task_id)
 
-    def test_pause_edit_resume_workflow(self, tmp_path, crossword_grid, comprehensive_word_list):
+    def test_pause_edit_resume_workflow(
+        self, tmp_path, crossword_grid, comprehensive_word_list
+    ):
         """
         Test pause/resume workflow with user edits.
 
@@ -192,12 +220,12 @@ class TestEndToEndPauseResume:
         4. Merge edits with saved state
         5. Resume with edited state
         """
-        task_id = 'e2e_edit_test'
+        task_id = "e2e_edit_test"
         pause_controller = PauseController(task_id)
         pause_controller.cleanup()
 
         pattern_matcher = PatternMatcher(comprehensive_word_list)
-        state_manager = StateManager(storage_dir=tmp_path)
+        StateManager(storage_dir=tmp_path)
 
         # Step 1: Start autofill
         orchestrator = BeamSearchOrchestrator(
@@ -208,7 +236,7 @@ class TestEndToEndPauseResume:
             candidates_per_slot=10,
             min_score=30,
             pause_controller=pause_controller,
-            task_id=task_id
+            task_id=task_id,
         )
 
         # Step 2: Pause quickly
@@ -222,42 +250,44 @@ class TestEndToEndPauseResume:
         result1 = orchestrator.fill(timeout=30)
         pause_thread.join()
 
-        assert hasattr(result1, 'paused') and result1.paused is True
+        assert hasattr(result1, "paused") and result1.paused is True
 
         print(f"\n✓ Paused after {result1.iterations} iterations")
 
         # Get saved state
         saved_states = StateManager().list_states()
-        task_states = [s for s in saved_states if s['task_id'].startswith(task_id)]
+        task_states = [s for s in saved_states if s["task_id"].startswith(task_id)]
         assert len(task_states) > 0
-        saved_task_id = task_states[0]['task_id']
+        saved_task_id = task_states[0]["task_id"]
 
         # Load state (from default storage location)
         loaded_state, metadata = StateManager().load_beam_search_state(saved_task_id)
 
         # Step 3: Simulate user edit - get grid from first beam state
         first_beam_dict = loaded_state.beam[0]
-        saved_grid = Grid.from_dict(first_beam_dict['grid_dict'])
+        saved_grid = Grid.from_dict(first_beam_dict["grid_dict"])
 
         # Make a user edit (fill in a 3-letter word manually)
         edited_grid = saved_grid.clone()
 
         # Find a 3-letter slot and fill it with "CAT"
         slots = crossword_grid.get_empty_slots()
-        three_letter_slots = [s for s in slots if s['length'] == 3]
+        three_letter_slots = [s for s in slots if s["length"] == 3]
 
         if three_letter_slots:
             slot = three_letter_slots[0]
-            if slot['direction'] == 'across':
-                edited_grid.set_letter(slot['row'], slot['col'], 'C')
-                edited_grid.set_letter(slot['row'], slot['col'] + 1, 'A')
-                edited_grid.set_letter(slot['row'], slot['col'] + 2, 'T')
+            if slot["direction"] == "across":
+                edited_grid.set_letter(slot["row"], slot["col"], "C")
+                edited_grid.set_letter(slot["row"], slot["col"] + 1, "A")
+                edited_grid.set_letter(slot["row"], slot["col"] + 2, "T")
             else:
-                edited_grid.set_letter(slot['row'], slot['col'], 'C')
-                edited_grid.set_letter(slot['row'] + 1, slot['col'], 'A')
-                edited_grid.set_letter(slot['row'] + 2, slot['col'], 'T')
+                edited_grid.set_letter(slot["row"], slot["col"], "C")
+                edited_grid.set_letter(slot["row"] + 1, slot["col"], "A")
+                edited_grid.set_letter(slot["row"] + 2, slot["col"], "T")
 
-            print(f"✓ User edit: filled {slot['direction']} slot at ({slot['row']}, {slot['col']}) with 'CAT'")
+            print(
+                f"✓ User edit: filled {slot['direction']} slot at ({slot['row']}, {slot['col']}) with 'CAT'"
+            )
 
         # Step 4: Get edit summary
         merger = EditMerger()
@@ -265,7 +295,9 @@ class TestEndToEndPauseResume:
             saved_grid_dict=saved_grid.to_dict(),
             edited_grid_dict=edited_grid.to_dict(),
             slot_list=loaded_state.all_slots,
-            slot_id_map=loaded_state.slot_id_map if hasattr(loaded_state, 'slot_id_map') else {}
+            slot_id_map=(
+                loaded_state.slot_id_map if hasattr(loaded_state, "slot_id_map") else {}
+            ),
         )
 
         print("✓ Edit summary:")
@@ -276,7 +308,9 @@ class TestEndToEndPauseResume:
         pause_controller.cleanup()
         StateManager().delete_state(saved_task_id)
 
-    def test_multiple_pause_resume_cycles(self, tmp_path, crossword_grid, comprehensive_word_list):
+    def test_multiple_pause_resume_cycles(
+        self, tmp_path, crossword_grid, comprehensive_word_list
+    ):
         """
         Test multiple pause/resume cycles on same puzzle.
 
@@ -285,7 +319,7 @@ class TestEndToEndPauseResume:
         - Each resume continues from previous state
         - Iteration count accumulates correctly
         """
-        task_id = 'e2e_multi_pause'
+        task_id = "e2e_multi_pause"
         pattern_matcher = PatternMatcher(comprehensive_word_list)
 
         total_iterations = 0
@@ -302,11 +336,17 @@ class TestEndToEndPauseResume:
             if cycle > 0:
                 state_manager = StateManager()
                 saved_states = state_manager.list_states()
-                prev_task_states = [s for s in saved_states if s['task_id'].startswith(f"{task_id}_cycle{cycle-1}")]
+                prev_task_states = [
+                    s
+                    for s in saved_states
+                    if s["task_id"].startswith(f"{task_id}_cycle{cycle-1}")
+                ]
                 if prev_task_states:
-                    prev_task_id = prev_task_states[0]['task_id']
+                    prev_task_id = prev_task_states[0]["task_id"]
                     resume_state, _ = state_manager.load_beam_search_state(prev_task_id)
-                    print(f"  Cycle {cycle}: Resuming from {resume_state.iterations} iterations")
+                    print(
+                        f"  Cycle {cycle}: Resuming from {resume_state.iterations} iterations"
+                    )
 
             orchestrator = BeamSearchOrchestrator(
                 grid=crossword_grid,
@@ -316,7 +356,7 @@ class TestEndToEndPauseResume:
                 candidates_per_slot=10,
                 min_score=30,
                 pause_controller=pause_controller,
-                task_id=f"{task_id}_cycle{cycle}"
+                task_id=f"{task_id}_cycle{cycle}",
             )
 
             # Pause after short time
@@ -330,7 +370,7 @@ class TestEndToEndPauseResume:
             result = orchestrator.fill(timeout=10, resume_state=resume_state)
             pause_thread.join()
 
-            if hasattr(result, 'paused') and result.paused:
+            if hasattr(result, "paused") and result.paused:
                 print(f"  Cycle {cycle}: Paused at {result.iterations} iterations")
                 total_iterations = result.iterations
             else:
@@ -343,7 +383,9 @@ class TestEndToEndPauseResume:
         print(f"✓ Multiple cycles completed. Total iterations: {total_iterations}")
         assert total_iterations > 0
 
-    def test_performance_metrics(self, tmp_path, crossword_grid, comprehensive_word_list):
+    def test_performance_metrics(
+        self, tmp_path, crossword_grid, comprehensive_word_list
+    ):
         """
         Test and measure pause/resume performance.
 
@@ -353,7 +395,7 @@ class TestEndToEndPauseResume:
         - State load time
         - Resume overhead
         """
-        task_id = 'e2e_perf_test'
+        task_id = "e2e_perf_test"
         pause_controller = PauseController(task_id)
         pause_controller.cleanup()
 
@@ -368,7 +410,7 @@ class TestEndToEndPauseResume:
             candidates_per_slot=10,
             min_score=30,
             pause_controller=pause_controller,
-            task_id=task_id
+            task_id=task_id,
         )
 
         # Measure pause time
@@ -391,13 +433,13 @@ class TestEndToEndPauseResume:
         print(f"  Time until pause: {fill_elapsed:.2f}s")
         print(f"  Iterations before pause: {result.iterations}")
 
-        if hasattr(result, 'paused') and result.paused:
+        if hasattr(result, "paused") and result.paused:
             # Measure state load time
             saved_states = state_manager.list_states()
-            task_states = [s for s in saved_states if s['task_id'].startswith(task_id)]
+            task_states = [s for s in saved_states if s["task_id"].startswith(task_id)]
 
             if task_states:
-                saved_task_id = task_states[0]['task_id']
+                saved_task_id = task_states[0]["task_id"]
 
                 load_start = time.time()
                 loaded_state, _ = state_manager.load_beam_search_state(saved_task_id)
@@ -413,7 +455,7 @@ class TestEndToEndPauseResume:
                     beam_width=5,
                     candidates_per_slot=10,
                     min_score=30,
-                    task_id=task_id + '_resume'
+                    task_id=task_id + "_resume",
                 )
 
                 resume_start = time.time()
@@ -421,7 +463,9 @@ class TestEndToEndPauseResume:
                 resume_elapsed = time.time() - resume_start
 
                 print(f"  Resume execution time: {resume_elapsed:.2f}s")
-                print(f"  Iterations in resumed session: {result2.iterations - result.iterations}")
+                print(
+                    f"  Iterations in resumed session: {result2.iterations - result.iterations}"
+                )
 
                 # Cleanup
                 state_manager.delete_state(saved_task_id)
@@ -429,5 +473,5 @@ class TestEndToEndPauseResume:
         pause_controller.cleanup()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '-s'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

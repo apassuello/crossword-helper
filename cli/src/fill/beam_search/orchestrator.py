@@ -20,7 +20,7 @@ from .selection.value_ordering import (
     LCVValueOrdering,
     StratifiedValueOrdering,
     ThresholdDiverseOrdering,
-    ThemeWordPriorityOrdering
+    ThemeWordPriorityOrdering,
 )
 from .beam.diversity import DiversityManager
 from .beam.manager import BeamManager
@@ -52,7 +52,7 @@ class BeamSearchOrchestrator:
         theme_words=None,
         pause_controller=None,
         task_id: Optional[str] = None,
-        partial_fill_mode: bool = False
+        partial_fill_mode: bool = False,
     ):
         """
         Initialize beam search orchestrator.
@@ -79,7 +79,9 @@ class BeamSearchOrchestrator:
         if beam_width < 1 or beam_width > 20:
             raise ValueError(f"beam_width must be 1-20, got {beam_width}")
         if candidates_per_slot < 1 or candidates_per_slot > 100:
-            raise ValueError(f"candidates_per_slot must be 1-100, got {candidates_per_slot}")
+            raise ValueError(
+                f"candidates_per_slot must be 1-100, got {candidates_per_slot}"
+            )
         if min_score < 0 or min_score > 100:
             raise ValueError(f"min_score must be 0-100, got {min_score}")
         if diversity_bonus < 0.0 or diversity_bonus > 1.0:
@@ -105,8 +107,12 @@ class BeamSearchOrchestrator:
 
         # Failure tracking (prevents thrashing on impossible slots)
         self.slot_attempt_history = {}  # (beam_signature, slot_id) -> attempt_count
-        self.recently_failed = []  # List of recently failed slot_ids (for MRV deprioritization)
-        self.max_attempts_per_slot = 3  # Max retries per (beam, slot) combination before backtracking
+        self.recently_failed = (
+            []
+        )  # List of recently failed slot_ids (for MRV deprioritization)
+        self.max_attempts_per_slot = (
+            3  # Max retries per (beam, slot) combination before backtracking
+        )
 
         # Initialize components
         self._init_components()
@@ -117,7 +123,7 @@ class BeamSearchOrchestrator:
         self.slot_selector = MRVSlotSelector(
             pattern_matcher=self.pattern_matcher,
             word_list=self.word_list,
-            theme_entries=self.theme_entries
+            theme_entries=self.theme_entries,
         )
 
         # Constraint propagation
@@ -129,20 +135,26 @@ class BeamSearchOrchestrator:
         # Phase 4.5: Added ThresholdDiverseOrdering for exploration-exploitation balance
         # Phase 5.1: Increased temperature to 0.8 for more exploration
         # Phase 3.4: Added ThemeWordPriorityOrdering for theme list prioritization
-        theme_priority = ThemeWordPriorityOrdering(theme_words=self.theme_words)  # Phase 3.4
+        theme_priority = ThemeWordPriorityOrdering(
+            theme_words=self.theme_words
+        )  # Phase 3.4
         lcv_ordering = LCVValueOrdering(
             pattern_matcher=self.pattern_matcher,
-            min_score_func=self._get_min_score_for_length
+            min_score_func=self._get_min_score_for_length,
         )
-        threshold_ordering = ThresholdDiverseOrdering(threshold=50, temperature=0.8)  # Phase 5.1: Was 0.4
+        threshold_ordering = ThresholdDiverseOrdering(
+            threshold=50, temperature=0.8
+        )  # Phase 5.1: Was 0.4
         stratified_ordering = StratifiedValueOrdering(tier_size=5)
         # Phase 4.5: Composite value ordering (theme priority FIRST, then LCV + threshold-diverse + stratified)
-        self.value_ordering = CompositeValueOrdering([
-            theme_priority,          # Phase 3.4: Theme words first (before LCV)
-            lcv_ordering,           # Least constraining value (prefer words that leave options open)
-            threshold_ordering,      # Threshold + temperature exploration (Phase 4.5)
-            stratified_ordering      # Stratified shuffling for diversity
-        ])
+        self.value_ordering = CompositeValueOrdering(
+            [
+                theme_priority,  # Phase 3.4: Theme words first (before LCV)
+                lcv_ordering,  # Least constraining value (prefer words that leave options open)
+                threshold_ordering,  # Threshold + temperature exploration (Phase 4.5)
+                stratified_ordering,  # Stratified shuffling for diversity
+            ]
+        )
 
         # Diversity management
         self.diversity_manager = DiversityManager()
@@ -151,7 +163,7 @@ class BeamSearchOrchestrator:
         self.state_evaluator = StateEvaluator(
             pattern_matcher=self.pattern_matcher,
             get_min_score_func=self._get_min_score_for_length,
-            get_intersecting_slots_func=SlotIntersectionHelper.get_intersecting_slots
+            get_intersecting_slots_func=SlotIntersectionHelper.get_intersecting_slots,
         )
 
         # Beam management
@@ -162,7 +174,7 @@ class BeamSearchOrchestrator:
             compute_score_func=self.state_evaluator.compute_score,
             is_quality_word_func=self.state_evaluator.is_quality_word,
             base_beam_width=self.beam_width,
-            value_ordering=self.value_ordering  # Phase 4.5: Wire up value ordering!
+            value_ordering=self.value_ordering,  # Phase 4.5: Wire up value ordering!
         )
 
     def _get_min_score_for_length(self, length: int) -> int:
@@ -179,7 +191,7 @@ class BeamSearchOrchestrator:
             Minimum score threshold for this length
         """
         if length <= 3:
-            return 0    # Accept any word (crosswordese OK)
+            return 0  # Accept any word (crosswordese OK)
         else:
             # Use user's min_score for all other lengths
             return self.min_score
@@ -248,7 +260,7 @@ class BeamSearchOrchestrator:
         if self.theme_entries:
             filtered_slots = []
             for slot in all_slots:
-                slot_id = (slot['row'], slot['col'], slot['direction'])
+                slot_id = (slot["row"], slot["col"], slot["direction"])
                 # Check if this exact slot is a theme entry
                 if slot_id in self.theme_entries:
                     continue  # Skip theme slots entirely
@@ -269,13 +281,17 @@ class BeamSearchOrchestrator:
                 slots_filled=0,
                 total_slots=0,
                 problematic_slots=[],
-                iterations=0
+                iterations=0,
             )
 
         # Handle theme entries
-        initial_grid, theme_slot_count, theme_slot_assignments, theme_words, sorted_slots = (
-            self._prepare_initial_state(all_slots)
-        )
+        (
+            initial_grid,
+            theme_slot_count,
+            theme_slot_assignments,
+            theme_words,
+            sorted_slots,
+        ) = self._prepare_initial_state(all_slots)
 
         # Initialize beam
         initial_state = BeamState(
@@ -284,7 +300,7 @@ class BeamSearchOrchestrator:
             total_slots=total_slots,
             score=100.0 * theme_slot_count,
             used_words=theme_words.copy(),
-            slot_assignments=theme_slot_assignments.copy()
+            slot_assignments=theme_slot_assignments.copy(),
         )
         beam = [initial_state.clone() for _ in range(self.beam_width)]
 
@@ -309,7 +325,9 @@ class BeamSearchOrchestrator:
                     )
                     # Return partial result with paused status
                     best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
-                    result = self._create_result(best_state, all_slots, total_slots, success=False)
+                    result = self._create_result(
+                        best_state, all_slots, total_slots, success=False
+                    )
                     result.paused = True  # Mark as paused
                     return result
 
@@ -318,17 +336,22 @@ class BeamSearchOrchestrator:
                 break
 
             # Select next slot (Dynamic MRV)
-            unfilled_slots = [s for s in all_slots
-                             if (s['row'], s['col'], s['direction']) not in filled_slots]
+            unfilled_slots = [
+                s
+                for s in all_slots
+                if (s["row"], s["col"], s["direction"]) not in filled_slots
+            ]
 
             if not unfilled_slots:
                 break
 
-            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
+            slot = self.slot_selector.select_next_slot(
+                unfilled_slots, beam[0], recently_failed=self.recently_failed
+            )
             if slot is None:
                 break
 
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             filled_slots.add(slot_id)
 
             # Progress reporting with incremental grid updates
@@ -337,12 +360,14 @@ class BeamSearchOrchestrator:
                 self.progress_reporter.update(
                     progress,
                     f"Beam search: slot {len(filled_slots)}/{total_slots}",
-                    'running',
-                    {'grid': beam[0].grid.to_dict()['grid']}  # Send current grid state
+                    "running",
+                    {"grid": beam[0].grid.to_dict()["grid"]},  # Send current grid state
                 )
 
             # Expand beam
-            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
+            expanded_beam = self.beam_manager.expand_beam(
+                beam, slot, self.candidates_per_slot
+            )
 
             # Backtracking if needed (only if we have successfully filled slots to backtrack from)
             if not expanded_beam and len(filled_slots) > 0:
@@ -365,13 +390,17 @@ class BeamSearchOrchestrator:
                         self.recently_failed.pop()
 
                 logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_id}")
-                logger.debug(f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination")
+                logger.debug(
+                    f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination"
+                )
                 logger.debug(f"  Recently failed slots: {self.recently_failed[:3]}")
 
                 # If we haven't exhausted attempts for this combination, continue
                 # MRV will now heavily penalize this slot and try alternatives
                 if attempts < self.max_attempts_per_slot:
-                    logger.debug(f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})")
+                    logger.debug(
+                        f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})"
+                    )
                     filled_slots.discard(slot_id)
                     continue
 
@@ -380,13 +409,19 @@ class BeamSearchOrchestrator:
 
                 # In partial fill mode, stop when stuck if we have a reasonable fill
                 if self.partial_fill_mode:
-                    filled_ratio = len(filled_slots) / total_slots if total_slots > 0 else 0
+                    filled_ratio = (
+                        len(filled_slots) / total_slots if total_slots > 0 else 0
+                    )
                     if filled_ratio >= 0.8:  # 80% filled is a good partial solution
-                        logger.debug(f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled")
+                        logger.debug(
+                            f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled"
+                        )
                         break
                     elif filled_ratio >= 0.5:
                         # Try gentler backtracking (only 1 level deep)
-                        logger.debug(f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled")
+                        logger.debug(
+                            f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled"
+                        )
                         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
                         if not backtracked_beam:
                             logger.debug("  Gentle backtracking failed, stopping here")
@@ -431,7 +466,9 @@ class BeamSearchOrchestrator:
                 # Remove current failing slot from filled_slots too
                 filled_slots.discard(slot_id)
 
-                logger.debug(f"  Backtracking complete, now have {len(filled_slots)} filled slots")
+                logger.debug(
+                    f"  Backtracking complete, now have {len(filled_slots)} filled slots"
+                )
                 continue
 
             # Adaptive beam width
@@ -442,7 +479,11 @@ class BeamSearchOrchestrator:
             # Prune beam with diversity
             if len(expanded_beam) > adaptive_width:
                 beam = self.diversity_manager.diverse_beam_prune(
-                    expanded_beam, slot, adaptive_width, num_groups=4, diversity_lambda=0.5
+                    expanded_beam,
+                    slot,
+                    adaptive_width,
+                    num_groups=4,
+                    diversity_lambda=0.5,
                 )
             else:
                 beam = expanded_beam
@@ -454,7 +495,7 @@ class BeamSearchOrchestrator:
                     max(complete_states, key=lambda s: s.score),
                     all_slots,
                     total_slots,
-                    success=True
+                    success=True,
                 )
 
         # Return best partial solution
@@ -486,7 +527,13 @@ class BeamSearchOrchestrator:
             # THEME PRESERVATION FIX: Log theme entry placement
             logger.debug(f"Theme entry placed and LOCKED: {word.upper()} at {slot_id}")
 
-        return initial_grid, theme_slot_count, theme_slot_assignments, theme_words, sorted_slots
+        return (
+            initial_grid,
+            theme_slot_count,
+            theme_slot_assignments,
+            theme_words,
+            sorted_slots,
+        )
 
     def _slot_overlaps_with_theme(self, slot: Dict) -> bool:
         """
@@ -501,7 +548,7 @@ class BeamSearchOrchestrator:
         Returns:
             True if slot overlaps with any theme entry, False otherwise
         """
-        slot_id = (slot['row'], slot['col'], slot['direction'])
+        slot_id = (slot["row"], slot["col"], slot["direction"])
 
         # Exact match
         if slot_id in self.theme_entries:
@@ -511,12 +558,18 @@ class BeamSearchOrchestrator:
         # This can happen if grid.get_empty_slots() splits a theme slot
         for theme_slot_id in self.theme_entries.keys():
             theme_row, theme_col, theme_dir = theme_slot_id
-            if slot['row'] == theme_row and slot['col'] == theme_col and slot['direction'] == theme_dir:
+            if (
+                slot["row"] == theme_row
+                and slot["col"] == theme_col
+                and slot["direction"] == theme_dir
+            ):
                 return True
 
         return False
 
-    def _analyze_slot_conflicts(self, state: BeamState, slot: Dict) -> Set[Tuple[int, int, str]]:
+    def _analyze_slot_conflicts(
+        self, state: BeamState, slot: Dict
+    ) -> Set[Tuple[int, int, str]]:
         """
         Identify which filled slots are causing the current slot to have no valid candidates.
 
@@ -538,12 +591,23 @@ class BeamSearchOrchestrator:
             row, col, direction = slot_id
 
             # Check if slots intersect
-            if not self._slots_intersect(slot, {'row': row, 'col': col, 'direction': direction, 'length': len(word)}):
+            if not self._slots_intersect(
+                slot,
+                {"row": row, "col": col, "direction": direction, "length": len(word)},
+            ):
                 continue
 
             # Find intersection positions
-            intersection_pos_current, intersection_pos_other = self._get_intersection_positions(
-                slot, {'row': row, 'col': col, 'direction': direction, 'length': len(word)}
+            intersection_pos_current, intersection_pos_other = (
+                self._get_intersection_positions(
+                    slot,
+                    {
+                        "row": row,
+                        "col": col,
+                        "direction": direction,
+                        "length": len(word),
+                    },
+                )
             )
 
             if intersection_pos_current is None or intersection_pos_other is None:
@@ -555,42 +619,54 @@ class BeamSearchOrchestrator:
             # Create pattern without this constraint
             pattern_list = list(pattern)
             pattern_without_constraint = pattern_list.copy()
-            pattern_without_constraint[intersection_pos_current] = '?'
-            pattern_without = ''.join(pattern_without_constraint)
+            pattern_without_constraint[intersection_pos_current] = "?"
+            pattern_without = "".join(pattern_without_constraint)
 
             # Check if this constraint is eliminating all candidates
-            min_score = self._get_min_score_for_length(slot['length'])
-            candidates_without = self.pattern_matcher.find(pattern_without, min_score=0)  # Very lenient
+            min_score = self._get_min_score_for_length(slot["length"])
+            candidates_without = self.pattern_matcher.find(
+                pattern_without, min_score=0
+            )  # Very lenient
             candidates_with = self.pattern_matcher.find(pattern, min_score=min_score)
 
             if len(candidates_without) > 0 and len(candidates_with) == 0:
                 # This constraint is problematic - it's eliminating all candidates
                 conflicts.add(slot_id)
-                logger.debug(f"    Conflict detected: slot {slot_id} with letter '{constraint_letter}' at pos {intersection_pos_current}")
+                logger.debug(
+                    f"    Conflict detected: slot {slot_id} with letter '{constraint_letter}' at pos {intersection_pos_current}"
+                )
 
-        logger.debug(f"  Analyzed conflicts for slot {(slot['row'], slot['col'], slot['direction'])}: found {len(conflicts)} conflicts")
+        logger.debug(
+            f"  Analyzed conflicts for slot {(slot['row'], slot['col'], slot['direction'])}: found {len(conflicts)} conflicts"
+        )
         return conflicts
 
     def _slots_intersect(self, slot1: Dict, slot2: Dict) -> bool:
         """Check if two slots intersect."""
         # If same direction, they can't intersect (parallel)
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
         # Check if they overlap
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             # slot1 is across (row fixed), slot2 is down (col fixed)
             # They intersect if slot1's row is in slot2's row range AND slot2's col is in slot1's col range
-            across_row, across_col = slot1['row'], slot1['col']
-            down_row, down_col = slot2['row'], slot2['col']
+            across_row, across_col = slot1["row"], slot1["col"]
+            down_row, down_col = slot2["row"], slot2["col"]
 
-            return (down_col >= across_col and down_col < across_col + slot1['length'] and
-                    across_row >= down_row and across_row < down_row + slot2['length'])
+            return (
+                down_col >= across_col
+                and down_col < across_col + slot1["length"]
+                and across_row >= down_row
+                and across_row < down_row + slot2["length"]
+            )
         else:
             # slot1 is down, slot2 is across
             return self._slots_intersect(slot2, slot1)
 
-    def _get_intersection_positions(self, slot1: Dict, slot2: Dict) -> Tuple[Optional[int], Optional[int]]:
+    def _get_intersection_positions(
+        self, slot1: Dict, slot2: Dict
+    ) -> Tuple[Optional[int], Optional[int]]:
         """
         Get the positions where two slots intersect.
 
@@ -600,10 +676,10 @@ class BeamSearchOrchestrator:
         if not self._slots_intersect(slot1, slot2):
             return (None, None)
 
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             # slot1 is across, slot2 is down
-            across_row, across_col = slot1['row'], slot1['col']
-            down_row, down_col = slot2['row'], slot2['col']
+            across_row, across_col = slot1["row"], slot1["col"]
+            down_row, down_col = slot2["row"], slot2["col"]
 
             pos_in_across = down_col - across_col
             pos_in_down = across_row - down_row
@@ -614,7 +690,9 @@ class BeamSearchOrchestrator:
             pos2, pos1 = self._get_intersection_positions(slot2, slot1)
             return (pos1, pos2)
 
-    def _backtrack_beam_states(self, beam: List[BeamState], depth: int = 1) -> List[BeamState]:
+    def _backtrack_beam_states(
+        self, beam: List[BeamState], depth: int = 1
+    ) -> List[BeamState]:
         """
         Perform true chronological backtracking by undoing recent slot assignments.
 
@@ -642,7 +720,7 @@ class BeamSearchOrchestrator:
             # Get last N assignments to remove (chronological order)
             sorted_assignments = sorted(
                 state.slot_assignments.items(),
-                key=lambda x: x  # Chronological order by slot_id
+                key=lambda x: x,  # Chronological order by slot_id
             )[-depth:]
 
             for slot_id, word in sorted_assignments:
@@ -691,7 +769,9 @@ class BeamSearchOrchestrator:
             conflicts = self._analyze_slot_conflicts(beam[0], slot)
 
         if not self.partial_fill_mode and conflicts:
-            logger.debug(f"  Found {len(conflicts)} conflicting slots, attempting backjump...")
+            logger.debug(
+                f"  Found {len(conflicts)} conflicting slots, attempting backjump..."
+            )
 
             # Create backjumped beam by removing conflicting assignments
             backjumped_beam = []
@@ -713,25 +793,33 @@ class BeamSearchOrchestrator:
                         new_state.used_words.discard(word)
                         new_state.slots_filled -= 1
 
-                        logger.debug(f"    Removed conflicting slot {conflict_slot_id} (word={word})")
+                        logger.debug(
+                            f"    Removed conflicting slot {conflict_slot_id} (word={word})"
+                        )
 
                 backjumped_beam.append(new_state)
 
             # Try expanding from backjumped state
-            expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10)
+            expanded = self.beam_manager.expand_beam(
+                backjumped_beam, slot, self.candidates_per_slot * 10
+            )
             if expanded:
                 logger.debug("  ✓ Success with conflict-directed backjumping")
                 return expanded
 
         # Try 2: More candidates (2x)
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
+        expanded = self.beam_manager.expand_beam(
+            beam, slot, self.candidates_per_slot * 2
+        )
         if expanded:
             logger.debug("  ✓ Success with 2x candidates")
             return expanded
 
         # Try 3: Even more candidates (5x)
         logger.debug("  Trying 5x candidates...")
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
+        expanded = self.beam_manager.expand_beam(
+            beam, slot, self.candidates_per_slot * 5
+        )
         if expanded:
             logger.debug("  ✓ Success with 5x candidates")
             return expanded
@@ -740,7 +828,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying min_score=0...")
         old_min_score = self.min_score
         self.min_score = 0
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
+        expanded = self.beam_manager.expand_beam(
+            beam, slot, self.candidates_per_slot * 10
+        )
         self.min_score = old_min_score
         if expanded:
             logger.debug("  ✓ Success with no score filter")
@@ -750,7 +840,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying chronological backtracking (depth=1)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 10
+            )
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
@@ -764,7 +856,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying deeper chronological backtracking (depth=2)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=2)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 15
+            )
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=2)")
                 return expanded
@@ -773,7 +867,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying very deep backtracking (depth=3)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=3)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 20
+            )
             if expanded:
                 logger.debug("  ✓ Success with deep backtracking (depth=3)")
                 return expanded
@@ -814,7 +910,9 @@ class BeamSearchOrchestrator:
             slot_id = tuple(key_list[1])
             self.slot_attempt_history[(beam_sig, slot_id)] = attempts
 
-        self.recently_failed = [tuple(slot_list) for slot_list in resume_state.recently_failed]
+        self.recently_failed = [
+            tuple(slot_list) for slot_list in resume_state.recently_failed
+        ]
 
         # Restore theme entries
         self.theme_entries = {}
@@ -836,7 +934,9 @@ class BeamSearchOrchestrator:
         total_slots = resume_state.total_slots
         slot_idx = resume_state.slot_idx
 
-        logger.info(f"Restored {len(beam)} beam states, {len(filled_slots)}/{total_slots} slots filled")
+        logger.info(
+            f"Restored {len(beam)} beam states, {len(filled_slots)}/{total_slots} slots filled"
+        )
 
         # Continue the main beam search loop from where it paused
         while len(filled_slots) < total_slots:
@@ -853,7 +953,9 @@ class BeamSearchOrchestrator:
                     )
                     # Return partial result with paused status
                     best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
-                    result = self._create_result(best_state, all_slots, total_slots, success=False)
+                    result = self._create_result(
+                        best_state, all_slots, total_slots, success=False
+                    )
                     result.paused = True  # Mark as paused
                     return result
 
@@ -862,17 +964,22 @@ class BeamSearchOrchestrator:
                 break
 
             # Select next slot (Dynamic MRV)
-            unfilled_slots = [s for s in all_slots
-                             if (s['row'], s['col'], s['direction']) not in filled_slots]
+            unfilled_slots = [
+                s
+                for s in all_slots
+                if (s["row"], s["col"], s["direction"]) not in filled_slots
+            ]
 
             if not unfilled_slots:
                 break
 
-            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
+            slot = self.slot_selector.select_next_slot(
+                unfilled_slots, beam[0], recently_failed=self.recently_failed
+            )
             if slot is None:
                 break
 
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             filled_slots.add(slot_id)
 
             # Progress reporting with incremental grid updates
@@ -881,12 +988,14 @@ class BeamSearchOrchestrator:
                 self.progress_reporter.update(
                     progress,
                     f"Beam search (resumed): slot {len(filled_slots)}/{total_slots}",
-                    'running',
-                    {'grid': beam[0].grid.to_dict()['grid']}  # Send current grid state
+                    "running",
+                    {"grid": beam[0].grid.to_dict()["grid"]},  # Send current grid state
                 )
 
             # Expand beam
-            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
+            expanded_beam = self.beam_manager.expand_beam(
+                beam, slot, self.candidates_per_slot
+            )
 
             # Backtracking if needed (only if we have successfully filled slots to backtrack from)
             if not expanded_beam and len(filled_slots) > 0:
@@ -909,13 +1018,17 @@ class BeamSearchOrchestrator:
                         self.recently_failed.pop()
 
                 logger.debug(f"\nWARNING: Beam expansion failed at slot {slot_id}")
-                logger.debug(f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination")
+                logger.debug(
+                    f"  Attempt {attempts}/{self.max_attempts_per_slot} for this (beam, slot) combination"
+                )
                 logger.debug(f"  Recently failed slots: {self.recently_failed[:3]}")
 
                 # If we haven't exhausted attempts for this combination, continue
                 # MRV will now heavily penalize this slot and try alternatives
                 if attempts < self.max_attempts_per_slot:
-                    logger.debug(f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})")
+                    logger.debug(
+                        f"  Removing slot from filled_slots, MRV will deprioritize it (penalty={1000 * (len(self.recently_failed))})"
+                    )
                     filled_slots.discard(slot_id)
                     continue
 
@@ -924,13 +1037,19 @@ class BeamSearchOrchestrator:
 
                 # In partial fill mode, stop when stuck if we have a reasonable fill
                 if self.partial_fill_mode:
-                    filled_ratio = len(filled_slots) / total_slots if total_slots > 0 else 0
+                    filled_ratio = (
+                        len(filled_slots) / total_slots if total_slots > 0 else 0
+                    )
                     if filled_ratio >= 0.8:  # 80% filled is a good partial solution
-                        logger.debug(f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled")
+                        logger.debug(
+                            f"  Partial fill mode: Stopping at {filled_ratio:.1%} filled"
+                        )
                         break
                     elif filled_ratio >= 0.5:
                         # Try gentler backtracking (only 1 level deep)
-                        logger.debug(f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled")
+                        logger.debug(
+                            f"  Partial fill mode: Gentle backtrack at {filled_ratio:.1%} filled"
+                        )
                         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
                         if not backtracked_beam:
                             logger.debug("  Gentle backtracking failed, stopping here")
@@ -975,7 +1094,9 @@ class BeamSearchOrchestrator:
                 # Remove current failing slot from filled_slots too
                 filled_slots.discard(slot_id)
 
-                logger.debug(f"  Backtracking complete, now have {len(filled_slots)} filled slots")
+                logger.debug(
+                    f"  Backtracking complete, now have {len(filled_slots)} filled slots"
+                )
                 continue
 
             # Adaptive beam width
@@ -986,7 +1107,11 @@ class BeamSearchOrchestrator:
             # Prune beam with diversity
             if len(expanded_beam) > adaptive_width:
                 beam = self.diversity_manager.diverse_beam_prune(
-                    expanded_beam, slot, adaptive_width, num_groups=4, diversity_lambda=0.5
+                    expanded_beam,
+                    slot,
+                    adaptive_width,
+                    num_groups=4,
+                    diversity_lambda=0.5,
                 )
             else:
                 beam = expanded_beam
@@ -998,7 +1123,7 @@ class BeamSearchOrchestrator:
                     max(complete_states, key=lambda s: s.score),
                     all_slots,
                     total_slots,
-                    success=True
+                    success=True,
                 )
 
         # Return best partial solution
@@ -1011,7 +1136,7 @@ class BeamSearchOrchestrator:
         filled_slots: Set,
         slot_idx: int,
         all_slots: List[Dict],
-        total_slots: int
+        total_slots: int,
     ) -> None:
         """
         Save current beam search state to disk for pause/resume.
@@ -1037,12 +1162,12 @@ class BeamSearchOrchestrator:
 
             # Create metadata
             metadata = {
-                'min_score': self.min_score,
-                'timeout': 300,  # Default timeout, will be overridden on resume
-                'grid_size': [self.grid.size, self.grid.size],
-                'total_slots': total_slots,
-                'slots_filled': len(filled_slots),
-                'iterations': self.iterations
+                "min_score": self.min_score,
+                "timeout": 300,  # Default timeout, will be overridden on resume
+                "grid_size": [self.grid.size, self.grid.size],
+                "total_slots": total_slots,
+                "slots_filled": len(filled_slots),
+                "iterations": self.iterations,
             }
 
             # Save to disk
@@ -1051,7 +1176,7 @@ class BeamSearchOrchestrator:
                 task_id=self.task_id,
                 beam_state=beam_search_state,
                 metadata=metadata,
-                compress=True
+                compress=True,
             )
 
             logger.info(f"Beam search state saved to {file_path}")
@@ -1064,7 +1189,7 @@ class BeamSearchOrchestrator:
         best_state: BeamState,
         all_slots: List[Dict],
         total_slots: int,
-        success: bool
+        success: bool,
     ):
         """Create FillResult from best state."""
         from ..autofill import FillResult
@@ -1075,19 +1200,24 @@ class BeamSearchOrchestrator:
         problematic_slots = []
         if not success:
             for slot in all_slots:
-                slot_id = (slot['row'], slot['col'], slot['direction'])
+                slot_id = (slot["row"], slot["col"], slot["direction"])
                 if slot_id not in best_state.slot_assignments:
                     # Clear gibberish from unfilled slots (stricter in partial fill mode)
                     pattern = best_state.grid.get_pattern_for_slot(slot)
-                    if self.state_evaluator.is_gibberish_pattern(pattern, strict=self.partial_fill_mode):
+                    if self.state_evaluator.is_gibberish_pattern(
+                        pattern, strict=self.partial_fill_mode
+                    ):
                         best_state.grid.remove_word(
-                            slot['row'], slot['col'], slot['length'], slot['direction']
+                            slot["row"], slot["col"], slot["length"], slot["direction"]
                         )
                     problematic_slots.append(slot)
 
         # Calculate actual filled slots
-        actual_filled = sum(1 for slot in all_slots
-                           if '?' not in best_state.grid.get_pattern_for_slot(slot))
+        actual_filled = sum(
+            1
+            for slot in all_slots
+            if "?" not in best_state.grid.get_pattern_for_slot(slot)
+        )
 
         return FillResult(
             success=success,
@@ -1096,5 +1226,5 @@ class BeamSearchOrchestrator:
             slots_filled=actual_filled,
             total_slots=total_slots,
             problematic_slots=problematic_slots,
-            iterations=self.iterations
+            iterations=self.iterations,
         )
