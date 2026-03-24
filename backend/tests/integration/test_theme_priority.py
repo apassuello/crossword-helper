@@ -173,7 +173,7 @@ class TestThemeWordCLIIntegration:
                 cmd=[
                     'python3', '-m', 'cli.src.cli', 'fill',
                     str(grid_file),
-                    '--wordlists', 'data/wordlists/comprehensive.txt',
+                    '--wordlists', 'data/wordlists/core/crosswordese.txt',
                     '--theme-wordlist', theme_file,
                     '--timeout', '10',
                     '--allow-nonstandard'
