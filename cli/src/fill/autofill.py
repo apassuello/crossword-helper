@@ -95,6 +95,7 @@ class Autofill:
         self.iterations = 0
         self.used_words = set()
         self.random_seed = None  # Phase 3.2: Seed for randomized restart
+        self.on_backtrack = None  # Callback for adaptive autofill
 
         # Domain tracking and constraint graph (initialized on fill())
         self.domains: Dict[int, Set[str]] = {}  # slot_id -> set of valid words
@@ -860,6 +861,11 @@ class Autofill:
             )
             self.used_words.remove(word)
 
+            # Notify adaptive autofill of backtrack
+            if self.on_backtrack:
+                slot_key = f"{slot['row']},{slot['col']},{slot['direction']}"
+                self.on_backtrack(slot_key)
+
         # No candidate worked
         return False
 
@@ -1014,6 +1020,11 @@ class Autofill:
                 slot["row"], slot["col"], slot["length"], slot["direction"]
             )
             self.used_words.remove(word)
+
+            # Notify adaptive autofill of backtrack
+            if self.on_backtrack:
+                slot_key = f"{slot['row']},{slot['col']},{slot['direction']}"
+                self.on_backtrack(slot_key)
 
         return False
 

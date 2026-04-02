@@ -378,6 +378,79 @@ class TestAutofill:
         assert '11x11' in repr_str or '11' in repr_str
 
 
+class TestOnBacktrackCallback:
+    """Test that on_backtrack callback is invoked during CSP backtracking."""
+
+    def test_on_backtrack_called_in_backtrack(self):
+        """Verify on_backtrack fires in _backtrack when a candidate fails."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=5)
+        autofill.start_time = time.time()
+        autofill.iterations = 0
+        autofill.used_words = set()
+
+        backtrack_log = []
+        autofill.on_backtrack = lambda key: backtrack_log.append(key)
+
+        # Create a fake slot list where the second slot has no candidates,
+        # forcing a backtrack on the first slot.
+        slots = [
+            {"row": 0, "col": 0, "length": 3, "direction": "across", "number": 1},
+            {"row": 0, "col": 0, "length": 3, "direction": "down", "number": 1},
+        ]
+
+        # _backtrack will place a word in slot 0 then fail on slot 1
+        # (since slot 1 shares cell 0,0 and no word starts with same letter).
+        # It will backtrack on slot 0 and try other candidates.
+        autofill._backtrack(slots, 0)
+
+        assert len(backtrack_log) > 0, "on_backtrack was never called"
+        # Verify slot key format
+        for key in backtrack_log:
+            parts = key.split(",")
+            assert len(parts) == 3, f"Bad slot key format: {key}"
+            assert parts[2] in ("across", "down")
+
+    def test_on_backtrack_called_in_backtrack_with_mac(self):
+        """Verify on_backtrack fires in _backtrack_with_mac too."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=5)
+        autofill.start_time = time.time()
+        autofill.iterations = 0
+        autofill.used_words = set()
+
+        # Initialize domains for MAC path
+        slots = [
+            {"row": 0, "col": 0, "length": 3, "direction": "across", "number": 1},
+            {"row": 0, "col": 0, "length": 3, "direction": "down", "number": 1},
+        ]
+        autofill._initialize_csp(slots)
+
+        backtrack_log = []
+        autofill.on_backtrack = lambda key: backtrack_log.append(key)
+
+        autofill._backtrack_with_mac(slots, 0)
+
+        assert len(backtrack_log) > 0, "on_backtrack was never called in MAC path"
+
+    def test_on_backtrack_default_is_none(self):
+        """Verify on_backtrack defaults to None and doesn't error."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=1)
+        assert autofill.on_backtrack is None
+        # Should not raise even though backtracking occurs internally
+        autofill.fill()
+
+
 class TestFillResult:
     """Test FillResult dataclass."""
 

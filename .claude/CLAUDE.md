@@ -76,7 +76,7 @@ python -m cli.src.cli pattern "C?T" \
   -w data/wordlists/comprehensive.txt \
   --algorithm trie --json-output
 
-# Export to PDF or HTML
+# Export to HTML
 python -m cli.src.cli export filled.json --format html -o puzzle.html
 ```
 
@@ -278,11 +278,10 @@ Three algorithms with different trade-offs:
 
 **Location:** `cli/src/fill/`
 
-Three implementations:
+Two implementations:
 
 1. **Regex** (`pattern_matcher.py`) - Simple, ~100ms for 454k words
 2. **Trie** (`trie_matcher.py`) - 10-50x faster, ~10ms for 454k words (default)
-3. **Aho-Corasick** (`ahocorasick_matcher.py`) - Fastest for batch operations
 
 ---
 
@@ -449,7 +448,7 @@ For comprehensive information, see:
 - Adaptive autofill with automatic black square placement
 - Theme entry locking (web UI)
 - Constraint analysis and crossing quality heatmap
-- Export (PDF, HTML, JSON)
+- Export (HTML, JSON)
 - Real-time progress tracking
 
 ### Resolved Issues

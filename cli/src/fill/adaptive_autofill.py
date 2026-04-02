@@ -96,6 +96,9 @@ class AdaptiveAutofill:
         # Use base autofill if provided, otherwise create new one
         if base_autofill:
             self.autofill = base_autofill
+            # Hook into autofill's backtrack callback
+            if hasattr(self.autofill, "on_backtrack"):
+                self.autofill.on_backtrack = self._on_backtrack
         else:
             self.autofill = None
             self._create_autofill()

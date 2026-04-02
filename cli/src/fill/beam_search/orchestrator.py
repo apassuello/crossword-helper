@@ -14,7 +14,6 @@ from ..word_list import WordList
 from ..pattern_matcher import PatternMatcher
 from .state import BeamState
 from .selection.slot_selector import MRVSlotSelector
-from .constraints.engine import MACConstraintEngine
 from .selection.value_ordering import (
     CompositeValueOrdering,
     LCVValueOrdering,
@@ -124,11 +123,6 @@ class BeamSearchOrchestrator:
             pattern_matcher=self.pattern_matcher,
             word_list=self.word_list,
             theme_entries=self.theme_entries,
-        )
-
-        # Constraint propagation
-        self.constraint_engine = MACConstraintEngine(
-            pattern_matcher=self.pattern_matcher
         )
 
         # Value ordering (composite strategy: theme priority + LCV + threshold-diverse + stratified)
