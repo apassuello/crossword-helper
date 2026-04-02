@@ -12,13 +12,14 @@ Usage:
     python -m cli.tests.benchmark_memory_optimization --verbose
 """
 
+import os
 import sys
 import time
 import gc
 import tracemalloc
 
 # Add project root to path
-sys.path.insert(0, '/Users/apa/projects/untitled_project/crossword-helper')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from cli.src.fill.beam_search.state import BeamState
 from cli.src.fill.beam_search.memory import (

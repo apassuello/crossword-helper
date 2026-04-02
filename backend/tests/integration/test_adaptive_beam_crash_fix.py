@@ -139,15 +139,11 @@ def test_api_adaptive_beam_starts_successfully(client):
 
 @pytest.mark.slow
 def test_adaptive_mode_adds_black_squares():
-    """Canary: --adaptive should auto-add black squares to an empty grid.
+    """Verify --adaptive auto-adds black squares to an empty grid.
 
     This test exercises the --adaptive CLI flag on a 7x7 all-empty grid
-    (no black squares). The adaptive feature is supposed to strategically
-    add black squares to make the grid fillable, but it is KNOWN BROKEN
-    and does NOT actually add them.
-
-    This is a regression canary. If this test starts passing, the feature
-    has been fixed. See CLAUDE.md Known Issues section.
+    (no black squares). The adaptive feature strategically adds black
+    squares to make the grid fillable.
     """
     grid_data = {"size": 7, "grid": [["." for _ in range(7)] for _ in range(7)]}
 
@@ -210,13 +206,9 @@ def test_adaptive_mode_adds_black_squares():
 
         black_squares_added = output_blacks > input_blacks
 
-        # KNOWN BROKEN: this assertion is expected to fail.
-        # When the feature is fixed, this canary will start passing.
         assert black_squares_added, (
-            "KNOWN BROKEN CANARY: --adaptive did not add any black squares "
-            f"to the 7x7 grid. Input had {input_blacks}, output has "
-            f"{output_blacks}. See CLAUDE.md Known Issues: CLI --adaptive "
-            "flag does NOT auto-add black squares."
+            f"--adaptive did not add any black squares to the 7x7 grid. "
+            f"Input had {input_blacks}, output has {output_blacks}."
         )
 
     except subprocess.TimeoutExpired:

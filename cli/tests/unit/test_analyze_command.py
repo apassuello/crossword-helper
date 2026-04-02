@@ -8,8 +8,13 @@ import sys
 import pytest
 
 
-def run_analyze(args, cwd="/Users/apa/projects/crossword-helper"):
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def run_analyze(args, cwd=None):
     """Helper: run the analyze CLI command and return (stdout, stderr, returncode)."""
+    if cwd is None:
+        cwd = PROJECT_ROOT
     cmd = [sys.executable, "-m", "cli.src.cli", "analyze"] + args
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     return result.stdout, result.stderr, result.returncode

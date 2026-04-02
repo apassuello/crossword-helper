@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A comprehensive crossword puzzle construction toolkit with web interface and CLI tools, implementing a **CLI-as-single-source-of-truth architecture**.
 
-**Current Status:** All 3 development phases complete (165/165 tests passing)
+**Current Status:** All 3 development phases complete (761+ tests passing)
 
 ---
 
@@ -151,7 +151,7 @@ crossword-helper/
 │   │   ├── black_square_suggester.py  # Strategic black square placement
 │   │   └── wordlist_resolver.py  # Wordlist path resolution
 │   ├── data/                   # Data access layer
-│   ├── tests/                  # Backend tests (165 passing)
+│   ├── tests/                  # Backend tests
 │   └── app.py                  # Flask app factory
 │
 ├── cli/                        # CLI tool (SINGLE SOURCE OF TRUTH)
@@ -446,16 +446,17 @@ For comprehensive information, see:
 - Grid validation
 - Autofill (all algorithms)
 - Pause/resume autofill
+- Adaptive autofill with automatic black square placement
 - Theme entry locking (web UI)
+- Constraint analysis and crossing quality heatmap
 - Export (PDF, HTML, JSON)
 - Real-time progress tracking
 
-### Known Issues ⚠️
-- ~~CLI `--theme-entries` flag does NOT preserve theme words~~ **FIXED** (the feature works; the canary test was broken — it was passing raw JSON instead of a file path)
-- CLI `--adaptive` flag does NOT auto-add black squares
-  - **Workaround:** Use web interface black square optimizer
+### Resolved Issues
+- ~~CLI `--theme-entries` flag does NOT preserve theme words~~ **FIXED** (canary test was passing raw JSON instead of a file path)
+- ~~CLI `--adaptive` flag does NOT auto-add black squares~~ **FIXED** (now working after trie score bound and beam timeout fixes)
 
 ---
 
 **Version:** 2.0.0 (All phases complete)
-**Last Updated:** December 2025
+**Last Updated:** April 2026
