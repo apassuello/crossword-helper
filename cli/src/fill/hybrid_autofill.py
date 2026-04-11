@@ -1,36 +1,32 @@
 """
-Hybrid autofill engine combining beam search and iterative repair.
+Hybrid autofill combining beam search and iterative repair.
 
-Orchestrates two-phase approach:
-1. Phase 1 (70% of time): Beam search for global exploration
-2. Phase 2 (30% of time): Iterative repair for local optimization
-
-Combines strengths of both algorithms to achieve higher completion rates
-than either algorithm alone.
+Two-phase approach: beam search (20% of timeout, capped per grid size)
+then iterative repair (remaining time). Returns best result from either phase.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
 import time
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .autofill import FillResult
 
 from ..core.grid import Grid
-from .word_list import WordList
-from .pattern_matcher import PatternMatcher
 from .beam_search_autofill import BeamSearchAutofill
 from .iterative_repair import IterativeRepair
+from .pattern_matcher import PatternMatcher
+from .word_list import WordList
 
 
 class HybridAutofill:
     """
-    Hybrid solver combining beam search and iterative repair.
+    Hybrid solver: beam search then iterative repair.
 
-    Strategy:
-    1. Phase 1 (20% of time, max 60s): Beam search for global exploration
-    2. Phase 2 (80% of time): Repair for local optimization
-    3. Return best result from either phase
+    Phase 1: Beam search with 20% of timeout (capped by grid size).
+    Phase 2: Iterative repair with remaining time.
+    Returns best result from either phase.
     """
 
     def __init__(
@@ -44,7 +40,7 @@ class HybridAutofill:
         progress_reporter=None,
         theme_entries=None,
         theme_words=None,
-        all_valid_words: set = None
+        all_valid_words: set = None,
     ):
         """
         Initialize hybrid autofill solver.
@@ -72,33 +68,35 @@ class HybridAutofill:
         self.all_valid_words = all_valid_words or set()
         self.theme_words = theme_words or set()
 
+    @staticmethod
+    def _compute_beam_cap(size: int) -> int:
+        """Compute beam timeout cap for a given grid size.
+
+        Linear scale: 30s at size 11, +9s per size step, max 120s.
+        Examples: 11→30, 15→66, 19→102, 21→120
+        """
+        return min(120, max(30, (size - 11) * 9 + 30))
+
     def fill(
         self,
         timeout: int = 300,
         beam_timeout_ratio: float = 0.2,
-        repair_timeout_ratio: float = 0.8
+        repair_timeout_ratio: float = 0.8,
     ) -> FillResult:
         """
         Fill grid using hybrid approach.
 
-        Algorithm:
-        1. Run beam search with 20% of timeout (quick exploration)
-        2. If perfect: return immediately
-        3. Run iterative repair on beam result with 80% of timeout
-        4. Return best of (beam_result, repair_result)
-
         Args:
-            timeout: Total time budget in seconds
-            beam_timeout_ratio: Fraction of time for beam search (default: 0.2, capped at 60s)
+            timeout: Total time budget in seconds (minimum 30)
+            beam_timeout_ratio: Fraction of time for beam search (default: 0.2)
             repair_timeout_ratio: Fraction of time for repair (default: 0.8)
 
         Returns:
             FillResult with best solution found
 
         Raises:
-            ValueError: If timeout < 30 or ratios invalid
+            ValueError: If timeout < 30 or beam_timeout_ratio + repair_timeout_ratio > 1.0
         """
-        from .autofill import FillResult  # Import here to avoid circular dependency
 
         # Validate parameters
         if timeout < 30:
@@ -112,8 +110,9 @@ class HybridAutofill:
 
         time.time()
 
-        # Calculate timeouts (beam capped at 60s — it's slow on large grids)
-        beam_timeout = min(60, max(10, int(timeout * beam_timeout_ratio)))
+        # Scale beam timeout cap with grid size (linear: 30s at size 11, +9s per size step, max 120s)
+        beam_cap = self._compute_beam_cap(self.grid.size)
+        beam_timeout = min(beam_cap, max(10, int(timeout * beam_timeout_ratio)))
         repair_timeout = max(10, timeout - beam_timeout)
 
         # Phase 1: Beam Search
@@ -128,7 +127,7 @@ class HybridAutofill:
             min_score=self.min_score,
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
-            theme_words=self.theme_words
+            theme_words=self.theme_words,
         )
 
         beam_result = beam_search.fill(timeout=beam_timeout)
@@ -138,7 +137,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}"
+                    f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
             return beam_result
 
@@ -146,7 +145,7 @@ class HybridAutofill:
         if self.progress_reporter:
             self.progress_reporter.update(
                 70,
-                f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)"
+                f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)",
             )
 
         # Use beam result grid as starting point
@@ -159,7 +158,7 @@ class HybridAutofill:
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
-            all_valid_words=self.all_valid_words
+            all_valid_words=self.all_valid_words,
         )
 
         repair_result = repair.fill(timeout=repair_timeout)
@@ -170,7 +169,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Repair complete: {repair_result.slots_filled}/{repair_result.total_slots}"
+                    f"Repair complete: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
             return repair_result
         elif repair_result.slots_filled >= beam_result.slots_filled:
@@ -178,7 +177,7 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Repair improved: {repair_result.slots_filled}/{repair_result.total_slots}"
+                    f"Repair improved: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
             return repair_result
         else:
@@ -186,6 +185,6 @@ class HybridAutofill:
             if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
-                    f"Beam best: {beam_result.slots_filled}/{beam_result.total_slots}"
+                    f"Beam best: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
             return beam_result

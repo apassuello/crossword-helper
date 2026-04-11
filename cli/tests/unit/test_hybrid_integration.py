@@ -2,13 +2,14 @@
 Integration tests for hybrid autofill (beam search + iterative repair).
 """
 
-import pytest
 import time
+
+import pytest
 from src.core.grid import Grid
-from src.fill.word_list import WordList
-from src.fill.trie_pattern_matcher import TriePatternMatcher
-from src.fill.hybrid_autofill import HybridAutofill
 from src.fill.beam_search_autofill import BeamSearchAutofill
+from src.fill.hybrid_autofill import HybridAutofill
+from src.fill.trie_pattern_matcher import TriePatternMatcher
+from src.fill.word_list import WordList
 
 
 class TestHybridIntegration:
@@ -19,21 +20,63 @@ class TestHybridIntegration:
         """Create a sample word list for testing."""
         words = [
             # 3-letter words
-            'CAT', 'COT', 'CUT', 'BAT', 'BOT', 'BUT',
-            'RAT', 'ROT', 'RUT', 'MAT', 'MOT', 'MUT',
-            'ACE', 'ACT', 'ART', 'ARC', 'ARM', 'ARE',
-            'TEA', 'TEN', 'TAN', 'TAR', 'TAX', 'TUB',
+            "CAT",
+            "COT",
+            "CUT",
+            "BAT",
+            "BOT",
+            "BUT",
+            "RAT",
+            "ROT",
+            "RUT",
+            "MAT",
+            "MOT",
+            "MUT",
+            "ACE",
+            "ACT",
+            "ART",
+            "ARC",
+            "ARM",
+            "ARE",
+            "TEA",
+            "TEN",
+            "TAN",
+            "TAR",
+            "TAX",
+            "TUB",
             # 4-letter words
-            'CATS', 'BATS', 'RATS', 'MATS', 'ARTS',
-            'TEAR', 'BEAR', 'DEAR', 'FEAR', 'HEAR',
-            'CART', 'DART', 'PART', 'TART', 'WART',
+            "CATS",
+            "BATS",
+            "RATS",
+            "MATS",
+            "ARTS",
+            "TEAR",
+            "BEAR",
+            "DEAR",
+            "FEAR",
+            "HEAR",
+            "CART",
+            "DART",
+            "PART",
+            "TART",
+            "WART",
             # 5-letter words
-            'APPLE', 'AMPLE', 'MAPLE', 'TABLE', 'CABLE',
-            'CABIN', 'CAPER', 'TAPER', 'PAPER',
+            "APPLE",
+            "AMPLE",
+            "MAPLE",
+            "TABLE",
+            "CABLE",
+            "CABIN",
+            "CAPER",
+            "TAPER",
+            "PAPER",
             # 7-letter words
-            'CABBAGE', 'BAGGAGE', 'PACKAGE',
+            "CABBAGE",
+            "BAGGAGE",
+            "PACKAGE",
             # 11-letter words
-            'ABRACADABRA', 'HOCUSPOCUS',
+            "ABRACADABRA",
+            "HOCUSPOCUS",
         ]
         return WordList(words)
 
@@ -51,11 +94,7 @@ class TestHybridIntegration:
 
     def test_init(self, small_grid, word_list, pattern_matcher_trie):
         """Test creating HybridAutofill solver."""
-        hybrid = HybridAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_trie
-        )
+        hybrid = HybridAutofill(small_grid, word_list, pattern_matcher_trie)
 
         assert hybrid.grid == small_grid
         assert hybrid.word_list == word_list
@@ -71,7 +110,7 @@ class TestHybridIntegration:
             pattern_matcher_trie,
             min_score=20,
             beam_width=3,
-            max_repair_iterations=100
+            max_repair_iterations=100,
         )
 
         assert hybrid.min_score == 20
@@ -99,19 +138,19 @@ class TestHybridIntegration:
             word_list,
             pattern_matcher_trie,
             beam_width=2,
-            max_repair_iterations=50
+            max_repair_iterations=50,
         )
 
         result = hybrid.fill(timeout=30)
 
         # Check result structure
-        assert hasattr(result, 'success')
-        assert hasattr(result, 'grid')
-        assert hasattr(result, 'time_elapsed')
-        assert hasattr(result, 'slots_filled')
-        assert hasattr(result, 'total_slots')
-        assert hasattr(result, 'problematic_slots')
-        assert hasattr(result, 'iterations')
+        assert hasattr(result, "success")
+        assert hasattr(result, "grid")
+        assert hasattr(result, "time_elapsed")
+        assert hasattr(result, "slots_filled")
+        assert hasattr(result, "total_slots")
+        assert hasattr(result, "problematic_slots")
+        assert hasattr(result, "iterations")
 
         # Check types
         assert isinstance(result.success, bool)
@@ -128,7 +167,7 @@ class TestHybridIntegration:
         # Fill entire grid with letters
         for row in range(11):
             for col in range(11):
-                grid.set_letter(row, col, 'A')
+                grid.set_letter(row, col, "A")
 
         hybrid = HybridAutofill(grid, word_list, pattern_matcher_trie)
         result = hybrid.fill(timeout=30)
@@ -140,16 +179,11 @@ class TestHybridIntegration:
 
     def test_fill_respects_timeout(self, small_grid, word_list, pattern_matcher_trie):
         """Test that fill respects timeout."""
-        hybrid = HybridAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=2
-        )
+        hybrid = HybridAutofill(small_grid, word_list, pattern_matcher_trie, beam_width=2)
 
         timeout = 30
         start = time.time()
-        result = hybrid.fill(timeout=timeout)
+        hybrid.fill(timeout=timeout)
         elapsed = time.time() - start
 
         # Should not exceed timeout by more than 20% (some overhead expected)
@@ -157,12 +191,7 @@ class TestHybridIntegration:
 
     def test_fill_no_duplicate_words(self, small_grid, word_list, pattern_matcher_trie):
         """Test that fill doesn't use duplicate words."""
-        hybrid = HybridAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=2
-        )
+        hybrid = HybridAutofill(small_grid, word_list, pattern_matcher_trie, beam_width=2)
 
         result = hybrid.fill(timeout=30)
 
@@ -170,12 +199,11 @@ class TestHybridIntegration:
         words_in_grid = []
         for slot in result.grid.get_word_slots():
             pattern = result.grid.get_pattern_for_slot(slot)
-            if '?' not in pattern:  # Only filled slots
+            if "?" not in pattern:  # Only filled slots
                 words_in_grid.append(pattern)
 
         # Check for duplicates
-        assert len(words_in_grid) == len(set(words_in_grid)), \
-            f"Found duplicate words: {words_in_grid}"
+        assert len(words_in_grid) == len(set(words_in_grid)), f"Found duplicate words: {words_in_grid}"
 
     def test_hybrid_vs_beam_alone(self, word_list, pattern_matcher_trie):
         """Test that hybrid performs at least as well as beam alone."""
@@ -192,42 +220,24 @@ class TestHybridIntegration:
                     grid.set_black_square(row, col, enforce_symmetry=False)
 
         # Run beam search alone
-        beam = BeamSearchAutofill(
-            grid.clone(),
-            word_list,
-            pattern_matcher_trie,
-            beam_width=3
-        )
+        beam = BeamSearchAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
         beam_result = beam.fill(timeout=20)
 
         # Run hybrid (beam + repair)
-        hybrid = HybridAutofill(
-            grid.clone(),
-            word_list,
-            pattern_matcher_trie,
-            beam_width=3
-        )
+        hybrid = HybridAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
         hybrid_result = hybrid.fill(timeout=30)
 
         # Hybrid should be at least as good as beam alone
-        assert hybrid_result.slots_filled >= beam_result.slots_filled, \
-            f"Hybrid ({hybrid_result.slots_filled}) should be ≥ beam ({beam_result.slots_filled})"
+        assert (
+            hybrid_result.slots_filled >= beam_result.slots_filled
+        ), f"Hybrid ({hybrid_result.slots_filled}) should be ≥ beam ({beam_result.slots_filled})"
 
     def test_timeout_allocation(self, small_grid, word_list, pattern_matcher_trie):
         """Test that timeout is allocated correctly between phases."""
-        hybrid = HybridAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=2
-        )
+        hybrid = HybridAutofill(small_grid, word_list, pattern_matcher_trie, beam_width=2)
 
         # With 70/30 split, beam gets 21s and repair gets 9s
-        result = hybrid.fill(
-            timeout=30,
-            beam_timeout_ratio=0.7,
-            repair_timeout_ratio=0.3
-        )
+        result = hybrid.fill(timeout=30, beam_timeout_ratio=0.7, repair_timeout_ratio=0.3)
 
         # Just verify it completes without error
         assert isinstance(result.time_elapsed, float)
@@ -252,11 +262,31 @@ class TestHybridIntegration:
             word_list,
             pattern_matcher_trie,
             beam_width=3,
-            max_repair_iterations=50
+            max_repair_iterations=50,
         )
 
         result = hybrid.fill(timeout=30)
 
         # Should make some progress
-        assert result.slots_filled >= 0
+        assert result.slots_filled > 0, f"Expected some slots filled, got {result.slots_filled}"
         assert result.time_elapsed < 30.0
+
+
+class TestBeamTimeoutScaling:
+    """Test that beam timeout scales with grid size."""
+
+    def test_small_grid_gets_short_beam_timeout(self):
+        """11x11 grid should get beam_cap=30."""
+        assert HybridAutofill._compute_beam_cap(11) == 30
+
+    def test_large_grid_gets_long_beam_timeout(self):
+        """21x21 grid should get beam_cap=120."""
+        assert HybridAutofill._compute_beam_cap(21) == 120
+
+    def test_standard_grid_beam_timeout(self):
+        """15x15 grid should get beam_cap=66."""
+        assert HybridAutofill._compute_beam_cap(15) == 66
+
+    def test_nonstandard_grid_beam_timeout(self):
+        """19x19 grid should get beam_cap=102 (linear interpolation)."""
+        assert HybridAutofill._compute_beam_cap(19) == 102
