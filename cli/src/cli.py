@@ -4,29 +4,26 @@ Command-line interface for crossword builder.
 Provides commands for creating, filling, validating, and exporting crossword grids.
 """
 
-import click
 import json
 import sys
 from pathlib import Path
 from typing import Optional
 
+import click
+
 from .core.grid import Grid
-from .core.validator import GridValidator
 from .core.numbering import GridNumbering
-from .fill.word_list import WordList
-from .fill.pattern_matcher import PatternMatcher
-from .fill.autofill import Autofill
+from .core.validator import GridValidator
 from .export.html_exporter import HTMLExporter
+from .fill.autofill import Autofill
+from .fill.pattern_matcher import PatternMatcher
+from .fill.word_list import WordList
 
 
 @click.group()
 @click.version_option(version="2.0.0", prog_name="crossword")
 def cli():
-    """
-    Crossword Builder CLI - Create and fill crossword puzzles.
-
-    Phase 2: Advanced CLI tool with autofill engine.
-    """
+    """Crossword Builder CLI — create, fill, validate, and export crossword puzzles."""
 
 
 @cli.command()
@@ -36,9 +33,7 @@ def cli():
     default="15",
     help="Grid size (11x11, 15x15, or 21x21)",
 )
-@click.option(
-    "--output", "-o", type=click.Path(), required=True, help="Output file path (.json)"
-)
+@click.option("--output", "-o", type=click.Path(), required=True, help="Output file path (.json)")
 def new(size: str, output: str):
     """Create a new empty crossword grid."""
     size_int = int(size)
@@ -83,13 +78,9 @@ def validate(grid_file: str):
 
     click.echo(f"File: {grid_file}")
     click.echo(f"Size: {stats['size']}×{stats['size']}")
-    click.echo(
-        f"Black squares: {stats['black_squares']} ({stats['black_square_percentage']:.1f}%)"
-    )
+    click.echo(f"Black squares: {stats['black_squares']} ({stats['black_square_percentage']:.1f}%)")
     click.echo(f"White squares: {stats['white_squares']}")
-    click.echo(
-        f"Word count: {stats['word_count']} ({stats['across_word_count']} across, {stats['down_word_count']} down)"
-    )
+    click.echo(f"Word count: {stats['word_count']} ({stats['across_word_count']} across, {stats['down_word_count']} down)")
 
     click.echo(f"\nSymmetric: {'✓ Yes' if stats['is_symmetric'] else '✗ No'}")
     click.echo(f"Connected: {'✓ Yes' if stats['is_connected'] else '✗ No'}")
@@ -97,9 +88,7 @@ def validate(grid_file: str):
     click.echo(f"\n{'='*60}")
 
     if is_valid:
-        click.echo(
-            click.style("✓ VALID - Grid meets all standards!", fg="green", bold=True)
-        )
+        click.echo(click.style("✓ VALID - Grid meets all standards!", fg="green", bold=True))
         if stats["meets_nyt_standards"]:
             click.echo(click.style("✓ Meets NYT standards", fg="green"))
     else:
@@ -121,12 +110,8 @@ def validate(grid_file: str):
     required=True,
     help="Word list files (can specify multiple)",
 )
-@click.option(
-    "--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling"
-)
-@click.option(
-    "--min-score", type=int, default=30, help="Minimum word quality score (1-100)"
-)
+@click.option("--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling")
+@click.option("--min-score", type=int, default=30, help="Minimum word quality score (1-100)")
 @click.option(
     "--algorithm",
     "-a",
@@ -162,12 +147,12 @@ def validate(grid_file: str):
     "--attempts",
     type=int,
     default=1,
-    help="Number of randomized restart attempts (Phase 3.2)",
+    help="Number of randomized restart attempts",
 )
 @click.option(
     "--theme-entries",
     type=click.Path(exists=True),
-    help="JSON file with theme entries to preserve during fill (format: {\"(row,col,direction)\": \"WORD\"})",
+    help='JSON file with theme entries to preserve during fill (format: {"(row,col,direction)": "WORD"})',
 )
 @click.option(
     "--theme-wordlist",
@@ -219,12 +204,13 @@ def fill(
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
     from .core.progress import ProgressReporter
+
     progress = ProgressReporter(enabled=json_output)
 
     # Load grid
     if not json_output:
         click.echo(f"Loading grid from {grid_file}...")
-    progress.update(5, f'Loading grid from {grid_file}')
+    progress.update(5, f"Loading grid from {grid_file}")
 
     with open(grid_file, "r") as f:
         data = json.load(f)
@@ -237,16 +223,19 @@ def fill(
 
     all_words = []
     for idx, wordlist_file in enumerate(wordlists):
-        progress.update(10 + int((idx / len(wordlists)) * 20), f'Loading wordlist {idx+1}/{len(wordlists)}')
+        progress.update(
+            10 + int((idx / len(wordlists)) * 20),
+            f"Loading wordlist {idx+1}/{len(wordlists)}",
+        )
         if not json_output:
             click.echo(f"  • {wordlist_file}")
         with open(wordlist_file, "r") as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
                 # Support WORD;SCORE format (comprehensive_scored.txt)
-                word = line.split(';')[0].strip().upper()
+                word = line.split(";")[0].strip().upper()
                 if word:
                     all_words.append(word)
 
@@ -255,15 +244,15 @@ def fill(
     if not json_output:
         click.echo(f"  Loaded {len(word_list)} words")
 
-    # Load theme wordlist if provided (Phase 3.4: Theme List Priority)
+    # Load theme wordlist if provided
     theme_words = set()
     if theme_wordlist:
-        progress.update(22, f'Loading theme wordlist from {theme_wordlist}')
+        progress.update(22, f"Loading theme wordlist from {theme_wordlist}")
         if not json_output:
             click.echo(f"⭐ Loading theme wordlist from {theme_wordlist}...")
 
         with open(theme_wordlist, "r") as f:
-            theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith('#')}
+            theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith("#")}
 
         if not json_output:
             click.echo(f"  ⭐ Loaded {len(theme_words)} theme words (will be prioritized)")
@@ -271,7 +260,7 @@ def fill(
     # Load theme entries if provided
     theme_entries_dict = None
     if theme_entries:
-        progress.update(25, f'Loading theme entries from {theme_entries}')
+        progress.update(25, f"Loading theme entries from {theme_entries}")
         if not json_output:
             click.echo(f"Loading theme entries from {theme_entries}...")
 
@@ -294,13 +283,19 @@ def fill(
                 parts = [p.strip().strip("'\"") for p in clean_key.split(",")]
                 if len(parts) != 3:
                     if not json_output:
-                        click.echo(f"Warning: Skipping malformed theme entry key: {key_str}", err=True)
+                        click.echo(
+                            f"Warning: Skipping malformed theme entry key: {key_str}",
+                            err=True,
+                        )
                     continue
                 row, col, direction = int(parts[0]), int(parts[1]), parts[2]
                 theme_entries_dict[(row, col, direction)] = word.upper()
             except (ValueError, IndexError) as e:
                 if not json_output:
-                    click.echo(f"Warning: Skipping invalid theme entry '{key_str}': {e}", err=True)
+                    click.echo(
+                        f"Warning: Skipping invalid theme entry '{key_str}': {e}",
+                        err=True,
+                    )
 
         if not json_output:
             click.echo(f"  Loaded {len(theme_entries_dict)} theme entries")
@@ -308,105 +303,127 @@ def fill(
                 click.echo(f"    • {direction.capitalize()} at ({row},{col}): {word}")
 
     # Create pattern matcher based on algorithm
+    from .fill.beam_search_autofill import BeamSearchAutofill
+    from .fill.hybrid_autofill import HybridAutofill
+    from .fill.iterative_repair import IterativeRepair
     from .fill.pattern_matcher import PatternMatcher
     from .fill.trie_pattern_matcher import TriePatternMatcher
-    from .fill.beam_search_autofill import BeamSearchAutofill
-    from .fill.iterative_repair import IterativeRepair
-    from .fill.hybrid_autofill import HybridAutofill
 
     # Use trie for beam/repair/hybrid algorithms for better performance
-    use_trie = algorithm in ['trie', 'beam', 'repair', 'hybrid']
+    use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
     pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
 
     # Display algorithm info
     if not json_output:
         algo_descriptions = {
-            'regex': 'classic regex-based CSP',
-            'trie': 'fast trie-based CSP',
-            'beam': f'beam search (width={beam_width})',
-            'repair': 'iterative repair',
-            'hybrid': f'hybrid (beam width={beam_width} + repair)'
+            "regex": "classic regex-based CSP",
+            "trie": "fast trie-based CSP",
+            "beam": f"beam search (width={beam_width})",
+            "repair": "iterative repair",
+            "hybrid": f"hybrid (beam width={beam_width} + repair)",
         }
         click.echo(f"  Algorithm: {algorithm} ({algo_descriptions.get(algorithm, algorithm)})")
 
-    progress.update(30, f'Loaded {len(word_list)} words, starting autofill')
+    progress.update(30, f"Loaded {len(word_list)} words, starting autofill")
 
     # Load ALL available wordlists for validation (not just user-selected ones)
     # This ensures words from any wordlist are recognized as valid
     all_valid_words = set()
-    wordlist_dir = Path(__file__).parent.parent.parent / 'data' / 'wordlists'
+    wordlist_dir = Path(__file__).parent.parent.parent / "data" / "wordlists"
     if wordlist_dir.exists():
-        for wl_file in wordlist_dir.rglob('*.txt'):
+        for wl_file in wordlist_dir.rglob("*.txt"):
             # Skip archive and custom directories
-            if 'archive' in wl_file.parts or 'custom' in wl_file.parts:
+            if "archive" in wl_file.parts or "custom" in wl_file.parts:
                 continue
             try:
                 with open(wl_file) as f:
                     for line in f:
                         line = line.strip()
-                        if not line or line.startswith('#'):
+                        if not line or line.startswith("#"):
                             continue
-                        word = line.split(';')[0].strip().upper()
+                        word = line.split(";")[0].strip().upper()
                         if word and word.isalpha() and 3 <= len(word) <= 21:
                             all_valid_words.add(word)
             except Exception:
                 pass  # Skip unreadable files
 
     # Create appropriate autofill instance based on algorithm
-    if algorithm == 'beam':
+    if algorithm == "beam":
         autofill = BeamSearchAutofill(
-            grid, word_list, pattern_matcher,
-            beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words,
-            partial_fill_mode=partial_fill
+            grid,
+            word_list,
+            pattern_matcher,
+            beam_width=beam_width,
+            min_score=min_score,
+            progress_reporter=progress,
+            theme_entries=theme_entries_dict,
+            theme_words=theme_words,
+            partial_fill_mode=partial_fill,
         )
-    elif algorithm == 'repair':
+    elif algorithm == "repair":
         autofill = IterativeRepair(
-            grid, word_list, pattern_matcher,
-            min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words,
-            all_valid_words=all_valid_words
+            grid,
+            word_list,
+            pattern_matcher,
+            min_score=min_score,
+            progress_reporter=progress,
+            theme_entries=theme_entries_dict,
+            theme_words=theme_words,
+            all_valid_words=all_valid_words,
         )
-    elif algorithm == 'hybrid':
+    elif algorithm == "hybrid":
         autofill = HybridAutofill(
-            grid, word_list, pattern_matcher,
-            beam_width=beam_width, min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words,
-            all_valid_words=all_valid_words
+            grid,
+            word_list,
+            pattern_matcher,
+            beam_width=beam_width,
+            min_score=min_score,
+            progress_reporter=progress,
+            theme_entries=theme_entries_dict,
+            theme_words=theme_words,
+            all_valid_words=all_valid_words,
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'
         # Note: Classic autofill doesn't support theme entries
         if theme_entries_dict and not json_output:
-            click.echo(click.style(
-                f"Warning: Theme entries not supported for {algorithm} algorithm. Use beam, repair, or hybrid.",
-                fg="yellow"
-            ))
+            click.echo(
+                click.style(
+                    f"Warning: Theme entries not supported for {algorithm} algorithm. Use beam, repair, or hybrid.",
+                    fg="yellow",
+                )
+            )
         autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
 
     # Wrap with adaptive autofill if enabled
     if adaptive:
         from .fill.adaptive_autofill import AdaptiveAutofill
+
         if not json_output:
-            click.echo(click.style(f"⚡ Adaptive mode enabled (max {max_adaptations} adaptations)", fg="cyan"))
-        progress.update(35, f'Adaptive mode enabled (max {max_adaptations} adaptations)')
+            click.echo(
+                click.style(
+                    f"⚡ Adaptive mode enabled (max {max_adaptations} adaptations)",
+                    fg="cyan",
+                )
+            )
+        progress.update(35, f"Adaptive mode enabled (max {max_adaptations} adaptations)")
 
         # Wrap the base autofill with adaptive wrapper
         # IMPORTANT: Store the original autofill (BeamSearch/Hybrid/etc.) to pass as base
         base_autofill_instance = autofill
 
         adaptive_options = {
-            'min_score': min_score,
-            'timeout': timeout,
-            'max_adaptations': max_adaptations,
-            'theme_entries': theme_entries_dict or {}
+            "min_score": min_score,
+            "timeout": timeout,
+            "max_adaptations": max_adaptations,
+            "theme_entries": theme_entries_dict or {},
         }
         autofill = AdaptiveAutofill(
             grid=grid,
             wordlists=[word_list],  # Wrap in list
             options=adaptive_options,
             progress_reporter=progress,
-            base_autofill=base_autofill_instance  # Pass the original autofill to preserve algorithm
+            base_autofill=base_autofill_instance,  # Pass the original autofill to preserve algorithm
         )
 
     # Get empty slots
@@ -414,17 +431,21 @@ def fill(
     if not empty_slots:
         if json_output:
             all_slots = grid.get_word_slots()
-            click.echo(json.dumps({
-                "success": True,
-                "grid": grid.to_dict()["grid"],
-                "slots_filled": len(all_slots),
-                "total_slots": len(all_slots),
-                "fill_percentage": 100,
-                "time_elapsed": 0.0,
-                "iterations": 0,
-                "problematic_slots_count": 0,
-                "message": "Grid was already completely filled"
-            }))
+            click.echo(
+                json.dumps(
+                    {
+                        "success": True,
+                        "grid": grid.to_dict()["grid"],
+                        "slots_filled": len(all_slots),
+                        "total_slots": len(all_slots),
+                        "fill_percentage": 100,
+                        "time_elapsed": 0.0,
+                        "iterations": 0,
+                        "problematic_slots_count": 0,
+                        "message": "Grid was already completely filled",
+                    }
+                )
+            )
         else:
             click.echo(click.style("\n✓ Grid is already completely filled!", fg="green"))
         return
@@ -440,13 +461,15 @@ def fill(
 
     # Fill grid
     # New algorithms (beam, repair, hybrid) use fill(timeout), classic uses fill() or fill_with_restarts()
-    if algorithm in ['beam', 'repair', 'hybrid']:
+    if algorithm in ["beam", "repair", "hybrid"]:
         # New algorithms don't support multiple attempts - they use timeout directly
         if attempts > 1 and not json_output:
-            click.echo(click.style(
-                f"Warning: --attempts parameter ignored for {algorithm} algorithm",
-                fg="yellow"
-            ))
+            click.echo(
+                click.style(
+                    f"Warning: --attempts parameter ignored for {algorithm} algorithm",
+                    fg="yellow",
+                )
+            )
 
         if json_output:
             result = autofill.fill(timeout=timeout)
@@ -483,26 +506,37 @@ def fill(
                         bar.update(progress_pct)
 
     # Cleanup pass: remove invalid words, keep letters shared with valid crossings
-    if cleanup and algorithm in ['repair', 'hybrid']:
+    if cleanup and algorithm in ["repair", "hybrid"]:
         if not json_output:
             click.echo("\nRunning cleanup pass...")
-        progress.update(95, 'Running cleanup pass: removing invalid words')
+        progress.update(95, "Running cleanup pass: removing invalid words")
 
         cleanup_engine = IterativeRepair(
-            result.grid, word_list, pattern_matcher,
-            min_score=min_score, progress_reporter=progress,
-            theme_entries=theme_entries_dict, theme_words=theme_words,
-            all_valid_words=all_valid_words
+            result.grid,
+            word_list,
+            pattern_matcher,
+            min_score=min_score,
+            progress_reporter=progress,
+            theme_entries=theme_entries_dict,
+            theme_words=theme_words,
+            all_valid_words=all_valid_words,
         )
         cleanup_result = cleanup_engine.cleanup_grid()
         if not json_output:
             removed = result.slots_filled - cleanup_result.slots_filled
-            click.echo(f"  Removed {removed} invalid words, {cleanup_result.slots_filled}/{cleanup_result.total_slots} valid words remain")
+            click.echo(
+                f"  Removed {removed} invalid words, "
+                f"{cleanup_result.slots_filled}/{cleanup_result.total_slots} valid words remain"
+            )
         result = cleanup_result
 
     # Send completion status for API integration with diagnostic info
     if result.success:
-        progress.update(100, f'Successfully filled {result.slots_filled}/{result.total_slots} slots', 'complete')
+        progress.update(
+            100,
+            f"Successfully filled {result.slots_filled}/{result.total_slots} slots",
+            "complete",
+        )
     else:
         # Generate suggestions for partial fill
         suggestions = []
@@ -519,9 +553,9 @@ def fill(
 
         suggestion_text = " | ".join(suggestions[:2])  # Limit to 2 suggestions
         progress.update(
-            min(95, int((result.slots_filled / result.total_slots) * 100)) if result.total_slots > 0 else 0,
-            f'Partial fill: {result.slots_filled}/{result.total_slots} slots. {suggestion_text}',
-            'complete'
+            (min(95, int((result.slots_filled / result.total_slots) * 100)) if result.total_slots > 0 else 0),
+            f"Partial fill: {result.slots_filled}/{result.total_slots} slots. {suggestion_text}",
+            "complete",
         )
 
     # Output results based on format
@@ -532,23 +566,47 @@ def fill(
             "grid": result.grid.to_dict()["grid"],  # Just the grid array (includes partial fills)
             "slots_filled": result.slots_filled,
             "total_slots": result.total_slots,
-            "fill_percentage": int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0,
+            "fill_percentage": (int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0),
             "time_elapsed": result.time_elapsed,
             "iterations": result.iterations,
-            "problematic_slots_count": len(result.problematic_slots)
+            "problematic_slots_count": len(result.problematic_slots),
         }
 
         # Add suggestions for partial fills
         if not result.success:
             suggestions = []
             if min_score > 20:
-                suggestions.append({"type": "min_score", "message": f"Lower minimum score (currently {min_score})", "action": "Reduce to 20 or below"})
+                suggestions.append(
+                    {
+                        "type": "min_score",
+                        "message": f"Lower minimum score (currently {min_score})",
+                        "action": "Reduce to 20 or below",
+                    }
+                )
             if result.slots_filled == 0:
-                suggestions.append({"type": "pattern", "message": "Pattern too constrained", "action": "Simplify black square pattern"})
+                suggestions.append(
+                    {
+                        "type": "pattern",
+                        "message": "Pattern too constrained",
+                        "action": "Simplify black square pattern",
+                    }
+                )
             elif result.slots_filled < result.total_slots * 0.5:
-                suggestions.append({"type": "difficulty", "message": "Pattern very difficult", "action": "Try different layout or lower constraints"})
+                suggestions.append(
+                    {
+                        "type": "difficulty",
+                        "message": "Pattern very difficult",
+                        "action": "Try different layout or lower constraints",
+                    }
+                )
             else:
-                suggestions.append({"type": "timeout", "message": "Increase timeout or reduce min score", "action": f"Good progress: {result.slots_filled}/{result.total_slots} filled"})
+                suggestions.append(
+                    {
+                        "type": "timeout",
+                        "message": "Increase timeout or reduce min score",
+                        "action": f"Good progress: {result.slots_filled}/{result.total_slots} filled",
+                    }
+                )
 
             output_data["suggestions"] = suggestions
 
@@ -560,15 +618,9 @@ def fill(
         click.echo(f"{'='*60}\n")
 
         if result.success:
-            click.echo(
-                click.style("✓ SUCCESS - Grid filled completely!", fg="green", bold=True)
-            )
+            click.echo(click.style("✓ SUCCESS - Grid filled completely!", fg="green", bold=True))
         else:
-            click.echo(
-                click.style(
-                    "✗ PARTIAL - Could not fill entire grid", fg="yellow", bold=True
-                )
-            )
+            click.echo(click.style("✗ PARTIAL - Could not fill entire grid", fg="yellow", bold=True))
 
         click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
         click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
@@ -577,15 +629,17 @@ def fill(
         if result.problematic_slots:
             click.echo(f"\nProblematic slots: {len(result.problematic_slots)}")
             for ps in result.problematic_slots[:5]:  # Show first 5
-                if isinstance(ps, dict) and 'slot' in ps:
-                    row, col, direction = ps['slot']
-                    pattern = ps.get('pattern', '?')
+                if isinstance(ps, dict) and "slot" in ps:
+                    row, col, direction = ps["slot"]
+                    pattern = ps.get("pattern", "?")
                 else:
-                    row, col, direction = ps.get('row', '?'), ps.get('col', '?'), ps.get('direction', '?')
-                    pattern = grid.get_pattern_for_slot(ps) if isinstance(ps, dict) and 'row' in ps else '?'
-                click.echo(
-                    f"  • {direction.capitalize() if isinstance(direction, str) else direction} {row},{col}: {pattern}"
-                )
+                    row, col, direction = (
+                        ps.get("row", "?"),
+                        ps.get("col", "?"),
+                        ps.get("direction", "?"),
+                    )
+                    pattern = grid.get_pattern_for_slot(ps) if isinstance(ps, dict) and "row" in ps else "?"
+                click.echo(f"  • {direction.capitalize() if isinstance(direction, str) else direction} {row},{col}: {pattern}")
 
         click.echo(f"\n{'='*60}\n")
 
@@ -652,9 +706,7 @@ def show(grid_file: str, format: str):
     default="html",
     help="Export format (html)",
 )
-@click.option(
-    "--output", "-o", type=click.Path(), required=True, help="Output file path"
-)
+@click.option("--output", "-o", type=click.Path(), required=True, help="Output file path")
 @click.option("--title", "-t", default="Crossword Puzzle", help="Puzzle title")
 def export(grid_file: str, format: str, output: str, title: str):
     """Export a crossword grid to various formats."""
@@ -673,17 +725,10 @@ def export(grid_file: str, format: str, output: str, title: str):
         sys.exit(1)
 
 
-# Phase 3.1: Commands for web API parity
-
-
 @cli.command()
 @click.argument("pattern_arg")
-@click.option(
-    "--wordlists", "-w", multiple=True, help="Word list files (can specify multiple)"
-)
-@click.option(
-    "--max-results", type=int, default=20, help="Maximum number of results to return"
-)
+@click.option("--wordlists", "-w", multiple=True, help="Word list files (can specify multiple)")
+@click.option("--max-results", type=int, default=20, help="Maximum number of results to return")
 @click.option(
     "--algorithm",
     "-a",
@@ -697,9 +742,15 @@ def export(grid_file: str, format: str, output: str, title: str):
     default=False,
     help="Output JSON format (for API compatibility)",
 )
-def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str, json_output: bool):
+def pattern(
+    pattern_arg: str,
+    wordlists: tuple,
+    max_results: int,
+    algorithm: str,
+    json_output: bool,
+):
     """
-    Find words matching a pattern (Phase 3.1).
+    Find words matching a pattern.
 
     Pattern uses ? for wildcards (e.g., "C?T" matches CAT, COT, CUT).
 
@@ -708,8 +759,8 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
         crossword pattern "?I?E" --wordlists standard.txt --max-results 10
         crossword pattern "A?PLE" --json-output
     """
-    from .core.scoring import analyze_letters
     from .core.progress import ProgressReporter
+    from .core.scoring import analyze_letters
 
     # Initialize progress reporter (only for JSON output mode)
     progress = ProgressReporter(enabled=json_output)
@@ -730,7 +781,7 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
                 # Report progress starting wordlist
                 progress.update(
                     wordlist_start_pct,
-                    f'Loading wordlist {idx + 1}/{total_wordlists}: {Path(wordlist_file).name}'
+                    f"Loading wordlist {idx + 1}/{total_wordlists}: {Path(wordlist_file).name}",
                 )
 
                 # Create progress callback for granular loading updates
@@ -741,12 +792,12 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
                         overall_pct = wordlist_start_pct + int(loading_pct * (wordlist_end_pct - wordlist_start_pct))
                         progress.update(
                             overall_pct,
-                            f'Loading {Path(wordlist_file).name}: {current:,} / {total:,} words'
+                            f"Loading {Path(wordlist_file).name}: {current:,} / {total:,} words",
                         )
 
                 word_list = WordList.from_file(
                     wordlist_file,
-                    progress_callback=loading_progress_callback if json_output else None
+                    progress_callback=(loading_progress_callback if json_output else None),
                 )
                 for word in word_list.get_all():
                     all_words.append((word.text, word.score, Path(wordlist_file).stem))
@@ -754,7 +805,7 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
             except Exception as e:
                 click.echo(f"Warning: Could not load {wordlist_file}: {e}", err=True)
 
-        progress.update(30, f'Loaded {len(all_words)} words from {total_wordlists} wordlist(s)')
+        progress.update(30, f"Loaded {len(all_words)} words from {total_wordlists} wordlist(s)")
     else:
         # If no wordlists specified, create minimal list
         default_words = ["CAT", "DOG", "BIRD", "FISH", "TREE", "STAR", "MOON", "SUN"]
@@ -762,14 +813,15 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
         for word in word_list.get_all():
             all_words.append((word.text, word.score, "builtin"))
         sources = ["builtin"]
-        progress.update(30, 'Using default wordlist')
+        progress.update(30, "Using default wordlist")
 
     # Create pattern matcher based on algorithm
-    progress.update(50, f'Initializing {algorithm} algorithm')
+    progress.update(50, f"Initializing {algorithm} algorithm")
     full_word_list = WordList([word for word, _, _ in all_words])
 
     if algorithm == "trie":
         from .fill.trie_pattern_matcher import TriePatternMatcher
+
         pattern_matcher = TriePatternMatcher(full_word_list)
     else:
         pattern_matcher = PatternMatcher(full_word_list)
@@ -783,19 +835,16 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
             percent = int((current / total) * 100)
             # Map 70-90% range to search progress
             overall_percent = 70 + int((percent / 100) * 20)
-            progress.update(
-                overall_percent,
-                f'Searched {current:,} / {total:,} words'
-            )
+            progress.update(overall_percent, f"Searched {current:,} / {total:,} words")
 
     matches = pattern_matcher.find(
         pattern_arg,
         min_score=0,
         max_results=max_results,
-        progress_callback=search_progress_callback if json_output else None
+        progress_callback=search_progress_callback if json_output else None,
     )
 
-    progress.update(90, f'Found {len(matches)} matches, formatting results')
+    progress.update(90, f"Found {len(matches)} matches, formatting results")
 
     # Format results
     results = []
@@ -822,15 +871,13 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
                 "sources_searched": sources,
             },
         }
-        progress.complete(f'Search complete: {len(results)} results returned')
+        progress.complete(f"Search complete: {len(results)} results returned")
         click.echo(json.dumps(output, indent=2))
     else:
         click.echo(f"\nPattern: {pattern_arg}")
         click.echo(f"Found {len(results)} matches:\n")
         for result in results:
-            click.echo(
-                f"  {result['word']:15} score={result['score']:3} source={result['source']}"
-            )
+            click.echo(f"  {result['word']:15} score={result['score']:3} source={result['source']}")
         if not results:
             click.echo("  (no matches found)")
 
@@ -845,7 +892,7 @@ def pattern(pattern_arg: str, wordlists: tuple, max_results: int, algorithm: str
 )
 def normalize(text: str, json_output: bool):
     """
-    Normalize crossword entry according to conventions (Phase 3.1).
+    Normalize crossword entry according to conventions.
 
     Examples:
         crossword normalize "Tina Fey"
@@ -898,7 +945,7 @@ def normalize(text: str, json_output: bool):
 )
 def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
     """
-    Auto-number a crossword grid (Phase 3.1).
+    Auto-number a crossword grid.
 
     Examples:
         crossword number grid.json
@@ -949,12 +996,130 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
         click.echo(f"\n{'='*60}\n")
 
 
+@cli.command()
+@click.argument("grid_file", type=click.Path(exists=True))
+@click.option("--wordlists", "-w", multiple=True, help="Word list files (can specify multiple)")
+@click.option("--word", default=None, help="Word to analyze placement for")
+@click.option(
+    "--slot",
+    default=None,
+    help="Target slot as 'row,col,direction,length' (requires --word)",
+)
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format",
+)
+def analyze(
+    grid_file: str,
+    wordlists: tuple,
+    word: Optional[str],
+    slot: Optional[str],
+    json_output: bool,
+):
+    """
+    Analyze grid constraints and placement impact.
+
+    Without --word: shows per-cell constraint data (how many words fit each slot).
+    With --word and --slot: shows how placing a word affects crossing slots.
+
+    Examples:
+        crossword analyze puzzle.json -w data/wordlists/comprehensive.txt --json-output
+        crossword analyze puzzle.json -w data/wordlists/comprehensive.txt --word OCEAN --slot "0,0,across,5" --json-output
+    """
+    from .core.constraint_analyzer import analyze_constraints, analyze_placement_impact
+    from .fill.trie_pattern_matcher import TriePatternMatcher
+
+    # Validate --slot requires --word
+    if slot and not word:
+        click.echo("Error: --slot requires --word", err=True)
+        sys.exit(1)
+
+    # Load grid (Grid has from_dict, not from_file)
+    try:
+        with open(grid_file) as f:
+            grid_data = json.load(f)
+        grid = Grid.from_dict(grid_data, strict_size=False)
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": str(e)}))
+        else:
+            click.echo(f"Error loading grid: {e}", err=True)
+        sys.exit(1)
+
+    # Load wordlists (WordList has from_file but no merge — use first, add_words for rest)
+    if not wordlists:
+        click.echo("Error: at least one wordlist is required (-w)", err=True)
+        sys.exit(1)
+
+    word_list = None
+    for wl_path in wordlists:
+        try:
+            wl = WordList.from_file(wl_path)
+            if word_list is None:
+                word_list = wl
+            else:
+                # Add words from subsequent wordlists
+                word_list.add_words([sw.text for sw in wl.get_all()])
+        except Exception as e:
+            click.echo(f"Warning: Could not load {wl_path}: {e}", err=True)
+
+    if word_list is None or len(word_list) == 0:
+        click.echo("Error: no words loaded from wordlists", err=True)
+        sys.exit(1)
+
+    # Build pattern matcher
+    pattern_matcher = TriePatternMatcher(word_list)
+
+    if word and slot:
+        # Placement impact analysis
+        try:
+            parts = slot.split(",")
+            if len(parts) != 4:
+                raise ValueError("Expected 'row,col,direction,length'")
+            slot_dict = {
+                "row": int(parts[0]),
+                "col": int(parts[1]),
+                "direction": parts[2].strip(),
+                "length": int(parts[3]),
+            }
+        except (ValueError, IndexError) as e:
+            click.echo(
+                f"Error parsing --slot: {e}. Expected format: row,col,direction,length",
+                err=True,
+            )
+            sys.exit(1)
+
+        result = analyze_placement_impact(grid, word, slot_dict, word_list, pattern_matcher)
+    else:
+        # Grid-wide constraint analysis
+        result = analyze_constraints(grid, word_list, pattern_matcher)
+
+    result["success"] = True
+
+    if json_output:
+        click.echo(json.dumps(result))
+    else:
+        # Human-readable output
+        if "constraints" in result:
+            summary = result["summary"]
+            click.echo(f"Grid analysis: {summary['total_cells']} cells")
+            click.echo(f"  Critical cells (< 5 options): {summary['critical_cells']}")
+            click.echo(f"  Average min options: {summary['average_min_options']}")
+        elif "impacts" in result:
+            click.echo(f"Placement impact for {word}:")
+            for slot_key, impact in result["impacts"].items():
+                click.echo(f"  {slot_key}: {impact['before']} → {impact['after']} ({impact['delta']:+d})")
+
+
 @cli.command("build-cache")
 @click.argument("wordlist", type=click.Path(exists=True))
 @click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     type=click.Path(),
-    help="Output path for cache file (default: same as wordlist with .pkl extension)"
+    help="Output path for cache file (default: same as wordlist with .pkl extension)",
 )
 def build_cache(wordlist: str, output: Optional[str]):
     """
@@ -974,7 +1139,7 @@ def build_cache(wordlist: str, output: Optional[str]):
     if output:
         cache_path = Path(output)
     else:
-        cache_path = wordlist_path.with_suffix('.pkl')
+        cache_path = wordlist_path.with_suffix(".pkl")
 
     click.echo(f"Building cache for: {wordlist_path.name}")
     click.echo(f"Output: {cache_path}")
@@ -1043,7 +1208,7 @@ def pause(task_id: str, json_output: bool):
             output = {
                 "success": True,
                 "task_id": task_id,
-                "message": f"Pause requested for task {task_id}"
+                "message": f"Pause requested for task {task_id}",
             }
             click.echo(json.dumps(output))
         else:
@@ -1061,7 +1226,10 @@ def pause(task_id: str, json_output: bool):
 @cli.command()
 @click.argument("state_file", type=click.Path(exists=True))
 @click.option(
-    "--output", "-o", type=click.Path(), help="Output file (defaults to overwriting state file)"
+    "--output",
+    "-o",
+    type=click.Path(),
+    help="Output file (defaults to overwriting state file)",
 )
 @click.option(
     "--json-output",
@@ -1076,12 +1244,8 @@ def pause(task_id: str, json_output: bool):
     default="hybrid",
     help="Fill algorithm to use for resumption",
 )
-@click.option(
-    "--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling"
-)
-@click.option(
-    "--min-score", type=int, default=30, help="Minimum word quality score (1-100)"
-)
+@click.option("--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling")
+@click.option("--min-score", type=int, default=30, help="Minimum word quality score (1-100)")
 def resume(
     state_file: str,
     output: Optional[str],
@@ -1103,13 +1267,13 @@ def resume(
         crossword resume state.json --algorithm hybrid --timeout 600
     """
     try:
-        from .fill.state_manager import StateManager
-        from .fill.pattern_matcher import PatternMatcher
-        from .fill.trie_pattern_matcher import TriePatternMatcher
-        from .fill.beam_search_autofill import BeamSearchAutofill
-        from .fill.iterative_repair import IterativeRepair
-        from .fill.hybrid_autofill import HybridAutofill
         from .core.progress import ProgressReporter
+        from .fill.beam_search_autofill import BeamSearchAutofill
+        from .fill.hybrid_autofill import HybridAutofill
+        from .fill.iterative_repair import IterativeRepair
+        from .fill.pattern_matcher import PatternMatcher
+        from .fill.state_manager import StateManager
+        from .fill.trie_pattern_matcher import TriePatternMatcher
 
         # Initialize progress reporter
         progress = ProgressReporter(enabled=json_output)
@@ -1170,9 +1334,7 @@ def resume(
 
         # Create pattern matcher
         use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
-        pattern_matcher = (
-            TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
-        )
+        pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
 
         # Create autofill instance
         if algorithm == "beam":
@@ -1202,9 +1364,7 @@ def resume(
                 progress_reporter=progress,
             )
         else:
-            autofill = Autofill(
-                grid, word_list, None, timeout, min_score, algorithm, progress
-            )
+            autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
 
         # Restore CSP state
         autofill.csp = csp_state
@@ -1244,9 +1404,7 @@ def resume(
             if result.success:
                 click.echo(click.style("✓ SUCCESS - Grid completed!", fg="green", bold=True))
             else:
-                click.echo(
-                    click.style("✗ PARTIAL - Could not complete grid", fg="yellow", bold=True)
-                )
+                click.echo(click.style("✗ PARTIAL - Could not complete grid", fg="yellow", bold=True))
 
             click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
             click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
@@ -1345,18 +1503,10 @@ def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int]):
 
 @cli.command("import-nyt")
 @click.argument("nyt_file", type=click.Path(exists=True))
-@click.option(
-    "--output", "-o", type=click.Path(), help="Output file for grid (.json)"
-)
-@click.option(
-    "--filled", is_flag=True, default=False, help="Output filled grid instead of empty"
-)
-@click.option(
-    "--verify/--no-verify", default=True, help="Run self-verification (default: on)"
-)
-@click.option(
-    "--json-output", is_flag=True, default=False, help="Machine-readable JSON output"
-)
+@click.option("--output", "-o", type=click.Path(), help="Output file for grid (.json)")
+@click.option("--filled", is_flag=True, default=False, help="Output filled grid instead of empty")
+@click.option("--verify/--no-verify", default=True, help="Run self-verification (default: on)")
+@click.option("--json-output", is_flag=True, default=False, help="Machine-readable JSON output")
 def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool, json_output: bool):
     """
     Import an NYT crossword JSON file (doshea/nyt_crosswords format).
@@ -1372,7 +1522,7 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
         crossword import-nyt puzzle.json -o empty_grid.json
         crossword import-nyt puzzle.json --filled -o filled_grid.json
     """
-    from .core.nyt_parser import parse_nyt_json, NytParseError
+    from .core.nyt_parser import NytParseError, parse_nyt_json
 
     try:
         result = parse_nyt_json(nyt_file, verify=verify)
@@ -1412,10 +1562,7 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
                 "grid_match": v.grid_match,
                 "words_placed": v.words_placed,
                 "total_words": v.total_words,
-                "mismatched_cells": [
-                    {"row": r, "col": c, "expected": e, "got": g}
-                    for r, c, e, g in v.mismatched_cells
-                ],
+                "mismatched_cells": [{"row": r, "col": c, "expected": e, "got": g} for r, c, e, g in v.mismatched_cells],
             }
 
         click.echo(json.dumps(output_data, indent=2))
@@ -1429,23 +1576,25 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
         click.echo(f"Date: {m.get('date', 'Unknown')}")
         click.echo(f"Author: {m.get('author', 'Unknown')}")
         click.echo(f"Size: {result.size}x{result.size}")
-        click.echo(f"Words: {len(result.words)} ({sum(1 for w in result.words if w.direction == 'across')} across, {sum(1 for w in result.words if w.direction == 'down')} down)")
+        across_count = sum(1 for w in result.words if w.direction == "across")
+        down_count = sum(1 for w in result.words if w.direction == "down")
+        click.echo(f"Words: {len(result.words)} ({across_count} across, {down_count} down)")
 
-        if m.get('has_rebus'):
+        if m.get("has_rebus"):
             click.echo(click.style("Warning: Puzzle contains rebus cells (multi-letter)", fg="yellow"))
 
-        if m.get('numbering_warnings'):
-            for warn in m['numbering_warnings']:
+        if m.get("numbering_warnings"):
+            for warn in m["numbering_warnings"]:
                 click.echo(click.style(f"Warning: {warn}", fg="yellow"))
 
         # Show word list
-        click.echo(f"\n--- Across ---")
-        for w in sorted((w for w in result.words if w.direction == 'across'), key=lambda w: w.number):
-            click.echo(f"  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  \"{w.clue}\"")
+        click.echo("\n--- Across ---")
+        for w in sorted((w for w in result.words if w.direction == "across"), key=lambda w: w.number):
+            click.echo(f'  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  "{w.clue}"')
 
-        click.echo(f"\n--- Down ---")
-        for w in sorted((w for w in result.words if w.direction == 'down'), key=lambda w: w.number):
-            click.echo(f"  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  \"{w.clue}\"")
+        click.echo("\n--- Down ---")
+        for w in sorted((w for w in result.words if w.direction == "down"), key=lambda w: w.number):
+            click.echo(f'  {w.number:3d}. {w.answer:15s} ({w.row},{w.col}) len={w.length}  "{w.clue}"')
 
         # Verification
         if result.verification:
@@ -1455,10 +1604,13 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
             click.echo(f"{'='*60}\n")
 
             if v.success:
-                click.echo(click.style(
-                    f"PASSED - All {v.words_placed}/{v.total_words} words placed, grid matches",
-                    fg="green", bold=True
-                ))
+                click.echo(
+                    click.style(
+                        f"PASSED - All {v.words_placed}/{v.total_words} words placed, grid matches",
+                        fg="green",
+                        bold=True,
+                    )
+                )
             else:
                 click.echo(click.style("FAILED", fg="red", bold=True))
                 if v.conflicts:

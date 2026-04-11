@@ -1,15 +1,12 @@
 """
-CLI Adapter for Phase 3 Integration.
-
-Provides a clean interface for calling the Phase 2 CLI tool from Flask API routes.
-Handles subprocess execution, JSON parsing, error handling, and optional caching.
+CLI Adapter — subprocess interface for calling the crossword CLI from Flask routes.
 """
 
 import json
 import subprocess
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class CLIAdapter:
@@ -43,9 +40,7 @@ class CLIAdapter:
         if not self.cli_path.is_file():
             raise ValueError(f"CLI path is not a file: {self.cli_path}")
 
-    def _run_command(
-        self, args: List[str], timeout: Optional[int] = None, check_success: bool = True
-    ) -> Tuple[str, str, int]:
+    def _run_command(self, args: List[str], timeout: Optional[int] = None, check_success: bool = True) -> Tuple[str, str, int]:
         """
         Run a CLI command and return stdout, stderr, and return code.
 
@@ -76,9 +71,7 @@ class CLIAdapter:
             )
 
             if check_success and result.returncode != 0:
-                raise subprocess.CalledProcessError(
-                    result.returncode, cmd, result.stdout, result.stderr
-                )
+                raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
 
             return result.stdout, result.stderr, result.returncode
 
@@ -117,8 +110,15 @@ class CLIAdapter:
             raise ValueError("Pattern cannot be empty")
 
         # Build command args
-        args = ["pattern", pattern, "--json-output", "--max-results", str(max_results),
-                "--algorithm", algorithm]
+        args = [
+            "pattern",
+            pattern,
+            "--json-output",
+            "--max-results",
+            str(max_results),
+            "--algorithm",
+            algorithm,
+        ]
 
         if wordlist_paths:
             for wordlist_path in wordlist_paths:
@@ -132,9 +132,7 @@ class CLIAdapter:
             result = json.loads(stdout)
             return result
         except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
-            )
+            raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
 
     def normalize(self, text: str) -> Dict[str, Any]:
         """
@@ -164,13 +162,9 @@ class CLIAdapter:
             result = json.loads(stdout)
             return result
         except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
-            )
+            raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
 
-    def number(
-        self, grid_data: Dict[str, Any], allow_nonstandard: bool = False
-    ) -> Dict[str, Any]:
+    def number(self, grid_data: Dict[str, Any], allow_nonstandard: bool = False) -> Dict[str, Any]:
         """
         Auto-number a crossword grid.
 
@@ -210,11 +204,102 @@ class CLIAdapter:
                 result = json.loads(stdout)
                 return result
             except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}"
-                )
+                raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
         finally:
             # Clean up temp file
+            Path(temp_path).unlink(missing_ok=True)
+
+    def analyze_constraints(
+        self,
+        grid_data: Dict[str, Any],
+        wordlist_paths: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Analyze grid constraints (per-cell option counts).
+
+        Args:
+            grid_data: Grid data dictionary
+            wordlist_paths: List of wordlist file paths
+
+        Returns:
+            Dict with 'constraints' and 'summary' keys
+        """
+        if not grid_data:
+            raise ValueError("Grid data cannot be empty")
+        if not wordlist_paths:
+            raise ValueError("At least one wordlist path is required")
+
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            args = ["analyze", temp_path, "--json-output"]
+            for wl in wordlist_paths:
+                args.extend(["-w", wl])
+
+            stdout, stderr, _ = self._run_command(args, timeout=30)
+
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse CLI output: {e}\nOutput: {stdout}")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def analyze_placement_impact(
+        self,
+        grid_data: Dict[str, Any],
+        word: str,
+        slot: Dict[str, Any],
+        wordlist_paths: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Analyze how placing a word affects crossing slots.
+
+        Args:
+            grid_data: Grid data dictionary
+            word: Word to place
+            slot: Slot dict with row, col, direction, length
+            wordlist_paths: List of wordlist file paths
+
+        Returns:
+            Dict with 'impacts' and 'summary' keys
+        """
+        if not grid_data:
+            raise ValueError("Grid data cannot be empty")
+        if not word:
+            raise ValueError("Word cannot be empty")
+
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            slot_str = f"{slot['row']},{slot['col']},{slot['direction']},{slot['length']}"
+            args = [
+                "analyze",
+                temp_path,
+                "--json-output",
+                "--word",
+                word,
+                "--slot",
+                slot_str,
+            ]
+            for wl in wordlist_paths:
+                args.extend(["-w", wl])
+
+            stdout, stderr, _ = self._run_command(args, timeout=30)
+
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse CLI output: {e}\nOutput: {stdout}")
+        finally:
             Path(temp_path).unlink(missing_ok=True)
 
     def fill(
@@ -322,7 +407,7 @@ class CLIAdapter:
         wordlist_paths: List[str],
         timeout_seconds: int = 300,
         min_score: int = 30,
-        algorithm: str = "trie"
+        algorithm: str = "trie",
     ) -> Dict[str, Any]:
         """
         Resume auto-fill from saved state.
@@ -349,6 +434,7 @@ class CLIAdapter:
 
         # Create temp output file
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             output_path = f.name
 
@@ -367,7 +453,7 @@ class CLIAdapter:
                 "--algorithm",
                 algorithm,
                 "--task-id",
-                task_id
+                task_id,
             ]
 
             for wordlist_path in wordlist_paths:
@@ -398,9 +484,7 @@ class CLIAdapter:
         """
         try:
             # Try running a simple command
-            stdout, stderr, code = self._run_command(
-                ["normalize", "TEST", "--json-output"], timeout=5, check_success=False
-            )
+            stdout, stderr, code = self._run_command(["normalize", "TEST", "--json-output"], timeout=5, check_success=False)
             return code == 0
         except Exception:
             return False

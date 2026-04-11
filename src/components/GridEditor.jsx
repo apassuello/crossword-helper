@@ -18,8 +18,12 @@ function GridEditor({
 }) {
   const [hoveredCell, setHoveredCell] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
+  const [showConstraints, setShowConstraints] = useState(false);
+  const [constraintData, setConstraintData] = useState(null);
+  const [constraintLoading, setConstraintLoading] = useState(false);
   const inputRef = useRef(null);
   const svgRef = useRef(null);
+  const constraintDebounceRef = useRef(null);
 
   useEffect(() => {
     // Focus input when cell is selected
@@ -27,6 +31,48 @@ function GridEditor({
       inputRef.current.focus();
     }
   }, [focusedCell]);
+
+  // Fetch constraint data when heatmap is toggled on or grid changes
+  useEffect(() => {
+    if (!showConstraints || !grid) {
+      setConstraintData(null);
+      return;
+    }
+
+    if (constraintDebounceRef.current) {
+      clearTimeout(constraintDebounceRef.current);
+    }
+
+    constraintDebounceRef.current = setTimeout(async () => {
+      setConstraintLoading(true);
+      try {
+        const response = await fetch('/api/constraints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grid: grid.map(row => row.map(cell =>
+              cell.isBlack ? '#' : (cell.letter || '.')
+            )),
+            wordlists: ['comprehensive'],
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setConstraintData(data.constraints || null);
+        }
+      } catch (err) {
+        console.error('Constraint fetch failed:', err);
+      } finally {
+        setConstraintLoading(false);
+      }
+    }, 500);
+
+    return () => {
+      if (constraintDebounceRef.current) {
+        clearTimeout(constraintDebounceRef.current);
+      }
+    };
+  }, [showConstraints, grid]);
 
   if (!grid) return <div className="grid-editor-loading">Initializing grid...</div>;
 
@@ -162,6 +208,25 @@ function GridEditor({
     return highlighted;
   };
 
+  const getConstraintColor = (row, col) => {
+    if (!constraintData) return null;
+    const cellData = constraintData[`${row},${col}`];
+    if (!cellData) return null;
+
+    const min = cellData.min_options;
+    if (min < 5) return 'rgba(255, 68, 68, 0.2)';
+    if (min < 20) return 'rgba(255, 153, 0, 0.2)';
+    if (min < 50) return 'rgba(255, 204, 0, 0.15)';
+    return 'rgba(68, 187, 68, 0.1)';
+  };
+
+  const getConstraintTooltip = (row, col) => {
+    if (!constraintData) return null;
+    const cellData = constraintData[`${row},${col}`];
+    if (!cellData) return null;
+    return `${cellData.across_options} across, ${cellData.down_options} down`;
+  };
+
   const highlightedCells = getHighlightedCells();
   const svgWidth = gridSize * CELL_SIZE + 2 * GRID_PADDING;
   const svgHeight = gridSize * CELL_SIZE + 2 * GRID_PADDING;
@@ -233,6 +298,21 @@ function GridEditor({
                     onMouseEnter={() => setHoveredCell({ row: rowIdx, col: colIdx })}
                     style={{ cursor: 'pointer' }}
                   />
+
+                  {/* Constraint heatmap overlay */}
+                  {showConstraints && !cell.isBlack && getConstraintColor(rowIdx, colIdx) && (
+                    <rect
+                      x={x}
+                      y={y}
+                      width={CELL_SIZE}
+                      height={CELL_SIZE}
+                      fill={getConstraintColor(rowIdx, colIdx)}
+                      className="constraint-overlay"
+                      pointerEvents="none"
+                    >
+                      <title>{getConstraintTooltip(rowIdx, colIdx)}</title>
+                    </rect>
+                  )}
 
                   {/* Cell number */}
                   {cell.number && (
@@ -316,6 +396,16 @@ function GridEditor({
           onKeyDown={handleKeyDown}
           style={{ position: 'absolute', left: '-9999px' }}
         />
+      </div>
+
+      <div className="grid-toolbar">
+        <button
+          className={classNames('constraint-toggle', { active: showConstraints, loading: constraintLoading })}
+          onClick={() => setShowConstraints(!showConstraints)}
+          title="Show crossing quality heatmap (red = few options, green = many)"
+        >
+          {constraintLoading ? '...' : '🔍'} Constraints
+        </button>
       </div>
 
       <div className="grid-instructions">
