@@ -18,7 +18,7 @@ class TestSymmetryValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         # Should have no symmetry errors
-        symmetry_errors = [e for e in errors if 'symmetry' in e.lower()]
+        symmetry_errors = [e for e in errors if "symmetry" in e.lower()]
         assert len(symmetry_errors) == 0
 
     def test_asymmetric_grid_fails(self):
@@ -30,7 +30,7 @@ class TestSymmetryValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         assert not is_valid
-        assert any('symmetry' in e.lower() for e in errors)
+        assert any("symmetry" in e.lower() for e in errors)
 
 
 class TestConnectivityValidation:
@@ -43,7 +43,7 @@ class TestConnectivityValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         # Should have no connectivity errors
-        connectivity_errors = [e for e in errors if 'connected' in e.lower() or 'isolated' in e.lower()]
+        connectivity_errors = [e for e in errors if "connected" in e.lower() or "isolated" in e.lower()]
         assert len(connectivity_errors) == 0
 
     def test_connected_grid_passes(self):
@@ -57,7 +57,7 @@ class TestConnectivityValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         # Should have no connectivity errors
-        connectivity_errors = [e for e in errors if 'connected' in e.lower() or 'isolated' in e.lower()]
+        connectivity_errors = [e for e in errors if "connected" in e.lower() or "isolated" in e.lower()]
         assert len(connectivity_errors) == 0
 
     def test_disconnected_grid_fails(self):
@@ -70,7 +70,7 @@ class TestConnectivityValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         assert not is_valid
-        assert any('connected' in e.lower() or 'isolated' in e.lower() for e in errors)
+        assert any("connected" in e.lower() or "isolated" in e.lower() for e in errors)
 
     def test_isolated_corner_fails(self):
         """Test that grid with isolated corner fails validation."""
@@ -84,7 +84,7 @@ class TestConnectivityValidation:
         is_valid, errors = GridValidator.validate_all(grid)
 
         assert not is_valid
-        assert any('connected' in e.lower() or 'isolated' in e.lower() for e in errors)
+        assert any("connected" in e.lower() or "isolated" in e.lower() for e in errors)
 
 
 class TestMinimumWordLength:
@@ -101,7 +101,7 @@ class TestMinimumWordLength:
         is_valid, errors = GridValidator.validate_all(grid)
 
         # Should have no word length errors
-        word_length_errors = [e for e in errors if 'word' in e.lower() and ('short' in e.lower() or 'letter' in e.lower())]
+        word_length_errors = [e for e in errors if "word" in e.lower() and ("short" in e.lower() or "letter" in e.lower())]
         assert len(word_length_errors) == 0
 
     def test_grid_with_short_across_word_fails(self):
@@ -158,7 +158,7 @@ class TestBlackSquarePercentage:
         is_valid, errors = GridValidator.validate_all(grid)
 
         # Should have no black square percentage errors
-        percentage_errors = [e for e in errors if 'black square' in e.lower() and '%' in e]
+        percentage_errors = [e for e in errors if "black square" in e.lower() and "%" in e]
         assert len(percentage_errors) == 0
 
     def test_high_black_square_percentage_fails(self):
@@ -175,7 +175,7 @@ class TestBlackSquarePercentage:
         is_valid, errors = GridValidator.validate_all(grid)
 
         assert not is_valid
-        assert any('black square' in e.lower() and ('%' in e or 'percentage' in e.lower()) for e in errors)
+        assert any("black square" in e.lower() and ("%" in e or "percentage" in e.lower()) for e in errors)
 
 
 class TestValidateAll:
@@ -218,13 +218,13 @@ class TestGridStats:
         grid = Grid(11)
         stats = GridValidator.get_grid_stats(grid)
 
-        assert stats['size'] == 11
-        assert stats['total_squares'] == 121
-        assert stats['black_squares'] == 0
-        assert stats['white_squares'] == 121
-        assert stats['black_square_percentage'] == 0.0
-        assert stats['is_symmetric'] is True
-        assert stats['is_connected'] is True
+        assert stats["size"] == 11
+        assert stats["total_squares"] == 121
+        assert stats["black_squares"] == 0
+        assert stats["white_squares"] == 121
+        assert stats["black_square_percentage"] == 0.0
+        assert stats["is_symmetric"] is True
+        assert stats["is_connected"] is True
 
     def test_grid_with_content_stats(self):
         """Test statistics for grid with content."""
@@ -235,13 +235,13 @@ class TestGridStats:
 
         stats = GridValidator.get_grid_stats(grid)
 
-        assert stats['size'] == 11
-        assert stats['total_squares'] == 121
-        assert stats['black_squares'] == 20
-        assert stats['white_squares'] == 101
-        assert 16.0 < stats['black_square_percentage'] < 17.0
-        assert stats['is_symmetric'] is True
-        assert stats['is_connected'] is True
+        assert stats["size"] == 11
+        assert stats["total_squares"] == 121
+        assert stats["black_squares"] == 20
+        assert stats["white_squares"] == 101
+        assert 16.0 < stats["black_square_percentage"] < 17.0
+        assert stats["is_symmetric"] is True
+        assert stats["is_connected"] is True
 
     def test_word_count_estimate(self):
         """Test word count estimation."""
@@ -254,8 +254,8 @@ class TestGridStats:
         stats = GridValidator.get_grid_stats(grid)
 
         # Should have some word count estimate
-        assert 'word_count' in stats
-        assert stats['word_count'] > 0
+        assert "word_count" in stats
+        assert stats["word_count"] > 0
 
     def test_meets_nyt_standards(self):
         """Test NYT standards flag."""
@@ -267,8 +267,8 @@ class TestGridStats:
         stats = GridValidator.get_grid_stats(grid)
 
         # Should meet NYT standards (symmetric, connected, <17% black, no short words)
-        assert 'meets_nyt_standards' in stats
-        assert stats['meets_nyt_standards'] is True
+        assert "meets_nyt_standards" in stats
+        assert stats["meets_nyt_standards"] is True
 
     def test_fails_nyt_standards(self):
         """Test NYT standards detection for bad grid."""
@@ -278,4 +278,4 @@ class TestGridStats:
 
         stats = GridValidator.get_grid_stats(grid)
 
-        assert stats['meets_nyt_standards'] is False
+        assert stats["meets_nyt_standards"] is False

@@ -42,16 +42,16 @@ describe('AutofillPanel Component', () => {
     vi.clearAllMocks();
   });
 
-  it('renders algorithm radio buttons', () => {
+  it('renders algorithm selector', () => {
     render(<AutofillPanel {...defaultProps} />);
-    // The component uses radio buttons for algorithm selection
     expect(screen.getByText('Algorithm')).toBeInTheDocument();
-    // Check that radio inputs for each algorithm exist
-    const radioButtons = document.querySelectorAll('input[type="radio"][name="algorithm"]');
-    expect(radioButtons.length).toBe(4); // repair, beam, trie, regex
-    // Check repair is selected by default
-    const repairRadio = document.querySelector('input[type="radio"][value="repair"]');
-    expect(repairRadio.checked).toBe(true);
+    // Component uses a <select> dropdown for algorithm selection
+    const select = document.querySelector('select');
+    expect(select).toBeInTheDocument();
+    expect(select.value).toBe('repair');
+    // All four algorithm options present
+    const options = select.querySelectorAll('option');
+    expect(options.length).toBe(4);
   });
 
   it('renders start autofill button', () => {

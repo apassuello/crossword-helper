@@ -119,7 +119,6 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
       });
 
       const data = response.data;
-      console.log('Placement suggestions received:', data.suggestions);
 
       // Ensure suggestions are in correct format
       if (data.suggestions && Array.isArray(data.suggestions)) {
@@ -171,8 +170,6 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
   // Apply all best placements at once
   const handleApplyAllPlacements = async () => {
-    console.log('Apply All clicked. Suggestions:', suggestions);
-
     if (!suggestions || suggestions.length === 0) {
       toast.error('No placement suggestions available. Please analyze placements first.');
       return;
@@ -186,23 +183,18 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
     toast.loading('Applying all theme words...', { id: 'apply-all' });
 
     for (const wordData of suggestions) {
-      console.log(`Processing word: ${wordData.word}`);
-
       // Skip words with no valid placements
       if (!wordData.suggestions || wordData.suggestions.length === 0) {
         skipCount++;
-        console.log(`Skipping ${wordData.word}: No valid placements`);
         continue;
       }
 
       // Get the best (first) suggestion
       const bestSuggestion = wordData.suggestions[0];
-      console.log(`Best suggestion for ${wordData.word}:`, bestSuggestion);
 
       // Skip if it has conflicts (WARNING in reasoning)
       if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
         skipCount++;
-        console.log(`Skipping ${wordData.word}: Has conflicts - ${bestSuggestion.reasoning}`);
         continue;
       }
 
@@ -220,19 +212,15 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
         if (response.data && response.data.grid) {
           successCount++;
-          console.log(`Successfully placed ${wordData.word}`);
           currentGrid = response.data.grid; // Update grid for next placement
 
           // Update parent grid
           if (onApplyPlacement) {
             onApplyPlacement(currentGrid, bestSuggestion);
           }
-        } else {
-          console.log(`No grid returned for ${wordData.word}`);
         }
       } catch (error) {
         skipCount++;
-        console.log(`Failed to place ${wordData.word}:`, error.message);
       }
     }
 

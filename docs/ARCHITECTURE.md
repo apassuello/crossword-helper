@@ -1,9 +1,6 @@
 # Crossword Helper - Master Architecture Document
 
-**Version:** 2.0
-**Last Updated:** March 2026
-**Status:** Production - All Phases Complete
-**Test Coverage:** 165/165 tests passing (100%)
+**Test Coverage:** 958 tests (907 default + 51 slow)
 
 ---
 
@@ -26,17 +23,17 @@
 
 ## Executive Summary
 
-The Crossword Helper is a comprehensive crossword puzzle construction toolkit that provides both a web interface and command-line tools for creating, filling, and exporting crossword puzzles. Built progressively over three development phases, the system implements a **CLI-as-single-source-of-truth** architecture where the CLI tool contains all business logic, and the web backend acts as a thin HTTP wrapper around subprocess calls.
+The Crossword Helper is a crossword puzzle construction toolkit that provides both a web interface and command-line tools for creating, filling, and exporting crossword puzzles. The system implements a **CLI-as-single-source-of-truth** architecture where the CLI tool contains all business logic, and the web backend acts as a thin HTTP wrapper around subprocess calls.
 
 ### Key Capabilities
 
 - **Interactive Grid Editor** - Web-based crossword grid construction with keyboard shortcuts
-- **Intelligent Autofill** - CSP-based and beam search algorithms for automated grid filling
+- **Autofill** - CSP-based and beam search algorithms for automated grid filling
 - **Pattern Matching** - Find words matching crossword patterns (e.g., `C?T` → CAT, COT, CUT)
-- **Wordlist Management** - 454k+ words across curated collections
+- **Wordlist Management** - 44k curated words (comprehensive.txt), plus scored/international variants
 - **Pause/Resume** - Interrupt long-running autofill operations and resume with edits
 - **Theme Entry Locking** - Preserve specific words during autofill
-- **Export Formats** - HTML, JSON, and text grid formats
+- **Export Formats** - HTML
 
 ### Primary Users
 
@@ -46,16 +43,10 @@ The Crossword Helper is a comprehensive crossword puzzle construction toolkit th
 
 ### Design Philosophy
 
-**Progressive Enhancement:**
-- Phase 1: Simple web app with immediate utility (3 helper tools)
-- Phase 2: Powerful CLI tool with advanced algorithms (CSP autofill)
-- Phase 3: Integration for unified codebase (web UI + CLI backend)
-
 **Single Source of Truth:**
 - All crossword logic lives in CLI tool
 - Web backend delegates to CLI via subprocess calls
 - No code duplication between interfaces
-- Maximum reusability and maintainability
 
 ---
 
@@ -70,7 +61,7 @@ The Crossword Helper is a comprehensive crossword puzzle construction toolkit th
 │  │  React Frontend (Vite + React 18)                 │  │
 │  │  - Grid Editor (interactive crossword UI)         │  │
 │  │  - Autofill Panel (algorithm controls)            │  │
-│  │  - Wordlist Manager (454k+ words)                 │  │
+│  │  - Wordlist Manager (44k words)                 │  │
 │  │  - Pattern Matcher (word search)                  │  │
 │  └────────────────────┬──────────────────────────────┘  │
 └─────────────────────────┼────────────────────────────────┘
@@ -80,7 +71,7 @@ The Crossword Helper is a comprehensive crossword puzzle construction toolkit th
 │            Flask Backend (localhost:5000)                 │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  API Layer (Flask Routes)                         │  │
-│  │  - 6 blueprints, 20+ endpoints                    │  │
+│  │  - 7 blueprints, 20+ endpoints                    │  │
 │  │  - Request validation                             │  │
 │  │  - SSE progress streaming                         │  │
 │  │  - Error handling                                 │  │
@@ -99,7 +90,7 @@ The Crossword Helper is a comprehensive crossword puzzle construction toolkit th
 ┌────────────────────────▼─────────────────────────────────┐
 │          CLI Tool (Python - Single Source of Truth)       │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  CLI Commands (Click framework - 8 commands)      │  │
+│  │  CLI Commands (Click framework - 14 commands)     │  │
 │  │  - new, fill, pattern, number, normalize, etc.    │  │
 │  └─────────────────────┬─────────────────────────────┘  │
 │                        │                                  │
@@ -107,9 +98,9 @@ The Crossword Helper is a comprehensive crossword puzzle construction toolkit th
 │  │  Core Modules (Business Logic)                    │  │
 │  │  ├─ Grid Engine (grid.py, numbering.py)          │  │
 │  │  ├─ Autofill Engine (CSP + Beam Search)          │  │
-│  │  ├─ Pattern Matcher (Regex + Trie + AC)          │  │
-│  │  ├─ Word List Manager (454k+ words)              │  │
-│  │  └─ Export Engine (HTML, JSON, text)             │  │
+│  │  ├─ Pattern Matcher (Regex + Trie)               │  │
+│  │  ├─ Word List Manager (44k words)              │  │
+│  │  └─ Export Engine (HTML)                         │  │
 │  └───────────────────────────────────────────────────┘  │
 └──────────────────────┬───────────────────────────────────┘
                        │
@@ -144,8 +135,8 @@ Frontend (React)
     ├─ GridEditor ──────────► POST /api/grid/update
     ├─ AutofillPanel ───────► POST /api/fill (SSE for progress)
     ├─ PatternMatcher ──────► POST /api/pattern
-    ├─ WordlistManager ─────► GET /api/wordlists
-    └─ ThemePlacer ─────────► POST /api/theme/place
+    ├─ WordListPanel ───────► GET /api/wordlists
+    └─ ThemeWordsPanel ─────► POST /api/theme/place
                               │
                               ▼
 Backend API (Flask)
@@ -167,7 +158,7 @@ CLI Adapter (backend/core/cli_adapter.py)
     └─ fill_with_resume() ──► crossword fill --resume-from state.json.gz
                               │
                               ▼
-CLI Tool (cli/src/cli.py - 8 commands, 903 lines)
+CLI Tool (cli/src/cli.py - 14 commands)
     │
     ├─ new ─────────────────► Create empty grid
     ├─ fill ────────────────► Autofill grid (CSP/Beam/Hybrid)
@@ -176,7 +167,7 @@ CLI Tool (cli/src/cli.py - 8 commands, 903 lines)
     ├─ normalize ───────────► Normalize entry conventions
     ├─ validate ────────────► Validate grid constraints
     ├─ wordlists ───────────► Manage word lists
-    └─ export ──────────────► Export to HTML/JSON
+    └─ export ──────────────► Export to HTML
                               │
                               ▼
 Core Modules (Single Source of Truth)
@@ -184,8 +175,8 @@ Core Modules (Single Source of Truth)
     ├─ Grid (grid.py) ──────────────► 2D array, symmetry, constraints
     ├─ Autofill (autofill.py) ──────► CSP with backtracking + AC-3
     ├─ BeamSearch (orchestrator.py) ► Global optimization search
-    ├─ PatternMatcher (3 algorithms) ► Regex, Trie, Aho-Corasick
-    ├─ WordList (word_list.py) ─────► 454k+ words, scoring
+    ├─ PatternMatcher (2 algorithms) ► Regex, Trie
+    ├─ WordList (word_list.py) ─────► 44k words, scoring
     ├─ GridNumbering (numbering.py) ► Auto-numbering algorithm
     └─ StateManager (state_manager.py) ► Pause/resume persistence
 ```
@@ -232,7 +223,7 @@ CROSSWORD    90     comprehensive
 
 #### Key Components
 
-**GridEditor.jsx** (~500 lines)
+**GridEditor.jsx**
 - Interactive crossword grid rendering
 - Keyboard navigation (arrows, Tab, Backspace)
 - Mouse interactions (click to edit, Shift+Click for black squares)
@@ -241,7 +232,7 @@ CROSSWORD    90     comprehensive
 - Auto-numbering display
 - Cell highlighting (selected, crossing word, errors)
 
-**AutofillPanel.jsx** (~400 lines)
+**AutofillPanel.jsx**
 - Algorithm selection (Regex, Trie, Beam Search, Hybrid)
 - Wordlist selection (comprehensive, 3-letter, crosswordese, etc.)
 - Parameter controls (timeout, min score, beam width)
@@ -250,20 +241,20 @@ CROSSWORD    90     comprehensive
 - Fill statistics (iterations, slots filled, time elapsed)
 - Error display for problematic slots
 
-**WordlistPanel.jsx** (~300 lines)
-- Browse 454k+ words across categories
+**WordListPanel.jsx**
+- Browse words across categories
 - Upload custom wordlists (.txt files)
 - View statistics (word count, length distribution)
 - Add individual words to existing lists
 - Search/filter functionality
 
-**ThemePlacer.jsx** (~200 lines)
+**ThemeWordsPanel.jsx**
 - Input theme words (one per line)
 - Suggest optimal placements
 - Lock/unlock theme entries
 - Visual indicators for locked words
 
-**PatternMatcher.jsx** (~150 lines)
+**PatternMatcher.jsx**
 - Pattern input with wildcard support
 - Real-time results display
 - Word score visualization
@@ -301,7 +292,7 @@ CROSSWORD    90     comprehensive
 #### Architecture Layers
 
 **API Layer** (backend/api/)
-- 6 Flask blueprints
+- 7 Flask blueprints
 - 20+ RESTful endpoints
 - Request validation (validators.py)
 - Error handling (errors.py)
@@ -310,7 +301,7 @@ CROSSWORD    90     comprehensive
 **Core Layer** (backend/core/)
 - CLIAdapter: Subprocess execution manager
 - EditMerger: Grid edit validation and merging
-- ThemePlacer: Theme word placement suggestions
+- ThemePlacer (`theme_placer.py`): Theme word placement suggestions
 - BlackSquareSuggester: Strategic black square recommendations
 - WordlistResolver: Wordlist path resolution
 
@@ -357,7 +348,7 @@ CROSSWORD    90     comprehensive
 
 #### CLIAdapter: The Integration Bridge
 
-**File:** `backend/core/cli_adapter.py` (~400 lines)
+**File:** `backend/core/cli_adapter.py`
 
 **Core Responsibility:** Execute CLI commands via subprocess and parse results
 
@@ -414,7 +405,7 @@ class CLIAdapter:
 
 #### Command Structure
 
-**File:** `cli/src/cli.py` (1,347 lines, 13 commands)
+**File:** `cli/src/cli.py` (14 commands)
 
 **Commands:**
 
@@ -458,7 +449,7 @@ class CLIAdapter:
    crossword validate puzzle.json
    ```
 
-7. **export** - Export puzzle to HTML/JSON
+7. **export** - Export puzzle to HTML
    ```bash
    crossword export puzzle.json --format html --output puzzle.html
    ```
@@ -505,7 +496,7 @@ class CLIAdapter:
 
 Four algorithm implementations with different trade-offs:
 
-1. **CSP with Backtracking + MAC** (`autofill.py`, 1,248 lines)
+1. **CSP with Backtracking + MAC** (`autofill.py`)
    - Constraint Satisfaction Problem with AC-3 arc consistency
    - MAC (Maintaining Arc Consistency) during backtracking
    - Most Constrained Variable (MCV) heuristic for slot ordering
@@ -514,11 +505,10 @@ Four algorithm implementations with different trade-offs:
      - Accurate: counts exact remaining options (top 100 candidates)
    - Forward checking after each placement
    - Stratified sampling for large domains (>10,000 words)
-   - Guaranteed solution if one exists
    - Fast for small grids (11×11 < 30s)
 
-2. **Beam Search** (`fill/beam_search/`, 19 files across 6 subpackages)
-   - **Orchestrator pattern** (`orchestrator.py`, 1,100 lines) coordinates:
+2. **Beam Search** (`fill/beam_search/`)
+   - **Orchestrator pattern** (`orchestrator.py`) coordinates:
      - `MRVSlotSelector` (selection/slot_selector.py) — Minimum Remaining Values
      - `MACConstraintEngine` (constraints/engine.py) — Constraint propagation
      - `CompositeValueOrdering` (selection/value_ordering.py) — Chained ordering pipeline:
@@ -533,19 +523,18 @@ Four algorithm implementations with different trade-offs:
    - Better word quality than CSP
    - Good for medium grids (15×15, 1-5min)
 
-3. **Hybrid Algorithm** (`hybrid_autofill.py`, 191 lines) — **default**
+3. **Hybrid Algorithm** (`hybrid_autofill.py`) — **default**
    - **Phase 1 — Beam Search** (20% of timeout, max 60s): Global exploration
    - **Phase 2 — Iterative Repair** (80% of remaining): Fixes crossing mismatches
    - Returns better of beam vs. repair result
-   - Best all-around performance
 
-4. **Iterative Repair** (`iterative_repair.py`, 1,919 lines)
+4. **Iterative Repair** (`iterative_repair.py`)
    - Region-based conflict detection and resolution
    - Multi-pass greedy fill with gibberish detection
    - **Tabu search** for local optimization (tenure = √num_slots)
    - Used as Phase 2 in Hybrid algorithm
 
-5. **Adaptive Autofill** (`adaptive_autofill.py`, 415 lines)
+5. **Adaptive Autofill** (`adaptive_autofill.py`)
    - Wrapper that monitors autofill progress
    - Auto-detects stuck situations (thrashing, stagnation)
    - Suggests strategic black square placements via `BlackSquareSuggester`
@@ -555,25 +544,17 @@ Four algorithm implementations with different trade-offs:
 
 **Pattern Matching** (`cli/src/fill/`)
 
-Three implementations with different performance characteristics:
+Two implementations:
 
 1. **Regex Matcher** (`pattern_matcher.py`)
    - Converts `C?T` → regex `^C.T$`, length-filtered
-   - ~200-500ms per query on 454k words
    - LRU cache for repeated patterns
 
 2. **Trie Matcher** (`trie_pattern_matcher.py` + `word_trie.py`)
    - Length-indexed tries (separate trie per word length 3–21)
    - Score-based subtree pruning via min/max bounds per node
    - Wildcard `?` branches to all children simultaneously
-   - 10-50x faster than regex (~10-50ms per query)
-   - Build time: ~2-3s for 454k words
    - **Default for autofill algorithms**
-
-3. **Aho-Corasick** (`ahocorasick_matcher.py`)
-   - Separate automaton per word length
-   - 10-100x faster than regex (~1-20ms per query)
-   - Requires `pyahocorasick` library (optional; falls back to Trie)
 
 **Word List Manager** (`cli/src/fill/word_list.py`)
 
@@ -599,8 +580,6 @@ Three implementations with different performance characteristics:
 **Export Engine** (`cli/src/export/`)
 
 - `html_exporter.py` - Generate printable HTML grids
-- `json_exporter.py` - JSON state persistence
-- Grid formatting (blank, solution, clues)
 
 ---
 
@@ -656,7 +635,7 @@ Three implementations with different performance characteristics:
 
 4. CLI subprocess executes
    ├─► Load grid from JSON
-   ├─► Load wordlists (454k words into trie)
+   ├─► Load wordlists (44k words into trie)
    ├─► Initialize Beam Search orchestrator
    ├─► Start filling loop:
    │   ├─ Select unfilled slot (MCV heuristic)
@@ -786,7 +765,7 @@ Three implementations with different performance characteristics:
 | **CLI Framework** | Click | 8.1+ | Rich features, excellent composability, typing support |
 | **Array Operations** | NumPy | 1.24+ | Fast 2D grid operations, symmetry validation |
 | **Pattern Matching** | Regex + Custom Trie | Built-in + Custom | Regex for simplicity, Trie for 10-50x speedup |
-| **Testing** | pytest | 7.4+ | Industry standard, excellent fixtures, 165 tests |
+| **Testing** | pytest | 7.4+ | Unit and integration testing |
 | **CORS** | Flask-CORS | 4.0+ | Enable React dev server communication |
 
 **Not Using:**
@@ -835,7 +814,6 @@ Three implementations with different performance characteristics:
 | **Beam Search** | Autofill (quality optimization) | O(k·n) beam width | Quality vs guarantees |
 | **AC-3** | Constraint propagation | O(ed³) edges/domain | Early pruning vs overhead |
 | **Trie** | Pattern matching | O(m) pattern length | Speed vs memory |
-| **Aho-Corasick** | Batch pattern matching | O(n+m+z) automaton | Batch speed vs build time |
 
 ---
 
@@ -918,7 +896,7 @@ output = json.loads(result.stdout)
 
 ### 7.4 React over Vanilla JS
 
-**Decision:** Use React for frontend (changed from Phase 1 plan)
+**Decision:** Use React for frontend
 
 **Rationale:**
 - ✅ Grid editor complexity (keyboard nav, symmetry, theme locking)
@@ -929,8 +907,8 @@ output = json.loads(result.stdout)
 **Original Plan:** Vanilla JS for "only 3 components"
 
 **Reality:** 20+ components once feature-complete
-- GridEditor, AutofillPanel, PatternMatcher, WordlistPanel
-- ThemePlacer, BlackSquareSuggester, ProgressBar, ToastNotifications
+- GridEditor, AutofillPanel, PatternMatcher, WordListPanel
+- ThemeWordsPanel, BlackSquareSuggester, ProgressBar, ToastNotifications
 - Modals, Tabs, Tooltips, ContextMenus
 
 **Trade-off Accepted:**
@@ -1173,7 +1151,7 @@ CORS(app, origins=[
 - **Pre-filled cells**: More pre-fill = faster (constraints guide search)
 - **Theme entries**: Locked words constrain search (slight slowdown)
 - **Min score threshold**: Higher threshold = fewer candidates = faster
-- **Wordlist size**: 454k words vs 50k words = 2-3x slower
+- **Wordlist size**: 44k words vs 50k words = 2-3x slower
 - **Grid connectivity**: More isolated regions = harder to fill
 
 **Iteration Counts (15×15):**
@@ -1184,16 +1162,15 @@ CORS(app, origins=[
 
 ### 9.3 Pattern Matching Performance
 
-**Algorithm Comparison (454k word list):**
+**Algorithm Comparison:**
 
-| Algorithm | Cold Start | Warm Cache | Use Case |
-|-----------|------------|------------|----------|
-| Regex | 100-200ms | 80-150ms | Small lists, simple patterns |
-| Trie | 50-100ms | 10-20ms | Default, 10-50x faster |
-| Aho-Corasick | 150-300ms | 5-15ms | Batch operations |
+| Algorithm | Use Case |
+|-----------|----------|
+| Regex | Simple patterns, small lists |
+| Trie | Default; faster for autofill |
 
 **Trie Structure:**
-- Build time: 2-3s for 454k words
+- Build time: 2-3s for 44k words
 - Memory: ~50MB in-memory trie
 - Cached in CLI process (amortized cost)
 
@@ -1211,7 +1188,7 @@ CORS(app, origins=[
 
 **CLI Process:**
 - Baseline: ~100MB (Python + NumPy)
-- Wordlist loaded: +50MB (454k words in trie)
+- Wordlist loaded: +50MB (44k words in trie)
 - Beam Search active: +100-300MB (beam states)
 - Peak: ~500MB (21×21 grid, beam width 10)
 
@@ -1224,7 +1201,7 @@ CORS(app, origins=[
 ### 9.5 Disk I/O
 
 **Read Operations:**
-- Wordlist load: 5-10MB/s (454k words)
+- Wordlist load: 5-10MB/s (44k words)
 - Grid load: <1ms (5-50KB JSON)
 - State load: 10-50ms (1-5MB gzipped)
 
@@ -1451,15 +1428,15 @@ python run.py
 ```
 crossword-helper/
 ├── backend/                 # Flask API server
-│   ├── api/                 # API routes (6 blueprints)
+│   ├── api/                 # API routes (7 blueprints)
 │   ├── core/                # CLI adapter, helpers
 │   ├── data/                # Data access
-│   ├── tests/               # Backend tests (165)
+│   ├── tests/               # Backend tests
 │   └── app.py               # Flask app factory
 │
 ├── cli/                     # CLI tool (single source of truth)
 │   ├── src/
-│   │   ├── cli.py           # Click commands (8)
+│   │   ├── cli.py           # Click commands (14)
 │   │   ├── core/            # Grid, numbering, validation
 │   │   ├── fill/            # Autofill algorithms
 │   │   └── export/          # Export formats
@@ -1475,18 +1452,18 @@ crossword-helper/
 ├── frontend/dist/           # Built frontend (production)
 │
 ├── data/
-│   ├── wordlists/           # Word lists (454k+ words)
-│   │   ├── comprehensive.txt
-│   │   ├── core/            # Curated core lists
+│   ├── wordlists/           # Word lists
+│   │   ├── comprehensive.txt  # 44k curated words
+│   │   ├── core/            # Core lists
 │   │   └── themed/          # Specialty lists
 │   └── tmp/                 # Temporary files (state, progress)
 │
 ├── docs/                    # Documentation
 │   ├── ARCHITECTURE.md      # This file
-│   ├── ROADMAP.md           # Development plan
-│   ├── PAUSE_RESUME_ARCHITECTURE.md
-│   ├── ADAPTIVE_FEATURES_PLAN.md
-│   └── phase*/              # Phase-specific docs
+│   ├── specs/               # Component specifications
+│   ├── api/                 # API docs
+│   ├── ops/                 # Operations guides
+│   └── dev/                 # Developer guides
 │
 ├── tests/                   # Root-level integration tests
 │
@@ -1810,14 +1787,14 @@ eventSource.onerror = () => {
 ### 12.5 Wordlist Management
 
 **Features:**
-- Browse 454k+ words across 10+ categories
+- Browse words across categories
 - Upload custom wordlists (.txt files)
 - View statistics (word count, length distribution, score distribution)
 - Add individual words to existing lists
 - Search/filter by length, score, pattern
 
 **Categories:**
-- `comprehensive.txt` - 454k words (all sources)
+- `comprehensive.txt` - 44k curated words
 - `core/3-letter.txt` - Short words (critical for tight spots)
 - `core/crosswordese.txt` - Common crossword fill
 - `themed/expressions.txt` - Multi-word phrases
@@ -1853,38 +1830,13 @@ def validate_wordlist(file):
 
 ## Conclusion
 
-The Crossword Helper implements a sophisticated **CLI-as-single-source-of-truth architecture** that provides both web and command-line interfaces from a unified codebase. Built progressively over three development phases, the system demonstrates key architectural principles:
+The Crossword Helper implements a **CLI-as-single-source-of-truth architecture** that provides both web and command-line interfaces from a unified codebase.
 
-### Architectural Strengths
+### Architecture Summary
 
-1. **Single Source of Truth**: CLI tool contains all business logic, eliminating code duplication
+1. **Single Source of Truth**: CLI tool contains all business logic
 2. **Layered Architecture**: Clear separation between HTTP, business logic, and data access
-3. **Subprocess Integration**: Clean integration pattern via CLIAdapter (100-300ms overhead)
-4. **Algorithm Sophistication**: Multiple autofill algorithms (CSP, Beam Search, Hybrid)
+3. **Subprocess Integration**: CLIAdapter bridges web and CLI
+4. **Multiple Autofill Algorithms**: CSP, Beam Search, Hybrid, Iterative Repair, Adaptive
 5. **Pause/Resume System**: Full state serialization with edit support
 6. **Real-Time Feedback**: SSE streaming for long-running operations
-7. **Comprehensive Testing**: 165 tests (100% passing), 92% backend coverage, 89% CLI coverage
-
-### Production Readiness
-
-- ✅ All features implemented and tested
-- ✅ Performance targets met (11×11 < 30s, 15×15 < 5min)
-- ✅ Local deployment stable
-- ✅ Error handling comprehensive
-- ⏳ Cloud deployment (future enhancement)
-- ⏳ Multi-user authentication (future enhancement)
-
-### Next Steps
-
-1. **User Testing**: Gather feedback from partner (non-technical user)
-2. **Performance Optimization**: Daemon mode for CLI (eliminate process spawn overhead)
-3. **Frontend Testing**: Add Jest + React Testing Library tests
-4. **Cloud Deployment**: Docker + Nginx + Gunicorn (if sharing with others)
-5. **Feature Expansion**: See ADAPTIVE_FEATURES_PLAN.md for roadmap
-
----
-
-**Document Version:** 1.0
-**Last Updated:** December 27, 2025
-**Maintained By:** Development Team
-**Next Review:** After user testing phase

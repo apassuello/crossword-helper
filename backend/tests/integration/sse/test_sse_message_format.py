@@ -13,9 +13,10 @@ that can take 30s-5min. These tests ensure the frontend can reliably consume
 the event stream.
 """
 
-import pytest
 import json
-import threading
+
+import pytest
+
 from backend.tests.integration.conftest import create_test_grid
 
 
@@ -35,15 +36,17 @@ class TestSSEMessageFormatCompliance:
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,  # Increased timeout to avoid validation rejection
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,  # Increased timeout to avoid validation rejection
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject short timeout at validation (400) or accept it (202)
@@ -76,13 +79,15 @@ class TestSSEMessageFormatCompliance:
         # Start pattern search (faster than autofill for testing)
         response = client.post(
             "/api/pattern/with-progress",
-            data=json.dumps({
-                "pattern": "C?T",
-                "wordlists": ["comprehensive"],
-                "max_results": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "pattern": "C?T",
+                    "wordlists": ["comprehensive"],
+                    "max_results": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -114,15 +119,17 @@ class TestSSEMessageFormatCompliance:
         grid = create_test_grid(5)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -140,16 +147,18 @@ class TestSSEMessageFormatCompliance:
 
         # Last message should indicate completion or error
         last_msg = messages[-1]
-        assert last_msg.get("status") in ["complete", "error"] or last_msg.get("progress") == 100, \
-            f"Final message should indicate completion, got: {last_msg}"
+        assert (
+            last_msg.get("status") in ["complete", "error"] or last_msg.get("progress") == 100
+        ), f"Final message should indicate completion, got: {last_msg}"
 
         # Progress should be monotonically increasing (or stay at 100)
         prev_progress = -1
         for msg in messages:
             if "progress" in msg:
                 current_progress = msg["progress"]
-                assert current_progress >= prev_progress, \
-                    f"Progress should increase monotonically: {prev_progress} -> {current_progress}"
+                assert (
+                    current_progress >= prev_progress
+                ), f"Progress should increase monotonically: {prev_progress} -> {current_progress}"
                 prev_progress = current_progress
 
     def test_sse_message_contains_required_fields(self, client, sse_parser):
@@ -167,13 +176,15 @@ class TestSSEMessageFormatCompliance:
         # Start pattern search
         response = client.post(
             "/api/pattern/with-progress",
-            data=json.dumps({
-                "pattern": "C?T",
-                "wordlists": ["comprehensive"],
-                "max_results": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "pattern": "C?T",
+                    "wordlists": ["comprehensive"],
+                    "max_results": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -185,18 +196,20 @@ class TestSSEMessageFormatCompliance:
         # Verify each message has required fields
         for msg in messages:
             # At minimum, should have message and status
-            assert "message" in msg or "progress" in msg, \
-                f"Message missing required fields: {msg}"
+            assert "message" in msg or "progress" in msg, f"Message missing required fields: {msg}"
 
             # If status present, should be valid
             if "status" in msg:
-                assert msg["status"] in ["running", "complete", "error", "paused"], \
-                    f"Invalid status: {msg['status']}"
+                assert msg["status"] in [
+                    "running",
+                    "complete",
+                    "error",
+                    "paused",
+                ], f"Invalid status: {msg['status']}"
 
             # If progress present, should be 0-100
             if "progress" in msg:
-                assert 0 <= msg["progress"] <= 100, \
-                    f"Progress out of range: {msg['progress']}"
+                assert 0 <= msg["progress"] <= 100, f"Progress out of range: {msg['progress']}"
 
 
 class TestSSEProgressiveUpdates:
@@ -213,15 +226,17 @@ class TestSSEProgressiveUpdates:
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -232,13 +247,11 @@ class TestSSEProgressiveUpdates:
 
         # Should have received multiple intermediate updates
         # (not just start + end)
-        assert len(messages) >= 3, \
-            f"Expected at least 3 messages (start, progress, end), got {len(messages)}"
+        assert len(messages) >= 3, f"Expected at least 3 messages (start, progress, end), got {len(messages)}"
 
         # Should have at least one message with status='running'
         running_messages = [m for m in messages if m.get("status") == "running"]
-        assert len(running_messages) >= 1, \
-            "Should have intermediate 'running' status messages"
+        assert len(running_messages) >= 1, "Should have intermediate 'running' status messages"
 
 
 class TestSSEErrorHandling:
@@ -257,15 +270,17 @@ class TestSSEErrorHandling:
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["nonexistent_wordlist"],  # Invalid wordlist
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["nonexistent_wordlist"],  # Invalid wordlist
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # Should still return 202 (task started)
@@ -281,8 +296,9 @@ class TestSSEErrorHandling:
 
         # Last message should indicate error
         last_msg = messages[-1]
-        assert last_msg.get("status") == "error" or "error" in last_msg.get("message", "").lower(), \
-            f"Expected error status, got: {last_msg}"
+        assert (
+            last_msg.get("status") == "error" or "error" in last_msg.get("message", "").lower()
+        ), f"Expected error status, got: {last_msg}"
 
     def test_sse_handles_timeout(self, client, sse_parser):
         """
@@ -297,15 +313,17 @@ class TestSSEErrorHandling:
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 1,  # Very short timeout
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 1,  # Very short timeout
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         # API might reject very short timeout at validation (400) or accept it (202)
@@ -327,8 +345,10 @@ class TestSSEErrorHandling:
         # Should indicate timeout or partial completion
         # (Timeout might result in partial fill with status='complete' or 'error')
         last_msg = messages[-1]
-        assert last_msg.get("status") in ["error", "complete"], \
-            f"Expected error or complete status after timeout, got: {last_msg}"
+        assert last_msg.get("status") in [
+            "error",
+            "complete",
+        ], f"Expected error or complete status after timeout, got: {last_msg}"
 
 
 class TestSSEDataPayload:
@@ -348,15 +368,17 @@ class TestSSEDataPayload:
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -371,11 +393,8 @@ class TestSSEDataPayload:
         # Should have grid data if successful
         if completion_msg.get("status") == "complete" and completion_msg.get("success"):
             # Check for grid data (might be in top-level or nested in 'data' field)
-            has_grid_data = "grid" in completion_msg or (
-                "data" in completion_msg and "grid" in completion_msg["data"]
-            )
-            assert has_grid_data, \
-                f"Completion message should include grid data: {completion_msg.keys()}"
+            has_grid_data = "grid" in completion_msg or ("data" in completion_msg and "grid" in completion_msg["data"])
+            assert has_grid_data, f"Completion message should include grid data: {completion_msg.keys()}"
 
 
 # Mark slow tests

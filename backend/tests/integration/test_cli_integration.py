@@ -8,19 +8,21 @@ IMPORTANT: These tests use REAL CLI execution, so they are slower than unit test
 Mark slow tests with @pytest.mark.slow to allow skipping during development.
 """
 
-import pytest
 import json
 import subprocess
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from backend.app import create_app
 from backend.core.cli_adapter import get_adapter
 from backend.tests.fixtures import (
+    EMPTY_3X3_CLI,
     EMPTY_3X3_FRONTEND,
     PARTIALLY_FILLED_3X3_FRONTEND,
-    PATTERN_3X3_FRONTEND,
-    EMPTY_3X3_CLI,
     PATTERN_3X3_CLI,
+    PATTERN_3X3_FRONTEND,
     TRANSFORMATION_TEST_CASES,
 )
 
@@ -43,6 +45,7 @@ def cli_adapter():
 # Data Transformation Tests
 # ==================================================
 # These tests verify the grid format transformation is correct
+
 
 class TestGridFormatTransformation:
     """Test transformation from frontend format to CLI format."""
@@ -120,6 +123,7 @@ class TestGridFormatTransformation:
 # ==================================================
 # These tests verify the CLI adapter works correctly
 
+
 class TestCLIAdapterIntegration:
     """Test CLIAdapter actually executes CLI commands."""
 
@@ -153,10 +157,7 @@ class TestCLIAdapterIntegration:
     def test_number_command_with_real_grid(self, cli_adapter):
         """Test that number command processes a real grid."""
         # Use empty 3x3 grid in CLI format
-        result = cli_adapter.number(
-            grid_data=EMPTY_3X3_CLI,
-            allow_nonstandard=True  # 3x3 is non-standard
-        )
+        result = cli_adapter.number(grid_data=EMPTY_3X3_CLI, allow_nonstandard=True)  # 3x3 is non-standard
 
         # Verify structure
         assert "numbering" in result, "Result should have 'numbering' field"
@@ -180,7 +181,7 @@ class TestCLIAdapterIntegration:
                 wordlist_paths=[str(Path(__file__).parent.parent.parent.parent / "data" / "wordlists" / "comprehensive.txt")],
                 timeout_seconds=30,
                 min_score=0,  # Accept any words for testing
-                allow_nonstandard=True
+                allow_nonstandard=True,
             )
 
             # Verify result structure
@@ -190,10 +191,7 @@ class TestCLIAdapterIntegration:
         except subprocess.CalledProcessError as e:
             # If this fails with AttributeError in stderr, the transformation bug exists
             if "AttributeError" in e.stderr:
-                pytest.fail(
-                    "CLI crashed with AttributeError - this indicates grid format bug!\n"
-                    f"Stderr: {e.stderr}"
-                )
+                pytest.fail("CLI crashed with AttributeError - this indicates grid format bug!\n" f"Stderr: {e.stderr}")
             raise
 
 
@@ -201,6 +199,7 @@ class TestCLIAdapterIntegration:
 # API Integration Tests (/api/fill)
 # ==================================================
 # These tests actually call the API endpoint and verify CLI execution
+
 
 class TestFillEndpointIntegration:
     """Test /api/fill endpoint with real CLI execution."""
@@ -213,20 +212,22 @@ class TestFillEndpointIntegration:
         This is the PRIMARY test that catches the bug.
         """
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": EMPTY_3X3_FRONTEND["grid"],
                 "wordlists": ["comprehensive"],
                 "timeout": 30,
-                "min_score": 0
+                "min_score": 0,
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
         # If the transformation is wrong, this will return 500 with AttributeError
-        assert response.status_code in [200, 507], \
-            f"Expected success or timeout, got {response.status_code}: {response.data}"
+        assert response.status_code in [
+            200,
+            507,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
         if response.status_code == 200:
             data = json.loads(response.data)
@@ -236,47 +237,48 @@ class TestFillEndpointIntegration:
     def test_fill_endpoint_with_pattern_grid(self, client):
         """Test /api/fill with grid containing black squares."""
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": PATTERN_3X3_FRONTEND["grid"],
                 "wordlists": ["comprehensive"],
                 "timeout": 30,
-                "min_score": 0
+                "min_score": 0,
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
-        assert response.status_code in [200, 507], \
-            f"Expected success or timeout, got {response.status_code}: {response.data}"
+        assert response.status_code in [
+            200,
+            507,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     @pytest.mark.slow
     def test_fill_endpoint_with_partially_filled_grid(self, client):
         """Test /api/fill with partially filled grid in frontend format."""
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": PARTIALLY_FILLED_3X3_FRONTEND["grid"],
                 "wordlists": ["comprehensive"],
                 "timeout": 30,
-                "min_score": 0
+                "min_score": 0,
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
-        assert response.status_code in [200, 507], \
-            f"Expected success or timeout, got {response.status_code}: {response.data}"
+        assert response.status_code in [
+            200,
+            507,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     def test_fill_endpoint_validates_missing_grid(self, client):
         """Test that /api/fill rejects requests without grid."""
         response = client.post(
-            '/api/fill',
-            json={
-                "size": 3,
-                "wordlists": ["comprehensive"]
-            },
-            content_type='application/json'
+            "/api/fill",
+            json={"size": 3, "wordlists": ["comprehensive"]},
+            content_type="application/json",
         )
 
         assert response.status_code == 400, "Should reject missing grid"
@@ -286,12 +288,9 @@ class TestFillEndpointIntegration:
     def test_fill_endpoint_validates_missing_size(self, client):
         """Test that /api/fill rejects requests without size."""
         response = client.post(
-            '/api/fill',
-            json={
-                "grid": EMPTY_3X3_FRONTEND["grid"],
-                "wordlists": ["comprehensive"]
-            },
-            content_type='application/json'
+            "/api/fill",
+            json={"grid": EMPTY_3X3_FRONTEND["grid"], "wordlists": ["comprehensive"]},
+            content_type="application/json",
         )
 
         assert response.status_code == 400, "Should reject missing size"
@@ -299,13 +298,13 @@ class TestFillEndpointIntegration:
     def test_fill_endpoint_validates_invalid_size(self, client):
         """Test that /api/fill rejects invalid grid sizes."""
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 2,  # Too small (min is 3)
                 "grid": [[]],
-                "wordlists": ["comprehensive"]
+                "wordlists": ["comprehensive"],
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
         assert response.status_code == 400, "Should reject invalid size"
@@ -313,13 +312,13 @@ class TestFillEndpointIntegration:
     def test_fill_endpoint_validates_wordlists(self, client):
         """Test that /api/fill validates wordlists parameter."""
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": EMPTY_3X3_FRONTEND["grid"],
-                "wordlists": []  # Empty list should fail
+                "wordlists": [],  # Empty list should fail
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
         assert response.status_code == 400, "Should reject empty wordlists"
@@ -329,6 +328,7 @@ class TestFillEndpointIntegration:
 # Grid Format Bug Regression Tests
 # ==================================================
 # These tests specifically target the bug that was missed
+
 
 class TestGridFormatBugRegression:
     """
@@ -345,9 +345,7 @@ class TestGridFormatBugRegression:
         This test will FAIL if the transformation code is removed or broken.
         """
         # Frontend sends this format
-        frontend_grid = [
-            [{"letter": "A", "isBlack": False}]
-        ]
+        frontend_grid = [[{"letter": "A", "isBlack": False}]]
 
         # Expected CLI format after transformation
         expected_cli_grid = [["A"]]
@@ -368,8 +366,7 @@ class TestGridFormatBugRegression:
                     cli_row.append(cell)
             cli_grid.append(cli_row)
 
-        assert cli_grid == expected_cli_grid, \
-            "Transformation should convert dict format to string format"
+        assert cli_grid == expected_cli_grid, "Transformation should convert dict format to string format"
 
     def test_bug_regression_cli_receives_parseable_json(self, cli_adapter):
         """
@@ -381,11 +378,7 @@ class TestGridFormatBugRegression:
         # Create grid data in CLI format
         grid_data = {
             "size": 3,
-            "grid": [
-                ["A", ".", "."],
-                [".", "#", "."],
-                [".", ".", "."]
-            ]
+            "grid": [["A", ".", "."], [".", "#", "."], [".", ".", "."]],
         }
 
         # Write to temp file (simulates what API does)
@@ -402,12 +395,13 @@ class TestGridFormatBugRegression:
                 capture_output=True,
                 text=True,
                 timeout=10,
-                cwd=cli_adapter.cli_path.parent
+                cwd=cli_adapter.cli_path.parent,
             )
 
             # Should not crash with AttributeError
-            assert "AttributeError" not in result.stderr, \
-                f"CLI crashed with AttributeError - grid format is wrong!\nStderr: {result.stderr}"
+            assert (
+                "AttributeError" not in result.stderr
+            ), f"CLI crashed with AttributeError - grid format is wrong!\nStderr: {result.stderr}"
 
         finally:
             Path(temp_path).unlink(missing_ok=True)
@@ -420,34 +414,49 @@ class TestGridFormatBugRegression:
         Sends frontend-format grid through API to CLI and verifies no crash.
         """
         response = client.post(
-            '/api/fill',
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": [
-                    [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-                    [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-                    [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                    ],
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": True},
+                        {"letter": "", "isBlack": False},
+                    ],
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                    ],
                 ],
                 "wordlists": ["comprehensive"],
                 "timeout": 30,
-                "min_score": 0
+                "min_score": 0,
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
         # Should NOT get 500 error with AttributeError
-        assert response.status_code != 500, \
-            f"API should not crash with 500 error. Response: {response.data}"
+        assert response.status_code != 500, f"API should not crash with 500 error. Response: {response.data}"
 
         # Accept 200 (success) or 507 (timeout) or 400 (validation error)
         # Just verify it doesn't crash
-        assert response.status_code in [200, 400, 507], \
-            f"Unexpected status code: {response.status_code}"
+        assert response.status_code in [
+            200,
+            400,
+            507,
+        ], f"Unexpected status code: {response.status_code}"
 
 
 # ==================================================
 # Error Handling Tests
 # ==================================================
+
 
 class TestCLIErrorHandling:
     """Test error handling in CLI integration."""
@@ -459,7 +468,7 @@ class TestCLIErrorHandling:
             cli_adapter._run_command(
                 ["fill", "/nonexistent/grid.json"],
                 timeout=0.001,  # 1ms timeout
-                check_success=False
+                check_success=False,
             )
 
     def test_cli_invalid_command_handling(self, cli_adapter):
@@ -469,12 +478,13 @@ class TestCLIErrorHandling:
 
     def test_cli_malformed_json_output(self, cli_adapter, monkeypatch):
         """Test handling of malformed JSON from CLI."""
+
         # Mock _run_command to return invalid JSON
         def mock_run_command(args, timeout=None):
             # Return malformed JSON output
             return ("not valid json {{{", "", 0)
 
-        monkeypatch.setattr(cli_adapter, '_run_command', mock_run_command)
+        monkeypatch.setattr(cli_adapter, "_run_command", mock_run_command)
 
         # This should raise ValueError due to JSON parse error
         with pytest.raises(ValueError, match="Failed to parse CLI output"):
@@ -484,6 +494,7 @@ class TestCLIErrorHandling:
 # ==================================================
 # Performance Tests
 # ==================================================
+
 
 @pytest.mark.slow
 class TestCLIPerformance:
@@ -495,16 +506,16 @@ class TestCLIPerformance:
 
         start_time = time.time()
 
-        response = client.post(
-            '/api/fill',
+        client.post(
+            "/api/fill",
             json={
                 "size": 3,
                 "grid": PATTERN_3X3_FRONTEND["grid"],
                 "wordlists": ["comprehensive"],
                 "timeout": 30,
-                "min_score": 0
+                "min_score": 0,
             },
-            content_type='application/json'
+            content_type="application/json",
         )
 
         elapsed = time.time() - start_time

@@ -5,16 +5,17 @@ Provides SSE endpoints for streaming progress updates during long-running operat
 like pattern search, autofill, and export.
 """
 
-from flask import Blueprint, Response, request, jsonify
 import json
 import queue
 import subprocess
 import threading
 import time
-from typing import Dict, Any
 import uuid
+from typing import Any, Dict
 
-progress_api = Blueprint('progress_api', __name__)
+from flask import Blueprint, Response, jsonify, request
+
+progress_api = Blueprint("progress_api", __name__)
 
 # Global progress trackers (task_id -> queue)
 progress_queues: Dict[str, queue.Queue] = {}
@@ -24,7 +25,7 @@ progress_queues_lock = threading.Lock()
 max_progress_per_task: Dict[str, int] = {}
 
 # Track running subprocesses for cleanup
-running_processes: Dict[str, 'subprocess.Popen'] = {}
+running_processes: Dict[str, "subprocess.Popen"] = {}
 running_processes_lock = threading.Lock()
 
 
@@ -44,7 +45,13 @@ def create_progress_tracker() -> str:
     return task_id
 
 
-def send_progress(task_id: str, progress: int, message: str, status: str = 'running', data: Dict[str, Any] = None):
+def send_progress(
+    task_id: str,
+    progress: int,
+    message: str,
+    status: str = "running",
+    data: Dict[str, Any] = None,
+):
     """
     Send a progress update for a task.
 
@@ -61,25 +68,25 @@ def send_progress(task_id: str, progress: int, message: str, status: str = 'runn
     # Enforce monotonicity: progress should never decrease during backtracking
     # This handles scenarios where beam search backtracks and reduces filled slots
     with progress_queues_lock:
-        if status == 'running':
+        if status == "running":
             current_max = max_progress_per_task.get(task_id, 0)
             progress = max(progress, current_max)
             max_progress_per_task[task_id] = progress
-        elif status == 'complete':
+        elif status == "complete":
             # Always allow completion at 100%
             progress = 100
             max_progress_per_task[task_id] = 100
 
     event = {
-        'progress': progress,
-        'message': message,
-        'status': status,
-        'timestamp': time.time()
+        "progress": progress,
+        "message": message,
+        "status": status,
+        "timestamp": time.time(),
     }
 
     # Include result data if provided
     if data:
-        event['data'] = data
+        event["data"] = data
 
     try:
         progress_queues[task_id].put(event, block=False)
@@ -117,7 +124,7 @@ def cleanup_process(task_id: str):
                 pass
 
 
-@progress_api.route('/progress/<task_id>', methods=['GET'])
+@progress_api.route("/progress/<task_id>", methods=["GET"])
 def stream_progress(task_id: str):
     """
     Stream progress updates via Server-Sent Events.
@@ -129,7 +136,7 @@ def stream_progress(task_id: str):
         SSE stream of progress events
     """
     if task_id not in progress_queues:
-        return jsonify({'error': 'Task not found'}), 404
+        return jsonify({"error": "Task not found"}), 404
 
     def generate():
         """Generate SSE events from progress queue."""
@@ -147,7 +154,7 @@ def stream_progress(task_id: str):
                     yield f"data: {json.dumps(event)}\n\n"
 
                     # If complete or error, stop streaming
-                    if event.get('status') in ['complete', 'error']:
+                    if event.get("status") in ["complete", "error"]:
                         break
 
                 except queue.Empty:
@@ -160,16 +167,16 @@ def stream_progress(task_id: str):
 
     return Response(
         generate(),
-        mimetype='text/event-stream',
+        mimetype="text/event-stream",
         headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',  # Disable nginx buffering
-            'Connection': 'keep-alive'
-        }
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "Connection": "keep-alive",
+        },
     )
 
 
-@progress_api.route('/progress/start', methods=['POST'])
+@progress_api.route("/progress/start", methods=["POST"])
 def start_progress_tracking():
     """
     Create a new progress tracker.
@@ -178,10 +185,10 @@ def start_progress_tracking():
         JSON with task_id
     """
     task_id = create_progress_tracker()
-    return jsonify({'task_id': task_id}), 200
+    return jsonify({"task_id": task_id}), 200
 
 
-@progress_api.route('/progress/<task_id>/update', methods=['POST'])
+@progress_api.route("/progress/<task_id>/update", methods=["POST"])
 def update_progress(task_id: str):
     """
     Manually update progress for a task (for testing).
@@ -200,13 +207,13 @@ def update_progress(task_id: str):
     data = request.get_json()
 
     if not data:
-        return jsonify({'error': 'Request body required'}), 400
+        return jsonify({"error": "Request body required"}), 400
 
     send_progress(
         task_id,
-        data.get('progress', 0),
-        data.get('message', 'Processing...'),
-        data.get('status', 'running')
+        data.get("progress", 0),
+        data.get("message", "Processing..."),
+        data.get("status", "running"),
     )
 
-    return jsonify({'success': True}), 200
+    return jsonify({"success": True}), 200

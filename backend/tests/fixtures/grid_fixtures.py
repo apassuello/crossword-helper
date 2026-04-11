@@ -13,39 +13,87 @@ to test data transformation and integration points.
 EMPTY_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+    ],
 }
 
 PARTIALLY_FILLED_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "C", "isBlack": False}, {"letter": "A", "isBlack": False}, {"letter": "T", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "#", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [
+            {"letter": "C", "isBlack": False},
+            {"letter": "A", "isBlack": False},
+            {"letter": "T", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "#", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+    ],
 }
 
 # Grid with black squares in pattern
 PATTERN_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+    ],
 }
 
 # Mixed empty and filled cells
 MIXED_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "A", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "C", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "G", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "I", "isBlack": False}]
-    ]
+        [
+            {"letter": "A", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "C", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "G", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "I", "isBlack": False},
+        ],
+    ],
 }
 
 # 5x5 grid for slightly larger tests
@@ -56,20 +104,50 @@ EMPTY_5X5_FRONTEND = {
         [{"letter": "", "isBlack": False}] * 5,
         [{"letter": "", "isBlack": False}] * 5,
         [{"letter": "", "isBlack": False}] * 5,
-        [{"letter": "", "isBlack": False}] * 5
-    ]
+        [{"letter": "", "isBlack": False}] * 5,
+    ],
 }
 
 # 5x5 with standard crossword pattern
 PATTERN_5X5_FRONTEND = {
     "size": 5,
     "grid": [
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+    ],
 }
 
 # ==================================================
@@ -77,41 +155,19 @@ PATTERN_5X5_FRONTEND = {
 # ==================================================
 # These represent what the CLI should receive after transformation
 
-EMPTY_3X3_CLI = {
-    "size": 3,
-    "grid": [
-        [".", ".", "."],
-        [".", ".", "."],
-        [".", ".", "."]
-    ]
-}
+EMPTY_3X3_CLI = {"size": 3, "grid": [[".", ".", "."], [".", ".", "."], [".", ".", "."]]}
 
 PARTIALLY_FILLED_3X3_CLI = {
     "size": 3,
-    "grid": [
-        ["C", "A", "T"],
-        [".", "#", "."],
-        [".", ".", "."]
-    ]
+    "grid": [["C", "A", "T"], [".", "#", "."], [".", ".", "."]],
 }
 
 PATTERN_3X3_CLI = {
     "size": 3,
-    "grid": [
-        [".", ".", "."],
-        [".", "#", "."],
-        [".", ".", "."]
-    ]
+    "grid": [[".", ".", "."], [".", "#", "."], [".", ".", "."]],
 }
 
-MIXED_3X3_CLI = {
-    "size": 3,
-    "grid": [
-        ["A", ".", "C"],
-        [".", "#", "."],
-        ["G", ".", "I"]
-    ]
-}
+MIXED_3X3_CLI = {"size": 3, "grid": [["A", ".", "C"], [".", "#", "."], ["G", ".", "I"]]}
 
 EMPTY_5X5_CLI = {
     "size": 5,
@@ -120,8 +176,8 @@ EMPTY_5X5_CLI = {
         [".", ".", ".", ".", "."],
         [".", ".", ".", ".", "."],
         [".", ".", ".", ".", "."],
-        [".", ".", ".", ".", "."]
-    ]
+        [".", ".", ".", ".", "."],
+    ],
 }
 
 PATTERN_5X5_CLI = {
@@ -131,8 +187,8 @@ PATTERN_5X5_CLI = {
         [".", "#", ".", "#", "."],
         [".", ".", ".", ".", "."],
         [".", "#", ".", "#", "."],
-        [".", ".", ".", ".", "."]
-    ]
+        [".", ".", ".", ".", "."],
+    ],
 }
 
 # ==================================================
@@ -143,57 +199,81 @@ PATTERN_5X5_CLI = {
 ALL_BLACK_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}],
-        [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}],
-        [{"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": True}]
-    ]
+        [
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+        ],
+        [
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+        ],
+        [
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": True},
+        ],
+    ],
 }
 
 ALL_BLACK_3X3_CLI = {
     "size": 3,
-    "grid": [
-        ["#", "#", "#"],
-        ["#", "#", "#"],
-        ["#", "#", "#"]
-    ]
+    "grid": [["#", "#", "#"], ["#", "#", "#"], ["#", "#", "#"]],
 }
 
 # Completely filled grid
 FULLY_FILLED_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "C", "isBlack": False}, {"letter": "A", "isBlack": False}, {"letter": "T", "isBlack": False}],
-        [{"letter": "A", "isBlack": False}, {"letter": "#", "isBlack": True}, {"letter": "R", "isBlack": False}],
-        [{"letter": "R", "isBlack": False}, {"letter": "A", "isBlack": False}, {"letter": "T", "isBlack": False}]
-    ]
+        [
+            {"letter": "C", "isBlack": False},
+            {"letter": "A", "isBlack": False},
+            {"letter": "T", "isBlack": False},
+        ],
+        [
+            {"letter": "A", "isBlack": False},
+            {"letter": "#", "isBlack": True},
+            {"letter": "R", "isBlack": False},
+        ],
+        [
+            {"letter": "R", "isBlack": False},
+            {"letter": "A", "isBlack": False},
+            {"letter": "T", "isBlack": False},
+        ],
+    ],
 }
 
 FULLY_FILLED_3X3_CLI = {
     "size": 3,
-    "grid": [
-        ["C", "A", "T"],
-        ["A", "#", "R"],
-        ["R", "A", "T"]
-    ]
+    "grid": [["C", "A", "T"], ["A", "#", "R"], ["R", "A", "T"]],
 }
 
 # Grid with lowercase letters (should be uppercased)
 LOWERCASE_3X3_FRONTEND = {
     "size": 3,
     "grid": [
-        [{"letter": "c", "isBlack": False}, {"letter": "a", "isBlack": False}, {"letter": "t", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": True}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [
+            {"letter": "c", "isBlack": False},
+            {"letter": "a", "isBlack": False},
+            {"letter": "t", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": True},
+            {"letter": "", "isBlack": False},
+        ],
+        [
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+            {"letter": "", "isBlack": False},
+        ],
+    ],
 }
 
 LOWERCASE_3X3_CLI = {
     "size": 3,
-    "grid": [
-        ["C", "A", "T"],  # Should be uppercased
-        [".", "#", "."],
-        [".", ".", "."]
-    ]
+    "grid": [["C", "A", "T"], [".", "#", "."], [".", ".", "."]],  # Should be uppercased
 }
 
 # ==================================================
@@ -217,22 +297,16 @@ TRANSFORMATION_TEST_CASES = [
 # Invalid Grids (for error handling tests)
 # ==================================================
 
-INVALID_GRID_MISSING_SIZE = {
-    "grid": [
-        [{"letter": "", "isBlack": False}]
-    ]
-}
+INVALID_GRID_MISSING_SIZE = {"grid": [[{"letter": "", "isBlack": False}]]}
 
-INVALID_GRID_MISSING_GRID = {
-    "size": 3
-}
+INVALID_GRID_MISSING_GRID = {"size": 3}
 
 INVALID_GRID_WRONG_SIZE = {
     "size": 2,  # Too small (min is 3)
     "grid": [
         [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
-        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}]
-    ]
+        [{"letter": "", "isBlack": False}, {"letter": "", "isBlack": False}],
+    ],
 }
 
 INVALID_GRID_MALFORMED_CELLS = {
@@ -240,8 +314,8 @@ INVALID_GRID_MALFORMED_CELLS = {
     "grid": [
         ["not", "a", "dict"],  # Should be objects with letter/isBlack
         ["array", "o", "strings"],
-        [".", ".", "."]
-    ]
+        [".", ".", "."],
+    ],
 }
 
 # ==================================================
@@ -253,7 +327,7 @@ VALID_FILL_REQUEST_3X3 = {
     "grid": EMPTY_3X3_FRONTEND["grid"],
     "wordlists": ["comprehensive"],
     "timeout": 30,
-    "min_score": 30
+    "min_score": 30,
 }
 
 VALID_FILL_REQUEST_WITH_PATTERN = {
@@ -262,7 +336,7 @@ VALID_FILL_REQUEST_WITH_PATTERN = {
     "wordlists": ["comprehensive"],
     "timeout": 60,
     "min_score": 40,
-    "algorithm": "trie"
+    "algorithm": "trie",
 }
 
 VALID_FILL_REQUEST_WITH_THEME = {
@@ -271,8 +345,5 @@ VALID_FILL_REQUEST_WITH_THEME = {
     "wordlists": ["comprehensive"],
     "timeout": 120,
     "min_score": 50,
-    "theme_entries": {
-        "(0,0,across)": "THEME",
-        "(2,0,across)": "ENTRY"
-    }
+    "theme_entries": {"(0,0,across)": "THEME", "(2,0,across)": "ENTRY"},
 }

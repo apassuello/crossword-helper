@@ -20,14 +20,9 @@ def handle_error(code: str, message: str, status: int, details: dict = None):
     Returns:
         Flask response tuple (json, status)
     """
-    response = {
-        'error': {
-            'code': code,
-            'message': message
-        }
-    }
+    response = {"error": {"code": code, "message": message}}
 
     if details:
-        response['error']['details'] = details
+        response["error"]["details"] = details
 
     return jsonify(response), status

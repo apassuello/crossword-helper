@@ -6,12 +6,12 @@ This package contains components responsible for beam operations:
 - Beam expansion and pruning
 """
 
-from .diversity import DiversityStrategy, DiversityManager
+from .diversity import DiversityManager, DiversityStrategy
 from .manager import BeamManagementStrategy, BeamManager
 
 __all__ = [
-    'DiversityStrategy',
-    'DiversityManager',
-    'BeamManagementStrategy',
-    'BeamManager',
+    "DiversityStrategy",
+    "DiversityManager",
+    "BeamManagementStrategy",
+    "BeamManager",
 ]

@@ -107,12 +107,6 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 - Build time: ~2–3s for 454k words
 - Default for autofill algorithms
 
-### C. Aho-Corasick (`cli/src/fill/ahocorasick_matcher.py`)
-- Separate automaton per word length
-- Uses `pyahocorasick` library native wildcard support
-- **10–100× faster than regex** (~1–20ms)
-- Optional dependency; factory function falls back to Trie
-
 ---
 
 ## 6. Autofill Algorithms
@@ -356,7 +350,7 @@ Four escalating strategies:
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | Grid storage | NumPy int8 arrays | Fast bulk operations, memory-efficient cell encoding |
-| Pattern matching | Trie (default) / Aho-Corasick / Regex | 10–100× speedup over naive regex for 454k word dictionary |
+| Pattern matching | Trie (default) / Regex | 10–50× speedup over naive regex for 454k word dictionary |
 | Autofill core | CSP + AC-3 + MAC | Proven constraint satisfaction with arc consistency pruning |
 | Autofill quality | Beam Search + Diverse Beam | Global optimization, prevents local optima, better word quality |
 | Heuristics | MCV/MRV + LCV + Forward Checking | Standard AI search heuristics adapted for crossword domain |

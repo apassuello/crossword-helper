@@ -46,10 +46,13 @@ This document provides practical, developer-friendly documentation for the Cross
    - [Delete Wordlist](#delete-wordlist)
    - [Get Wordlist Statistics](#get-wordlist-statistics)
    - [Import Wordlist](#import-wordlist)
-8. [Common Patterns](#common-patterns)
-9. [Data Structures](#data-structures)
-10. [Error Handling](#error-handling)
-11. [Complete Workflows](#complete-workflows)
+8. [Constraint Analysis](#constraint-analysis)
+   - [Get Grid Constraints](#get-grid-constraints)
+   - [Get Placement Impact](#get-placement-impact)
+9. [Common Patterns](#common-patterns)
+10. [Data Structures](#data-structures)
+11. [Error Handling](#error-handling)
+12. [Complete Workflows](#complete-workflows)
 
 ---
 
@@ -2162,6 +2165,124 @@ eventSource.onmessage = (event) => {
 1. `status: "running"` - Operation in progress
 2. `status: "complete"` - Operation finished (includes result in `data` field)
 3. `status: "error"` - Operation failed
+
+---
+
+## Constraint Analysis
+
+### Get Grid Constraints
+
+Analyze every white cell in the grid and return how many valid words can fill the crossing slots through it. Powers the **crossing quality heatmap** in the UI.
+
+**Endpoint:** `POST /api/constraints`
+
+**Request:**
+```json
+{
+  "grid": [[".", "C", "A", "T", "."], ...],
+  "wordlists": ["comprehensive"]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `grid` | 2D array | Yes | Grid rows; `"."` = empty white cell, `"#"` = black square, letter = filled cell |
+| `wordlists` | string[] | No | Wordlist names to use (default: `["comprehensive"]`) |
+
+**Response:**
+```json
+{
+  "constraints": {
+    "0,0": {
+      "across_options": 142,
+      "down_options": 38,
+      "min_options": 38
+    },
+    "0,1": {
+      "across_options": 142,
+      "down_options": 55,
+      "min_options": 55
+    }
+  },
+  "summary": {
+    "total_cells": 189,
+    "critical_cells": 12,
+    "average_min_options": 47.3
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `constraints` | Map of `"row,col"` → per-cell data |
+| `across_options` | Words that fit the across slot through this cell |
+| `down_options` | Words that fit the down slot through this cell |
+| `min_options` | `min(across_options, down_options)` — the bottleneck |
+| `summary.critical_cells` | Cells where `min_options < 5` |
+
+**Status Codes:** `200 OK`, `400 Bad Request` (missing grid or no valid wordlists), `500 Internal Server Error`
+
+**UI heatmap thresholds:**
+
+| min_options | Color | Meaning |
+|-------------|-------|---------|
+| < 5 | 🔴 Red | Critical — almost no words fit |
+| 5–19 | 🟠 Orange | Tight |
+| 20–49 | 🟡 Yellow | Moderate |
+| ≥ 50 | 🟢 Green | Healthy |
+
+---
+
+### Get Placement Impact
+
+Analyze how placing a specific word in a slot affects the option count of all crossing slots. Useful for evaluating candidate words before committing.
+
+**Endpoint:** `POST /api/constraints/impact`
+
+**Request:**
+```json
+{
+  "grid": [[".", ".", ".", ".", "."], ...],
+  "word": "OCEAN",
+  "slot": {"row": 0, "col": 0, "direction": "across", "length": 5},
+  "wordlists": ["comprehensive"]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `grid` | 2D array | Yes | Current grid state |
+| `word` | string | Yes | Word to test (case-insensitive) |
+| `slot` | object | Yes | Target slot: `row`, `col`, `direction`, `length` |
+| `wordlists` | string[] | No | Wordlist names (default: `["comprehensive"]`) |
+
+**Response:**
+```json
+{
+  "impacts": {
+    "0,1,down": {"before": 142, "after": 18, "delta": -124, "length": 15},
+    "0,2,down": {"before": 97,  "after": 31, "delta": -66,  "length": 15},
+    "0,3,down": {"before": 110, "after": 44, "delta": -66,  "length": 15}
+  },
+  "summary": {
+    "total_crossings": 5,
+    "worst_delta": -124,
+    "crossings_eliminated": 0
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `impacts` | Map of `"row,col,direction"` → impact data for each crossing slot |
+| `before` | Option count before placing the word |
+| `after` | Option count after placing the word |
+| `delta` | `after - before` (always ≤ 0; placing a word never adds options) |
+| `length` | Length of the crossing slot |
+| `summary.worst_delta` | Most negative delta across all crossings |
+| `summary.crossings_eliminated` | Crossings reduced to 0 options (would make grid unsolvable) |
+
+**Status Codes:** `200 OK`, `400 Bad Request` (missing grid/word/slot fields), `500 Internal Server Error`
 
 ---
 

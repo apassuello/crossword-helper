@@ -2,13 +2,15 @@
 Unit tests for beam search autofill module.
 """
 
-import pytest
 import time
+from unittest.mock import patch
+
+import pytest
 from src.core.grid import Grid
-from src.fill.word_list import WordList
+from src.fill.beam_search_autofill import BeamSearchAutofill, BeamState
 from src.fill.pattern_matcher import PatternMatcher
 from src.fill.trie_pattern_matcher import TriePatternMatcher
-from src.fill.beam_search_autofill import BeamState, BeamSearchAutofill
+from src.fill.word_list import WordList
 
 
 class TestBeamState:
@@ -28,8 +30,8 @@ class TestBeamState:
             slots_filled=5,
             total_slots=10,
             score=75.0,
-            used_words={'CAT', 'DOG', 'BIRD'},
-            slot_assignments={(0, 0, 'across'): 'CAT'}
+            used_words={"CAT", "DOG", "BIRD"},
+            slot_assignments={(0, 0, "across"): "CAT"},
         )
 
         assert state.grid == sample_grid
@@ -37,27 +39,17 @@ class TestBeamState:
         assert state.total_slots == 10
         assert state.score == 75.0
         assert len(state.used_words) == 3
-        assert 'CAT' in state.used_words
+        assert "CAT" in state.used_words
 
     def test_completion_rate(self, sample_grid):
         """Test completion_rate calculation."""
-        state = BeamState(
-            grid=sample_grid,
-            slots_filled=7,
-            total_slots=10,
-            score=0.0
-        )
+        state = BeamState(grid=sample_grid, slots_filled=7, total_slots=10, score=0.0)
 
         assert state.completion_rate() == 0.7
 
     def test_completion_rate_zero_slots(self, sample_grid):
         """Test completion_rate with zero total slots."""
-        state = BeamState(
-            grid=sample_grid,
-            slots_filled=0,
-            total_slots=0,
-            score=0.0
-        )
+        state = BeamState(grid=sample_grid, slots_filled=0, total_slots=0, score=0.0)
 
         assert state.completion_rate() == 0.0
 
@@ -68,21 +60,21 @@ class TestBeamState:
             slots_filled=3,
             total_slots=10,
             score=50.0,
-            used_words={'CAT', 'DOG'},
-            slot_assignments={(0, 0, 'across'): 'CAT'}
+            used_words={"CAT", "DOG"},
+            slot_assignments={(0, 0, "across"): "CAT"},
         )
 
         cloned = original.clone()
 
         # Modify cloned state
-        cloned.used_words.add('BIRD')
-        cloned.slot_assignments[(1, 1, 'down')] = 'DOG'
-        cloned.grid.place_word('TEST', 0, 0, 'across')
+        cloned.used_words.add("BIRD")
+        cloned.slot_assignments[(1, 1, "down")] = "DOG"
+        cloned.grid.place_word("TEST", 0, 0, "across")
 
         # Original should be unchanged
-        assert 'BIRD' not in original.used_words
-        assert (1, 1, 'down') not in original.slot_assignments
-        assert original.grid.get_pattern_for_slot({'row': 0, 'col': 0, 'length': 4, 'direction': 'across'}) != 'TEST'
+        assert "BIRD" not in original.used_words
+        assert (1, 1, "down") not in original.slot_assignments
+        assert original.grid.get_pattern_for_slot({"row": 0, "col": 0, "length": 4, "direction": "across"}) != "TEST"
 
     def test_equality(self, sample_grid):
         """Test equality comparison."""
@@ -91,7 +83,7 @@ class TestBeamState:
             slots_filled=3,
             total_slots=10,
             score=50.0,
-            used_words={'CAT', 'DOG'}
+            used_words={"CAT", "DOG"},
         )
 
         state2 = BeamState(
@@ -99,7 +91,7 @@ class TestBeamState:
             slots_filled=3,
             total_slots=10,
             score=50.0,
-            used_words={'CAT', 'DOG'}
+            used_words={"CAT", "DOG"},
         )
 
         assert state1 == state2
@@ -111,7 +103,7 @@ class TestBeamState:
             slots_filled=3,
             total_slots=10,
             score=50.0,
-            used_words={'CAT', 'DOG'}
+            used_words={"CAT", "DOG"},
         )
 
         state2 = BeamState(
@@ -119,7 +111,7 @@ class TestBeamState:
             slots_filled=3,
             total_slots=10,
             score=50.0,
-            used_words={'CAT', 'BIRD'}
+            used_words={"CAT", "BIRD"},
         )
 
         assert state1 != state2
@@ -133,21 +125,63 @@ class TestBeamSearchAutofill:
         """Create a sample word list for testing."""
         words = [
             # 3-letter words
-            'CAT', 'COT', 'CUT', 'BAT', 'BOT', 'BUT',
-            'RAT', 'ROT', 'RUT', 'MAT', 'MOT', 'MUT',
-            'ACE', 'ACT', 'ART', 'ARC', 'ARM', 'ARE',
-            'TEA', 'TEN', 'TAN', 'TAR', 'TAX', 'TUB',
+            "CAT",
+            "COT",
+            "CUT",
+            "BAT",
+            "BOT",
+            "BUT",
+            "RAT",
+            "ROT",
+            "RUT",
+            "MAT",
+            "MOT",
+            "MUT",
+            "ACE",
+            "ACT",
+            "ART",
+            "ARC",
+            "ARM",
+            "ARE",
+            "TEA",
+            "TEN",
+            "TAN",
+            "TAR",
+            "TAX",
+            "TUB",
             # 4-letter words
-            'CATS', 'BATS', 'RATS', 'MATS', 'ARTS',
-            'TEAR', 'BEAR', 'DEAR', 'FEAR', 'HEAR',
-            'CART', 'DART', 'PART', 'TART', 'WART',
+            "CATS",
+            "BATS",
+            "RATS",
+            "MATS",
+            "ARTS",
+            "TEAR",
+            "BEAR",
+            "DEAR",
+            "FEAR",
+            "HEAR",
+            "CART",
+            "DART",
+            "PART",
+            "TART",
+            "WART",
             # 5-letter words
-            'APPLE', 'AMPLE', 'MAPLE', 'TABLE', 'CABLE',
-            'CABIN', 'CAPER', 'TAPER', 'PAPER',
+            "APPLE",
+            "AMPLE",
+            "MAPLE",
+            "TABLE",
+            "CABLE",
+            "CABIN",
+            "CAPER",
+            "TAPER",
+            "PAPER",
             # 7-letter words
-            'CABBAGE', 'BAGGAGE', 'PACKAGE',
+            "CABBAGE",
+            "BAGGAGE",
+            "PACKAGE",
             # 11-letter words
-            'ABRACADABRA', 'HOCUSPOCUS',
+            "ABRACADABRA",
+            "HOCUSPOCUS",
         ]
         return WordList(words)
 
@@ -173,11 +207,7 @@ class TestBeamSearchAutofill:
 
     def test_init(self, small_grid, word_list, pattern_matcher_regex):
         """Test creating BeamSearchAutofill solver."""
-        autofill = BeamSearchAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_regex
-        )
+        autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex)
 
         assert autofill.grid == small_grid
         assert autofill.word_list == word_list
@@ -195,7 +225,7 @@ class TestBeamSearchAutofill:
             beam_width=3,
             candidates_per_slot=5,
             min_score=20,
-            diversity_bonus=0.2
+            diversity_bonus=0.2,
         )
 
         assert autofill.beam_width == 3
@@ -206,40 +236,20 @@ class TestBeamSearchAutofill:
     def test_init_invalid_beam_width(self, small_grid, word_list, pattern_matcher_regex):
         """Test that invalid beam_width raises ValueError."""
         with pytest.raises(ValueError, match="beam_width must be 1-20"):
-            BeamSearchAutofill(
-                small_grid,
-                word_list,
-                pattern_matcher_regex,
-                beam_width=0
-            )
+            BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, beam_width=0)
 
         with pytest.raises(ValueError, match="beam_width must be 1-20"):
-            BeamSearchAutofill(
-                small_grid,
-                word_list,
-                pattern_matcher_regex,
-                beam_width=25
-            )
+            BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, beam_width=25)
 
     def test_init_invalid_candidates_per_slot(self, small_grid, word_list, pattern_matcher_regex):
         """Test that invalid candidates_per_slot raises ValueError."""
         with pytest.raises(ValueError, match="candidates_per_slot must be 1-100"):
-            BeamSearchAutofill(
-                small_grid,
-                word_list,
-                pattern_matcher_regex,
-                candidates_per_slot=0
-            )
+            BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, candidates_per_slot=0)
 
     def test_init_invalid_diversity_bonus(self, small_grid, word_list, pattern_matcher_regex):
         """Test that invalid diversity_bonus raises ValueError."""
         with pytest.raises(ValueError, match="diversity_bonus must be 0.0-1.0"):
-            BeamSearchAutofill(
-                small_grid,
-                word_list,
-                pattern_matcher_regex,
-                diversity_bonus=-0.1
-            )
+            BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, diversity_bonus=-0.1)
 
     def test_fill_already_complete_grid(self, word_list, pattern_matcher_regex):
         """Test filling an already complete grid."""
@@ -247,7 +257,7 @@ class TestBeamSearchAutofill:
         # Fill entire grid with letters
         for row in range(11):
             for col in range(11):
-                grid.set_letter(row, col, 'A')
+                grid.set_letter(row, col, "A")
 
         autofill = BeamSearchAutofill(grid, word_list, pattern_matcher_regex)
         result = autofill.fill(timeout=10)
@@ -271,18 +281,18 @@ class TestBeamSearchAutofill:
             word_list,
             pattern_matcher_trie,
             beam_width=2,
-            candidates_per_slot=3
+            candidates_per_slot=3,
         )
         result = autofill.fill(timeout=10)
 
         # Check result structure
-        assert hasattr(result, 'success')
-        assert hasattr(result, 'grid')
-        assert hasattr(result, 'time_elapsed')
-        assert hasattr(result, 'slots_filled')
-        assert hasattr(result, 'total_slots')
-        assert hasattr(result, 'problematic_slots')
-        assert hasattr(result, 'iterations')
+        assert hasattr(result, "success")
+        assert hasattr(result, "grid")
+        assert hasattr(result, "time_elapsed")
+        assert hasattr(result, "slots_filled")
+        assert hasattr(result, "total_slots")
+        assert hasattr(result, "problematic_slots")
+        assert hasattr(result, "iterations")
 
         # Check types
         assert isinstance(result.success, bool)
@@ -295,16 +305,11 @@ class TestBeamSearchAutofill:
 
     def test_fill_respects_timeout(self, small_grid, word_list, pattern_matcher_regex):
         """Test that fill respects timeout."""
-        autofill = BeamSearchAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_regex,
-            beam_width=2
-        )
+        autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, beam_width=2)
 
         timeout = 10
         start = time.time()
-        result = autofill.fill(timeout=timeout)
+        autofill.fill(timeout=timeout)
         elapsed = time.time() - start
 
         # Should not exceed timeout by more than 5 seconds (fixed ceiling, not % —
@@ -313,12 +318,7 @@ class TestBeamSearchAutofill:
 
     def test_fill_no_duplicate_words(self, small_grid, word_list, pattern_matcher_trie):
         """Test that fill doesn't use duplicate words."""
-        autofill = BeamSearchAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=3
-        )
+        autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_trie, beam_width=3)
 
         result = autofill.fill(timeout=15)
 
@@ -326,23 +326,17 @@ class TestBeamSearchAutofill:
         words_in_grid = []
         for slot in result.grid.get_word_slots():
             pattern = result.grid.get_pattern_for_slot(slot)
-            if '?' not in pattern:  # Only filled slots
+            if "?" not in pattern:  # Only filled slots
                 words_in_grid.append(pattern)
 
         # Check for duplicates
-        assert len(words_in_grid) == len(set(words_in_grid)), \
-            f"Found duplicate words: {words_in_grid}"
+        assert len(words_in_grid) == len(set(words_in_grid)), f"Found duplicate words: {words_in_grid}"
 
     def test_compute_score(self, small_grid, word_list, pattern_matcher_regex):
         """Test _compute_score method."""
         autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex)
 
-        state = BeamState(
-            grid=small_grid,
-            slots_filled=5,
-            total_slots=10,
-            score=0.0
-        )
+        state = BeamState(grid=small_grid, slots_filled=5, total_slots=10, score=0.0)
 
         # Test score calculation
         score = autofill._compute_score(state, word_score=80)
@@ -354,12 +348,7 @@ class TestBeamSearchAutofill:
         """Test _compute_score with full completion."""
         autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex)
 
-        state = BeamState(
-            grid=small_grid,
-            slots_filled=10,
-            total_slots=10,
-            score=0.0
-        )
+        state = BeamState(grid=small_grid, slots_filled=10, total_slots=10, score=0.0)
 
         score = autofill._compute_score(state, word_score=100)
 
@@ -376,10 +365,10 @@ class TestBeamSearchAutofill:
             total_slots=10,
             score=0.0,
             slot_assignments={
-                (0, 0, 'across'): 'CAT',
-                (1, 0, 'across'): 'DOG',
-                (2, 0, 'across'): 'BIRD'
-            }
+                (0, 0, "across"): "CAT",
+                (1, 0, "across"): "DOG",
+                (2, 0, "across"): "BIRD",
+            },
         )
 
         state2 = BeamState(
@@ -388,10 +377,10 @@ class TestBeamSearchAutofill:
             total_slots=10,
             score=0.0,
             slot_assignments={
-                (0, 0, 'across'): 'CAT',  # Same
-                (1, 0, 'across'): 'RAT',  # Different
-                (3, 0, 'across'): 'BAT'   # Only in state2
-            }
+                (0, 0, "across"): "CAT",  # Same
+                (1, 0, "across"): "RAT",  # Different
+                (3, 0, "across"): "BAT",  # Only in state2
+            },
         )
 
         diff_count = autofill._count_differences(state1, state2)
@@ -406,12 +395,7 @@ class TestBeamSearchAutofill:
 
         autofill = BeamSearchAutofill(grid, word_list, pattern_matcher_trie)
 
-        state = BeamState(
-            grid=grid.clone(),
-            slots_filled=0,
-            total_slots=10,
-            score=0.0
-        )
+        state = BeamState(grid=grid.clone(), slots_filled=0, total_slots=10, score=0.0)
 
         # Empty grid should be viable (has candidates for all slots)
         is_viable, risk_penalty = autofill._evaluate_state_viability(state)
@@ -424,7 +408,7 @@ class TestBeamSearchAutofill:
         grid.set_black_square(5, 5)
 
         # Create impossible pattern (all Q's - unlikely to have matches)
-        grid.place_word('QQQ', 0, 0, 'across')
+        grid.place_word("QQQ", 0, 0, "across")
 
         autofill = BeamSearchAutofill(grid, word_list, pattern_matcher_trie)
 
@@ -433,7 +417,7 @@ class TestBeamSearchAutofill:
             slots_filled=1,
             total_slots=10,
             score=0.0,
-            used_words={'QQQ'}
+            used_words={"QQQ"},
         )
 
         # Method should return tuple (bool, float)
@@ -461,28 +445,17 @@ class TestBeamSearchAutofill:
         if len(sorted_slots) >= 2:
             for i in range(len(sorted_slots) - 1):
                 # Next slot should have length <= current slot
-                assert sorted_slots[i+1]['length'] <= sorted_slots[i]['length']
+                assert sorted_slots[i + 1]["length"] <= sorted_slots[i]["length"]
 
     def test_expand_beam_basic(self, word_list, pattern_matcher_trie):
         """Test _expand_beam basic functionality."""
         grid = Grid(11)
         grid.set_black_square(5, 5)
 
-        autofill = BeamSearchAutofill(
-            grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=2,
-            candidates_per_slot=3
-        )
+        autofill = BeamSearchAutofill(grid, word_list, pattern_matcher_trie, beam_width=2, candidates_per_slot=3)
 
         # Create initial beam
-        state = BeamState(
-            grid=grid.clone(),
-            slots_filled=0,
-            total_slots=10,
-            score=0.0
-        )
+        state = BeamState(grid=grid.clone(), slots_filled=0, total_slots=10, score=0.0)
         beam = [state]
 
         # Get a slot to fill
@@ -518,7 +491,7 @@ class TestBeamSearchAutofill:
                 slots_filled=i,
                 total_slots=10,
                 score=float(i * 10),  # Scores: 0, 10, 20, ..., 90
-                used_words=set()
+                used_words=set(),
             )
             states.append(state)
 
@@ -534,12 +507,7 @@ class TestBeamSearchAutofill:
 
     def test_apply_diversity_bonus(self, small_grid, word_list, pattern_matcher_regex):
         """Test _apply_diversity_bonus modifies scores."""
-        autofill = BeamSearchAutofill(
-            small_grid,
-            word_list,
-            pattern_matcher_regex,
-            diversity_bonus=0.1
-        )
+        autofill = BeamSearchAutofill(small_grid, word_list, pattern_matcher_regex, diversity_bonus=0.1)
 
         # Create beam with different slot assignments
         state1 = BeamState(
@@ -547,7 +515,7 @@ class TestBeamSearchAutofill:
             slots_filled=2,
             total_slots=10,
             score=50.0,
-            slot_assignments={(0, 0, 'across'): 'CAT', (1, 0, 'across'): 'DOG'}
+            slot_assignments={(0, 0, "across"): "CAT", (1, 0, "across"): "DOG"},
         )
 
         state2 = BeamState(
@@ -555,7 +523,7 @@ class TestBeamSearchAutofill:
             slots_filled=2,
             total_slots=10,
             score=50.0,
-            slot_assignments={(0, 0, 'across'): 'RAT', (1, 0, 'across'): 'BAT'}
+            slot_assignments={(0, 0, "across"): "RAT", (1, 0, "across"): "BAT"},
         )
 
         beam = [state1, state2]
@@ -582,17 +550,100 @@ class TestBeamSearchAutofill:
                 else:
                     grid.set_black_square(row, col, enforce_symmetry=False)
 
-        autofill = BeamSearchAutofill(
-            grid,
-            word_list,
-            pattern_matcher_trie,
-            beam_width=3,
-            candidates_per_slot=5
-        )
+        autofill = BeamSearchAutofill(grid, word_list, pattern_matcher_trie, beam_width=3, candidates_per_slot=5)
 
         result = autofill.fill(timeout=15)
 
         # Should make some progress
-        assert result.slots_filled >= 0
+        assert result.slots_filled > 0, f"Expected some slots filled, got {result.slots_filled}"
         assert result.iterations > 0
         assert result.time_elapsed < 15.0
+
+
+class TestBeamBacktrackingOrder:
+    """Verify conflict-directed backjumping runs BEFORE candidate expansion."""
+
+    @pytest.fixture
+    def orchestrator(self):
+        from src.core.grid import Grid
+        from src.fill.beam_search.orchestrator import BeamSearchOrchestrator
+        from src.fill.trie_pattern_matcher import TriePatternMatcher
+        from src.fill.word_list import WordList
+
+        words = [
+            "CAT",
+            "COT",
+            "CUT",
+            "BAT",
+            "BOT",
+            "ACE",
+            "ACT",
+            "ART",
+            "ARE",
+            "ARC",
+            "CATS",
+            "BATS",
+            "RATS",
+            "ACTS",
+        ]
+        wl = WordList(words)
+        pm = TriePatternMatcher(wl)
+        grid = Grid(11)
+        return BeamSearchOrchestrator(grid, wl, pm, beam_width=2, candidates_per_slot=5, partial_fill_mode=False)
+
+    @pytest.fixture
+    def dummy_beam(self, orchestrator):
+        state = BeamState(
+            grid=orchestrator.grid.clone(),
+            slots_filled=1,
+            total_slots=4,
+            score=50.0,
+            used_words={"CAT"},
+            slot_assignments={(0, 0, "across"): "CAT"},
+        )
+        return [state]
+
+    @pytest.fixture
+    def dummy_slot(self):
+        return {"row": 0, "col": 0, "length": 3, "direction": "across"}
+
+    def test_conflict_analysis_runs_before_candidate_expansion(self, orchestrator, dummy_beam, dummy_slot):
+        """_analyze_slot_conflicts is called before expand_beam for candidates.
+
+        This test catches a regression to the old ordering (2x/5x candidates first).
+        With the new ordering: analyze_conflicts runs first, then expand_beam.
+        If expand_beam succeeds on its first call, analyze_conflicts should still
+        have been called — it runs unconditionally before any expand_beam for candidates.
+        In the OLD ordering, a successful early expand_beam would skip conflict analysis.
+        """
+        call_order = []
+
+        def record_analyze(*args, **kwargs):
+            call_order.append("analyze_conflicts")
+            return []  # no conflicts found, fall through to candidate expansion
+
+        def record_expand(*args, **kwargs):
+            call_order.append("expand_beam")
+            return [dummy_beam[0]]  # succeed on first expand call
+
+        with (
+            patch.object(orchestrator, "_analyze_slot_conflicts", side_effect=record_analyze),
+            patch.object(orchestrator.beam_manager, "expand_beam", side_effect=record_expand),
+        ):
+            result = orchestrator._try_backtracking(dummy_beam, dummy_slot)
+
+        assert call_order[0] == "analyze_conflicts", (
+            f"Expected conflict analysis first, got ordering: {call_order}. "
+            "This means backjumping no longer runs before candidate expansion."
+        )
+        assert result, "Expected _try_backtracking to return a result"
+
+    def test_conflict_analysis_called_exactly_once(self, orchestrator, dummy_beam, dummy_slot):
+        """_analyze_slot_conflicts is called exactly once per _try_backtracking call."""
+        with (
+            patch.object(orchestrator, "_analyze_slot_conflicts", return_value=[]) as mock_analyze,
+            patch.object(orchestrator.beam_manager, "expand_beam", return_value=[]),
+        ):
+            orchestrator._try_backtracking(dummy_beam, dummy_slot)
+
+        assert mock_analyze.call_count == 1, f"Expected _analyze_slot_conflicts called once, got {mock_analyze.call_count}."

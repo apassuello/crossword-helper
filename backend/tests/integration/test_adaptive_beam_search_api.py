@@ -9,8 +9,9 @@ This test reproduces the exact scenario reported by the user:
 - Comprehensive wordlist
 """
 
-import pytest
 import json
+
+import pytest
 
 
 def create_21x21_grid_with_theme_words():
@@ -69,14 +70,14 @@ def test_adaptive_beam_search_comprehensive_wordlist(client, sse_parser):
         "min_score": 10,
         "algorithm": "beam",  # KEY: Beam search algorithm
         "adaptive_mode": True,  # KEY: Adaptive mode enabled
-        "max_adaptations": 5
+        "max_adaptations": 5,
     }
 
     # Make request to /api/fill/with-progress
     response = client.post(
         "/api/fill/with-progress",
         data=json.dumps(request_data),
-        content_type="application/json"
+        content_type="application/json",
     )
 
     # Should return 202 with task ID
@@ -95,7 +96,7 @@ def test_adaptive_beam_search_comprehensive_wordlist(client, sse_parser):
     # The SSE stream tests verify the actual stream behavior
 
     # 202 + task_id proves startup didn't crash. No sleep needed.
-    print(f"✓ Autofill process started successfully for adaptive + beam search")
+    print("✓ Autofill process started successfully for adaptive + beam search")
 
 
 def test_adaptive_mode_without_beam_search(client):
@@ -112,13 +113,13 @@ def test_adaptive_mode_without_beam_search(client):
         "min_score": 10,
         "algorithm": "trie",  # Standard CSP with trie
         "adaptive_mode": True,
-        "max_adaptations": 5
+        "max_adaptations": 5,
     }
 
     response = client.post(
         "/api/fill/with-progress",
         data=json.dumps(request_data),
-        content_type="application/json"
+        content_type="application/json",
     )
 
     assert response.status_code == 202
@@ -141,13 +142,13 @@ def test_beam_search_without_adaptive_mode(client):
         "timeout": 60,
         "min_score": 10,
         "algorithm": "beam",  # Beam search
-        "adaptive_mode": False  # No adaptive mode
+        "adaptive_mode": False,  # No adaptive mode
     }
 
     response = client.post(
         "/api/fill/with-progress",
         data=json.dumps(request_data),
-        content_type="application/json"
+        content_type="application/json",
     )
 
     assert response.status_code == 202
@@ -181,13 +182,13 @@ def test_cli_command_construction(client, mocker):
         "min_score": 10,
         "algorithm": "beam",
         "adaptive_mode": True,
-        "max_adaptations": 5
+        "max_adaptations": 5,
     }
 
     response = client.post(
         "/api/fill/with-progress",
         data=json.dumps(request_data),
-        content_type="application/json"
+        content_type="application/json",
     )
 
     assert response.status_code == 202

@@ -14,13 +14,13 @@ Uses a 7x7 grid with standard black square pattern and the `comprehensive` wordl
 for fast, reliable test execution (~2-20s per test).
 """
 
-import pytest
 import json
+import os
 import subprocess
 import sys
 import tempfile
-import os
 
+import pytest
 
 # Realistic 7x7 grid with symmetric black squares (22 slots)
 STANDARD_GRID_7x7 = {
@@ -33,7 +33,7 @@ STANDARD_GRID_7x7 = {
         [".", ".", ".", ".", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
-    ]
+    ],
 }
 
 # 7x7 grid with some pre-filled letters
@@ -47,11 +47,10 @@ PREFILLED_GRID_7x7 = {
         [".", ".", ".", ".", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
         [".", ".", ".", "#", ".", ".", "."],
-    ]
+    ],
 }
 
 WORDLIST = "data/wordlists/comprehensive.txt"
-
 
 
 def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeout=20):
@@ -61,20 +60,27 @@ def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeou
     Returns:
         tuple: (return_code, stdout, stderr)
     """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(grid_data, f)
         grid_file = f.name
 
     try:
         cmd = [
-            sys.executable, "-m", "cli.src.cli", "fill",
+            sys.executable,
+            "-m",
+            "cli.src.cli",
+            "fill",
             grid_file,
-            "--wordlists", WORDLIST,
-            "--timeout", str(timeout),
-            "--min-score", "1",
-            "--algorithm", algorithm,
+            "--wordlists",
+            WORDLIST,
+            "--timeout",
+            str(timeout),
+            "--min-score",
+            "1",
+            "--algorithm",
+            algorithm,
             "--allow-nonstandard",
-            "--json-output"
+            "--json-output",
         ]
 
         if adaptive:
@@ -85,7 +91,7 @@ def run_cli_fill(grid_data, algorithm, adaptive=False, max_adaptations=2, timeou
             cmd,
             capture_output=True,
             text=True,
-            timeout=timeout + 10  # Add buffer for subprocess overhead
+            timeout=timeout + 10,  # Add buffer for subprocess overhead
         )
 
         return result.returncode, result.stdout, result.stderr
@@ -107,7 +113,7 @@ def assert_no_crash(stdout, stderr):
 
 def assert_valid_json_output(stdout):
     """Verify stdout contains valid JSON with expected keys."""
-    for line in stdout.split('\n'):
+    for line in stdout.split("\n"):
         if line.strip().startswith('{"success"'):
             result = json.loads(line)
             assert "success" in result
@@ -123,9 +129,7 @@ class TestCLIAutofillScenarios:
     @pytest.mark.slow
     def test_trie_standard_grid(self):
         """CSP/Trie on 7x7 grid with black squares — should fill completely."""
-        returncode, stdout, stderr = run_cli_fill(
-            STANDARD_GRID_7x7, "trie", adaptive=False, timeout=15
-        )
+        returncode, stdout, stderr = run_cli_fill(STANDARD_GRID_7x7, "trie", adaptive=False, timeout=15)
         assert_no_crash(stdout, stderr)
         result = assert_valid_json_output(stdout)
         assert result["success"] is True
@@ -133,18 +137,14 @@ class TestCLIAutofillScenarios:
     @pytest.mark.slow
     def test_beam_standard_grid(self):
         """Beam search on 7x7 grid — should complete without crash."""
-        returncode, stdout, stderr = run_cli_fill(
-            STANDARD_GRID_7x7, "beam", adaptive=False, timeout=30
-        )
+        returncode, stdout, stderr = run_cli_fill(STANDARD_GRID_7x7, "beam", adaptive=False, timeout=30)
         assert_no_crash(stdout, stderr)
         assert_valid_json_output(stdout)
 
     @pytest.mark.slow
     def test_adaptive_trie_standard_grid(self):
         """Adaptive + CSP/Trie on 7x7 grid — should complete without crash."""
-        returncode, stdout, stderr = run_cli_fill(
-            STANDARD_GRID_7x7, "trie", adaptive=True, timeout=15
-        )
+        returncode, stdout, stderr = run_cli_fill(STANDARD_GRID_7x7, "trie", adaptive=True, timeout=15)
         assert "TypeError: Autofill.fill() got an unexpected keyword argument 'timeout'" not in stderr
         assert_no_crash(stdout, stderr)
         assert_valid_json_output(stdout)
@@ -153,9 +153,7 @@ class TestCLIAutofillScenarios:
     def test_adaptive_beam_standard_grid(self):
         """Adaptive + Beam on 7x7 grid — the critical combo that was broken."""
         try:
-            returncode, stdout, stderr = run_cli_fill(
-                STANDARD_GRID_7x7, "beam", adaptive=True, timeout=30
-            )
+            returncode, stdout, stderr = run_cli_fill(STANDARD_GRID_7x7, "beam", adaptive=True, timeout=30)
             assert_no_crash(stdout, stderr)
             assert_valid_json_output(stdout)
         except subprocess.TimeoutExpired:
@@ -164,9 +162,7 @@ class TestCLIAutofillScenarios:
     @pytest.mark.slow
     def test_beam_prefilled_grid(self):
         """Beam search with pre-filled letters — should not crash."""
-        returncode, stdout, stderr = run_cli_fill(
-            PREFILLED_GRID_7x7, "beam", adaptive=False, timeout=30
-        )
+        returncode, stdout, stderr = run_cli_fill(PREFILLED_GRID_7x7, "beam", adaptive=False, timeout=30)
         assert_no_crash(stdout, stderr)
         assert_valid_json_output(stdout)
 
@@ -174,9 +170,7 @@ class TestCLIAutofillScenarios:
     def test_adaptive_beam_prefilled(self):
         """Adaptive + Beam with pre-filled letters — should not crash."""
         try:
-            returncode, stdout, stderr = run_cli_fill(
-                PREFILLED_GRID_7x7, "beam", adaptive=True, timeout=30
-            )
+            returncode, stdout, stderr = run_cli_fill(PREFILLED_GRID_7x7, "beam", adaptive=True, timeout=30)
             assert_no_crash(stdout, stderr)
             assert_valid_json_output(stdout)
         except subprocess.TimeoutExpired:
@@ -199,12 +193,10 @@ class TestCLIAutofillScenarios:
                 [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
                 ["#", ".", ".", ".", ".", ".", "#", ".", ".", ".", "."],
                 ["#", ".", ".", ".", ".", ".", "#", ".", ".", ".", "."],
-            ]
+            ],
         }
         try:
-            returncode, stdout, stderr = run_cli_fill(
-                grid_data, "beam", adaptive=False, timeout=30
-            )
+            returncode, stdout, stderr = run_cli_fill(grid_data, "beam", adaptive=False, timeout=30)
             assert_no_crash(stdout, stderr)
         except subprocess.TimeoutExpired:
             pytest.skip("Beam on 11x11 exceeded timeout — cannot verify crash fix")
@@ -223,13 +215,13 @@ class TestAPIAutofillScenarios:
             "wordlists": ["comprehensive"],
             "timeout": 30,
             "min_score": 10,
-            "algorithm": "beam"
+            "algorithm": "beam",
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -249,13 +241,13 @@ class TestAPIAutofillScenarios:
             "min_score": 10,
             "algorithm": "beam",
             "adaptive_mode": True,
-            "max_adaptations": 2
+            "max_adaptations": 2,
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202
@@ -275,13 +267,13 @@ class TestAPIAutofillScenarios:
             "min_score": 10,
             "algorithm": "trie",
             "adaptive_mode": True,
-            "max_adaptations": 2
+            "max_adaptations": 2,
         }
 
         response = client.post(
             "/api/fill/with-progress",
             data=json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         assert response.status_code == 202

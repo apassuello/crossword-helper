@@ -32,20 +32,20 @@ class TestAutoNumber:
         # C A T
 
         # Row 0: R A T (black squares to isolate)
-        grid.set_letter(0, 0, 'R')
-        grid.set_letter(0, 1, 'A')
-        grid.set_letter(0, 2, 'T')
+        grid.set_letter(0, 0, "R")
+        grid.set_letter(0, 1, "A")
+        grid.set_letter(0, 2, "T")
         grid.set_black_square(0, 3, enforce_symmetry=False)
 
         # Row 1: # A #
         grid.set_black_square(1, 0, enforce_symmetry=False)
-        grid.set_letter(1, 1, 'A')
+        grid.set_letter(1, 1, "A")
         grid.set_black_square(1, 2, enforce_symmetry=False)
 
         # Row 2: C A T
-        grid.set_letter(2, 0, 'C')
-        grid.set_letter(2, 1, 'A')
-        grid.set_letter(2, 2, 'T')
+        grid.set_letter(2, 0, "C")
+        grid.set_letter(2, 1, "A")
+        grid.set_letter(2, 2, "T")
         grid.set_black_square(2, 3, enforce_symmetry=False)
 
         numbering = GridNumbering.auto_number(grid)
@@ -172,9 +172,9 @@ class TestGetCluePositions:
         #       . . . # .
         #       # . . # .
         #       . . . # .
-        grid.set_letter(0, 0, 'C')
-        grid.set_letter(0, 1, 'A')
-        grid.set_letter(0, 2, 'T')
+        grid.set_letter(0, 0, "C")
+        grid.set_letter(0, 1, "A")
+        grid.set_letter(0, 2, "T")
         grid.set_black_square(0, 3, enforce_symmetry=False)
         grid.set_black_square(1, 0, enforce_symmetry=False)
 
@@ -183,13 +183,13 @@ class TestGetCluePositions:
         # Find clue at (0,0)
         clue_1 = None
         for num, info in clue_info.items():
-            if info['position'] == (0, 0):
+            if info["position"] == (0, 0):
                 clue_1 = info
                 break
 
         assert clue_1 is not None
-        assert clue_1['has_across'] is True
-        assert clue_1['across_length'] == 3
+        assert clue_1["has_across"] is True
+        assert clue_1["across_length"] == 3
 
     def test_simple_down_clue(self):
         """Test getting clue info for down word."""
@@ -199,9 +199,9 @@ class TestGetCluePositions:
         #       T # . . .
         #       # # . . .
         #       . # . . .
-        grid.set_letter(0, 0, 'C')
-        grid.set_letter(1, 0, 'A')
-        grid.set_letter(2, 0, 'T')
+        grid.set_letter(0, 0, "C")
+        grid.set_letter(1, 0, "A")
+        grid.set_letter(2, 0, "T")
         grid.set_black_square(3, 0, enforce_symmetry=False)
         grid.set_black_square(0, 1, enforce_symmetry=False)
 
@@ -210,13 +210,13 @@ class TestGetCluePositions:
         # Find clue at (0,0)
         clue_1 = None
         for num, info in clue_info.items():
-            if info['position'] == (0, 0):
+            if info["position"] == (0, 0):
                 clue_1 = info
                 break
 
         assert clue_1 is not None
-        assert clue_1['has_down'] is True
-        assert clue_1['down_length'] == 3
+        assert clue_1["has_down"] is True
+        assert clue_1["down_length"] == 3
 
     def test_clue_both_directions(self):
         """Test clue that has both across and down words."""
@@ -236,24 +236,24 @@ class TestGetCluePositions:
         # Find clue at (0,2) which starts across
         across_clue = None
         for num, info in clue_info.items():
-            if info['position'] == (0, 2):
+            if info["position"] == (0, 2):
                 across_clue = info
                 break
 
         # Find clue at (2,0) which starts down
         down_clue = None
         for num, info in clue_info.items():
-            if info['position'] == (2, 0):
+            if info["position"] == (2, 0):
                 down_clue = info
                 break
 
         assert across_clue is not None
-        assert across_clue['has_across'] is True
-        assert across_clue['across_length'] == 9  # 11 - 2 = 9
+        assert across_clue["has_across"] is True
+        assert across_clue["across_length"] == 9  # 11 - 2 = 9
 
         assert down_clue is not None
-        assert down_clue['has_down'] is True
-        assert down_clue['down_length'] == 9   # 11 - 2 = 9
+        assert down_clue["has_down"] is True
+        assert down_clue["down_length"] == 9  # 11 - 2 = 9
 
     def test_clue_numbers_match_positions(self):
         """Test that clue numbers correspond to positions correctly."""
@@ -269,7 +269,7 @@ class TestGetCluePositions:
 
         # All positions should be valid
         for num, info in clue_info.items():
-            row, col = info['position']
+            row, col = info["position"]
             assert 0 <= row < 11
             assert 0 <= col < 11
             assert not grid.is_black(row, col)
@@ -284,7 +284,7 @@ class TestGetCluePositions:
 
         for num, info in clue_info.items():
             # Every clue must start at least one word
-            assert info['has_across'] or info['has_down']
+            assert info["has_across"] or info["has_down"]
 
     def test_word_lengths_are_correct(self):
         """Test that reported word lengths match actual slots."""
@@ -305,15 +305,15 @@ class TestGetCluePositions:
         # (0,0) should have across length 3 (columns 0-2) and down length 3 (rows 0-2)
         clue_1 = None
         for num, info in clue_info.items():
-            if info['position'] == (0, 0):
+            if info["position"] == (0, 0):
                 clue_1 = info
                 break
 
         assert clue_1 is not None
-        if clue_1['has_across']:
-            assert clue_1['across_length'] == 3
-        if clue_1['has_down']:
-            assert clue_1['down_length'] == 3
+        if clue_1["has_across"]:
+            assert clue_1["across_length"] == 3
+        if clue_1["has_down"]:
+            assert clue_1["down_length"] == 3
 
     def test_clue_positions_include_only_word_starts(self):
         """Test that only cells starting words are included."""
@@ -322,16 +322,16 @@ class TestGetCluePositions:
         #       . . . . . . . . . . .
         #       . . . . . . . . . . .
         # Add black square after WORD to isolate it
-        grid.set_letter(0, 0, 'W')
-        grid.set_letter(0, 1, 'O')
-        grid.set_letter(0, 2, 'R')
-        grid.set_letter(0, 3, 'D')
+        grid.set_letter(0, 0, "W")
+        grid.set_letter(0, 1, "O")
+        grid.set_letter(0, 2, "R")
+        grid.set_letter(0, 3, "D")
         grid.set_black_square(0, 4, enforce_symmetry=False)
 
         clue_info = GridNumbering.get_clue_positions(grid)
 
         # (0,0) starts across word, should be numbered
-        assert any(info['position'] == (0, 0) for info in clue_info.values())
+        assert any(info["position"] == (0, 0) for info in clue_info.values())
 
         # (0,1), (0,2), (0,3) also start down words, so they WILL be numbered
         # Only cells that don't start ANY word shouldn't be numbered

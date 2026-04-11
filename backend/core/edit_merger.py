@@ -5,9 +5,9 @@ Merges user edits into saved autofill state while maintaining consistency
 and detecting unsolvable configurations.
 """
 
-from typing import Dict, List, Set
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GridChanges:
     """Tracks changes between saved and edited grids."""
+
     filled_slots: List[int]  # Slot IDs that were filled by user
     emptied_slots: List[int]  # Slot IDs that were emptied by user
     modified_slots: List[int]  # Slot IDs where content changed
@@ -40,7 +41,7 @@ class EditMerger:
         self,
         saved_state,  # CSPState from state_manager
         edited_grid_dict: Dict,
-        word_list=None  # Optional: for validating new words
+        word_list=None,  # Optional: for validating new words
     ):
         """
         Merge user edits into saved state.
@@ -71,16 +72,13 @@ class EditMerger:
         edited_grid = Grid.from_dict(edited_grid_dict)
 
         # Detect changes
-        changes = self._detect_changes(
-            saved_grid,
-            edited_grid,
-            saved_state.slot_list,
-            saved_state.slot_id_map
-        )
+        changes = self._detect_changes(saved_grid, edited_grid, saved_state.slot_list, saved_state.slot_id_map)
 
-        self.logger.info(f"Detected changes: {len(changes.filled_slots)} filled, "
-                        f"{len(changes.emptied_slots)} emptied, "
-                        f"{len(changes.modified_slots)} modified")
+        self.logger.info(
+            f"Detected changes: {len(changes.filled_slots)} filled, "
+            f"{len(changes.emptied_slots)} emptied, "
+            f"{len(changes.modified_slots)} modified"
+        )
 
         # Update locked slots (add newly filled slots)
         updated_locked = set(saved_state.locked_slots)
@@ -99,28 +97,16 @@ class EditMerger:
         updated_used_words.difference_update(changes.removed_words)
 
         # Update domains based on new constraints
-        updated_domains = self._update_domains_with_edits(
-            saved_state,
-            edited_grid,
-            changes,
-            updated_locked
-        )
+        updated_domains = self._update_domains_with_edits(saved_state, edited_grid, changes, updated_locked)
 
         # Validate solvability (only if we actually have domains to validate)
         has_domains = any(len(domain) > 0 for domain in updated_domains.values())
 
         if has_domains:
-            validation_result = self._validate_state(
-                updated_domains,
-                saved_state.constraints,
-                saved_state.slot_list
-            )
+            validation_result = self._validate_state(updated_domains, saved_state.constraints, saved_state.slot_list)
 
-            if not validation_result['is_valid']:
-                error_msg = (
-                    "User edits create unsolvable configuration: "
-                    f"{validation_result['reason']}"
-                )
+            if not validation_result["is_valid"]:
+                error_msg = "User edits create unsolvable configuration: " f"{validation_result['reason']}"
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -138,18 +124,12 @@ class EditMerger:
             locked_slots=list(updated_locked),
             timestamp=saved_state.timestamp,
             random_seed=saved_state.random_seed,
-            letter_frequency_table=saved_state.letter_frequency_table
+            letter_frequency_table=saved_state.letter_frequency_table,
         )
 
         return updated_state
 
-    def _detect_changes(
-        self,
-        saved_grid,
-        edited_grid,
-        slot_list: List[Dict],
-        slot_id_map: Dict
-    ) -> GridChanges:
+    def _detect_changes(self, saved_grid, edited_grid, slot_list: List[Dict], slot_id_map: Dict) -> GridChanges:
         """
         Detect what changed between grids.
 
@@ -172,7 +152,7 @@ class EditMerger:
 
         # Check each slot for changes
         for slot in slot_list:
-            row, col, direction = slot['row'], slot['col'], slot['direction']
+            row, col, direction = slot["row"], slot["col"], slot["direction"]
 
             # Get patterns from both grids
             saved_pattern = saved_grid.get_pattern_for_slot(slot)
@@ -186,8 +166,8 @@ class EditMerger:
                 continue
 
             # Detect changes
-            saved_has_gaps = '?' in saved_pattern
-            edited_has_gaps = '?' in edited_pattern
+            saved_has_gaps = "?" in saved_pattern
+            edited_has_gaps = "?" in edited_pattern
 
             if saved_has_gaps and not edited_has_gaps:
                 # Slot was filled
@@ -210,15 +190,11 @@ class EditMerger:
             emptied_slots=emptied_slots,
             modified_slots=modified_slots,
             new_words=new_words,
-            removed_words=removed_words
+            removed_words=removed_words,
         )
 
     def _update_domains_with_edits(
-        self,
-        saved_state,
-        edited_grid,
-        changes: GridChanges,
-        locked_slots: Set[int]
+        self, saved_state, edited_grid, changes: GridChanges, locked_slots: Set[int]
     ) -> Dict[int, Set[str]]:
         """
         Update domains based on new constraints from edits.
@@ -233,17 +209,14 @@ class EditMerger:
             Updated domains (slot_id -> set of valid words)
         """
         # Start with saved domains (convert lists to sets)
-        updated_domains = {
-            int(slot_id): set(words)
-            for slot_id, words in saved_state.domains.items()
-        }
+        updated_domains = {int(slot_id): set(words) for slot_id, words in saved_state.domains.items()}
 
         # For filled/modified slots, set domain to single word
         for slot_id in changes.filled_slots + changes.modified_slots:
             if slot_id in locked_slots:
                 slot = saved_state.slot_list[slot_id]
                 pattern = edited_grid.get_pattern_for_slot(slot)
-                if '?' not in pattern:
+                if "?" not in pattern:
                     # Set domain to just this word
                     updated_domains[slot_id] = {pattern}
 
@@ -252,10 +225,7 @@ class EditMerger:
 
         # Run constraint propagation to update dependent domains
         updated_domains = self._propagate_constraints(
-            updated_domains,
-            saved_state.constraints,
-            edited_grid,
-            saved_state.slot_list
+            updated_domains, saved_state.constraints, edited_grid, saved_state.slot_list
         )
 
         return updated_domains
@@ -265,7 +235,7 @@ class EditMerger:
         domains: Dict[int, Set[str]],
         constraints: Dict[int, List],
         grid,
-        slot_list: List[Dict]
+        slot_list: List[Dict],
     ) -> Dict[int, Set[str]]:
         """
         Propagate constraints using AC-3 algorithm.
@@ -309,7 +279,7 @@ class EditMerger:
         slot_id: int,
         other_slot: int,
         pos1: int,
-        pos2: int
+        pos2: int,
     ) -> bool:
         """
         Revise domain of slot_id based on constraint with other_slot.
@@ -355,7 +325,7 @@ class EditMerger:
         self,
         domains: Dict[int, Set[str]],
         constraints: Dict[int, List],
-        slot_list: List[Dict]
+        slot_list: List[Dict],
     ) -> Dict[str, any]:
         """
         Validate that state is still solvable.
@@ -383,28 +353,22 @@ class EditMerger:
             for slot_id in empty_domains[:3]:  # Show first 3
                 if slot_id < len(slot_list):
                     slot = slot_list[slot_id]
-                    slot_info.append(
-                        f"({slot['row']},{slot['col']}) {slot['direction']}"
-                    )
+                    slot_info.append(f"({slot['row']},{slot['col']}) {slot['direction']}")
 
             return {
-                'is_valid': False,
-                'reason': f"Empty domains for slots: {', '.join(slot_info)}",
-                'empty_domains': empty_domains
+                "is_valid": False,
+                "reason": f"Empty domains for slots: {', '.join(slot_info)}",
+                "empty_domains": empty_domains,
             }
 
-        return {
-            'is_valid': True,
-            'reason': None,
-            'empty_domains': []
-        }
+        return {"is_valid": True, "reason": None, "empty_domains": []}
 
     def get_edit_summary(
         self,
         saved_grid_dict: Dict,
         edited_grid_dict: Dict,
         slot_list: List[Dict],
-        slot_id_map: Dict
+        slot_id_map: Dict,
     ) -> Dict:
         """
         Get summary of edits without full merge.
@@ -425,17 +389,12 @@ class EditMerger:
         saved_grid = Grid.from_dict(saved_grid_dict)
         edited_grid = Grid.from_dict(edited_grid_dict)
 
-        changes = self._detect_changes(
-            saved_grid,
-            edited_grid,
-            slot_list,
-            slot_id_map
-        )
+        changes = self._detect_changes(saved_grid, edited_grid, slot_list, slot_id_map)
 
         return {
-            'filled_count': len(changes.filled_slots),
-            'emptied_count': len(changes.emptied_slots),
-            'modified_count': len(changes.modified_slots),
-            'new_words': list(changes.new_words),
-            'removed_words': list(changes.removed_words)
+            "filled_count": len(changes.filled_slots),
+            "emptied_count": len(changes.emptied_slots),
+            "modified_count": len(changes.modified_slots),
+            "new_words": list(changes.new_words),
+            "removed_words": list(changes.removed_words),
         }

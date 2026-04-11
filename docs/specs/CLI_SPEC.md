@@ -1,9 +1,6 @@
 # CLI Tool Specification
 
 **Document Type:** Component Specification (Layer 1 - Single Source of Truth)
-**Version:** 2.0.0
-**Last Updated:** 2026-03
-**Status:** Production-Ready - All Features Complete
 
 ---
 
@@ -63,7 +60,7 @@ The CLI tool is the **single source of truth** for all crossword puzzle logic in
 ```
 cli/
 ├── src/
-│   ├── cli.py                      # Main CLI entry point (1,347 lines, 13 commands)
+│   ├── cli.py                      # Main CLI entry point (14 commands)
 │   ├── core/                       # Core grid operations
 │   │   ├── grid.py                 # Grid data structure (NumPy-backed)
 │   │   ├── numbering.py            # Auto-numbering algorithm
@@ -73,24 +70,22 @@ cli/
 │   │   ├── cell_types.py           # Cell state enumeration
 │   │   └── progress.py             # Progress reporting (JSON stderr)
 │   ├── fill/                       # Autofill algorithms
-│   │   ├── autofill.py             # CSP with backtracking + MAC (1,248 lines)
+│   │   ├── autofill.py             # CSP with backtracking + MAC
 │   │   ├── beam_search_autofill.py # Beam search algorithm
 │   │   ├── iterative_repair.py     # Iterative repair algorithm
 │   │   ├── hybrid_autofill.py      # Hybrid (beam + repair)
 │   │   ├── adaptive_autofill.py    # Adaptive black square placement
 │   │   ├── pattern_matcher.py      # Regex-based pattern matching
-│   │   ├── trie_pattern_matcher.py # Trie-based pattern matching (10-50x faster)
-│   │   ├── ahocorasick_matcher.py  # Aho-Corasick for batch operations
+│   │   ├── trie_pattern_matcher.py # Trie-based pattern matching
 │   │   ├── word_list.py            # Word list data structure
 │   │   ├── word_trie.py            # Trie data structure
 │   │   ├── state_manager.py        # Pause/resume state serialization
 │   │   └── pause_controller.py     # Pause signal handling
 │   └── export/                     # Export formats
-│       ├── html_exporter.py        # HTML grid generation
-│       └── json_exporter.py        # JSON state export
+│       └── html_exporter.py        # HTML grid generation
 ├── tests/                          # Test suite
-│   ├── unit/                       # Unit tests (40 tests)
-│   └── integration/                # Integration tests (20 tests)
+│   ├── unit/
+│   └── integration/
 └── crossword                       # Entry point script (#!/usr/bin/env python)
 ```
 
@@ -117,7 +112,7 @@ cli/
 ┌─────────────────▼───────────────────────────┐
 │  CLI TOOL (Single Source of Truth)          │
 │  ┌───────────────────────────────────────┐  │
-│  │  8 Commands (Click framework)         │  │
+│  │  13 Commands (Click framework)        │  │
 │  │  - new, fill, pattern, number, etc.   │  │
 │  └─────────────┬─────────────────────────┘  │
 │                │                             │
@@ -125,10 +120,10 @@ cli/
 │  │  Core Modules (Pure Python)           │  │
 │  │  ├─ Grid Engine (NumPy)               │  │
 │  │  ├─ Autofill Algorithms (5 types)     │  │
-│  │  ├─ Pattern Matching (3 algorithms)   │  │
-│  │  ├─ Word List Manager (454k words)    │  │
+│  │  ├─ Pattern Matching (2 algorithms)   │  │
+│  │  ├─ Word List Manager (44k words)     │  │
 │  │  ├─ State Manager (pause/resume)      │  │
-│  │  └─ Export Engine (HTML, JSON)        │  │
+│  │  └─ Export Engine (HTML)             │  │
 │  └───────────────────────────────────────┘  │
 └─────────────────────────────────────────────┘
 ```
@@ -209,7 +204,7 @@ crossword new --size 11 --output test.json
 
 ### Overview
 
-The CLI provides 13 commands organized by functionality:
+The CLI provides 14 commands:
 
 | Command | Category | Purpose | Typical Usage |
 |---------|----------|---------|---------------|
@@ -220,11 +215,12 @@ The CLI provides 13 commands organized by functionality:
 | `normalize` | Text Ops | Normalize crossword entries | Clue formatting |
 | `validate` | Grid Ops | Validate against NYT standards | Quality check |
 | `show` | Display | Display grid in terminal | Quick preview |
-| `export` | Export | Export to HTML/JSON | Final output |
+| `export` | Export | Export to HTML | Final output |
 | `build-cache` | Wordlist | Pre-build wordlist cache (.pkl) | Performance optimization |
 | `pause` | State Mgmt | Pause running autofill | Interrupt long fills |
 | `resume` | State Mgmt | Resume from saved state | Continue paused fills |
 | `list-states` | State Mgmt | List saved autofill states | Browse saved states |
+| `import-nyt` | Import | Import NYT crossword JSON | Grid import |
 
 > **For detailed algorithm analysis:** See [../ALGORITHM_DEEP_DIVE.md](../ALGORITHM_DEEP_DIVE.md)
 
@@ -320,7 +316,7 @@ crossword fill <grid_file> \
 | `trie` | CSP | Trie-based backtracking (10-50x faster) | Medium grids, speed |
 | `beam` | Beam Search | Global optimization, beam width=5 | Quality over guarantees |
 | `repair` | Iterative Repair | Local search with conflict resolution | Hard constraints |
-| `hybrid` | Hybrid | Beam search + repair fallback | **Default - best all-around** |
+| `hybrid` | Hybrid | Beam search + repair fallback | **Default** |
 
 **Example: Basic Fill**
 ```bash
@@ -420,7 +416,7 @@ Iterations: 3,429
 When `--json-output` is used, progress is written to **stderr** in JSON format (stdout contains final result):
 
 ```json
-{"progress": 30, "message": "Loaded 454,283 words, starting autofill"}
+{"progress": 30, "message": "Loaded 44,024 words, starting autofill"}
 {"progress": 45, "message": "Filled 34/76 slots (backtracked 127 times)"}
 {"progress": 100, "message": "Successfully filled 76/76 slots", "status": "complete"}
 ```
@@ -511,7 +507,7 @@ Results (127 found, showing top 20):
 
 **Performance:**
 
-| Algorithm | 454k words | 50k words | Use Case |
+| Algorithm | 44k words | 50k words | Use Case |
 |-----------|------------|-----------|----------|
 | Regex | ~100ms | ~20ms | Simple, reliable |
 | Trie | ~10ms | ~2ms | **Default - 10-50x faster** |
@@ -792,9 +788,6 @@ crossword export puzzle.json \
 
 ### Command: `pause`
 
-> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
->
-> Infrastructure exists in `cli/src/fill/pause_controller.py` - just needs CLI command exposure.
 
 **Purpose:** Request a running autofill task to pause gracefully
 
@@ -853,9 +846,6 @@ def pause(task_id: str):
 
 ### Command: `resume`
 
-> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
->
-> Infrastructure exists in `cli/src/fill/state_manager.py` - just needs CLI command exposure.
 
 **Purpose:** Resume autofill from a saved state file
 
@@ -959,9 +949,6 @@ def resume(state_file: str, output: str, json_output: bool, algorithm: str):
 
 ### Command: `list-states`
 
-> ⚠️ **IMPLEMENTATION STATUS**: Not yet implemented (planned for Phase 3.3)
->
-> Infrastructure exists in `cli/src/fill/state_manager.py` - just needs CLI command exposure.
 
 **Purpose:** List all saved autofill states
 
@@ -1455,7 +1442,7 @@ class ProgressReporter:
 ```python
 progress = ProgressReporter(enabled=json_output)
 progress.update(5, 'Loading grid')
-progress.update(30, 'Loaded 454,283 words, starting autofill')
+progress.update(30, 'Loaded 44,024 words, starting autofill')
 progress.update(45, 'Filled 34/76 slots (backtracked 127 times)')
 progress.update(100, 'Successfully filled', status='complete')
 ```
@@ -1479,7 +1466,7 @@ The CLI implements **5 autofill algorithms** with different trade-offs:
 | **trie** | CSP | Solution if exists | Medium | Fast | Medium grids, reliability |
 | **beam** | Beam Search | None | High | Medium | Quality-focused |
 | **repair** | Iterative Repair | None | Medium-High | Fast | Hard constraints |
-| **hybrid** | Hybrid | None (best effort) | High | Fast | **Default - best all-around** |
+| **hybrid** | Hybrid | None (best effort) | High | Fast | **Default** |
 
 ### Algorithm Selection Guide
 
@@ -1488,11 +1475,11 @@ Choose algorithm based on:
 
 11×11 grid:
   - Any algorithm works (<30s)
-  - Recommend: trie (fast, guaranteed)
+  - Recommend: trie (fast, exhaustive search)
 
 15×15 grid:
   - Recommend: hybrid (quality + reliability)
-  - Alternative: beam (max quality, no guarantee)
+  - Alternative: beam (max quality, no completeness)
 
 21×21 grid:
   - Recommend: hybrid (only reliable option)
@@ -1502,7 +1489,7 @@ Max quality needed:
   - Use: beam (beam_width=10)
 
 Max reliability needed:
-  - Use: trie (classic CSP, guaranteed solution)
+  - Use: trie (classic CSP, exhaustive backtracking)
 
 Tight constraints (many theme entries):
   - Use: repair (handles conflicts well)
@@ -1512,7 +1499,7 @@ Tight constraints (many theme entries):
 
 ### Algorithm 1: CSP with Backtracking (`autofill.py`)
 
-**File:** `cli/src/fill/autofill.py` (43,619 lines)
+**File:** `cli/src/fill/autofill.py`
 
 **Type:** Constraint Satisfaction Problem with backtracking
 
@@ -1670,7 +1657,6 @@ def _revise(slot_id: int, other_id: int, my_pos: int, other_pos: int) -> bool:
 | 21×21 | 5-30min | 10000-50000 | 70% |
 
 **Strengths:**
-- Guaranteed to find solution if one exists
 - Efficient pruning (AC-3 eliminates impossible candidates)
 - Well-tested (classic algorithm)
 
@@ -1683,7 +1669,7 @@ def _revise(slot_id: int, other_id: int, my_pos: int, other_pos: int) -> bool:
 
 ### Algorithm 2: Beam Search (`beam_search_autofill.py`)
 
-**File:** `cli/src/fill/beam_search_autofill.py` (5,893 lines)
+**File:** `cli/src/fill/beam_search_autofill.py`
 
 **Type:** Global optimization search with beam pruning
 
@@ -1799,7 +1785,7 @@ def _score_state(state: BeamState) -> float:
 
 ### Algorithm 3: Iterative Repair (`iterative_repair.py`)
 
-**File:** `cli/src/fill/iterative_repair.py` (25,743 lines)
+**File:** `cli/src/fill/iterative_repair.py`
 
 **Type:** Local search with conflict resolution
 
@@ -1910,7 +1896,7 @@ def _find_conflicts() -> List[Dict]:
 
 ### Algorithm 4: Hybrid (`hybrid_autofill.py`)
 
-**File:** `cli/src/fill/hybrid_autofill.py` (6,322 lines)
+**File:** `cli/src/fill/hybrid_autofill.py`
 
 **Type:** Beam Search → Iterative Repair fallback
 
@@ -1965,8 +1951,7 @@ def fill(timeout: int) -> FillResult:
 | 21×21 | 8-35min | 85% | Medium-High |
 
 **Strengths:**
-- **Best all-around algorithm**
-- High success rate (combines completeness + quality)
+- High success rate (combines quality + coverage)
 - Good word quality (beam search phase)
 - Handles hard grids (repair fallback)
 
@@ -1978,7 +1963,7 @@ def fill(timeout: int) -> FillResult:
 
 ### Algorithm 5: Adaptive Autofill (`adaptive_autofill.py`)
 
-**File:** `cli/src/fill/adaptive_autofill.py` (13,691 lines)
+**File:** `cli/src/fill/adaptive_autofill.py`
 
 **Type:** Meta-algorithm with adaptive black square placement
 
@@ -2238,16 +2223,13 @@ class WordList:
 **Statistics:**
 
 ```python
-# Typical comprehensive wordlist
-Total words: 454,283
+# comprehensive.txt (44k words)
+Total words: 44,024
 By length:
-  3 letters: 1,347
-  4 letters: 4,821
-  5 letters: 8,940
-  6 letters: 13,562
-  7 letters: 17,234
+  3 letters: 972
+  4 letters: 3,902
+  5 letters: 7,415
   ...
-  15 letters: 4,102
 ```
 
 ---
@@ -2309,7 +2291,7 @@ class WordTrie:
 
 **Performance:**
 
-- Build time: ~2-3s for 454k words
+- Build time: ~2-3s for 44k words
 - Memory: ~50MB
 - Search time: ~10ms (vs ~100ms regex)
 - Speedup: **10-50x faster than regex**
@@ -2478,7 +2460,7 @@ avg_score = sum(word_scores) / len(word_scores)
 
 ```
 data/wordlists/
-├── comprehensive.txt           # 454,283 words (all sources)
+├── comprehensive.txt           # 44k curated words
 ├── core/                       # Curated core lists
 │   ├── common_3_letter.txt     # Critical short words
 │   ├── common_4_letter.txt
@@ -2534,32 +2516,15 @@ with open('comprehensive.txt', 'r') as f:
 word_list = WordList(words)
 
 # Deduplication handled automatically
-print(len(word_list))  # → 454,283 unique words
+print(len(word_list))  # → 44,024 unique words
 ```
 
 ### Statistics
 
-**Comprehensive Wordlist:**
+**comprehensive.txt:**
 
 ```
-Total words: 454,283
-By length:
-  3: 1,347    (0.3%)
-  4: 4,821    (1.1%)
-  5: 8,940    (2.0%)
-  6: 13,562   (3.0%)
-  7: 17,234   (3.8%)
-  8: 19,842   (4.4%)
-  9: 21,039   (4.6%)
-  10: 20,512  (4.5%)
-  11-15: 347,986 (76.3%)
-
-By score:
-  0-20: 12,384   (2.7%)   [Low quality]
-  21-40: 89,234  (19.6%)  [Below average]
-  41-60: 201,482 (44.3%)  [Average]
-  61-80: 123,094 (27.1%)  [Good]
-  81-100: 28,089  (6.2%)  [Excellent]
+Total words: 44,024
 ```
 
 ---
@@ -2894,8 +2859,8 @@ fetch('/api/fill/resume', {
 |-----------|--------|-------------|
 | Python baseline | ~50MB | Interpreter + stdlib |
 | NumPy | ~30MB | Array operations |
-| Word list (454k) | ~50MB | In-memory list |
-| Word trie (454k) | ~50MB | Trie structure |
+| Word list (44k) | ~50MB | In-memory list |
+| Word trie (44k) | ~50MB | Trie structure |
 | CSP domains (15×15) | ~100MB | Candidate lists |
 | Beam states (w=5) | ~100MB | Partial grids |
 | **Total Peak** | **~400MB** | During autofill |
@@ -2912,19 +2877,12 @@ fetch('/api/fill/resume', {
 
 ### Pattern Matching Performance
 
-**454k word comprehensive wordlist:**
+**Pattern matching algorithms:**
 
-| Algorithm | Pattern | Time | Memory | Results |
-|-----------|---------|------|--------|---------|
-| Regex | `C?T` | 100ms | 50MB | 127 |
-| Trie | `C?T` | 10ms | 50MB | 127 |
-| Aho-Corasick | `C?T` | 5ms | 80MB | 127 |
-| Regex | `?????` (5 letters) | 150ms | 50MB | 8,940 |
-| Trie | `?????` | 15ms | 50MB | 8,940 |
-
-**Speedup:**
-- Trie: **10x faster** than regex (typical)
-- Aho-Corasick: **20x faster** for batch operations
+| Algorithm | Use Case |
+|-----------|----------|
+| Regex | Simple patterns |
+| Trie | Default; faster for autofill |
 
 ### Optimization Opportunities
 
@@ -3180,7 +3138,7 @@ def resume_fill():
 
 ```
 cli/tests/
-├── unit/                          # Fast, isolated tests (40 tests)
+├── unit/                          # Fast, isolated tests
 │   ├── test_grid.py               # Grid operations
 │   ├── test_numbering.py          # Auto-numbering
 │   ├── test_validator.py          # Grid validation
@@ -3190,7 +3148,7 @@ cli/tests/
 │   ├── test_beam_search.py        # Beam search
 │   ├── test_state_manager.py      # Pause/resume state
 │   └── test_word_trie.py          # Trie data structure
-└── integration/                   # End-to-end tests (20 tests)
+└── integration/                   # End-to-end tests
     ├── test_phase2_fixes.py       # CLI commands
     └── test_cli_commands.py       # Full workflows
 ```
@@ -3495,7 +3453,7 @@ crossword fill puzzle.json \
 1. **8 Commands**: `new`, `fill`, `pattern`, `number`, `normalize`, `validate`, `show`, `export`
 2. **5 Autofill Algorithms**: CSP (regex/trie), Beam Search, Iterative Repair, Hybrid, Adaptive
 3. **Pause/Resume**: Full algorithm state serialization with edit support
-4. **454k+ Words**: Comprehensive wordlist with scoring and categorization
+4. **44k+ Words**: Comprehensive wordlist with scoring and categorization
 5. **Performance**: Trie-based pattern matching (10-50x faster than regex)
 6. **Integration**: Designed as backend engine (CLI-as-single-source-of-truth)
 
@@ -3533,7 +3491,5 @@ crossword fill puzzle.json \
 
 ---
 
-**Document Version:** 2.0.0
 **Total Lines:** 2,847
-**Last Updated:** 2026-03
 **Maintained By:** Development Team

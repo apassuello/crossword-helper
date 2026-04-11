@@ -6,6 +6,7 @@ are properly locked and preserved during the autofill process.
 """
 
 import pytest
+
 from cli.src.core.grid import Grid
 
 

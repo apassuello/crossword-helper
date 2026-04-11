@@ -6,14 +6,14 @@ All CLI adapter calls are mocked -- no real subprocess invocations.
 
 import json
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_grid(size=5, fill="."):
     """Build a simple size x size grid of strings."""
@@ -39,6 +39,7 @@ def _fill_request(size=5, **overrides):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def client(mocker):
@@ -103,9 +104,7 @@ class TestHealthCheck:
 class TestPatternSearch:
     def test_valid_request(self, client):
         c, mock_adapter = client
-        mock_adapter.pattern.return_value = {
-            "results": [{"word": "CAT", "score": 90}]
-        }
+        mock_adapter.pattern.return_value = {"results": [{"word": "CAT", "score": 90}]}
 
         resp = _post_json(c, "/api/pattern", {"pattern": "C?T"})
         assert resp.status_code == 200
@@ -138,9 +137,7 @@ class TestPatternSearch:
         c, mock_adapter = client
         mock_adapter.pattern.return_value = {"results": []}
 
-        resp = _post_json(
-            c, "/api/pattern", {"pattern": "A?B", "max_results": 10}
-        )
+        resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "max_results": 10})
         assert resp.status_code == 200
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["max_results"] == 10
@@ -149,9 +146,7 @@ class TestPatternSearch:
         c, mock_adapter = client
         mock_adapter.pattern.return_value = {"results": []}
 
-        resp = _post_json(
-            c, "/api/pattern", {"pattern": "A?B", "algorithm": "trie"}
-        )
+        resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "algorithm": "trie"})
         assert resp.status_code == 200
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["algorithm"] == "trie"
@@ -386,9 +381,7 @@ class TestFillGrid:
         c, mock_adapter = client
         mock_adapter.fill.return_value = {"success": True}
 
-        resp = _post_json(
-            c, "/api/fill", _fill_request(timeout=60, min_score=50)
-        )
+        resp = _post_json(c, "/api/fill", _fill_request(timeout=60, min_score=50))
         assert resp.status_code == 200
         call_kwargs = mock_adapter.fill.call_args[1]
         assert call_kwargs["timeout_seconds"] == 60
@@ -432,9 +425,7 @@ class TestFillWithProgress:
 
     def test_missing_grid_returns_400(self, client):
         c, _ = client
-        resp = _post_json(
-            c, "/api/fill/with-progress", {"size": 5, "wordlists": ["comprehensive"]}
-        )
+        resp = _post_json(c, "/api/fill/with-progress", {"size": 5, "wordlists": ["comprehensive"]})
         assert resp.status_code == 400
 
     def test_theme_entries_passed_through(self, client, mocker):
@@ -444,9 +435,7 @@ class TestFillWithProgress:
         mocker.patch("backend.api.routes.create_progress_tracker", return_value="t1")
         mock_thread = mocker.patch("backend.api.routes.threading.Thread")
 
-        body = _fill_request(
-            theme_entries={"(0,0,across)": "HELLO"}
-        )
+        body = _fill_request(theme_entries={"(0,0,across)": "HELLO"})
         resp = _post_json(c, "/api/fill/with-progress", body)
         assert resp.status_code == 202
 

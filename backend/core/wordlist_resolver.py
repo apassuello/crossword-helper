@@ -5,9 +5,9 @@ Provides shared logic for resolving wordlist names to absolute file paths.
 Eliminates code duplication across route handlers.
 """
 
+import logging
 from pathlib import Path
 from typing import List
-import logging
 
 logger = logging.getLogger(__name__)
 

@@ -136,9 +136,7 @@ class TestCancelAutofill:
         assert data["state_saved"] is True
         assert "cancelled" in data["message"].lower()
 
-    def test_cancel_requests_pause_and_cleanup(
-        self, client, mock_pause_controller, mocker
-    ):
+    def test_cancel_requests_pause_and_cleanup(self, client, mock_pause_controller, mocker):
         _, mock_pc = mock_pause_controller
         mock_cleanup = mocker.patch(
             "backend.api.progress_routes.cleanup_process",
@@ -189,9 +187,7 @@ class TestResumeAutofill:
         assert data["total_slots"] == 40
         mock_state_manager.save_csp_state.assert_called_once()
 
-    def test_resume_with_edited_grid(
-        self, client, mock_state_manager, edit_merger, mocker
-    ):
+    def test_resume_with_edited_grid(self, client, mock_state_manager, edit_merger, mocker):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -234,23 +230,17 @@ class TestResumeAutofill:
     def test_resume_state_not_found_returns_404(self, client, mock_state_manager):
         mock_state_manager.load_csp_state.side_effect = FileNotFoundError("gone")
 
-        resp = client.post(
-            "/api/fill/resume", json={"task_id": "task_missing"}
-        )
+        resp = client.post("/api/fill/resume", json={"task_id": "task_missing"})
         data = resp.get_json()
 
         assert resp.status_code == 404
         assert "not found" in data["error"].lower()
 
-    def test_resume_unsolvable_edits_returns_409(
-        self, client, mock_state_manager, edit_merger, mocker
-    ):
+    def test_resume_unsolvable_edits_returns_409(self, client, mock_state_manager, edit_merger, mocker):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
-        mocker.patch.object(
-            edit_merger, "merge_edits", side_effect=ValueError("unsolvable")
-        )
+        mocker.patch.object(edit_merger, "merge_edits", side_effect=ValueError("unsolvable"))
 
         resp = client.post(
             "/api/fill/resume",
@@ -264,9 +254,7 @@ class TestResumeAutofill:
         assert resp.status_code == 409
         assert "unsolvable" in data["error"].lower()
 
-    def test_resume_saves_with_correct_metadata(
-        self, client, mock_state_manager
-    ):
+    def test_resume_saves_with_correct_metadata(self, client, mock_state_manager):
         saved = _make_saved_state()
         meta = _make_metadata(algorithm="csp")
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -278,31 +266,21 @@ class TestResumeAutofill:
 
         assert resp.status_code == 200
         call_kwargs = mock_state_manager.save_csp_state.call_args
-        saved_meta = (
-            call_kwargs.kwargs.get("metadata")
-            or call_kwargs[1].get("metadata")
-        )
+        saved_meta = call_kwargs.kwargs.get("metadata") or call_kwargs[1].get("metadata")
         assert saved_meta["resumed_from"] == "task_r4"
         assert saved_meta["resume_options"] == {"timeout": 300}
 
-    def test_resume_no_options_defaults_to_empty(
-        self, client, mock_state_manager
-    ):
+    def test_resume_no_options_defaults_to_empty(self, client, mock_state_manager):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
 
-        resp = client.post(
-            "/api/fill/resume", json={"task_id": "task_r5"}
-        )
-        data = resp.get_json()
+        resp = client.post("/api/fill/resume", json={"task_id": "task_r5"})
+        resp.get_json()
 
         assert resp.status_code == 200
         call_kwargs = mock_state_manager.save_csp_state.call_args
-        saved_meta = (
-            call_kwargs.kwargs.get("metadata")
-            or call_kwargs[1].get("metadata")
-        )
+        saved_meta = call_kwargs.kwargs.get("metadata") or call_kwargs[1].get("metadata")
         assert saved_meta["resume_options"] == {}
 
 
@@ -312,9 +290,7 @@ class TestResumeAutofill:
 
 
 class TestGetSavedState:
-    def test_state_found_returns_200(
-        self, client, mock_state_manager, mock_grid
-    ):
+    def test_state_found_returns_200(self, client, mock_state_manager, mock_grid):
         saved = _make_saved_state(grid=[["A", ".", "#"]] * 3)
         meta = _make_metadata()
         info = {"task_id": "task_s1", "timestamp": "2025-12-26T10:00:00Z"}
@@ -331,9 +307,7 @@ class TestGetSavedState:
         mock_grid.from_dict.assert_called_once()
 
     def test_state_not_found_returns_404(self, client, mock_state_manager):
-        mock_state_manager.get_state_info.side_effect = FileNotFoundError(
-            "nope"
-        )
+        mock_state_manager.get_state_info.side_effect = FileNotFoundError("nope")
 
         resp = client.get("/api/fill/state/task_missing")
         data = resp.get_json()
@@ -341,9 +315,7 @@ class TestGetSavedState:
         assert resp.status_code == 404
         assert "not found" in data["error"].lower()
 
-    def test_state_includes_grid_preview(
-        self, client, mock_state_manager, mock_grid
-    ):
+    def test_state_includes_grid_preview(self, client, mock_state_manager, mock_grid):
         grid_data = [["C", "A", "T"], ["D", "O", "G"], [".", ".", "."]]
         saved = _make_saved_state(grid=grid_data)
         meta = _make_metadata()
@@ -426,9 +398,7 @@ class TestListSavedStates:
 
         client.get("/api/fill/states")
 
-        mock_state_manager.list_states.assert_called_once_with(
-            max_age_days=None
-        )
+        mock_state_manager.list_states.assert_called_once_with(max_age_days=None)
 
     def test_list_empty_returns_zero_count(self, client, mock_state_manager):
         mock_state_manager.list_states.return_value = []
@@ -449,28 +419,22 @@ class TestCleanupOldStates:
     def test_cleanup_returns_deleted_count(self, client, mock_state_manager):
         mock_state_manager.cleanup_old_states.return_value = 5
 
-        resp = client.post(
-            "/api/fill/states/cleanup", json={"max_age_days": 14}
-        )
+        resp = client.post("/api/fill/states/cleanup", json={"max_age_days": 14})
         data = resp.get_json()
 
         assert resp.status_code == 200
         assert data["success"] is True
         assert data["deleted_count"] == 5
-        mock_state_manager.cleanup_old_states.assert_called_once_with(
-            max_age_days=14
-        )
+        mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=14)
 
     def test_cleanup_defaults_to_7_days(self, client, mock_state_manager):
         mock_state_manager.cleanup_old_states.return_value = 0
 
         resp = client.post("/api/fill/states/cleanup", json={})
-        data = resp.get_json()
+        resp.get_json()
 
         assert resp.status_code == 200
-        mock_state_manager.cleanup_old_states.assert_called_once_with(
-            max_age_days=7
-        )
+        mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=7)
 
     def test_cleanup_no_body_defaults_to_7(self, client, mock_state_manager):
         mock_state_manager.cleanup_old_states.return_value = 0
@@ -479,16 +443,12 @@ class TestCleanupOldStates:
         resp = client.post("/api/fill/states/cleanup", json={})
 
         assert resp.status_code == 200
-        mock_state_manager.cleanup_old_states.assert_called_once_with(
-            max_age_days=7
-        )
+        mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=7)
 
     def test_cleanup_message_includes_count(self, client, mock_state_manager):
         mock_state_manager.cleanup_old_states.return_value = 3
 
-        resp = client.post(
-            "/api/fill/states/cleanup", json={"max_age_days": 1}
-        )
+        resp = client.post("/api/fill/states/cleanup", json={"max_age_days": 1})
         data = resp.get_json()
 
         assert "3" in data["message"]
@@ -500,9 +460,7 @@ class TestCleanupOldStates:
 
 
 class TestEditSummary:
-    def test_valid_request_returns_summary(
-        self, client, mock_state_manager, edit_merger, mocker
-    ):
+    def test_valid_request_returns_summary(self, client, mock_state_manager, edit_merger, mocker):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -514,9 +472,7 @@ class TestEditSummary:
             "new_words": ["CAT"],
             "removed_words": [],
         }
-        mocker.patch.object(
-            edit_merger, "get_edit_summary", return_value=summary
-        )
+        mocker.patch.object(edit_merger, "get_edit_summary", return_value=summary)
 
         resp = client.post(
             "/api/fill/edit-summary",
@@ -552,9 +508,7 @@ class TestEditSummary:
         assert "edited_grid" in data["error"]
 
     def test_state_not_found_returns_404(self, client, mock_state_manager):
-        mock_state_manager.load_csp_state.side_effect = FileNotFoundError(
-            "gone"
-        )
+        mock_state_manager.load_csp_state.side_effect = FileNotFoundError("gone")
 
         resp = client.post(
             "/api/fill/edit-summary",

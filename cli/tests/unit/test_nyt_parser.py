@@ -3,14 +3,13 @@
 import json
 
 import pytest
-
+from src.core.numbering import GridNumbering
 from src.core.nyt_parser import (
     NytDataError,
     NytFormatError,
     NytParseError,
     NytParseResult,
     NytWord,
-    VerificationResult,
     extract_words,
     load_nyt_file,
     nyt_grid_to_internal,
@@ -18,8 +17,6 @@ from src.core.nyt_parser import (
     parse_nyt_json,
     verify_extraction,
 )
-from src.core.numbering import GridNumbering
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -66,9 +63,15 @@ def _make_nyt_3x3(
     """
     if grid is None:
         grid = [
-            "C", "A", "T",
-            "O", "N", "E",
-            "B", "E", "D",
+            "C",
+            "A",
+            "T",
+            "O",
+            "N",
+            "E",
+            "B",
+            "E",
+            "D",
         ]
 
     if gridnums is None:

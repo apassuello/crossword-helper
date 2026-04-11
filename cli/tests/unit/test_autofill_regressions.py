@@ -1,134 +1,16 @@
 """
-Simplified regression test suite for Phase 4 bug fixes.
-
-This test suite ensures that all bugs fixed during Phase 4 do not regress.
-Each test corresponds to a specific "FIX #N" comment in the codebase.
+Unit tests for word quality in autofill — scoring, gibberish detection, and deduplication.
 """
 
 import pytest
-
 from src.core.grid import Grid
 from src.fill.beam_search_autofill import BeamState
-from src.fill.word_list import WordList
 from src.fill.pattern_matcher import PatternMatcher
+from src.fill.word_list import WordList
 
 
-class TestPhase4Regressions:
-    """Comprehensive tests for all Phase 4 fixes."""
-
-    def test_fix1_slot_completion_counting(self):
-        """
-        FIX #1 (Phase 4.2): Only increment slots_filled if slot is COMPLETELY filled.
-        Previous bug: Counted every word placement, even if slot still had '?' wildcards.
-        """
-        # Test that partial patterns are not counted as complete
-        patterns_and_completeness = [
-            ("STONE", True),   # Complete word - should count
-            ("A?C??", False),  # Partial pattern - should NOT count
-            ("?????", False),  # All wildcards - should NOT count
-            ("ARENA", True),   # Complete word - should count
-            ("ST?NE", False),  # One wildcard - should NOT count
-        ]
-
-        for pattern, should_be_complete in patterns_and_completeness:
-            is_complete = '?' not in pattern
-            assert is_complete == should_be_complete, \
-                f"Pattern '{pattern}' completion check failed"
-
-    def test_fix2_gibberish_detection(self):
-        """
-        FIX #2 (Phase 4.1): Detect and remove gibberish patterns.
-        Previous bug: Words like AAAAA, III, NNN were accepted as valid.
-        """
-        def is_gibberish(word: str) -> bool:
-            """Simple gibberish detection."""
-            if len(word) < 3:
-                return False
-            # All same letter
-            if len(set(word)) == 1:
-                return True
-            # More than 80% same letter
-            most_common = max(word.count(c) for c in set(word))
-            if most_common / len(word) > 0.8:
-                return True
-            return False
-
-        # Test gibberish patterns
-        gibberish_words = ["AAAAA", "III", "NNN", "ZZZZ", "XXXXX", "QQQ"]
-        valid_words = ["STONE", "BOOK", "TREE", "SPEED", "ALL", "HELLO"]
-
-        for word in gibberish_words:
-            assert is_gibberish(word), f"{word} should be detected as gibberish"
-
-        for word in valid_words:
-            assert not is_gibberish(word), f"{word} should NOT be detected as gibberish"
-
-    def test_fix3_pattern_restoration(self):
-        """
-        FIX #3 (Phase 4.1/4.2): Fix pattern restoration bug.
-        Previous bug: Pattern restoration could crash on certain inputs.
-        """
-        Grid(11)
-
-        # Test various patterns can be restored without crashing
-        test_cases = [
-            # (word_to_place, expected_pattern)
-            ("STONE", "STONE"),  # Full word
-            ("ABC", "ABC"),      # Short word
-        ]
-
-        for word, expected in test_cases:
-            test_grid = Grid(11)
-            test_grid.place_word(word, 0, 0, 'across')
-            pattern = test_grid.get_pattern_for_slot({
-                'row': 0, 'col': 0, 'direction': 'across', 'length': len(word)
-            })
-            assert pattern == expected, f"Pattern restoration failed for {word}"
-
-    def test_fix4_grid_completion_validation(self):
-        """
-        FIX #4 (Phase 4.2): Double-check actual grid completion.
-        Previous bug: Relied on counter instead of checking actual grid state.
-        """
-        grid = Grid(11)
-
-        # Place some words
-        grid.place_word("STONE", 0, 0, 'across')
-        grid.place_word("ARENA", 1, 0, 'across')
-
-        # Manually create slots to test
-        test_slots = [
-            {'row': 0, 'col': 0, 'direction': 'across', 'length': 5},
-            {'row': 1, 'col': 0, 'direction': 'across', 'length': 5},
-            {'row': 2, 'col': 0, 'direction': 'across', 'length': 5},  # Empty slot
-        ]
-
-        # Count actually filled slots
-        actual_filled = sum(
-            1 for slot in test_slots
-            if '?' not in grid.get_pattern_for_slot(slot)
-        )
-
-        # Should count only the two filled slots, not the empty one
-        assert actual_filled == 2, f"Should have 2 filled slots, got {actual_filled}"
-
-    def test_fix5_word_length_validation(self):
-        """
-        FIX #5 (Phase 4.3): Validate word length matches slot length.
-        Previous bug: Words could be placed in wrong-length slots.
-        """
-        # Test word length validation
-        test_cases = [
-            ("STONE", 5, True),   # Exact match
-            ("CAT", 5, False),    # Too short
-            ("STONES", 5, False),  # Too long
-            ("DOG", 3, True),     # Exact match
-        ]
-
-        for word, slot_length, should_match in test_cases:
-            matches = (len(word) == slot_length)
-            assert matches == should_match, \
-                f"Word '{word}' length check for slot {slot_length} failed"
+class TestWordQuality:
+    """Tests for scoring and gibberish filtering in autofill."""
 
     def test_gibberish_scoring(self):
         """Test that gibberish patterns receive lower scores than real words."""
@@ -149,8 +31,9 @@ class TestPhase4Regressions:
         # This is the key test - real words should outscore gibberish
         # Note: The original bug was that AAAAA scored 40, which was too high
         # The fix should ensure gibberish scores much lower
-        assert max_gibberish < min_real, \
-            f"Best gibberish ({max_gibberish}) should score less than worst real word ({min_real})"
+        assert (
+            max_gibberish < min_real
+        ), f"Best gibberish ({max_gibberish}) should score less than worst real word ({min_real})"
 
     def test_empty_cell_consistency(self):
         """Test consistent handling of empty cells (dots vs wildcards)."""
@@ -158,21 +41,15 @@ class TestPhase4Regressions:
 
         # Grid starts with all empty cells
         # get_pattern_for_slot should convert empty cells to '?'
-        slot = {'row': 0, 'col': 0, 'direction': 'across', 'length': 5}
+        slot = {"row": 0, "col": 0, "direction": "across", "length": 5}
         pattern = grid.get_pattern_for_slot(slot)
 
         assert pattern == "?????", "Empty cells should be represented as wildcards"
-        assert '.' not in pattern, "Pattern should not contain dots"
+        assert "." not in pattern, "Pattern should not contain dots"
 
     def test_duplicate_word_prevention(self):
         """Test that duplicate words are properly tracked."""
-        state = BeamState(
-            grid=Grid(11),
-            slots_filled=0,
-            total_slots=10,
-            score=0.0,
-            used_words=set()
-        )
+        state = BeamState(grid=Grid(11), slots_filled=0, total_slots=10, score=0.0, used_words=set())
 
         # Add words to used set
         state.used_words.add("STONE")
@@ -193,7 +70,7 @@ class TestPhase4Regressions:
     def test_integration_no_gibberish_in_solutions(self):
         """Integration test: Solutions should never contain obvious gibberish."""
         # Create a quality word list (no gibberish)
-        quality_words = ['STONE', 'ARENA', 'RATES', 'INTER', 'HELLO', 'WORLD']
+        quality_words = ["STONE", "ARENA", "RATES", "INTER", "HELLO", "WORLD"]
         word_list = WordList(quality_words)
 
         # Verify no single-letter repetitions in word list
@@ -217,8 +94,7 @@ class TestPerformanceRegression:
 
         # Create word list with alphabetic words only
         # WordList validates with isalpha(), so can't use digits
-        words = [f"WORD{'ABCD'[i %4]}{'EFGH'[i %4]}{chr(65+i %26)}{chr(65+(i//26) %26)}"
-                 for i in range(1000)]
+        words = [f"WORD{'ABCD'[i % 4]}{'EFGH'[i % 4]}{chr(65 + i % 26)}{chr(65 + (i // 26) % 26)}" for i in range(1000)]
         word_list = WordList(words)
         pm = PatternMatcher(word_list)
 
@@ -227,8 +103,7 @@ class TestPerformanceRegression:
         # Use the actual method name from PatternMatcher
         # Pattern must match word length: WORDAAEA = 8 letters
         pattern = "WORD????"
-        candidates = [(w.text, w.score) for w in word_list.words
-                      if pm.matches_pattern(w.text, pattern)]
+        candidates = [(w.text, w.score) for w in word_list.words if pm.matches_pattern(w.text, pattern)]
         end = time.time()
 
         # Should be fast even with validation

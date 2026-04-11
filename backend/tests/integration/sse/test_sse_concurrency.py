@@ -13,11 +13,10 @@ might start multiple operations (e.g., testing different algorithms). The system
 must maintain separate SSE streams and progress state for each task.
 """
 
-import pytest
 import json
-import threading
-from queue import Queue
-from backend.app import create_app
+
+import pytest
+
 from backend.tests.integration.conftest import create_test_grid
 
 
@@ -38,15 +37,17 @@ class TestConcurrentSSEStreams:
         # Start first autofill
         response1 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response1.status_code == 202
@@ -55,15 +56,17 @@ class TestConcurrentSSEStreams:
         # Start second autofill immediately
         response2 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         assert response2.status_code == 202
@@ -80,8 +83,8 @@ class TestConcurrentSSEStreams:
         messages_2 = sse_parser(sse_response_2.data)
 
         # Both should have messages
-        assert len(messages_1) > 0, f"Task 1 should have progress messages"
-        assert len(messages_2) > 0, f"Task 2 should have progress messages"
+        assert len(messages_1) > 0, "Task 1 should have progress messages"
+        assert len(messages_2) > 0, "Task 2 should have progress messages"
 
         # Messages should be independent (no shared state)
         # If messages were cross-contaminated, we'd see identical sequences
@@ -104,43 +107,49 @@ class TestConcurrentSSEStreams:
         # Start pattern search
         response_pattern = client.post(
             "/api/pattern/with-progress",
-            data=json.dumps({
-                "pattern": "C?T",
-                "wordlists": ["comprehensive"],
-                "max_results": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "pattern": "C?T",
+                    "wordlists": ["comprehensive"],
+                    "max_results": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
         task_id_pattern = response_pattern.json["task_id"]
 
         # Start autofill #1
         response_fill_1 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
         task_id_fill_1 = response_fill_1.json["task_id"]
 
         # Start autofill #2
         response_fill_2 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 15,
-                "min_score": 10,
-                "algorithm": "beam"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 15,
+                    "min_score": 10,
+                    "algorithm": "beam",
+                }
+            ),
+            content_type="application/json",
         )
         task_id_fill_2 = response_fill_2.json["task_id"]
 
@@ -176,29 +185,33 @@ class TestSSETaskIsolation:
         # Start 2 autofill tasks
         response1 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
         task_id_1 = response1.json["task_id"]
 
         response2 = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
         task_id_2 = response2.json["task_id"]
 
@@ -217,8 +230,9 @@ class TestSSETaskIsolation:
         # (This is a basic check - in practice, message content should differ)
         # If isolation failed, we'd see identical message counts/content
         # For now, just verify both streams have data
-        assert messages_1 != messages_2 or len(messages_1) != len(messages_2), \
-            "Streams should have independent progress updates"
+        assert messages_1 != messages_2 or len(messages_1) != len(
+            messages_2
+        ), "Streams should have independent progress updates"
 
     def test_nonexistent_task_id_returns_404(self, client):
         """
@@ -229,14 +243,17 @@ class TestSSETaskIsolation:
 
         # Should return 404 (not found) or immediately close with error message
         # (Implementation might vary - either is acceptable)
-        assert response.status_code in [404, 200], \
-            f"Expected 404 or 200, got {response.status_code}"
+        assert response.status_code in [
+            404,
+            200,
+        ], f"Expected 404 or 200, got {response.status_code}"
 
         # If 200, should immediately send error message
         if response.status_code == 200:
-            data_str = response.data.decode('utf-8')
-            assert len(data_str) == 0 or "error" in data_str.lower() or "not found" in data_str.lower(), \
-                "Should indicate task not found"
+            data_str = response.data.decode("utf-8")
+            assert (
+                len(data_str) == 0 or "error" in data_str.lower() or "not found" in data_str.lower()
+            ), "Should indicate task not found"
 
 
 class TestSSEResourceCleanup:
@@ -254,13 +271,15 @@ class TestSSEResourceCleanup:
         # Start pattern search (fast operation)
         response = client.post(
             "/api/pattern/with-progress",
-            data=json.dumps({
-                "pattern": "C?T",
-                "wordlists": ["comprehensive"],
-                "max_results": 5,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "pattern": "C?T",
+                    "wordlists": ["comprehensive"],
+                    "max_results": 5,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -290,15 +309,17 @@ class TestSSEResourceCleanup:
         # Start autofill
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -333,15 +354,17 @@ class TestSSERaceConditions:
         # Start autofill
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 5,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 10,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 5,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 10,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -358,28 +381,29 @@ class TestSSERaceConditions:
 
         Create 10 tasks in quick succession, verify all unique IDs.
         """
-        grid = create_test_grid(11)
+        create_test_grid(11)
         task_ids = []
 
         # Create 10 tasks rapidly
         for i in range(10):
             response = client.post(
                 "/api/pattern/with-progress",
-                data=json.dumps({
-                    "pattern": f"C?{chr(65 + i)}",  # C?A, C?B, C?C, ...
-                    "wordlists": ["comprehensive"],
-                    "max_results": 5,
-                    "algorithm": "trie"
-                }),
-                content_type="application/json"
+                data=json.dumps(
+                    {
+                        "pattern": f"C?{chr(65 + i)}",  # C?A, C?B, C?C, ...
+                        "wordlists": ["comprehensive"],
+                        "max_results": 5,
+                        "algorithm": "trie",
+                    }
+                ),
+                content_type="application/json",
             )
 
             assert response.status_code == 202
             task_ids.append(response.json["task_id"])
 
         # All task IDs should be unique
-        assert len(task_ids) == len(set(task_ids)), \
-            f"Task ID collision detected: {task_ids}"
+        assert len(task_ids) == len(set(task_ids)), f"Task ID collision detected: {task_ids}"
 
 
 class TestSSELongRunningOperations:
@@ -400,15 +424,17 @@ class TestSSELongRunningOperations:
         # Start autofill with 20s timeout
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 11,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "trie"
-            }),
-            content_type="application/json"
+            data=json.dumps(
+                {
+                    "size": 11,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                }
+            ),
+            content_type="application/json",
         )
 
         task_id = response.json["task_id"]
@@ -420,8 +446,7 @@ class TestSSELongRunningOperations:
         messages = sse_parser(sse_response.data)
 
         # Should have multiple messages spanning the operation
-        assert len(messages) >= 3, \
-            f"Expected multiple progress updates during 20s operation, got {len(messages)}"
+        assert len(messages) >= 3, f"Expected multiple progress updates during 20s operation, got {len(messages)}"
 
 
 # Mark slow tests

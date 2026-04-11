@@ -9,16 +9,16 @@ Tests performance with various:
 Generates detailed performance report.
 """
 
-import time
 import sys
+import time
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.fill.word_list import WordList
-from src.fill.pattern_matcher import PatternMatcher
-from src.fill.trie_pattern_matcher import TriePatternMatcher
+from src.fill.pattern_matcher import PatternMatcher  # noqa: E402
+from src.fill.trie_pattern_matcher import TriePatternMatcher  # noqa: E402
+from src.fill.word_list import WordList  # noqa: E402
 
 
 class BenchmarkResult:
@@ -32,29 +32,36 @@ class BenchmarkResult:
         self.speedup = regex_time / trie_time if trie_time > 0 else 0
 
     def __str__(self):
-        return (f"{self.name:40} | "
-                f"Regex: {self.regex_time*1000:7.2f}ms | "
-                f"Trie: {self.trie_time*1000:7.2f}ms | "
-                f"Speedup: {self.speedup:5.1f}x | "
-                f"Results: {self.result_count:5}")
+        return (
+            f"{self.name:40} | "
+            f"Regex: {self.regex_time*1000:7.2f}ms | "
+            f"Trie: {self.trie_time*1000:7.2f}ms | "
+            f"Speedup: {self.speedup:5.1f}x | "
+            f"Results: {self.result_count:5}"
+        )
 
 
 def load_wordlist(wordlist_path: Path, max_words: int = None):
     """Load words from file."""
     words = []
-    with open(wordlist_path, 'r') as f:
+    with open(wordlist_path, "r") as f:
         for line in f:
             word = line.strip().upper()
-            if word and not word.startswith('#'):
+            if word and not word.startswith("#"):
                 words.append(word)
                 if max_words and len(words) >= max_words:
                     break
     return WordList(words)
 
 
-def benchmark_pattern(pattern: str, regex_matcher: PatternMatcher,
-                     trie_matcher: TriePatternMatcher, min_score: int = 30,
-                     max_results: int = 100, iterations: int = 10):
+def benchmark_pattern(
+    pattern: str,
+    regex_matcher: PatternMatcher,
+    trie_matcher: TriePatternMatcher,
+    min_score: int = 30,
+    max_results: int = 100,
+    iterations: int = 10,
+):
     """Benchmark a single pattern with both algorithms."""
 
     # Warm up (first run may include cache misses)
@@ -87,7 +94,7 @@ def benchmark_pattern(pattern: str, regex_matcher: PatternMatcher,
         f"Pattern: {pattern} (min_score={min_score})",
         regex_time,
         trie_time,
-        len(regex_results)
+        len(regex_results),
     )
 
 
@@ -154,7 +161,7 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
             trie_matcher,
             min_score=min_score,
             max_results=100,
-            iterations=10
+            iterations=10,
         )
         results.append(result)
         print(result)
@@ -179,14 +186,16 @@ def run_benchmarks(wordlist_path: Path, wordlist_size: int = None):
     print("\nTotal Time (all patterns):")
     print(f"  Regex: {total_regex_time*1000:.2f}ms")
     print(f"  Trie:  {total_trie_time*1000:.2f}ms")
-    print(f"  Savings: {(total_regex_time - total_trie_time)*1000:.2f}ms ({(1 - total_trie_time/total_regex_time)*100:.1f}% faster)")
+    savings_ms = (total_regex_time - total_trie_time) * 1000
+    savings_pct = (1 - total_trie_time / total_regex_time) * 100
+    print(f"  Savings: {savings_ms:.2f}ms ({savings_pct:.1f}% faster)")
 
     # Cache statistics
     print(f"\n{'='*90}")
     print("Cache Performance")
     print(f"{'='*90}")
 
-    regex_cache_stats = regex_matcher.get_cache_stats() if hasattr(regex_matcher, 'get_cache_stats') else None
+    regex_cache_stats = regex_matcher.get_cache_stats() if hasattr(regex_matcher, "get_cache_stats") else None
     trie_cache_stats = trie_matcher.get_cache_stats()
 
     if regex_cache_stats:
@@ -215,16 +224,16 @@ def main():
 
     # Find wordlist files
     project_root = Path(__file__).parent.parent.parent
-    wordlists_dir = project_root / 'data' / 'wordlists'
+    wordlists_dir = project_root / "data" / "wordlists"
 
     # Test with different wordlist sizes
     test_configs = [
         # (wordlist_file, max_words, description)
-        ('core/common_3_letter.txt', None, 'Small wordlist (3-letter words)'),
-        ('core/crosswordese.txt', None, 'Medium wordlist (crosswordese)'),
-        ('comprehensive.txt', 10000, 'Large wordlist (10k words)'),
-        ('comprehensive.txt', 50000, 'Very large wordlist (50k words)'),
-        ('comprehensive.txt', None, 'Huge wordlist (full comprehensive ~454k words)'),
+        ("core/common_3_letter.txt", None, "Small wordlist (3-letter words)"),
+        ("core/crosswordese.txt", None, "Medium wordlist (crosswordese)"),
+        ("comprehensive.txt", 10000, "Large wordlist (10k words)"),
+        ("comprehensive.txt", 50000, "Very large wordlist (50k words)"),
+        ("comprehensive.txt", None, "Huge wordlist (full comprehensive ~454k words)"),
     ]
 
     for wordlist_file, max_words, description in test_configs:
@@ -243,6 +252,7 @@ def main():
         except Exception as e:
             print(f"\nERROR: {e}")
             import traceback
+
             traceback.print_exc()
 
         # Add delay between tests
@@ -253,5 +263,5 @@ def main():
     print(f"{'='*90}\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
