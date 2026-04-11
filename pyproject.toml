@@ -1,0 +1,21 @@
+[tool.black]
+line-length = 127
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 127
+
+[tool.ruff]
+line-length = 127
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E203",  # whitespace before ':' — black-intentional for slice notation
+]
+
+[tool.flake8]
+max-line-length = 127
+extend-ignore = ["E203"]
