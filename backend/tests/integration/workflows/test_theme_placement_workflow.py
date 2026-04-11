@@ -9,8 +9,9 @@ This test simulates theme-based crossword creation:
 5. Verify theme words unchanged
 """
 
-import pytest
 import json
+
+import pytest
 
 pytestmark = pytest.mark.slow
 
@@ -35,10 +36,8 @@ class TestThemePlacementWorkflow:
         # Step 1: Upload theme words
         response = client.post(
             "/api/theme/upload",
-            data=json.dumps({
-                "content": "BIRTHDAY\nCELEBRATION\nPARTY"
-            }),
-            content_type="application/json"
+            data=json.dumps({"content": "BIRTHDAY\nCELEBRATION\nPARTY"}),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -48,12 +47,8 @@ class TestThemePlacementWorkflow:
         # Step 2: Get placement suggestions
         response = client.post(
             "/api/theme/suggest-placements",
-            data=json.dumps({
-                "grid": grid,
-                "size": 15,
-                "theme_words": theme_words
-            }),
-            content_type="application/json"
+            data=json.dumps({"grid": grid, "size": 15, "theme_words": theme_words}),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -67,20 +62,22 @@ class TestThemePlacementWorkflow:
         placement = suggestions[0]["suggestions"][0]
         response = client.post(
             "/api/theme/apply-placement",
-            data=json.dumps({
-                "grid": grid,
-                "placement": {
-                    "word": placement["word"],
-                    "row": placement["row"],
-                    "col": placement["col"],
-                    "direction": placement["direction"]
+            data=json.dumps(
+                {
+                    "grid": grid,
+                    "placement": {
+                        "word": placement["word"],
+                        "row": placement["row"],
+                        "col": placement["col"],
+                        "direction": placement["direction"],
+                    },
                 }
-            }),
-            content_type="application/json"
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
-        assert response.json["applied"] == True
+        assert response.json["applied"]
         modified_grid = response.json["grid"]
 
         # Step 4: Verify theme word is in grid
@@ -108,18 +105,18 @@ class TestThemePlacementWorkflow:
         # Run autofill with theme preservation
         response = client.post(
             "/api/fill/with-progress",
-            data=json.dumps({
-                "size": 15,
-                "grid": grid,
-                "wordlists": ["comprehensive"],
-                "timeout": 20,
-                "min_score": 10,
-                "algorithm": "trie",
-                "theme_entries": {
-                    "(0,0,across)": theme_word
+            data=json.dumps(
+                {
+                    "size": 15,
+                    "grid": grid,
+                    "wordlists": ["comprehensive"],
+                    "timeout": 20,
+                    "min_score": 10,
+                    "algorithm": "trie",
+                    "theme_entries": {"(0,0,across)": theme_word},
                 }
-            }),
-            content_type="application/json"
+            ),
+            content_type="application/json",
         )
 
         assert response.status_code == 202

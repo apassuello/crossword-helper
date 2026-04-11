@@ -25,7 +25,7 @@ class ProgressReporter:
         self.enabled = enabled
         self.max_progress = 0  # Track maximum progress for monotonicity
 
-    def report(self, progress: int, message: str, status: str = 'running', data: dict = None):
+    def report(self, progress: int, message: str, status: str = "running", data: dict = None):
         """
         Report progress update.
 
@@ -40,29 +40,29 @@ class ProgressReporter:
 
         # Enforce monotonicity: progress should never decrease
         # This handles backtracking scenarios where filled slots may temporarily decrease
-        if status == 'running':
+        if status == "running":
             progress = max(progress, self.max_progress)
             self.max_progress = progress
-        elif status == 'complete':
+        elif status == "complete":
             # Always allow completion at 100%
             progress = 100
             self.max_progress = 100
 
         event = {
-            'type': 'progress',
-            'progress': progress,
-            'message': message,
-            'status': status
+            "type": "progress",
+            "progress": progress,
+            "message": message,
+            "status": status,
         }
 
         # Include optional data
         if data:
-            event['data'] = data
+            event["data"] = data
 
         # Output to stderr as JSON
         print(json.dumps(event), file=sys.stderr, flush=True)
 
-    def start(self, message: str = 'Starting...'):
+    def start(self, message: str = "Starting..."):
         """
         Report operation start.
 
@@ -70,9 +70,9 @@ class ProgressReporter:
             message: Start message
         """
         self.max_progress = 0  # Reset max progress for new operation
-        self.report(0, message, 'running')
+        self.report(0, message, "running")
 
-    def update(self, progress: int, message: str, status: str = 'running', data: dict = None):
+    def update(self, progress: int, message: str, status: str = "running", data: dict = None):
         """
         Report progress update.
 
@@ -84,14 +84,14 @@ class ProgressReporter:
         """
         self.report(progress, message, status, data)
 
-    def complete(self, message: str = 'Complete'):
+    def complete(self, message: str = "Complete"):
         """
         Report successful completion.
 
         Args:
             message: Completion message
         """
-        self.report(100, message, 'complete')
+        self.report(100, message, "complete")
 
     def error(self, message: str):
         """
@@ -100,4 +100,4 @@ class ProgressReporter:
         Args:
             message: Error message
         """
-        self.report(0, message, 'error')
+        self.report(0, message, "error")

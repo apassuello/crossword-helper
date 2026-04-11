@@ -1,5 +1,10 @@
 # Crossword Construction Helper
 
+[![Tests & Coverage](https://github.com/apassuello/crossword-helper/actions/workflows/test.yml/badge.svg)](https://github.com/apassuello/crossword-helper/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/apassuello/crossword-helper/graph/badge.svg)](https://codecov.io/gh/apassuello/crossword-helper)
+[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
 A toolkit for building crossword puzzles. It has a web UI for interactive grid
 editing and autofill, plus a CLI for scripting and batch operations. All puzzle
 logic lives in the CLI; the web app is a thin wrapper around it.
@@ -29,9 +34,9 @@ python3 run.py
   COT, CUT, etc.) using regex or trie-based search
 - **Autofill** -- fill grids using CSP with backtracking, beam search, or
   iterative repair; supports theme word locking
-- **Wordlists** -- ships with 454k+ words; upload your own or combine multiple
-  lists
-- **Import/Export** -- JSON grid format, PDF export, .puz export
+- **Wordlists** -- ships with 44k curated words; upload your own or combine
+  multiple lists
+- **Export** -- HTML format
 
 ## Development Mode
 
@@ -67,8 +72,8 @@ python -m cli.src.cli validate puzzle.json
 # Create a new empty grid
 python -m cli.src.cli new --size 15 -o puzzle.json
 
-# Export to PDF
-python -m cli.src.cli export filled.json --format pdf -o puzzle.pdf
+# Export to HTML
+python -m cli.src.cli export filled.json --format html -o puzzle.html
 ```
 
 ## Running Tests
@@ -95,10 +100,12 @@ src/               React frontend (components, styles)
 data/wordlists/    Word lists (comprehensive.txt + specialty lists)
 ```
 
+## Resources
+
+- [The Art of Crossword Construction](docs/resources/art-of-construction.pdf) -- reference guide for puzzle construction techniques
+
 ## Known Limitations
 
-- The CLI `--theme-entries` flag does not reliably lock theme words during
-  autofill. Use the web interface for themed puzzles instead.
 - No multi-user or authentication support. Runs locally only.
 
 ## Tech Stack

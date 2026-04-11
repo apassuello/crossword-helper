@@ -7,21 +7,22 @@ All subprocess calls are mocked — no real CLI invocations.
 import json
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.core.cli_adapter import CLIAdapter, get_adapter, cached_normalize
-
+from backend.core.cli_adapter import CLIAdapter, cached_normalize, get_adapter
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     """Reset the module-level singleton before every test."""
     import backend.core.cli_adapter as mod
+
     mod._adapter = None
     # Also clear lru_cache between tests
     cached_normalize.cache_clear()
@@ -52,6 +53,7 @@ def _make_completed_process(stdout="", stderr="", returncode=0):
 # Constructor
 # ===========================================================================
 
+
 class TestConstructor:
     def test_raises_when_cli_not_found(self, tmp_path):
         missing = tmp_path / "no_such_file"
@@ -72,6 +74,7 @@ class TestConstructor:
 # ===========================================================================
 # pattern()
 # ===========================================================================
+
 
 class TestPattern:
     def test_empty_pattern_raises(self, adapter):
@@ -142,6 +145,7 @@ class TestPattern:
 # number()
 # ===========================================================================
 
+
 class TestNumber:
     def test_empty_grid_raises(self, adapter):
         with pytest.raises(ValueError, match="empty"):
@@ -188,6 +192,7 @@ class TestNumber:
 # fill()
 # ===========================================================================
 
+
 class TestFill:
     def test_empty_grid_raises(self, adapter):
         with pytest.raises(ValueError, match="empty"):
@@ -211,6 +216,7 @@ class TestFill:
             if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
                 # Could be reading the output file
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -220,7 +226,10 @@ class TestFill:
                     mock_stat.return_value = MagicMock(st_size=100)
                     with patch.object(Path, "unlink"):
                         adapter.fill(
-                            {"size": 7, "grid": [["." for _ in range(7)] for _ in range(7)]},
+                            {
+                                "size": 7,
+                                "grid": [["." for _ in range(7)] for _ in range(7)],
+                            },
                             ["w1.txt", "w2.txt"],
                             timeout_seconds=120,
                             min_score=50,
@@ -254,6 +263,7 @@ class TestFill:
             path_str = str(path)
             if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -281,6 +291,7 @@ class TestFill:
             path_str = str(path)
             if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -327,6 +338,7 @@ class TestFill:
 # fill_with_resume()
 # ===========================================================================
 
+
 class TestFillWithResume:
     def test_missing_state_file_raises(self, adapter):
         with pytest.raises(FileNotFoundError, match="State file not found"):
@@ -345,6 +357,7 @@ class TestFillWithResume:
             path_str = str(path)
             if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -387,6 +400,7 @@ class TestFillWithResume:
             path_str = str(path)
             if path_str.endswith(".json") and "r" in (a[0] if a else kw.get("mode", "r")):
                 import io
+
                 return io.StringIO(json.dumps(result_data))
             return original_open(path, *a, **kw)
 
@@ -401,6 +415,7 @@ class TestFillWithResume:
 # ===========================================================================
 # normalize()
 # ===========================================================================
+
 
 class TestNormalize:
     def test_empty_text_raises(self, adapter):
@@ -427,8 +442,103 @@ class TestNormalize:
 
 
 # ===========================================================================
+# analyze_constraints() / analyze_placement_impact()
+# ===========================================================================
+
+
+class TestAnalyzeConstraints:
+    GRID = {"size": 5, "grid": [["." for _ in range(5)] for _ in range(5)]}
+    PAYLOAD = {
+        "constraints": {"0,0": {"across_options": 10, "down_options": 5, "min_options": 5}},
+        "summary": {"total_cells": 25, "critical_cells": 0, "average_min_options": 5.0},
+    }
+
+    def test_empty_grid_raises(self, adapter):
+        with pytest.raises(ValueError, match="empty"):
+            adapter.analyze_constraints({}, ["words.txt"])
+
+    def test_empty_wordlist_raises(self, adapter):
+        with pytest.raises(ValueError, match="wordlist"):
+            adapter.analyze_constraints(self.GRID, [])
+
+    @patch("subprocess.run")
+    def test_command_construction(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(self.PAYLOAD))
+        adapter.analyze_constraints(self.GRID, ["list1.txt", "list2.txt"])
+
+        args = mock_run.call_args[0][0]
+        assert "analyze" in args
+        assert "--json-output" in args
+        w_indices = [i for i, a in enumerate(args) if a == "-w"]
+        assert len(w_indices) == 2
+        assert args[w_indices[0] + 1] == "list1.txt"
+        assert args[w_indices[1] + 1] == "list2.txt"
+
+    @patch("subprocess.run")
+    def test_invalid_json_raises(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout="NOT JSON")
+        with pytest.raises(ValueError, match="Failed to parse"):
+            adapter.analyze_constraints(self.GRID, ["words.txt"])
+
+    @patch("subprocess.run")
+    def test_returns_parsed_result(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(self.PAYLOAD))
+        result = adapter.analyze_constraints(self.GRID, ["words.txt"])
+        assert result == self.PAYLOAD
+
+
+class TestAnalyzePlacementImpact:
+    GRID = {"size": 5, "grid": [["." for _ in range(5)] for _ in range(5)]}
+    SLOT = {"row": 0, "col": 0, "direction": "across", "length": 5}
+    PAYLOAD = {
+        "impacts": {"0,1,down": {"before": 100, "after": 10, "delta": -90, "length": 5}},
+        "summary": {
+            "total_crossings": 1,
+            "worst_delta": -90,
+            "crossings_eliminated": 0,
+        },
+    }
+
+    def test_empty_grid_raises(self, adapter):
+        with pytest.raises(ValueError, match="empty"):
+            adapter.analyze_placement_impact({}, "CATCH", self.SLOT, ["words.txt"])
+
+    def test_empty_word_raises(self, adapter):
+        with pytest.raises(ValueError, match="Word"):
+            adapter.analyze_placement_impact(self.GRID, "", self.SLOT, ["words.txt"])
+
+    @patch("subprocess.run")
+    def test_command_construction(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(self.PAYLOAD))
+        adapter.analyze_placement_impact(self.GRID, "CATCH", self.SLOT, ["list1.txt"])
+
+        args = mock_run.call_args[0][0]
+        assert "analyze" in args
+        assert "--json-output" in args
+        assert "--word" in args
+        word_idx = args.index("--word")
+        assert args[word_idx + 1] == "CATCH"
+        assert "--slot" in args
+        slot_idx = args.index("--slot")
+        assert args[slot_idx + 1] == "0,0,across,5"
+
+    @patch("subprocess.run")
+    def test_invalid_json_raises(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout="NOT JSON")
+        with pytest.raises(ValueError, match="Failed to parse"):
+            adapter.analyze_placement_impact(self.GRID, "CATCH", self.SLOT, ["words.txt"])
+
+    @patch("subprocess.run")
+    def test_returns_parsed_result(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(self.PAYLOAD))
+        result = adapter.analyze_placement_impact(self.GRID, "CATCH", self.SLOT, ["words.txt"])
+        assert result == self.PAYLOAD
+
+
+# ===========================================================================
 # health_check()
 # ===========================================================================
+
 
 class TestHealthCheck:
     @patch("subprocess.run")
@@ -455,6 +565,7 @@ class TestHealthCheck:
 # ===========================================================================
 # _run_command() internals
 # ===========================================================================
+
 
 class TestRunCommand:
     @patch("subprocess.run")
@@ -493,6 +604,7 @@ class TestRunCommand:
 # Singleton: get_adapter()
 # ===========================================================================
 
+
 class TestGetAdapter:
     @patch("backend.core.cli_adapter.CLIAdapter.__init__", return_value=None)
     def test_returns_same_instance(self, mock_init):
@@ -506,6 +618,7 @@ class TestGetAdapter:
 # ===========================================================================
 # Caching: cached_normalize()
 # ===========================================================================
+
 
 class TestCachedNormalize:
     @patch("backend.core.cli_adapter.get_adapter")

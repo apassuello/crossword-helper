@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Crossword Construction Helper
 
-A comprehensive crossword puzzle construction toolkit with web interface and CLI tools, implementing a **CLI-as-single-source-of-truth architecture**.
+A crossword puzzle construction toolkit with web interface and CLI tools, implementing a **CLI-as-single-source-of-truth architecture**.
 
-**Current Status:** All 3 development phases complete (165/165 tests passing)
+**Current Status:** 958 tests (907 default + 51 slow)
 
 ---
 
@@ -76,7 +76,7 @@ python -m cli.src.cli pattern "C?T" \
   -w data/wordlists/comprehensive.txt \
   --algorithm trie --json-output
 
-# Export to PDF or HTML
+# Export to HTML
 python -m cli.src.cli export filled.json --format html -o puzzle.html
 ```
 
@@ -86,7 +86,7 @@ python -m cli.src.cli export filled.json --format html -o puzzle.html
 
 ### CLI as Single Source of Truth
 
-The key architectural principle is that **all business logic lives in the CLI tool**. The web backend is a thin HTTP wrapper that executes CLI commands via subprocess.
+All business logic lives in the CLI tool. The web backend is a thin HTTP wrapper that executes CLI commands via subprocess.
 
 ```
 React Frontend (src/)
@@ -97,12 +97,6 @@ CLI Tool (cli/src/)
     ↓ Core algorithms
 NumPy + Pattern Matching + CSP Autofill
 ```
-
-**Why this works:**
-- No code duplication (one implementation, two interfaces)
-- Easy testing (test logic once, both interfaces benefit)
-- Clear separation (HTTP concerns vs. crossword logic)
-- ~100-300ms subprocess overhead is negligible for operations that take 30s-5min
 
 ### Technology Stack
 
@@ -122,10 +116,10 @@ NumPy + Pattern Matching + CSP Autofill
 - Click (CLI framework)
 - NumPy (grid operations)
 - CSP + Beam Search + Hybrid (autofill algorithms)
-- Trie-based pattern matching (10-50x faster than regex)
+- Trie-based pattern matching
 
 **Data:**
-- 454k+ words across multiple wordlists
+- 44k curated words (comprehensive.txt), plus scored/international variants
 - JSON for grid state
 - Gzipped JSON for pause/resume state
 - File-based progress tracking
@@ -137,26 +131,27 @@ NumPy + Pattern Matching + CSP Autofill
 ```
 crossword-helper/
 ├── backend/                    # Flask API (thin wrapper around CLI)
-│   ├── api/                    # API routes (6 blueprints, 20+ endpoints)
+│   ├── api/                    # API routes (7 blueprints, 20+ endpoints)
 │   │   ├── routes.py           # Core endpoints (pattern, number, fill)
 │   │   ├── grid_routes.py      # Grid operations
 │   │   ├── theme_routes.py     # Theme entry management
 │   │   ├── pause_resume_routes.py  # Pause/resume autofill
 │   │   ├── wordlist_routes.py  # Wordlist management
-│   │   └── progress_routes.py  # SSE progress streaming
+│   │   ├── progress_routes.py  # SSE progress streaming
+│   │   └── constraint_routes.py  # Constraint analysis
 │   ├── core/                   # Backend logic
 │   │   ├── cli_adapter.py      # Subprocess execution (THE INTEGRATION POINT)
 │   │   ├── edit_merger.py      # Grid edit validation
 │   │   ├── theme_placer.py     # Theme word suggestions
-│   │   ├── black_square_suggester.py  # Strategic black square placement
+│   │   ├── black_square_suggester.py  # Black square placement
 │   │   └── wordlist_resolver.py  # Wordlist path resolution
 │   ├── data/                   # Data access layer
-│   ├── tests/                  # Backend tests (165 passing)
+│   ├── tests/                  # Backend tests
 │   └── app.py                  # Flask app factory
 │
 ├── cli/                        # CLI tool (SINGLE SOURCE OF TRUTH)
 │   └── src/
-│       ├── cli.py              # Click commands (8 commands)
+│       ├── cli.py              # Click commands (14 commands)
 │       ├── core/               # Grid, numbering, validation, scoring
 │       │   ├── grid.py         # Grid data structure (NumPy)
 │       │   ├── numbering.py    # Auto-numbering algorithm
@@ -168,32 +163,31 @@ crossword-helper/
 │       │   ├── autofill.py     # CSP with backtracking + AC-3
 │       │   ├── beam_search/    # Beam search orchestrator
 │       │   ├── pattern_matcher.py  # Regex pattern matching
-│       │   ├── trie_matcher.py # Trie-based (10-50x faster)
+│       │   ├── trie_matcher.py # Trie-based pattern matching
 │       │   ├── word_list.py    # Wordlist management
 │       │   ├── state_manager.py  # Pause/resume state
 │       │   └── pause_controller.py  # File-based IPC
-│       └── export/             # Export formats (HTML, JSON)
+│       └── export/             # Export formats (HTML)
 │
 ├── src/                        # React frontend
 │   ├── App.jsx                 # Main app component
-│   ├── components/             # React components (20+)
+│   ├── components/             # React components
 │   │   ├── GridEditor.jsx      # Interactive crossword grid
 │   │   ├── AutofillPanel.jsx   # Autofill controls + progress
 │   │   ├── PatternMatcher.jsx  # Pattern search UI
-│   │   ├── WordlistPanel.jsx   # Wordlist management
-│   │   └── ThemePlacer.jsx     # Theme word placement
+│   │   ├── WordListPanel.jsx   # Wordlist management
+│   │   └── ThemeWordsPanel.jsx # Theme word placement
 │   ├── hooks/                  # Custom React hooks
 │   └── styles/                 # SCSS styles
 │
-├── data/wordlists/             # 454k+ words
-│   ├── comprehensive.txt       # All words
-│   ├── core/                   # Curated core lists
+├── data/wordlists/             # Word lists
+│   ├── comprehensive.txt       # 44k curated words
+│   ├── core/                   # Core lists
 │   └── themed/                 # Specialty lists
 │
-├── docs/                       # Comprehensive documentation
+├── docs/                       # Documentation
 │   ├── README.md               # Documentation navigation
-│   ├── ARCHITECTURE.md         # System architecture (1,842 lines)
-│   ├── ROADMAP.md              # Development history
+│   ├── ARCHITECTURE.md         # System architecture
 │   ├── specs/                  # Component specifications
 │   │   ├── CLI_SPEC.md         # CLI specification
 │   │   ├── BACKEND_SPEC.md     # Backend API specification
@@ -217,7 +211,7 @@ crossword-helper/
 
 **Location:** `backend/core/cli_adapter.py`
 
-This is the **critical integration point** between web and CLI. It executes CLI commands via subprocess and parses JSON output.
+This is the integration point between web and CLI. It executes CLI commands via subprocess and parses JSON output.
 
 **Key methods:**
 - `pattern()` - Execute pattern search
@@ -242,25 +236,19 @@ Three algorithms with different trade-offs:
 
 1. **CSP with Backtracking** (`autofill.py`)
    - Constraint Satisfaction with AC-3 arc consistency
-   - Guaranteed to find solution if one exists
    - Best for: Small grids (11×11)
-   - Performance: <30s for 11×11
 
 2. **Beam Search** (`beam_search/orchestrator.py`)
    - Global optimization, maintains top-k solutions
    - Better word quality than CSP
    - Best for: Medium grids (15×15)
-   - Performance: 1-5min for 15×15
 
 3. **Hybrid** (default)
-   - Starts with Beam Search, falls back to CSP
-   - Best all-around performance
+   - Starts with Beam Search, falls back to iterative repair
    - Best for: All grid sizes
-   - Performance: 1-5min for 15×15, 5-30min for 21×21
 
 ### Pause/Resume System
 
-**How it works:**
 1. User pauses autofill → backend writes pause signal file
 2. CLI detects signal → serializes complete algorithm state to gzipped JSON
 3. User manually edits grid (add/remove/change letters)
@@ -278,11 +266,10 @@ Three algorithms with different trade-offs:
 
 **Location:** `cli/src/fill/`
 
-Three implementations:
+Two implementations:
 
-1. **Regex** (`pattern_matcher.py`) - Simple, ~100ms for 454k words
-2. **Trie** (`trie_matcher.py`) - 10-50x faster, ~10ms for 454k words (default)
-3. **Aho-Corasick** (`ahocorasick_matcher.py`) - Fastest for batch operations
+1. **Regex** (`pattern_matcher.py`) - Simple baseline
+2. **Trie** (`trie_matcher.py`) - Faster, used by default
 
 ---
 
@@ -356,22 +343,6 @@ def test_pattern_search(cli_adapter, mocker):
     mock_run.assert_called_once()
 ```
 
-### Performance Considerations
-
-**API Response Times:**
-- `/api/health`: ~30ms (no CLI call)
-- `/api/pattern`: 150-300ms (CLI overhead + trie search)
-- `/api/number`: 120-180ms (CLI overhead + numbering)
-- `/api/fill` (start): 200-400ms (spawns subprocess, returns task ID)
-- `/api/fill` (complete): 30s-5min (actual autofill time)
-
-**Subprocess overhead:** 100-280ms average (acceptable for this use case)
-
-**Memory usage:**
-- Backend: ~50-100MB
-- CLI process: ~100-500MB (depends on grid size and beam width)
-- Frontend: ~10MB
-
 ---
 
 ## Common Development Tasks
@@ -426,11 +397,11 @@ npm run dev
 
 ## Documentation
 
-For comprehensive information, see:
+See:
 
 - **[docs/README.md](../docs/README.md)** - Documentation navigation guide
-- **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)** - Complete system architecture (1,842 lines)
-- **[docs/api/API_REFERENCE.md](../docs/api/API_REFERENCE.md)** - API reference (26 endpoints)
+- **[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)** - System architecture
+- **[docs/api/API_REFERENCE.md](../docs/api/API_REFERENCE.md)** - API reference
 - **[docs/specs/](../docs/specs/)** - CLI, Backend, Frontend specifications
 - **[docs/ops/TESTING.md](../docs/ops/TESTING.md)** - Testing strategies
 - **[docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md)** - Developer onboarding
@@ -442,21 +413,16 @@ For comprehensive information, see:
 ### Working Features ✅
 - Custom wordlists
 - Multiple wordlist support
-- Pattern matching (all algorithms)
+- Pattern matching (regex + trie)
 - Grid validation
-- Autofill (all algorithms)
+- Autofill (CSP, beam search, hybrid)
 - Pause/resume autofill
+- Adaptive autofill with automatic black square placement
 - Theme entry locking (web UI)
-- Export (PDF, HTML, JSON)
+- Constraint analysis and crossing quality heatmap
+- Export (HTML)
 - Real-time progress tracking
 
-### Known Issues ⚠️
-- CLI `--theme-entries` flag does NOT preserve theme words
-  - **Workaround:** Use web interface for themed puzzles
-- CLI `--adaptive` flag does NOT auto-add black squares
-  - **Workaround:** Use web interface black square optimizer
-
----
-
-**Version:** 2.0.0 (All phases complete)
-**Last Updated:** December 2025
+### Resolved Issues
+- ~~CLI `--theme-entries` flag does NOT preserve theme words~~ **FIXED** (canary test was passing raw JSON instead of a file path)
+- ~~CLI `--adaptive` flag does NOT auto-add black squares~~ **FIXED** (now working after trie score bound and beam timeout fixes)

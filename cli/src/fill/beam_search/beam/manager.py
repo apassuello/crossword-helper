@@ -5,9 +5,9 @@ This module implements strategies for beam expansion, pruning,
 and adaptive width adjustment.
 """
 
-from typing import List, Dict
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
+from typing import Dict, List
 
 from ..state import BeamState
 
@@ -18,12 +18,7 @@ class BeamManagementStrategy(ABC):
     """Abstract base class for beam management strategies."""
 
     @abstractmethod
-    def expand_beam(
-        self,
-        beam: List[BeamState],
-        slot: Dict,
-        candidates_per_slot: int
-    ) -> List[BeamState]:
+    def expand_beam(self, beam: List[BeamState], slot: Dict, candidates_per_slot: int) -> List[BeamState]:
         """
         Expand beam by trying top-K candidates in each state.
 
@@ -32,11 +27,7 @@ class BeamManagementStrategy(ABC):
         """
 
     @abstractmethod
-    def prune_beam(
-        self,
-        beam: List[BeamState],
-        beam_width: int
-    ) -> List[BeamState]:
+    def prune_beam(self, beam: List[BeamState], beam_width: int) -> List[BeamState]:
         """
         Prune beam to keep only top-K diverse states.
 
@@ -50,7 +41,7 @@ class BeamManagementStrategy(ABC):
         beam_states: List[BeamState],
         unfilled_slots: List[Dict],
         total_slots: int,
-        slot: Dict
+        slot: Dict,
     ) -> int:
         """
         Calculate adaptive beam width based on search state.
@@ -76,7 +67,7 @@ class BeamManager(BeamManagementStrategy):
         compute_score_func,
         is_quality_word_func,
         base_beam_width: int,
-        value_ordering=None  # Phase 4.5: Added value ordering
+        value_ordering=None,
     ):
         """
         Initialize beam manager.
@@ -88,24 +79,19 @@ class BeamManager(BeamManagementStrategy):
             compute_score_func: Function to compute state score
             is_quality_word_func: Function to check word quality
             base_beam_width: Base beam width
-            value_ordering: Value ordering strategy (Phase 4.5)
+            value_ordering: Value ordering strategy
         """
         self.pattern_matcher = pattern_matcher
         self.get_min_score = get_min_score_func
         self.evaluate_viability = evaluate_viability_func
         self.compute_score = compute_score_func
         self.is_quality_word = is_quality_word_func
-        self.value_ordering = value_ordering  # Phase 4.5
+        self.value_ordering = value_ordering
         self.base_beam_width = base_beam_width
         self.debug_lcv = False
         self.debug_mac = False
 
-    def expand_beam(
-        self,
-        beam: List[BeamState],
-        slot: Dict,
-        candidates_per_slot: int
-    ) -> List[BeamState]:
+    def expand_beam(self, beam: List[BeamState], slot: Dict, candidates_per_slot: int) -> List[BeamState]:
         """
         Expand beam by trying top-K candidates in each state.
 
@@ -142,7 +128,7 @@ class BeamManager(BeamManagementStrategy):
         for beam_idx, state in enumerate(beam):
             # THEME PRESERVATION FIX: Check if slot already has an assigned word
             # This prevents theme words from being overwritten during expansion
-            slot_id = (slot['row'], slot['col'], slot['direction'])
+            slot_id = (slot["row"], slot["col"], slot["direction"])
             if slot_id in state.slot_assignments:
                 # Slot already filled (e.g., theme word) - don't try to fill it again
                 expanded.append(state)
@@ -152,40 +138,33 @@ class BeamManager(BeamManagementStrategy):
             pattern = state.grid.get_pattern_for_slot(slot)
 
             # Skip if already filled
-            if '?' not in pattern:
+            if "?" not in pattern:
                 expanded.append(state)
                 continue
 
             # Use length-dependent quality threshold
-            min_score = self.get_min_score(slot['length'])
+            min_score = self.get_min_score(slot["length"])
 
             # Get ALL candidate words
-            all_candidates = self.pattern_matcher.find(
-                pattern,
-                min_score=min_score
-            )
+            all_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
 
             if len(all_candidates) == 0:
                 # No candidates: this beam state is dead
                 continue
 
-            # CROSSWORDESE FILTER (Phase 2.1 - Research Gap #8):
-            # Filter out unacceptable crosswordese based on slot length
+            # CROSSWORDESE FILTER: Filter out unacceptable crosswordese based on slot length
             # - 3-4 letters: Crosswordese OK (glue words)
             # - 5-6 letters: Crosswordese penalized (score reduced 50%)
             # - 7+ letters: Crosswordese completely filtered (unacceptable)
-            all_candidates = filter_crosswordese(all_candidates, slot['length'])
+            all_candidates = filter_crosswordese(all_candidates, slot["length"])
 
             if len(all_candidates) == 0:
                 # No candidates after crosswordese filter: dead end
                 continue
 
             # QUALITY FILTER: For long slots, reject likely gibberish
-            if slot['length'] >= 7:
-                quality_candidates = [
-                    (word, score) for word, score in all_candidates
-                    if self.is_quality_word(word)
-                ]
+            if slot["length"] >= 7:
+                quality_candidates = [(word, score) for word, score in all_candidates if self.is_quality_word(word)]
 
                 # Safety valve: only use quality filter if enough candidates remain
                 if len(quality_candidates) >= 5:
@@ -214,10 +193,10 @@ class BeamManager(BeamManagementStrategy):
                     total_skipped_duplicate += 1
                     continue
 
-                # FIX #5 (Phase 4.3): CRITICAL - Validate word length matches slot length
-                # This should never fail if pattern matching is correct, but add defensive check
-                # to prevent partial placements that leave dots in grid
-                if len(word) != slot['length']:
+                # Validate word length matches slot length (defensive check)
+                # This should never fail if pattern matching is correct, but prevents
+                # partial placements that leave dots in grid
+                if len(word) != slot["length"]:
                     continue
 
                 # Create new state
@@ -225,27 +204,20 @@ class BeamManager(BeamManagementStrategy):
 
                 # THEME PRESERVATION: Place word (may fail if conflicts with locked cells)
                 try:
-                    new_state.grid.place_word(
-                        word,
-                        slot['row'],
-                        slot['col'],
-                        slot['direction']
-                    )
+                    new_state.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
                 except ValueError:
                     # Word conflicts with locked cells (theme words) - skip it
                     continue
 
                 # Update metadata
                 new_state.used_words.add(word)
-                slot_id = (slot['row'], slot['col'], slot['direction'])
+                slot_id = (slot["row"], slot["col"], slot["direction"])
                 new_state.slot_assignments[slot_id] = word
 
-                # FIX #1 (Phase 4.2): Only increment slots_filled if slot is COMPLETELY filled
-                # Previous bug: Counted every word placement, even if slot still had '?' wildcards
-                # Correct: Only count when pattern has no '?' remaining
-                # Note: No need to check for dots - get_pattern_for_slot() converts dots to '?'
+                # Only increment slots_filled if slot is COMPLETELY filled
+                # (pattern has no '?' remaining)
                 pattern = new_state.grid.get_pattern_for_slot(slot)
-                if '?' not in pattern:
+                if "?" not in pattern:
                     new_state.slots_filled += 1
 
                 # Compute score
@@ -260,9 +232,8 @@ class BeamManager(BeamManagementStrategy):
                     expanded.append(new_state)
                     total_added += 1
 
-                    # Phase 5.1: Track word usage for pattern diversity
-                    # If value_ordering supports pattern tracking, update bigram counts
-                    if hasattr(self.value_ordering, 'track_word_usage'):
+                    # Track word usage for pattern diversity (update bigram counts)
+                    if hasattr(self.value_ordering, "track_word_usage"):
                         self.value_ordering.track_word_usage(word)
                 else:
                     total_skipped_viability += 1
@@ -276,11 +247,7 @@ class BeamManager(BeamManagementStrategy):
 
         return expanded
 
-    def prune_beam(
-        self,
-        beam: List[BeamState],
-        beam_width: int
-    ) -> List[BeamState]:
+    def prune_beam(self, beam: List[BeamState], beam_width: int) -> List[BeamState]:
         """
         Prune beam to keep only top-K DIVERSE states.
 
@@ -339,9 +306,7 @@ class BeamManager(BeamManagementStrategy):
                     break
 
                 # Check diversity: how many words differ from already selected?
-                min_difference = min(
-                    self._count_word_differences(candidate, s) for s in selected
-                )
+                min_difference = min(self._count_word_differences(candidate, s) for s in selected)
 
                 # Only add if sufficiently different (at least 1 word different)
                 if min_difference > 0:
@@ -367,7 +332,7 @@ class BeamManager(BeamManagementStrategy):
         beam_states: List[BeamState],
         unfilled_slots: List[Dict],
         total_slots: int,
-        slot: Dict
+        slot: Dict,
     ) -> int:
         """
         Smart adaptive beam width based on search state, not just depth.
@@ -395,7 +360,7 @@ class BeamManager(BeamManagementStrategy):
             mean_score = sum(scores) / len(scores)
             variance = sum((s - mean_score) ** 2 for s in scores) / len(scores)
             # Normalize variance
-            normalized_variance = variance / (mean_score ** 2 + 0.001)
+            normalized_variance = variance / (mean_score**2 + 0.001)
         else:
             normalized_variance = 1.0
 
@@ -408,8 +373,8 @@ class BeamManager(BeamManagementStrategy):
             diversity_factor = 1.0
 
         # Factor 2: Count viable candidates for current slot
-        pattern = beam_states[0].grid.get_pattern_for_slot(slot) if beam_states else "?" * slot['length']
-        min_score = self.get_min_score(slot['length'])
+        pattern = beam_states[0].grid.get_pattern_for_slot(slot) if beam_states else "?" * slot["length"]
+        min_score = self.get_min_score(slot["length"])
         candidates = self.pattern_matcher.find(pattern, min_score=min_score)
         viable_count = len(candidates)
 

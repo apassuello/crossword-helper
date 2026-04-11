@@ -7,7 +7,8 @@ for 10-50x faster pattern matching with large word lists.
 API-compatible with pattern_matcher.PatternMatcher for easy switching.
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import Dict, List, Optional, Tuple
+
 from .word_list import WordList
 from .word_trie import build_trie_from_wordlist
 
@@ -60,7 +61,7 @@ class TriePatternMatcher:
         pattern: str,
         min_score: int = 30,
         max_results: Optional[int] = None,
-        progress_callback=None
+        progress_callback=None,
     ) -> List[Tuple[str, int]]:
         """
         Find words matching pattern.
@@ -85,7 +86,7 @@ class TriePatternMatcher:
             [('VISA', 85), ('PITA', 80), ('DIVA', 75), ('RITA', 70)]
         """
         # Normalize pattern (convert . to ?)
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
 
         # Check cache
         cache_key = f"{pattern}:{min_score}:{max_results}"
@@ -130,7 +131,7 @@ class TriePatternMatcher:
         Returns:
             Number of matching words
         """
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
         return self.trie.count_matches(pattern, min_score)
 
     def get_best_match(self, pattern: str) -> Tuple[str, int]:
@@ -159,7 +160,7 @@ class TriePatternMatcher:
         Returns:
             True if at least one word matches
         """
-        pattern = pattern.upper().replace('.', '?')
+        pattern = pattern.upper().replace(".", "?")
         return self.trie.has_matches(pattern, min_score)
 
     def clear_cache(self) -> None:
@@ -179,11 +180,11 @@ class TriePatternMatcher:
         hit_rate = self._cache_hits / total if total > 0 else 0
 
         return {
-            'hits': self._cache_hits,
-            'misses': self._cache_misses,
-            'total_queries': total,
-            'hit_rate': f"{hit_rate:.1%}",
-            'cache_size': len(self._pattern_cache)
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "total_queries": total,
+            "hit_rate": f"{hit_rate:.1%}",
+            "cache_size": len(self._pattern_cache),
         }
 
     def get_trie_stats(self) -> Dict[str, any]:

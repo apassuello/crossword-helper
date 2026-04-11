@@ -4,7 +4,9 @@ import json
 import select
 import subprocess
 import time
+
 import pytest
+
 from backend.app import create_app
 
 
@@ -20,19 +22,21 @@ def client():
 @pytest.fixture
 def sse_parser():
     """Parse SSE stream bytes into list of JSON message dicts."""
+
     def parse_sse_stream(data_bytes):
         messages = []
-        data_str = data_bytes.decode('utf-8')
-        for chunk in data_str.split('\n\n'):
+        data_str = data_bytes.decode("utf-8")
+        for chunk in data_str.split("\n\n"):
             if not chunk.strip():
                 continue
-            for line in chunk.split('\n'):
-                if line.startswith('data: '):
+            for line in chunk.split("\n"):
+                if line.startswith("data: "):
                     try:
                         messages.append(json.loads(line[6:]))
                     except json.JSONDecodeError:
                         pass
         return messages
+
     return parse_sse_stream
 
 
@@ -77,12 +81,12 @@ def collect_sse_messages(client, task_id):
     """
     sse_response = client.get(f"/api/progress/{task_id}")
     messages = []
-    data_str = sse_response.data.decode('utf-8')
-    for chunk in data_str.split('\n\n'):
+    data_str = sse_response.data.decode("utf-8")
+    for chunk in data_str.split("\n\n"):
         if not chunk.strip():
             continue
-        for line in chunk.split('\n'):
-            if line.startswith('data: '):
+        for line in chunk.split("\n"):
+            if line.startswith("data: "):
                 try:
                     messages.append(json.loads(line[6:]))
                 except json.JSONDecodeError:
@@ -144,7 +148,4 @@ def run_cli_until_output(cmd, target_text, timeout=10):
     stdout_so_far = "".join(collected)
     if target_text in stdout_so_far:
         return stdout_so_far
-    raise TimeoutError(
-        f"'{target_text}' not found in stdout within {timeout}s. "
-        f"Got: {stdout_so_far[:500]}"
-    )
+    raise TimeoutError(f"'{target_text}' not found in stdout within {timeout}s. " f"Got: {stdout_so_far[:500]}")

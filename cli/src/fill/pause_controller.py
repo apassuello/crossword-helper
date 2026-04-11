@@ -5,9 +5,9 @@ Uses file-based signaling to request pause during long-running algorithms.
 Simple, reliable, and cross-platform compatible.
 """
 
+import time
 from pathlib import Path
 from typing import Optional
-import time
 
 
 class PauseController:

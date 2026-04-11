@@ -1,53 +1,31 @@
 """
-Beam search autofill engine for crossword grids.
+Backward-compatibility wrapper for BeamSearchAutofill.
 
-BACKWARD COMPATIBILITY WRAPPER - This module now delegates to BeamSearchOrchestrator.
-
-The original 1,989-line god class has been refactored into focused components.
-This wrapper maintains the original API for backward compatibility.
+Delegates to BeamSearchOrchestrator. Kept so existing imports
+(tests, hybrid_autofill) continue to work.
 """
 
 import logging
 from typing import Dict, Optional, Tuple
 
 from ..core.grid import Grid
-from .word_list import WordList
-from .pattern_matcher import PatternMatcher
 from .beam_search.orchestrator import BeamSearchOrchestrator
 from .beam_search.state import BeamState
+from .pattern_matcher import PatternMatcher
+from .word_list import WordList
 
 # Module-level logger for backward compatibility with tests
 logger = logging.getLogger(__name__)
 
 # Re-export BeamState for backward compatibility
-__all__ = ['BeamSearchAutofill', 'BeamState']
+__all__ = ["BeamSearchAutofill", "BeamState"]
 
 
 class BeamSearchAutofill(BeamSearchOrchestrator):
     """
-    Beam search solver for crossword grids.
+    Backward-compatibility wrapper around BeamSearchOrchestrator.
 
-    BACKWARD COMPATIBILITY WRAPPER - Inherits from BeamSearchOrchestrator.
-
-    This class now simply inherits all functionality from BeamSearchOrchestrator,
-    which composes the refactored components:
-    - SlotSelector (MRV selection)
-    - ConstraintEngine (MAC propagation)
-    - ValueOrdering (LCV + stratified shuffling)
-    - DiversityManager (beam diversity)
-    - StateEvaluator (viability + quality)
-    - BeamManager (expansion + pruning)
-
-    The original monolithic implementation has been decomposed into these
-    focused, testable components while maintaining the same external API.
-
-    Algorithm:
-    1. Initialize beam with beam_width empty grids
-    2. For each slot (in MRV order):
-        a. Expand: Try top-K words in each beam state
-        b. Prune: Keep only top beam_width diverse states
-        c. Check: Stop if any state is complete
-    3. Return best state (most slots filled)
+    All functionality is inherited. See BeamSearchOrchestrator for details.
     """
 
     def __init__(
@@ -62,7 +40,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         progress_reporter=None,
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
         theme_words=None,
-        partial_fill_mode: bool = False
+        partial_fill_mode: bool = False,
     ):
         """
         Initialize beam search solver.
@@ -98,7 +76,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             progress_reporter=progress_reporter,
             theme_entries=theme_entries,
             theme_words=theme_words,
-            partial_fill_mode=partial_fill_mode
+            partial_fill_mode=partial_fill_mode,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator

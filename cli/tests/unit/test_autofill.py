@@ -2,13 +2,14 @@
 Unit tests for autofill module.
 """
 
-import pytest
 import time
+
+import pytest
 from src.core.grid import Grid
-from src.fill.word_list import WordList
+from src.fill.autofill import Autofill, FillResult
 from src.fill.pattern_matcher import PatternMatcher
 from src.fill.trie_pattern_matcher import TriePatternMatcher
-from src.fill.autofill import Autofill, FillResult
+from src.fill.word_list import WordList
 
 
 class TestAutofill:
@@ -19,16 +20,44 @@ class TestAutofill:
         """Create a sample word list for testing."""
         words = [
             # 3-letter words
-            'CAT', 'COT', 'CUT', 'BAT', 'BOT', 'BUT',
-            'RAT', 'ROT', 'RUT', 'MAT', 'MOT', 'MUT',
-            'ACE', 'ACT', 'ART', 'ARC', 'ARM', 'ARE',
+            "CAT",
+            "COT",
+            "CUT",
+            "BAT",
+            "BOT",
+            "BUT",
+            "RAT",
+            "ROT",
+            "RUT",
+            "MAT",
+            "MOT",
+            "MUT",
+            "ACE",
+            "ACT",
+            "ART",
+            "ARC",
+            "ARM",
+            "ARE",
             # 4-letter words
-            'CATS', 'BATS', 'RATS', 'MATS',
-            'TEAR', 'BEAR', 'DEAR', 'FEAR',
-            'CART', 'DART', 'PART', 'TART',
+            "CATS",
+            "BATS",
+            "RATS",
+            "MATS",
+            "TEAR",
+            "BEAR",
+            "DEAR",
+            "FEAR",
+            "CART",
+            "DART",
+            "PART",
+            "TART",
             # 5-letter words
-            'APPLE', 'AMPLE', 'MAPLE',
-            'CABIN', 'CABLE', 'CAPER',
+            "APPLE",
+            "AMPLE",
+            "MAPLE",
+            "CABIN",
+            "CABLE",
+            "CAPER",
         ]
         return WordList(words)
 
@@ -70,7 +99,7 @@ class TestAutofill:
         # Fill entire grid
         for row in range(11):
             for col in range(11):
-                grid.set_letter(row, col, 'A')
+                grid.set_letter(row, col, "A")
 
         autofill = Autofill(grid, word_list)
         result = autofill.fill()
@@ -85,13 +114,13 @@ class TestAutofill:
         result = autofill.fill()
 
         assert isinstance(result, FillResult)
-        assert hasattr(result, 'success')
-        assert hasattr(result, 'grid')
-        assert hasattr(result, 'time_elapsed')
-        assert hasattr(result, 'slots_filled')
-        assert hasattr(result, 'total_slots')
-        assert hasattr(result, 'problematic_slots')
-        assert hasattr(result, 'iterations')
+        assert hasattr(result, "success")
+        assert hasattr(result, "grid")
+        assert hasattr(result, "time_elapsed")
+        assert hasattr(result, "slots_filled")
+        assert hasattr(result, "total_slots")
+        assert hasattr(result, "problematic_slots")
+        assert hasattr(result, "iterations")
 
     def test_fill_timeout(self, small_grid, word_list):
         """Test that fill respects timeout."""
@@ -127,11 +156,7 @@ class TestAutofill:
         result = autofill.fill()
 
         # Check that some cells were filled
-        filled_count = sum(
-            1 for row in range(grid.size)
-            for col in range(grid.size)
-            if grid.has_letter(row, col)
-        )
+        filled_count = sum(1 for row in range(grid.size) for col in range(grid.size) if grid.has_letter(row, col))
         assert filled_count > 0 or not result.success  # Either filled or failed
 
     def test_initialize_csp(self, small_grid, word_list):
@@ -163,8 +188,8 @@ class TestAutofill:
         autofill = Autofill(small_grid, word_list)
 
         # Create two intersecting slots
-        slot_across = {'row': 2, 'col': 1, 'length': 5, 'direction': 'across'}
-        slot_down = {'row': 0, 'col': 3, 'length': 5, 'direction': 'down'}
+        slot_across = {"row": 2, "col": 1, "length": 5, "direction": "across"}
+        slot_down = {"row": 0, "col": 3, "length": 5, "direction": "down"}
 
         intersection = autofill._get_intersection(slot_across, slot_down)
 
@@ -172,15 +197,15 @@ class TestAutofill:
         assert intersection is not None
         pos_across, pos_down = intersection
         assert pos_across == 2  # Position 2 in across word
-        assert pos_down == 2    # Position 2 in down word
+        assert pos_down == 2  # Position 2 in down word
 
     def test_get_intersection_parallel_slots(self, small_grid, word_list):
         """Test that parallel slots don't intersect."""
         autofill = Autofill(small_grid, word_list)
 
         # Two parallel across slots
-        slot1 = {'row': 0, 'col': 0, 'length': 5, 'direction': 'across'}
-        slot2 = {'row': 1, 'col': 0, 'length': 5, 'direction': 'across'}
+        slot1 = {"row": 0, "col": 0, "length": 5, "direction": "across"}
+        slot2 = {"row": 1, "col": 0, "length": 5, "direction": "across"}
 
         intersection = autofill._get_intersection(slot1, slot2)
         assert intersection is None
@@ -189,8 +214,8 @@ class TestAutofill:
         """Test that non-overlapping slots don't intersect."""
         autofill = Autofill(small_grid, word_list)
 
-        slot_across = {'row': 0, 'col': 0, 'length': 3, 'direction': 'across'}
-        slot_down = {'row': 5, 'col': 5, 'length': 3, 'direction': 'down'}
+        slot_across = {"row": 0, "col": 0, "length": 3, "direction": "across"}
+        slot_down = {"row": 5, "col": 5, "length": 3, "direction": "down"}
 
         intersection = autofill._get_intersection(slot_across, slot_down)
         assert intersection is None
@@ -224,10 +249,7 @@ class TestAutofill:
         autofill = Autofill(grid, word_list)
 
         # Set up domains manually
-        autofill.domains = {
-            0: {'CAT', 'COT', 'CUT'},
-            1: {'BAT', 'RAT', 'MAT'}
-        }
+        autofill.domains = {0: {"CAT", "COT", "CUT"}, 1: {"BAT", "RAT", "MAT"}}
 
         # Revise with constraint that position 0 must match
         # CAT[0]=C should match nothing in domain 1 (all start with B/R/M)
@@ -329,8 +351,8 @@ class TestAutofill:
         """Test detecting slot intersection."""
         autofill = Autofill(small_grid, word_list)
 
-        slot1 = {'row': 2, 'col': 1, 'length': 5, 'direction': 'across'}
-        slot2 = {'row': 0, 'col': 3, 'length': 5, 'direction': 'down'}
+        slot1 = {"row": 2, "col": 1, "length": 5, "direction": "across"}
+        slot2 = {"row": 0, "col": 3, "length": 5, "direction": "down"}
 
         assert autofill._slots_intersect(slot1, slot2)
 
@@ -338,8 +360,8 @@ class TestAutofill:
         """Test that parallel slots don't intersect."""
         autofill = Autofill(small_grid, word_list)
 
-        slot1 = {'row': 0, 'col': 0, 'length': 5, 'direction': 'across'}
-        slot2 = {'row': 1, 'col': 0, 'length': 5, 'direction': 'across'}
+        slot1 = {"row": 0, "col": 0, "length": 5, "direction": "across"}
+        slot2 = {"row": 1, "col": 0, "length": 5, "direction": "across"}
 
         assert not autofill._slots_intersect(slot1, slot2)
 
@@ -347,8 +369,8 @@ class TestAutofill:
         """Test that non-overlapping slots don't intersect."""
         autofill = Autofill(small_grid, word_list)
 
-        slot1 = {'row': 0, 'col': 0, 'length': 3, 'direction': 'across'}
-        slot2 = {'row': 5, 'col': 5, 'length': 3, 'direction': 'down'}
+        slot1 = {"row": 0, "col": 0, "length": 3, "direction": "across"}
+        slot2 = {"row": 5, "col": 5, "length": 3, "direction": "down"}
 
         assert not autofill._slots_intersect(slot1, slot2)
 
@@ -357,11 +379,11 @@ class TestAutofill:
         grid = Grid(11)
         autofill = Autofill(grid, word_list)
 
-        slot = {'row': 2, 'col': 1, 'length': 5, 'direction': 'across'}
+        slot = {"row": 2, "col": 1, "length": 5, "direction": "across"}
         all_slots = [
-            {'row': 2, 'col': 1, 'length': 5, 'direction': 'across'},  # Same slot
-            {'row': 0, 'col': 3, 'length': 5, 'direction': 'down'},    # Crosses
-            {'row': 3, 'col': 0, 'length': 5, 'direction': 'across'},  # Doesn't cross
+            {"row": 2, "col": 1, "length": 5, "direction": "across"},  # Same slot
+            {"row": 0, "col": 3, "length": 5, "direction": "down"},  # Crosses
+            {"row": 3, "col": 0, "length": 5, "direction": "across"},  # Doesn't cross
         ]
 
         crossing = autofill._get_crossing_slots(slot, all_slots)
@@ -374,8 +396,81 @@ class TestAutofill:
         autofill = Autofill(small_grid, word_list)
         repr_str = repr(autofill)
 
-        assert 'Autofill' in repr_str
-        assert '11x11' in repr_str or '11' in repr_str
+        assert "Autofill" in repr_str
+        assert "11x11" in repr_str or "11" in repr_str
+
+
+class TestOnBacktrackCallback:
+    """Test that on_backtrack callback is invoked during CSP backtracking."""
+
+    def test_on_backtrack_called_in_backtrack(self):
+        """Verify on_backtrack fires in _backtrack when a candidate fails."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=5)
+        autofill.start_time = time.time()
+        autofill.iterations = 0
+        autofill.used_words = set()
+
+        backtrack_log = []
+        autofill.on_backtrack = lambda key: backtrack_log.append(key)
+
+        # Create a fake slot list where the second slot has no candidates,
+        # forcing a backtrack on the first slot.
+        slots = [
+            {"row": 0, "col": 0, "length": 3, "direction": "across", "number": 1},
+            {"row": 0, "col": 0, "length": 3, "direction": "down", "number": 1},
+        ]
+
+        # _backtrack will place a word in slot 0 then fail on slot 1
+        # (since slot 1 shares cell 0,0 and no word starts with same letter).
+        # It will backtrack on slot 0 and try other candidates.
+        autofill._backtrack(slots, 0)
+
+        assert len(backtrack_log) > 0, "on_backtrack was never called"
+        # Verify slot key format
+        for key in backtrack_log:
+            parts = key.split(",")
+            assert len(parts) == 3, f"Bad slot key format: {key}"
+            assert parts[2] in ("across", "down")
+
+    def test_on_backtrack_called_in_backtrack_with_mac(self):
+        """Verify on_backtrack fires in _backtrack_with_mac too."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=5)
+        autofill.start_time = time.time()
+        autofill.iterations = 0
+        autofill.used_words = set()
+
+        # Initialize domains for MAC path
+        slots = [
+            {"row": 0, "col": 0, "length": 3, "direction": "across", "number": 1},
+            {"row": 0, "col": 0, "length": 3, "direction": "down", "number": 1},
+        ]
+        autofill._initialize_csp(slots)
+
+        backtrack_log = []
+        autofill.on_backtrack = lambda key: backtrack_log.append(key)
+
+        autofill._backtrack_with_mac(slots, 0)
+
+        assert len(backtrack_log) > 0, "on_backtrack was never called in MAC path"
+
+    def test_on_backtrack_default_is_none(self):
+        """Verify on_backtrack defaults to None and doesn't error."""
+        grid = Grid(11)
+        words = ["CAT", "BAT", "RAT"]
+        wl = WordList(words)
+
+        autofill = Autofill(grid, wl, timeout=1)
+        assert autofill.on_backtrack is None
+        # Should not raise even though backtracking occurs internally
+        autofill.fill()
 
 
 class TestFillResult:
@@ -391,7 +486,7 @@ class TestFillResult:
             slots_filled=10,
             total_slots=10,
             problematic_slots=[],
-            iterations=100
+            iterations=100,
         )
 
         assert result.success is True
@@ -405,9 +500,7 @@ class TestFillResult:
     def test_partial_fill(self):
         """Test FillResult for partial fill."""
         grid = Grid(11)
-        problematic = [
-            {'row': 0, 'col': 0, 'length': 5, 'direction': 'across'}
-        ]
+        problematic = [{"row": 0, "col": 0, "length": 5, "direction": "across"}]
         result = FillResult(
             success=False,
             grid=grid,
@@ -415,7 +508,7 @@ class TestFillResult:
             slots_filled=8,
             total_slots=10,
             problematic_slots=problematic,
-            iterations=1000
+            iterations=1000,
         )
 
         assert result.success is False
@@ -431,9 +524,9 @@ class TestAutofillIntegration:
         """Create a larger word list for integration tests."""
         words = []
         # Add many 3-letter words
-        for c1 in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-            for c2 in 'AEIOU':
-                for c3 in 'NRST':
+        for c1 in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            for c2 in "AEIOU":
+                for c3 in "NRST":
                     words.append(c1 + c2 + c3)
         return WordList(words)
 
@@ -458,12 +551,12 @@ class TestAutofillIntegration:
         grid.set_black_square(0, 5)
 
         # Pre-fill some words
-        grid.place_word('CAT', 0, 0, 'across')
+        grid.place_word("CAT", 0, 0, "across")
 
         autofill = Autofill(grid, large_word_list, timeout=5)
         autofill.fill()
 
         # CAT should still be there
-        assert grid.get_cell(0, 0) == 'C'
-        assert grid.get_cell(0, 1) == 'A'
-        assert grid.get_cell(0, 2) == 'T'
+        assert grid.get_cell(0, 0) == "C"
+        assert grid.get_cell(0, 1) == "A"
+        assert grid.get_cell(0, 2) == "T"

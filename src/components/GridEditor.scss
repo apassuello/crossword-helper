@@ -109,3 +109,32 @@
 .symmetry-indicator {
   animation: symmetryPulse 1.5s ease-in-out infinite;
 }
+.grid-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  .constraint-toggle {
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+
+    &.active {
+      background: #e8f0fe;
+      border-color: #4285f4;
+      color: #1a73e8;
+    }
+
+    &.loading {
+      opacity: 0.7;
+      cursor: wait;
+    }
+  }
+}
+
+.constraint-overlay {
+  pointer-events: none;
+}

@@ -5,12 +5,13 @@ Handles serialization and deserialization of complete algorithm state,
 enabling pause/resume workflow for long-running autofill operations.
 """
 
-import json
 import gzip
-from typing import Dict, List, Set, Tuple, Optional, Any
-from dataclasses import dataclass, asdict
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 from ..core.grid import Grid
 
 
@@ -21,6 +22,7 @@ class CSPState:
 
     Captures all necessary state to resume backtracking from exact position.
     """
+
     # Grid state
     grid_dict: Dict  # Grid.to_dict() result
 
@@ -56,6 +58,7 @@ class BeamSearchState:
 
     Captures all necessary state to resume beam search from exact position.
     """
+
     # Beam states (list of serialized BeamState objects)
     beam: List[Dict]  # Each dict contains: grid_dict, used_words, slot_assignments, etc.
 
@@ -90,6 +93,7 @@ class SerializedState:
 
     Wraps algorithm-specific state with metadata for versioning and validation.
     """
+
     version: str  # State format version (e.g., "1.0")
     algorithm: str  # 'csp' or 'beam'
     task_id: str  # Unique task identifier
@@ -129,7 +133,7 @@ class StateManager:
         task_id: str,
         csp_state: CSPState,
         metadata: Dict[str, Any],
-        compress: bool = True
+        compress: bool = True,
     ) -> Path:
         """
         Save CSP state to file.
@@ -146,11 +150,11 @@ class StateManager:
         # Create serialized state container
         serialized = SerializedState(
             version=self.VERSION,
-            algorithm='csp',
+            algorithm="csp",
             task_id=task_id,
             timestamp=datetime.now().isoformat(),
             metadata=metadata,
-            state_data=asdict(csp_state)
+            state_data=asdict(csp_state),
         )
 
         # Convert to JSON
@@ -159,19 +163,16 @@ class StateManager:
         # Determine file path
         if compress:
             file_path = self.storage_dir / f"{task_id}.json.gz"
-            with gzip.open(file_path, 'wt', encoding='utf-8') as f:
+            with gzip.open(file_path, "wt", encoding="utf-8") as f:
                 f.write(json_data)
         else:
             file_path = self.storage_dir / f"{task_id}.json"
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(json_data)
 
         return file_path
 
-    def load_csp_state(
-        self,
-        task_id: str
-    ) -> Tuple[CSPState, Dict[str, Any]]:
+    def load_csp_state(self, task_id: str) -> Tuple[CSPState, Dict[str, Any]]:
         """
         Load CSP state from file.
 
@@ -190,10 +191,10 @@ class StateManager:
         file_path_json = self.storage_dir / f"{task_id}.json"
 
         if file_path_gz.exists():
-            with gzip.open(file_path_gz, 'rt', encoding='utf-8') as f:
+            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
                 json_data = f.read()
         elif file_path_json.exists():
-            with open(file_path_json, 'r', encoding='utf-8') as f:
+            with open(file_path_json, "r", encoding="utf-8") as f:
                 json_data = f.read()
         else:
             raise FileNotFoundError(f"State file not found for task_id: {task_id}")
@@ -202,43 +203,32 @@ class StateManager:
         data = json.loads(json_data)
 
         # Validate version
-        if data.get('version') != self.VERSION:
-            raise ValueError(
-                f"Incompatible state version: {data.get('version')} "
-                f"(expected {self.VERSION})"
-            )
+        if data.get("version") != self.VERSION:
+            raise ValueError(f"Incompatible state version: {data.get('version')} " f"(expected {self.VERSION})")
 
         # Validate algorithm
-        if data.get('algorithm') != 'csp':
-            raise ValueError(
-                f"Wrong algorithm: {data.get('algorithm')} (expected 'csp')"
-            )
+        if data.get("algorithm") != "csp":
+            raise ValueError(f"Wrong algorithm: {data.get('algorithm')} (expected 'csp')")
 
         # Extract state data
-        state_data = data['state_data']
-        metadata = data['metadata']
+        state_data = data["state_data"]
+        metadata = data["metadata"]
 
         # Reconstruct CSPState (converting Lists back to Sets where needed)
         csp_state = CSPState(
-            grid_dict=state_data['grid_dict'],
-            domains={
-                int(k): v for k, v in state_data['domains'].items()
-            },  # Keep as List
-            constraints={
-                int(k): v for k, v in state_data['constraints'].items()
-            },
-            used_words=state_data['used_words'],  # Keep as List
-            slot_id_map={
-                k: v for k, v in state_data['slot_id_map'].items()
-            },
-            slot_list=state_data['slot_list'],
-            slots_sorted=state_data['slots_sorted'],
-            current_slot_index=state_data['current_slot_index'],
-            iteration_count=state_data['iteration_count'],
-            locked_slots=state_data['locked_slots'],  # Keep as List
-            timestamp=state_data['timestamp'],
-            random_seed=state_data.get('random_seed'),
-            letter_frequency_table=state_data.get('letter_frequency_table')
+            grid_dict=state_data["grid_dict"],
+            domains={int(k): v for k, v in state_data["domains"].items()},  # Keep as List
+            constraints={int(k): v for k, v in state_data["constraints"].items()},
+            used_words=state_data["used_words"],  # Keep as List
+            slot_id_map={k: v for k, v in state_data["slot_id_map"].items()},
+            slot_list=state_data["slot_list"],
+            slots_sorted=state_data["slots_sorted"],
+            current_slot_index=state_data["current_slot_index"],
+            iteration_count=state_data["iteration_count"],
+            locked_slots=state_data["locked_slots"],  # Keep as List
+            timestamp=state_data["timestamp"],
+            random_seed=state_data.get("random_seed"),
+            letter_frequency_table=state_data.get("letter_frequency_table"),
         )
 
         return csp_state, metadata
@@ -264,26 +254,26 @@ class StateManager:
         file_path_json = self.storage_dir / f"{task_id}.json"
 
         if file_path_gz.exists():
-            with gzip.open(file_path_gz, 'rt', encoding='utf-8') as f:
+            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
                 data = json.load(f)
         elif file_path_json.exists():
-            with open(file_path_json, 'r', encoding='utf-8') as f:
+            with open(file_path_json, "r", encoding="utf-8") as f:
                 data = json.load(f)
         else:
             raise FileNotFoundError(f"State file not found for task_id: {task_id}")
 
         # Extract key info
-        metadata = data['metadata']
+        metadata = data["metadata"]
 
         return {
-            'task_id': data['task_id'],
-            'timestamp': data['timestamp'],
-            'algorithm': data['algorithm'],
-            'version': data['version'],
-            'slots_filled': metadata.get('slots_filled', 0),
-            'total_slots': metadata.get('total_slots', 0),
-            'grid_size': metadata.get('grid_size', [15, 15]),
-            'iteration_count': data['state_data'].get('iteration_count', 0)
+            "task_id": data["task_id"],
+            "timestamp": data["timestamp"],
+            "algorithm": data["algorithm"],
+            "version": data["version"],
+            "slots_filled": metadata.get("slots_filled", 0),
+            "total_slots": metadata.get("total_slots", 0),
+            "grid_size": metadata.get("grid_size", [15, 15]),
+            "iteration_count": data["state_data"].get("iteration_count", 0),
         }
 
     def delete_state(self, task_id: str) -> bool:
@@ -325,14 +315,14 @@ class StateManager:
         for file_path in self.storage_dir.glob("*.json*"):
             try:
                 # Extract task_id from filename
-                task_id = file_path.stem.replace('.json', '')
+                task_id = file_path.stem.replace(".json", "")
 
                 # Get state info
                 info = self.get_state_info(task_id)
 
                 # Filter by age if specified
                 if max_age_days is not None:
-                    state_time = datetime.fromisoformat(info['timestamp'])
+                    state_time = datetime.fromisoformat(info["timestamp"])
                     age_days = (datetime.now() - state_time).days
                     if age_days > max_age_days:
                         continue
@@ -343,7 +333,7 @@ class StateManager:
                 continue
 
         # Sort by timestamp (newest first)
-        states.sort(key=lambda x: x['timestamp'], reverse=True)
+        states.sort(key=lambda x: x["timestamp"], reverse=True)
 
         return states
 
@@ -378,7 +368,7 @@ class StateManager:
     def capture_csp_state(
         autofill_instance,
         current_slot_index: int,
-        locked_slots: Optional[Set[int]] = None
+        locked_slots: Optional[Set[int]] = None,
     ) -> CSPState:
         """
         Capture current CSP state from Autofill instance.
@@ -397,17 +387,11 @@ class StateManager:
             locked_slots = set()
 
         # Convert domains from Set to List for JSON
-        domains_list = {
-            slot_id: list(words)
-            for slot_id, words in autofill_instance.domains.items()
-        }
+        domains_list = {slot_id: list(words) for slot_id, words in autofill_instance.domains.items()}
 
         # Convert slot_id_map to JSON-serializable format
         # Keys are tuples like (row, col, direction), convert to lists
-        slot_id_map_str = {
-            json.dumps(list(key)): value
-            for key, value in autofill_instance.slot_id_map.items()
-        }
+        slot_id_map_str = {json.dumps(list(key)): value for key, value in autofill_instance.slot_id_map.items()}
 
         return CSPState(
             grid_dict=autofill_instance.grid.to_dict(),
@@ -416,24 +400,17 @@ class StateManager:
             used_words=list(autofill_instance.used_words),
             slot_id_map=slot_id_map_str,
             slot_list=autofill_instance.slot_list,
-            slots_sorted=getattr(autofill_instance, 'slots_sorted', []),
+            slots_sorted=getattr(autofill_instance, "slots_sorted", []),
             current_slot_index=current_slot_index,
             iteration_count=autofill_instance.iterations,
             locked_slots=list(locked_slots),
             timestamp=datetime.now().isoformat(),
-            random_seed=getattr(autofill_instance, 'random_seed', None),
-            letter_frequency_table=getattr(
-                autofill_instance,
-                'letter_frequency_table',
-                None
-            )
+            random_seed=getattr(autofill_instance, "random_seed", None),
+            letter_frequency_table=getattr(autofill_instance, "letter_frequency_table", None),
         )
 
     @staticmethod
-    def restore_to_autofill(
-        autofill_instance,
-        csp_state: CSPState
-    ) -> None:
+    def restore_to_autofill(autofill_instance, csp_state: CSPState) -> None:
         """
         Restore CSP state into Autofill instance.
 
@@ -447,10 +424,7 @@ class StateManager:
         autofill_instance.grid = Grid.from_dict(csp_state.grid_dict)
 
         # Restore CSP state (convert Lists back to Sets where needed)
-        autofill_instance.domains = {
-            slot_id: set(words)
-            for slot_id, words in csp_state.domains.items()
-        }
+        autofill_instance.domains = {slot_id: set(words) for slot_id, words in csp_state.domains.items()}
         autofill_instance.constraints = csp_state.constraints
         autofill_instance.used_words = set(csp_state.used_words)
 
@@ -473,7 +447,7 @@ class StateManager:
             autofill_instance.letter_frequency_table = csp_state.letter_frequency_table
 
         # Store sorted slots for resume
-        if not hasattr(autofill_instance, 'slots_sorted'):
+        if not hasattr(autofill_instance, "slots_sorted"):
             autofill_instance.slots_sorted = csp_state.slots_sorted
 
     def save_beam_search_state(
@@ -481,7 +455,7 @@ class StateManager:
         task_id: str,
         beam_state: BeamSearchState,
         metadata: Dict[str, Any],
-        compress: bool = True
+        compress: bool = True,
     ) -> Path:
         """
         Save Beam Search state to file.
@@ -498,11 +472,11 @@ class StateManager:
         # Create serialized state container
         serialized = SerializedState(
             version=self.VERSION,
-            algorithm='beam',
+            algorithm="beam",
             task_id=task_id,
             timestamp=datetime.now().isoformat(),
             metadata=metadata,
-            state_data=asdict(beam_state)
+            state_data=asdict(beam_state),
         )
 
         # Convert to JSON
@@ -511,19 +485,16 @@ class StateManager:
         # Determine file path
         if compress:
             file_path = self.storage_dir / f"{task_id}.json.gz"
-            with gzip.open(file_path, 'wt', encoding='utf-8') as f:
+            with gzip.open(file_path, "wt", encoding="utf-8") as f:
                 f.write(json_data)
         else:
             file_path = self.storage_dir / f"{task_id}.json"
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(json_data)
 
         return file_path
 
-    def load_beam_search_state(
-        self,
-        task_id: str
-    ) -> Tuple[BeamSearchState, Dict[str, Any]]:
+    def load_beam_search_state(self, task_id: str) -> Tuple[BeamSearchState, Dict[str, Any]]:
         """
         Load Beam Search state from file.
 
@@ -542,10 +513,10 @@ class StateManager:
         file_path_json = self.storage_dir / f"{task_id}.json"
 
         if file_path_gz.exists():
-            with gzip.open(file_path_gz, 'rt', encoding='utf-8') as f:
+            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
                 json_data = f.read()
         elif file_path_json.exists():
-            with open(file_path_json, 'r', encoding='utf-8') as f:
+            with open(file_path_json, "r", encoding="utf-8") as f:
                 json_data = f.read()
         else:
             raise FileNotFoundError(f"State file not found for task_id: {task_id}")
@@ -554,38 +525,33 @@ class StateManager:
         data = json.loads(json_data)
 
         # Validate version
-        if data.get('version') != self.VERSION:
-            raise ValueError(
-                f"Incompatible state version: {data.get('version')} "
-                f"(expected {self.VERSION})"
-            )
+        if data.get("version") != self.VERSION:
+            raise ValueError(f"Incompatible state version: {data.get('version')} " f"(expected {self.VERSION})")
 
         # Validate algorithm
-        if data.get('algorithm') != 'beam':
-            raise ValueError(
-                f"Wrong algorithm: {data.get('algorithm')} (expected 'beam')"
-            )
+        if data.get("algorithm") != "beam":
+            raise ValueError(f"Wrong algorithm: {data.get('algorithm')} (expected 'beam')")
 
         # Extract state data
-        state_data = data['state_data']
-        metadata = data['metadata']
+        state_data = data["state_data"]
+        metadata = data["metadata"]
 
         # Reconstruct BeamSearchState
         beam_state = BeamSearchState(
-            beam=state_data['beam'],
-            filled_slots=state_data['filled_slots'],
-            slot_idx=state_data['slot_idx'],
-            iterations=state_data['iterations'],
-            slot_attempt_history=state_data['slot_attempt_history'],
-            recently_failed=state_data['recently_failed'],
-            beam_width=state_data['beam_width'],
-            candidates_per_slot=state_data['candidates_per_slot'],
-            min_score=state_data['min_score'],
-            diversity_bonus=state_data['diversity_bonus'],
-            theme_entries=state_data['theme_entries'],
-            all_slots=state_data['all_slots'],
-            total_slots=state_data['total_slots'],
-            timestamp=state_data['timestamp']
+            beam=state_data["beam"],
+            filled_slots=state_data["filled_slots"],
+            slot_idx=state_data["slot_idx"],
+            iterations=state_data["iterations"],
+            slot_attempt_history=state_data["slot_attempt_history"],
+            recently_failed=state_data["recently_failed"],
+            beam_width=state_data["beam_width"],
+            candidates_per_slot=state_data["candidates_per_slot"],
+            min_score=state_data["min_score"],
+            diversity_bonus=state_data["diversity_bonus"],
+            theme_entries=state_data["theme_entries"],
+            all_slots=state_data["all_slots"],
+            total_slots=state_data["total_slots"],
+            timestamp=state_data["timestamp"],
         )
 
         return beam_state, metadata
@@ -602,23 +568,14 @@ class StateManager:
             Dictionary representation of BeamState
         """
         return {
-            'grid_dict': beam_state_obj.grid.to_dict(),
-            'slots_filled': beam_state_obj.slots_filled,
-            'total_slots': beam_state_obj.total_slots,
-            'score': beam_state_obj.score,
-            'used_words': list(beam_state_obj.used_words),
-            'slot_assignments': {
-                json.dumps(list(k)): v
-                for k, v in beam_state_obj.slot_assignments.items()
-            },
-            'domains': {
-                json.dumps(list(k)): v
-                for k, v in beam_state_obj.domains.items()
-            },
-            'domain_reductions': {
-                json.dumps(list(k)): v
-                for k, v in beam_state_obj.domain_reductions.items()
-            }
+            "grid_dict": beam_state_obj.grid.to_dict(),
+            "slots_filled": beam_state_obj.slots_filled,
+            "total_slots": beam_state_obj.total_slots,
+            "score": beam_state_obj.score,
+            "used_words": list(beam_state_obj.used_words),
+            "slot_assignments": {json.dumps(list(k)): v for k, v in beam_state_obj.slot_assignments.items()},
+            "domains": {json.dumps(list(k)): v for k, v in beam_state_obj.domains.items()},
+            "domain_reductions": {json.dumps(list(k)): v for k, v in beam_state_obj.domain_reductions.items()},
         }
 
     @staticmethod
@@ -635,44 +592,39 @@ class StateManager:
         from .beam_search.state import BeamState
 
         # Restore grid
-        grid = Grid.from_dict(beam_state_dict['grid_dict'])
+        grid = Grid.from_dict(beam_state_dict["grid_dict"])
 
         # Restore slot_assignments with tuple keys
         slot_assignments = {}
-        for key_str, value in beam_state_dict['slot_assignments'].items():
+        for key_str, value in beam_state_dict["slot_assignments"].items():
             key_list = json.loads(key_str)
             slot_assignments[tuple(key_list)] = value
 
         # Restore domains with tuple keys
         domains = {}
-        for key_str, value in beam_state_dict['domains'].items():
+        for key_str, value in beam_state_dict["domains"].items():
             key_list = json.loads(key_str)
             domains[tuple(key_list)] = value
 
         # Restore domain_reductions with tuple keys
         domain_reductions = {}
-        for key_str, value in beam_state_dict['domain_reductions'].items():
+        for key_str, value in beam_state_dict["domain_reductions"].items():
             key_list = json.loads(key_str)
             domain_reductions[tuple(key_list)] = value
 
         return BeamState(
             grid=grid,
-            slots_filled=beam_state_dict['slots_filled'],
-            total_slots=beam_state_dict['total_slots'],
-            score=beam_state_dict['score'],
-            used_words=set(beam_state_dict['used_words']),
+            slots_filled=beam_state_dict["slots_filled"],
+            total_slots=beam_state_dict["total_slots"],
+            score=beam_state_dict["score"],
+            used_words=set(beam_state_dict["used_words"]),
             slot_assignments=slot_assignments,
             domains=domains,
-            domain_reductions=domain_reductions
+            domain_reductions=domain_reductions,
         )
 
     @staticmethod
-    def capture_beam_search_state(
-        orchestrator_instance,
-        beam: List,
-        filled_slots: Set,
-        slot_idx: int
-    ) -> BeamSearchState:
+    def capture_beam_search_state(orchestrator_instance, beam: List, filled_slots: Set, slot_idx: int) -> BeamSearchState:
         """
         Capture current Beam Search state from orchestrator instance.
 
@@ -686,17 +638,17 @@ class StateManager:
             BeamSearchState ready for serialization
         """
         # Serialize each BeamState in the beam
-        serialized_beam = [
-            StateManager.serialize_beam_state(state)
-            for state in beam
-        ]
+        serialized_beam = [StateManager.serialize_beam_state(state) for state in beam]
 
         # Convert filled_slots set to list
         filled_slots_list = [list(slot_tuple) for slot_tuple in filled_slots]
 
         # Convert slot_attempt_history with tuple keys to JSON strings
         slot_attempt_history = {}
-        for (beam_sig, slot_id), attempts in orchestrator_instance.slot_attempt_history.items():
+        for (
+            beam_sig,
+            slot_id,
+        ), attempts in orchestrator_instance.slot_attempt_history.items():
             key_str = json.dumps([beam_sig, list(slot_id)])
             slot_attempt_history[key_str] = attempts
 
@@ -726,5 +678,5 @@ class StateManager:
             theme_entries=theme_entries,
             all_slots=all_slots,
             total_slots=len(all_slots),
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )

@@ -24,11 +24,15 @@ def wordlist_dir(tmp_path):
 
     # metadata.json (empty structure)
     metadata = tmp_path / "metadata.json"
-    metadata.write_text(json.dumps({
-        "wordlists": {},
-        "categories": {"core": {"description": "Core wordlists"}},
-        "tags": {"common": {"description": "Common words"}},
-    }))
+    metadata.write_text(
+        json.dumps(
+            {
+                "wordlists": {},
+                "categories": {"core": {"description": "Core wordlists"}},
+                "tags": {"common": {"description": "Common words"}},
+            }
+        )
+    )
 
     return tmp_path
 

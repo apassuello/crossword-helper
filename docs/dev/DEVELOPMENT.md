@@ -245,7 +245,7 @@ crossword-helper/
 │   │   │   │   └── scorer.py   # Beam scoring
 │   │   │   ├── pattern_matcher.py  # Regex pattern matching
 │   │   │   ├── trie_matcher.py # Trie-based matching (10-50x faster)
-│   │   │   ├── ahocorasick_matcher.py  # Aho-Corasick (batch)
+
 │   │   │   ├── word_list.py    # Word list management
 │   │   │   ├── state_manager.py  # Pause/resume state
 │   │   │   └── pause_controller.py  # Pause signal handling
@@ -925,7 +925,7 @@ def search_pattern(
         pattern: Pattern with wildcards (e.g., "C?T" for CAT, COT, CUT)
         wordlist_paths: Paths to word list files
         max_results: Maximum number of results to return
-        algorithm: Matching algorithm ("regex", "trie", "ahocorasick")
+        algorithm: Matching algorithm ("regex", "trie")
 
     Returns:
         Dictionary with keys:
@@ -3169,7 +3169,6 @@ function onRenderCallback(
 |-----------|------------|------------|----------|
 | Regex | 100-200ms | 80-150ms | Simple patterns |
 | Trie | 50-100ms | 10-20ms | Default (10-50x faster) |
-| Aho-Corasick | 150-300ms | 5-15ms | Batch operations |
 
 ### Optimization Strategies
 

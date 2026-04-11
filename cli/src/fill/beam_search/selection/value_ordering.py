@@ -5,13 +5,13 @@ This module implements various strategies for ordering candidate words,
 including LCV (Least Constraining Value) and quality-based ordering.
 """
 
-from typing import List, Tuple, Dict, Optional
-from abc import ABC, abstractmethod
-import random
 import logging
+import random
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional, Tuple
 
-from ..state import BeamState
 from ....core.grid import Grid
+from ..state import BeamState
 
 logger = logging.getLogger(__name__)
 
@@ -90,16 +90,16 @@ class LCVValueOrdering(ValueOrderingStrategy):
             total_remaining = 0
             for crossing in crossing_slots:
                 # Skip already filled slots
-                crossing_id = (crossing['row'], crossing['col'], crossing['direction'])
+                crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
                 if crossing_id in state.slot_assignments:
                     continue
 
                 # THEME PRESERVATION: Temporarily place word and get pattern
                 # This may fail if word conflicts with locked cells (theme words)
                 try:
-                    state.grid.place_word(word, slot['row'], slot['col'], slot['direction'])
+                    state.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
                     pattern = state.grid.get_pattern_for_slot(crossing)
-                    state.grid.remove_word(slot['row'], slot['col'], slot['length'], slot['direction'])
+                    state.grid.remove_word(slot["row"], slot["col"], slot["length"], slot["direction"])
                 except ValueError:
                     # Word conflicts with locked cells - skip it entirely
                     # This word cannot be placed, so give it very low score
@@ -107,7 +107,7 @@ class LCVValueOrdering(ValueOrderingStrategy):
                     break
 
                 # Count how many words would be eliminated
-                min_score = self.get_min_score(crossing['length'])
+                min_score = self.get_min_score(crossing["length"])
                 crossing_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
 
                 # Filter out used words
@@ -120,7 +120,7 @@ class LCVValueOrdering(ValueOrderingStrategy):
         if not lcv_scored:
             return []
 
-        # Phase 5.1: Calculate adjusted scores that preserve LCV information
+        # Calculate adjusted scores that preserve LCV information
         # Instead of just sorting and discarding constraint info, we adjust the scores
         # so downstream strategies (ThresholdDiverseOrdering) preserve the ordering
 
@@ -155,26 +155,25 @@ class LCVValueOrdering(ValueOrderingStrategy):
 
     def _slots_intersect(self, slot1: Dict, slot2: Dict) -> bool:
         """Check if two slots intersect."""
-        if slot1['direction'] == slot2['direction']:
+        if slot1["direction"] == slot2["direction"]:
             return False
 
-        if slot1['direction'] == 'across':
+        if slot1["direction"] == "across":
             across_slot = slot1
             down_slot = slot2
         else:
             across_slot = slot2
             down_slot = slot1
 
-        across_row = across_slot['row']
-        across_col_start = across_slot['col']
-        across_col_end = across_col_start + across_slot['length'] - 1
+        across_row = across_slot["row"]
+        across_col_start = across_slot["col"]
+        across_col_end = across_col_start + across_slot["length"] - 1
 
-        down_col = down_slot['col']
-        down_row_start = down_slot['row']
-        down_row_end = down_row_start + down_slot['length'] - 1
+        down_col = down_slot["col"]
+        down_row_start = down_slot["row"]
+        down_row_end = down_row_start + down_slot["length"] - 1
 
-        return (down_row_start <= across_row <= down_row_end and
-                across_col_start <= down_col <= across_col_end)
+        return down_row_start <= across_row <= down_row_end and across_col_start <= down_col <= across_col_end
 
 
 class StratifiedValueOrdering(ValueOrderingStrategy):
@@ -221,7 +220,7 @@ class StratifiedValueOrdering(ValueOrderingStrategy):
         # Group into tiers
         tiers = []
         for i in range(0, len(sorted_candidates), self.tier_size):
-            tier = sorted_candidates[i:i + self.tier_size]
+            tier = sorted_candidates[i : i + self.tier_size]
             random.shuffle(tier)  # Shuffle within tier
             tiers.append(tier)
 
@@ -270,14 +269,14 @@ class CompositeValueOrdering(ValueOrderingStrategy):
         """
         Forward word usage tracking to all strategies that support it.
 
-        Phase 5.1: Allows composite strategy to propagate tracking calls
-        to child strategies (e.g., ThresholdDiverseOrdering).
+        Allows composite strategy to propagate tracking calls to child
+        strategies (e.g., ThresholdDiverseOrdering).
 
         Args:
             word: Word that was just placed
         """
         for strategy in self.strategies:
-            if hasattr(strategy, 'track_word_usage'):
+            if hasattr(strategy, "track_word_usage"):
                 strategy.track_word_usage(word)
 
 
@@ -321,7 +320,7 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
     """
     Threshold-based ordering with temperature for exploration.
 
-    Phase 4.5: Research-validated approach from Stanford crossword paper.
+    Research-validated approach from Stanford crossword paper.
 
     Algorithm:
     1. Set quality threshold (e.g., score >= 50)
@@ -346,20 +345,19 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         Args:
             threshold: Minimum quality score to consider (default 50)
             temperature: Randomization factor 0-1 (0=greedy, 1=fully random)
-                        Default 0.8 provides balanced exploration (Phase 5.1: was 0.3)
+                        Default 0.8 provides balanced exploration
         """
         self.threshold = threshold
         self.temperature = temperature
-        # Phase 5.1: Pattern diversity tracking
-        self.recent_bigrams = {}  # Track recently used letter pairs
-        self.bigram_decay = 0.9   # Decay factor per word placed
+        self.recent_bigrams = {}  # Track recently used letter pairs for diversity
+        self.bigram_decay = 0.9  # Decay factor per word placed
 
     def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
         """
         Order candidates by threshold + diversity.
 
         Algorithm:
-        1. Apply bigram diversity penalties (Phase 5.1: NEW)
+        1. Apply bigram diversity penalties
         2. Filter to candidates above threshold
         3. If too few, gradually lower threshold (adaptive)
         4. Sort by quality within threshold group
@@ -377,7 +375,7 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         if not candidates:
             return candidates
 
-        # Phase 5.1: Apply bigram diversity penalties
+        # Apply bigram diversity penalties
         # Penalize words with recently-used letter patterns
         diversity_adjusted = []
         for word, score in candidates:
@@ -385,7 +383,7 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
 
             # Check each bigram (pair of adjacent letters)
             for i in range(len(word) - 1):
-                bigram = word[i:i+2]
+                bigram = word[i : i + 2]
                 if bigram in self.recent_bigrams:
                     # Penalize proportional to recent usage
                     penalty += self.recent_bigrams[bigram] * 5  # 5 points per occurrence
@@ -431,7 +429,10 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
                 if random.random() < self.temperature:
                     # Swap with random position
                     j = random.randint(i, len(rest_candidates) - 1)
-                    rest_candidates[i], rest_candidates[j] = rest_candidates[j], rest_candidates[i]
+                    rest_candidates[i], rest_candidates[j] = (
+                        rest_candidates[j],
+                        rest_candidates[i],
+                    )
 
         return top_candidates + rest_candidates
 
@@ -439,8 +440,8 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         """
         Track bigrams from a selected word to encourage pattern diversity.
 
-        Phase 5.1: After a word is placed, record its letter bigrams and apply
-        decay to all tracked bigrams. This encourages natural diversity by
+        After a word is placed, record its letter bigrams and apply decay
+        to all tracked bigrams. This encourages natural diversity by
         penalizing repeated patterns without permanent exclusion.
 
         Args:
@@ -448,7 +449,7 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
         """
         # Add bigrams from selected word
         for i in range(len(word) - 1):
-            bigram = word[i:i+2]
+            bigram = word[i : i + 2]
             # Increment count for this bigram
             self.recent_bigrams[bigram] = self.recent_bigrams.get(bigram, 0) + 1
 
@@ -465,8 +466,6 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
 class ThemeWordPriorityOrdering(ValueOrderingStrategy):
     """
     Theme word priority ordering strategy.
-
-    Phase 3.4: Theme List Priority Feature
 
     Prioritizes words from a designated theme wordlist by:
     1. Sorting theme words to the front of the candidate list

@@ -2,18 +2,19 @@
 Unit tests for StateManager - pause/resume state serialization.
 """
 
-import pytest
-import json
 import gzip
-from pathlib import Path
-from datetime import datetime
-import tempfile
+import json
 import shutil
+import tempfile
+from datetime import datetime
+from pathlib import Path
 
-from cli.src.fill.state_manager import StateManager, CSPState
+import pytest
+
 from cli.src.core.grid import Grid
-from cli.src.fill.word_list import WordList
 from cli.src.fill.autofill import Autofill
+from cli.src.fill.state_manager import CSPState, StateManager
+from cli.src.fill.word_list import WordList
 
 
 class TestStateManager:
@@ -38,47 +39,43 @@ class TestStateManager:
         """Create a simple CSP state for testing."""
         grid = Grid(15)
         grid.set_black_square(0, 0)  # Add some black squares
-        grid.set_letter(0, 1, 'A')   # Add some letters
+        grid.set_letter(0, 1, "A")  # Add some letters
 
         return CSPState(
             grid_dict=grid.to_dict(),
             domains={
-                0: ['WORD', 'TEST', 'GRID'],
-                1: ['ALPHA', 'BRAVO'],
-                2: ['CROSS', 'WORDS']
+                0: ["WORD", "TEST", "GRID"],
+                1: ["ALPHA", "BRAVO"],
+                2: ["CROSS", "WORDS"],
             },
-            constraints={
-                0: [[1, 0, 2], [2, 1, 0]],
-                1: [[0, 2, 0]],
-                2: [[0, 0, 1]]
-            },
-            used_words=['WORD', 'ALPHA'],
+            constraints={0: [[1, 0, 2], [2, 1, 0]], 1: [[0, 2, 0]], 2: [[0, 0, 1]]},
+            used_words=["WORD", "ALPHA"],
             slot_id_map={
                 '[0, 1, "across"]': 0,
                 '[0, 1, "down"]': 1,
-                '[1, 0, "across"]': 2
+                '[1, 0, "across"]': 2,
             },
             slot_list=[
-                {'row': 0, 'col': 1, 'direction': 'across', 'length': 4},
-                {'row': 0, 'col': 1, 'direction': 'down', 'length': 5},
-                {'row': 1, 'col': 0, 'direction': 'across', 'length': 5}
+                {"row": 0, "col": 1, "direction": "across", "length": 4},
+                {"row": 0, "col": 1, "direction": "down", "length": 5},
+                {"row": 1, "col": 0, "direction": "across", "length": 5},
             ],
             slots_sorted=[0, 1, 2],
             current_slot_index=1,
             iteration_count=150,
             locked_slots=[0],
             timestamp=datetime.now().isoformat(),
-            random_seed=42
+            random_seed=42,
         )
 
     def test_save_csp_state_compressed(self, state_manager, simple_csp_state, temp_dir):
         """Test saving CSP state with compression."""
         task_id = "test_task_001"
         metadata = {
-            'min_score': 50,
-            'timeout': 300,
-            'grid_size': [15, 15],
-            'total_slots': 76
+            "min_score": 50,
+            "timeout": 300,
+            "grid_size": [15, 15],
+            "total_slots": 76,
         }
 
         # Save state
@@ -86,7 +83,7 @@ class TestStateManager:
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=True
+            compress=True,
         )
 
         # Verify file exists
@@ -94,28 +91,28 @@ class TestStateManager:
         assert file_path.name == f"{task_id}.json.gz"
 
         # Verify it's gzipped
-        with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+        with gzip.open(file_path, "rt", encoding="utf-8") as f:
             data = json.load(f)
 
         # Verify structure
-        assert data['version'] == StateManager.VERSION
-        assert data['algorithm'] == 'csp'
-        assert data['task_id'] == task_id
-        assert 'timestamp' in data
-        assert data['metadata'] == metadata
-        assert 'state_data' in data
+        assert data["version"] == StateManager.VERSION
+        assert data["algorithm"] == "csp"
+        assert data["task_id"] == task_id
+        assert "timestamp" in data
+        assert data["metadata"] == metadata
+        assert "state_data" in data
 
     def test_save_csp_state_uncompressed(self, state_manager, simple_csp_state, temp_dir):
         """Test saving CSP state without compression."""
         task_id = "test_task_002"
-        metadata = {'test': 'data'}
+        metadata = {"test": "data"}
 
         # Save state
         file_path = state_manager.save_csp_state(
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=False
+            compress=False,
         )
 
         # Verify file exists
@@ -123,23 +120,23 @@ class TestStateManager:
         assert file_path.name == f"{task_id}.json"
 
         # Verify it's plain JSON
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        assert data['algorithm'] == 'csp'
-        assert data['task_id'] == task_id
+        assert data["algorithm"] == "csp"
+        assert data["task_id"] == task_id
 
     def test_load_csp_state_compressed(self, state_manager, simple_csp_state):
         """Test loading compressed CSP state."""
         task_id = "test_task_003"
-        metadata = {'min_score': 60}
+        metadata = {"min_score": 60}
 
         # Save state
         state_manager.save_csp_state(
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=True
+            compress=True,
         )
 
         # Load state
@@ -173,7 +170,7 @@ class TestStateManager:
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=False
+            compress=False,
         )
 
         # Load state
@@ -191,44 +188,35 @@ class TestStateManager:
     def test_get_state_info(self, state_manager, simple_csp_state):
         """Test getting state info without full load."""
         task_id = "test_task_005"
-        metadata = {
-            'slots_filled': 38,
-            'total_slots': 76,
-            'grid_size': [15, 15]
-        }
+        metadata = {"slots_filled": 38, "total_slots": 76, "grid_size": [15, 15]}
 
         # Save state
         state_manager.save_csp_state(
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=True
+            compress=True,
         )
 
         # Get info
         info = state_manager.get_state_info(task_id)
 
         # Verify info
-        assert info['task_id'] == task_id
-        assert info['algorithm'] == 'csp'
-        assert info['version'] == StateManager.VERSION
-        assert info['slots_filled'] == 38
-        assert info['total_slots'] == 76
-        assert info['grid_size'] == [15, 15]
-        assert info['iteration_count'] == 150
-        assert 'timestamp' in info
+        assert info["task_id"] == task_id
+        assert info["algorithm"] == "csp"
+        assert info["version"] == StateManager.VERSION
+        assert info["slots_filled"] == 38
+        assert info["total_slots"] == 76
+        assert info["grid_size"] == [15, 15]
+        assert info["iteration_count"] == 150
+        assert "timestamp" in info
 
     def test_delete_state(self, state_manager, simple_csp_state, temp_dir):
         """Test deleting saved state."""
         task_id = "test_task_006"
 
         # Save state
-        file_path = state_manager.save_csp_state(
-            task_id=task_id,
-            csp_state=simple_csp_state,
-            metadata={},
-            compress=True
-        )
+        file_path = state_manager.save_csp_state(task_id=task_id, csp_state=simple_csp_state, metadata={}, compress=True)
 
         assert file_path.exists()
 
@@ -250,8 +238,8 @@ class TestStateManager:
             state_manager.save_csp_state(
                 task_id=task_id,
                 csp_state=simple_csp_state,
-                metadata={'index': i},
-                compress=True
+                metadata={"index": i},
+                compress=True,
             )
 
         # List states
@@ -261,7 +249,7 @@ class TestStateManager:
         assert len(states) >= 3
 
         # Verify they're sorted by timestamp (newest first)
-        timestamps = [s['timestamp'] for s in states]
+        timestamps = [s["timestamp"] for s in states]
         assert timestamps == sorted(timestamps, reverse=True)
 
     def test_cleanup_old_states(self, state_manager, simple_csp_state, temp_dir):
@@ -269,16 +257,12 @@ class TestStateManager:
         task_id = "test_task_old"
 
         # Save state
-        file_path = state_manager.save_csp_state(
-            task_id=task_id,
-            csp_state=simple_csp_state,
-            metadata={},
-            compress=True
-        )
+        file_path = state_manager.save_csp_state(task_id=task_id, csp_state=simple_csp_state, metadata={}, compress=True)
 
         # Manually modify file timestamp to make it old
         import os
         import time
+
         old_time = time.time() - (8 * 24 * 3600)  # 8 days ago
         os.utime(file_path, (old_time, old_time))
 
@@ -292,55 +276,41 @@ class TestStateManager:
         """Test capturing state from Autofill instance."""
         # Create simple grid and autofill instance
         grid = Grid(11)
-        word_list = WordList(words={'TEST': 100, 'WORD': 90, 'GRID': 85})
+        word_list = WordList(words={"TEST": 100, "WORD": 90, "GRID": 85})
 
-        autofill = Autofill(
-            grid=grid,
-            word_list=word_list,
-            min_score=0,
-            timeout=60
-        )
+        autofill = Autofill(grid=grid, word_list=word_list, min_score=0, timeout=60)
 
         # Manually set some state
-        autofill.domains = {0: {'TEST', 'WORD'}, 1: {'GRID'}}
+        autofill.domains = {0: {"TEST", "WORD"}, 1: {"GRID"}}
         autofill.constraints = {0: [[1, 0, 1]], 1: [[0, 1, 0]]}
-        autofill.used_words = {'TEST'}
-        autofill.slot_id_map = {(0, 0, 'across'): 0, (0, 0, 'down'): 1}
+        autofill.used_words = {"TEST"}
+        autofill.slot_id_map = {(0, 0, "across"): 0, (0, 0, "down"): 1}
         autofill.slot_list = [
-            {'row': 0, 'col': 0, 'direction': 'across', 'length': 4},
-            {'row': 0, 'col': 0, 'direction': 'down', 'length': 4}
+            {"row": 0, "col": 0, "direction": "across", "length": 4},
+            {"row": 0, "col": 0, "direction": "down", "length": 4},
         ]
         autofill.iterations = 100
         autofill.random_seed = 123
 
         # Capture state
-        csp_state = StateManager.capture_csp_state(
-            autofill,
-            current_slot_index=1,
-            locked_slots={0}
-        )
+        csp_state = StateManager.capture_csp_state(autofill, current_slot_index=1, locked_slots={0})
 
         # Verify captured state
         assert csp_state.current_slot_index == 1
         assert csp_state.iteration_count == 100
         assert csp_state.random_seed == 123
-        assert csp_state.used_words == ['TEST']
+        assert csp_state.used_words == ["TEST"]
         assert csp_state.locked_slots == [0]
         assert 0 in csp_state.domains
-        assert 'TEST' in csp_state.domains[0] or 'WORD' in csp_state.domains[0]
+        assert "TEST" in csp_state.domains[0] or "WORD" in csp_state.domains[0]
 
     def test_restore_to_autofill(self, simple_csp_state):
         """Test restoring state into Autofill instance."""
         # Create empty autofill instance
         grid = Grid(15)
-        word_list = WordList(words={'TEST': 100})
+        word_list = WordList(words={"TEST": 100})
 
-        autofill = Autofill(
-            grid=grid,
-            word_list=word_list,
-            min_score=0,
-            timeout=60
-        )
+        autofill = Autofill(grid=grid, word_list=word_list, min_score=0, timeout=60)
 
         # Restore state
         StateManager.restore_to_autofill(autofill, simple_csp_state)
@@ -352,7 +322,7 @@ class TestStateManager:
 
         # Verify domains restored as sets
         assert isinstance(autofill.domains[0], set)
-        assert 'WORD' in autofill.domains[0]
+        assert "WORD" in autofill.domains[0]
 
         # Verify grid restored
         assert autofill.grid.size == 15
@@ -360,14 +330,14 @@ class TestStateManager:
     def test_round_trip_serialization(self, state_manager, simple_csp_state):
         """Test full round-trip: save -> load -> restore."""
         task_id = "test_task_roundtrip"
-        metadata = {'test': 'roundtrip'}
+        metadata = {"test": "roundtrip"}
 
         # Save state
         state_manager.save_csp_state(
             task_id=task_id,
             csp_state=simple_csp_state,
             metadata=metadata,
-            compress=True
+            compress=True,
         )
 
         # Load state
@@ -378,7 +348,7 @@ class TestStateManager:
 
         # Restore to autofill instance
         grid = Grid(15)
-        word_list = WordList(words={'WORD': 100, 'TEST': 90})
+        word_list = WordList(words={"WORD": 100, "TEST": 90})
 
         autofill = Autofill(grid=grid, word_list=word_list)
         StateManager.restore_to_autofill(autofill, loaded_state)
@@ -394,10 +364,7 @@ class TestStateManager:
         grid = Grid(15)
 
         # Create state with large domains
-        large_domains = {
-            i: [f'WORD{j:04d}' for j in range(1000)]
-            for i in range(10)
-        }
+        large_domains = {i: [f"WORD{j:04d}" for j in range(1000)] for i in range(10)}
 
         csp_state = CSPState(
             grid_dict=grid.to_dict(),
@@ -410,26 +377,21 @@ class TestStateManager:
             current_slot_index=5,
             iteration_count=500,
             locked_slots=[],
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
         task_id = "test_task_large"
         metadata = {}
 
         # Save and load
-        state_manager.save_csp_state(
-            task_id=task_id,
-            csp_state=csp_state,
-            metadata=metadata,
-            compress=True
-        )
+        state_manager.save_csp_state(task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True)
 
         loaded_state, _ = state_manager.load_csp_state(task_id)
 
         # Verify large domains preserved
         assert len(loaded_state.domains) == 10
         assert len(loaded_state.domains[0]) == 1000
-        assert loaded_state.domains[5][500] == 'WORD0500'
+        assert loaded_state.domains[5][500] == "WORD0500"
 
 
 class TestPauseController:
@@ -487,8 +449,9 @@ class TestPauseController:
 
     def test_pause_controller_rate_limiting(self, temp_dir):
         """Test that should_pause() is rate limited."""
-        from cli.src.fill.pause_controller import PauseController
         import time
+
+        from cli.src.fill.pause_controller import PauseController
 
         task_id = "test_task_rate"
         controller = PauseController(task_id=task_id, pause_dir=temp_dir)

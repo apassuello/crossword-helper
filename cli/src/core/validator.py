@@ -9,6 +9,7 @@ Validates crossword grids against NYT-style construction rules:
 """
 
 from typing import List, Tuple
+
 from .grid import Grid
 
 
@@ -43,9 +44,7 @@ class GridValidator:
         # Check black square percentage
         black_pct = GridValidator._get_black_square_percentage(grid)
         if black_pct > 17.0:
-            errors.append(
-                f"Black square percentage ({black_pct:.1f}%) exceeds 17% limit"
-            )
+            errors.append(f"Black square percentage ({black_pct:.1f}%) exceeds 17% limit")
 
         return (len(errors) == 0, errors)
 
@@ -92,12 +91,14 @@ class GridValidator:
             visited.add((row, col))
 
             # Add neighbors
-            stack.extend([
-                (row - 1, col),  # up
-                (row + 1, col),  # down
-                (row, col - 1),  # left
-                (row, col + 1)   # right
-            ])
+            stack.extend(
+                [
+                    (row - 1, col),  # up
+                    (row + 1, col),  # down
+                    (row, col - 1),  # left
+                    (row, col + 1),  # right
+                ]
+            )
 
         # Check if visited all white squares
         return len(visited) == white_count
@@ -114,7 +115,7 @@ class GridValidator:
         slots = grid.get_word_slots()
 
         for slot in slots:
-            if slot['length'] < 3:
+            if slot["length"] < 3:
                 errors.append(
                     f"{slot['direction'].capitalize()} word at "
                     f"({slot['row']}, {slot['col']}) is only {slot['length']} letters"
@@ -143,23 +144,23 @@ class GridValidator:
             Dictionary with grid statistics
         """
         word_slots = grid.get_word_slots()
-        across_words = [s for s in word_slots if s['direction'] == 'across']
-        down_words = [s for s in word_slots if s['direction'] == 'down']
+        across_words = [s for s in word_slots if s["direction"] == "across"]
+        down_words = [s for s in word_slots if s["direction"] == "down"]
 
         black_squares = len(grid.get_black_squares())
         total_squares = grid.size * grid.size
         white_squares = total_squares - black_squares
 
         return {
-            'size': grid.size,
-            'total_squares': total_squares,
-            'black_squares': black_squares,
-            'white_squares': white_squares,
-            'black_square_percentage': GridValidator._get_black_square_percentage(grid),
-            'word_count': len(word_slots),
-            'across_word_count': len(across_words),
-            'down_word_count': len(down_words),
-            'is_symmetric': grid.check_symmetry(),
-            'is_connected': GridValidator._check_connectivity(grid),
-            'meets_nyt_standards': GridValidator.validate_all(grid)[0]
+            "size": grid.size,
+            "total_squares": total_squares,
+            "black_squares": black_squares,
+            "white_squares": white_squares,
+            "black_square_percentage": GridValidator._get_black_square_percentage(grid),
+            "word_count": len(word_slots),
+            "across_word_count": len(across_words),
+            "down_word_count": len(down_words),
+            "is_symmetric": grid.check_symmetry(),
+            "is_connected": GridValidator._check_connectivity(grid),
+            "meets_nyt_standards": GridValidator.validate_all(grid)[0],
         }

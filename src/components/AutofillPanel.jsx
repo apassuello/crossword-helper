@@ -143,7 +143,6 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
 
       // Start autofill with new task ID
       toast.success('Resuming autofill from saved state...');
-      console.log(`Resuming with new task ID: ${data.new_task_id}`);
       onStartAutofill({...options, theme_entries: getThemeEntries(), resumeTaskId: data.new_task_id});
 
     } catch (err) {

@@ -315,7 +315,7 @@ Located in: `cli/tests/unit/`
 
 **File:** `test_pattern_matcher.py`
 
-**Purpose:** Verify pattern matching algorithms (Regex, Trie, Aho-Corasick)
+**Purpose:** Verify pattern matching algorithms (Regex, Trie)
 
 **Example Tests:**
 ```python

@@ -1,8 +1,5 @@
 # Known Issues
 
-**Last Updated**: December 28, 2025
-**Status**: Multiple issues identified, needs debugging
-
 ---
 
 ## Critical Issues
@@ -71,7 +68,7 @@
 **Files Needing Update**:
 - `THEME_WORD_PRIORITY_IMPLEMENTATION_COMPLETE.md` (claims UI works)
 - `docs/THEME_LIST_FEATURE.md` (user guide for broken UI)
-- `PHASE_2_IMPLEMENTATION_COMPLETE.md` (Phase 2 status)
+- `PHASE_2_IMPLEMENTATION_COMPLETE.md` (milestone status doc)
 
 **Next Steps**:
 1. Update all docs to reflect current broken state

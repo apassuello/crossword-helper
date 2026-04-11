@@ -8,6 +8,6 @@ beam states for quality and viability.
 from .state_evaluator import StateEvaluationStrategy, StateEvaluator
 
 __all__ = [
-    'StateEvaluationStrategy',
-    'StateEvaluator',
+    "StateEvaluationStrategy",
+    "StateEvaluator",
 ]

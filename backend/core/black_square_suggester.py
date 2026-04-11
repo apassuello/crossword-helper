@@ -5,7 +5,7 @@ Analyzes problematic slots and suggests optimal black square placements
 to resolve stuck autofill situations while maintaining grid quality.
 """
 
-from typing import List, Dict
+from typing import Dict, List
 
 
 class BlackSquareSuggestion:
@@ -22,7 +22,7 @@ class BlackSquareSuggestion:
         right_length: int,
         symmetric_position: Dict,
         new_word_count: int,
-        constraint_reduction: int
+        constraint_reduction: int,
     ):
         self.position = position
         self.row = row
@@ -37,16 +37,16 @@ class BlackSquareSuggestion:
 
     def to_dict(self):
         return {
-            'position': self.position,
-            'row': self.row,
-            'col': self.col,
-            'score': self.score,
-            'reasoning': self.reasoning,
-            'left_length': self.left_length,
-            'right_length': self.right_length,
-            'symmetric_position': self.symmetric_position,
-            'new_word_count': self.new_word_count,
-            'constraint_reduction': self.constraint_reduction
+            "position": self.position,
+            "row": self.row,
+            "col": self.col,
+            "score": self.score,
+            "reasoning": self.reasoning,
+            "left_length": self.left_length,
+            "right_length": self.right_length,
+            "symmetric_position": self.symmetric_position,
+            "new_word_count": self.new_word_count,
+            "constraint_reduction": self.constraint_reduction,
         }
 
 
@@ -69,15 +69,10 @@ class BlackSquareSuggester:
             13: (66, 74),
             15: (72, 78),
             17: (80, 88),
-            21: (90, 100)
+            21: (90, 100),
         }
 
-    def suggest_placements(
-        self,
-        grid: List[List],
-        problematic_slot: Dict,
-        max_suggestions: int = 3
-    ) -> List[Dict]:
+    def suggest_placements(self, grid: List[List], problematic_slot: Dict, max_suggestions: int = 3) -> List[Dict]:
         """
         Suggest black square placements for a problematic slot.
 
@@ -89,7 +84,7 @@ class BlackSquareSuggester:
         Returns:
             List of BlackSquareSuggestion dicts
         """
-        slot_length = problematic_slot['length']
+        slot_length = problematic_slot["length"]
 
         # Don't suggest for short slots
         if slot_length < 6:
@@ -127,7 +122,7 @@ class BlackSquareSuggester:
 
         # Calculate resulting lengths
         left_len = position
-        right_len = slot['length'] - position - 1
+        right_len = slot["length"] - position - 1
 
         # ===================================
         # FACTOR 1: Length Balance (0-100)
@@ -165,10 +160,7 @@ class BlackSquareSuggester:
         current_word_count = self._count_words(grid)
         new_word_count = current_word_count + 2  # Split adds 1 net word
 
-        min_words, max_words = self.word_count_ranges.get(
-            self.grid_size,
-            (70, 80)  # Default
-        )
+        min_words, max_words = self.word_count_ranges.get(self.grid_size, (70, 80))  # Default
 
         if min_words <= new_word_count <= max_words:
             score += 100
@@ -193,11 +185,11 @@ class BlackSquareSuggester:
 
     def _get_symmetric_position(self, grid: List[List], slot: Dict, position: int) -> Dict:
         """Calculate the rotationally symmetric position."""
-        row = slot['row']
-        col = slot['col']
-        direction = slot['direction']
+        row = slot["row"]
+        col = slot["col"]
+        direction = slot["direction"]
 
-        if direction == 'across':
+        if direction == "across":
             # Black square at (row, col + position)
             # Symmetric is at (grid_size-1-row, grid_size-1-(col+position))
             sym_row = self.grid_size - 1 - row
@@ -208,15 +200,12 @@ class BlackSquareSuggester:
             sym_row = self.grid_size - 1 - (row + position)
             sym_col = self.grid_size - 1 - col
 
-        return {
-            'row': sym_row,
-            'col': sym_col
-        }
+        return {"row": sym_row, "col": sym_col}
 
     def _can_place_symmetric_black(self, grid: List[List], sym_pos: Dict) -> bool:
         """Check if symmetric position can have a black square."""
-        row = sym_pos['row']
-        col = sym_pos['col']
+        row = sym_pos["row"]
+        col = sym_pos["col"]
 
         # Check bounds
         if not (0 <= row < self.grid_size and 0 <= col < self.grid_size):
@@ -229,18 +218,18 @@ class BlackSquareSuggester:
         # Check if position is empty (can place black)
         cell = grid[row][col]
         if isinstance(cell, dict):
-            return not cell.get('letter') and not cell.get('isThemeLocked', False)
+            return not cell.get("letter") and not cell.get("isThemeLocked", False)
         else:
             # String format
-            return cell in ['', '.']
+            return cell in ["", "."]
 
     def _is_black(self, grid: List[List], row: int, col: int) -> bool:
         """Check if cell is a black square."""
         cell = grid[row][col]
         if isinstance(cell, dict):
-            return cell.get('isBlack', False)
+            return cell.get("isBlack", False)
         else:
-            return cell == '#'
+            return cell == "#"
 
     def _count_words(self, grid: List[List]) -> int:
         """Count total words in grid (across + down)."""
@@ -291,9 +280,9 @@ class BlackSquareSuggester:
     def _is_black_cell(self, cell) -> bool:
         """Helper to check if a cell is black (handles both formats)."""
         if isinstance(cell, dict):
-            return cell.get('isBlack', False)
+            return cell.get("isBlack", False)
         else:
-            return cell == '#'
+            return cell == "#"
 
     def _estimate_constraint_reduction(self, slot: Dict, position: int) -> int:
         """
@@ -303,13 +292,13 @@ class BlackSquareSuggester:
         """
         # Simple heuristic: longer words have more constraints
         # Splitting reduces total constraint load
-        original_length = slot['length']
+        original_length = slot["length"]
         left_len = position
         right_len = original_length - position - 1
 
         # Constraint count roughly proportional to length squared
-        original_constraints = original_length ** 2
-        new_constraints = (left_len ** 2) + (right_len ** 2)
+        original_constraints = original_length**2
+        new_constraints = (left_len**2) + (right_len**2)
 
         reduction = original_constraints - new_constraints
 
@@ -326,7 +315,7 @@ class BlackSquareSuggester:
         # More sophisticated version would check actual crossing words
 
         left_len = position
-        right_len = slot['length'] - position - 1
+        right_len = slot["length"] - position - 1
 
         unchecked = 0
 
@@ -338,24 +327,18 @@ class BlackSquareSuggester:
 
         return unchecked
 
-    def _create_suggestion(
-        self,
-        grid: List[List],
-        slot: Dict,
-        position: int,
-        score: int
-    ) -> BlackSquareSuggestion:
+    def _create_suggestion(self, grid: List[List], slot: Dict, position: int, score: int) -> BlackSquareSuggestion:
         """Create a BlackSquareSuggestion object."""
         left_len = position
-        right_len = slot['length'] - position - 1
+        right_len = slot["length"] - position - 1
 
         # Calculate actual grid position
-        if slot['direction'] == 'across':
-            black_row = slot['row']
-            black_col = slot['col'] + position
+        if slot["direction"] == "across":
+            black_row = slot["row"]
+            black_col = slot["col"] + position
         else:  # down
-            black_row = slot['row'] + position
-            black_col = slot['col']
+            black_row = slot["row"] + position
+            black_col = slot["col"]
 
         # Get symmetric position
         sym_pos = self._get_symmetric_position(grid, slot, position)
@@ -367,13 +350,7 @@ class BlackSquareSuggester:
         constraint_reduction = self._estimate_constraint_reduction(slot, position)
 
         # Generate reasoning
-        reasoning = self._generate_reasoning(
-            left_len,
-            right_len,
-            score,
-            new_word_count,
-            constraint_reduction
-        )
+        reasoning = self._generate_reasoning(left_len, right_len, score, new_word_count, constraint_reduction)
 
         return BlackSquareSuggestion(
             position=position,
@@ -385,7 +362,7 @@ class BlackSquareSuggester:
             right_length=right_len,
             symmetric_position=sym_pos,
             new_word_count=new_word_count,
-            constraint_reduction=constraint_reduction
+            constraint_reduction=constraint_reduction,
         )
 
     def _generate_reasoning(
@@ -394,7 +371,7 @@ class BlackSquareSuggester:
         right_len: int,
         score: int,
         new_word_count: int,
-        constraint_reduction: int
+        constraint_reduction: int,
     ) -> str:
         """Generate human-readable reasoning."""
         reasons = []
@@ -446,20 +423,12 @@ def validate_grid_for_black_squares(grid: List[List], grid_size: int) -> Dict:
 
     # Count current black squares
     black_count = sum(
-        1 for row in grid for cell in row
-        if (isinstance(cell, dict) and cell.get('isBlack', False)) or cell == '#'
+        1 for row in grid for cell in row if (isinstance(cell, dict) and cell.get("isBlack", False)) or cell == "#"
     )
 
     # Typical max black squares: ~16% of grid
     max_black = grid_size * grid_size * 0.16
     if black_count > max_black:
-        warnings.append(
-            f"High black square count ({black_count}). "
-            "Adding more may reduce grid quality."
-        )
+        warnings.append(f"High black square count ({black_count}). " "Adding more may reduce grid quality.")
 
-    return {
-        'valid': len(errors) == 0,
-        'errors': errors,
-        'warnings': warnings
-    }
+    return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}

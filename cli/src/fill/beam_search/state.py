@@ -5,8 +5,9 @@ This module contains the BeamState dataclass which represents one partial
 solution in the beam search algorithm.
 """
 
-from typing import Dict, Set, Tuple, List
 from dataclasses import dataclass, field
+from typing import Dict, List, Set, Tuple
+
 from ...core.grid import Grid
 
 
@@ -24,10 +25,10 @@ class BeamState:
     - All words in used_words exist in grid
     """
 
-    grid: Grid                                          # Current grid state
-    slots_filled: int                                   # Number of slots filled so far
-    total_slots: int                                    # Total slots in grid
-    score: float                                        # Quality score (0.0-100.0)
+    grid: Grid  # Current grid state
+    slots_filled: int  # Number of slots filled so far
+    total_slots: int  # Total slots in grid
+    score: float  # Quality score (0.0-100.0)
     used_words: Set[str] = field(default_factory=set)  # Words placed (prevent duplicates)
     slot_assignments: Dict[Tuple[int, int, str], str] = field(default_factory=dict)  # slot → word
     domains: Dict[Tuple[int, int, str], List[str]] = field(default_factory=dict)  # slot → candidate words
@@ -37,7 +38,7 @@ class BeamState:
         """Return fraction of slots filled (0.0-1.0)"""
         return self.slots_filled / self.total_slots if self.total_slots > 0 else 0.0
 
-    def clone(self) -> 'BeamState':
+    def clone(self) -> "BeamState":
         """
         Create deep copy of this state.
 
@@ -55,10 +56,10 @@ class BeamState:
             used_words=self.used_words.copy(),  # CRITICAL: copy set
             slot_assignments=self.slot_assignments.copy(),
             domains={k: v.copy() if isinstance(v, list) else v for k, v in self.domains.items()},
-            domain_reductions=self.domain_reductions.copy()
+            domain_reductions=self.domain_reductions.copy(),
         )
 
-    def __eq__(self, other: 'BeamState') -> bool:
+    def __eq__(self, other: "BeamState") -> bool:
         """
         Check equality (for testing).
 
@@ -70,9 +71,10 @@ class BeamState:
         # Check grid equality by comparing cells content
         # Grid doesn't have __eq__, so compare cells directly
         import numpy as np
+
         grids_equal = np.array_equal(self.grid.cells, other.grid.cells)
 
-        return (grids_equal and self.used_words == other.used_words)
+        return grids_equal and self.used_words == other.used_words
 
     def __hash__(self) -> int:
         """

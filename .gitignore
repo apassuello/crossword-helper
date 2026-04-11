@@ -65,7 +65,7 @@ frontend/dist/
 # Test output files
 test_filled*.json
 
-# Phase 1 test outputs
+# Test outputs
 test_phase*.json
 
 # Development/demo scripts
@@ -94,6 +94,9 @@ test_grids/
 
 # Claude Code
 .claude/
+
+# Root-level copies of committed resources
+/art-of-construction.pdf
 
 # Downloaded third-party sources (fetched by scripts/research/)
 data/research/

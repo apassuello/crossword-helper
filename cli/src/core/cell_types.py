@@ -16,28 +16,55 @@ from typing import Literal, Union
 # ============================================================================
 
 # Empty cell in the grid (no letter placed yet)
-EMPTY_CELL = '.'
+EMPTY_CELL = "."
 
 # Black square (word boundary)
-BLACK_CELL = '#'
+BLACK_CELL = "#"
 
 # Valid letter range
-LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # Type definition for grid cells
-GridCell = Literal['.', '#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-                   'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
-                   'W', 'X', 'Y', 'Z']
+GridCell = Literal[
+    ".",
+    "#",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+]
 
 # ============================================================================
 # PATTERN MATCHING CONSTANTS (Search Patterns)
 # ============================================================================
 
 # Wildcard in pattern matching (matches any letter)
-WILDCARD = '?'
+WILDCARD = "?"
 
 # Pattern character type
-PatternChar = Union[Literal['?'], str]  # '?' or any letter A-Z
+PatternChar = Union[Literal["?"], str]  # '?' or any letter A-Z
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -132,6 +159,7 @@ def count_empty_cells(row: list) -> int:
 def count_filled_cells(row: list) -> int:
     """Count the number of filled cells (letters) in a grid row."""
     return sum(1 for cell in row if is_filled(cell))
+
 
 # ============================================================================
 # ASSERTIONS FOR DEBUGGING
