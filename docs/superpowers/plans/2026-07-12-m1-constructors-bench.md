@@ -356,6 +356,37 @@ import "./styles/bench/base.css";
 
 ---
 
+### Task 4.5: Migrate `src/App.jsx` network calls onto the `api` client
+
+**Purpose:** Guard 2 (`scripts/check-guards.sh`) blocks any staged `src/` file outside `src/api/` + `src/__tests__/` that contains `axios`, `fetch(`, or `new EventSource`. `App.jsx` still uses `axios` + a raw `EventSource`, so the next task that re-stages it would be blocked. Standalone task (Arthur chose this over folding the migration into the top of Task 5) so the transport swap lands as one reviewable, side-effect-free commit.
+
+**Scope:** Pure, behavior-preserving transport swap onto the existing `src/api/client.js` surface — request payloads stay **byte-identical** (values, defaults, encoding), only the transport changes. No new behavior, no test rewrites, no `App.test.jsx` (Tasks 5–18 rewrite this lifecycle). **verify/clean keep their object-cell `{letter,isBlack}` payloads** — they hit a dict-tolerant backend path and byte-identical payload = identical behavior. Encoding cleanup (object-cell → `gridCodec`) is **Task 10's** job, not this one.
+
+**Files:**
+- Modify: `src/App.jsx` only (swap `import axios` → `import { api } from './api/client'`).
+- Untouched by design: `axios` stays in `package.json` (other components import it); `src/hooks/useSSEProgress.js` stays (Task 11 deletes it).
+
+**Interfaces (contracts consumed, all from `src/api/client.js`):**
+- `api.startFill(options)` — POST `/api/fill/with-progress`; returns parsed body (`{ task_id }`) directly, no `.data`. Caller owns grid encoding; client passes `grid` through verbatim.
+- `api.openProgress(taskId, { onEvent, onError })` → handle with idempotent `close()`. `onEvent` receives the **already-parsed** SSE object (client owns `JSON.parse`).
+- `api.cancelFill(taskId)`, `api.verifyWords({ grid, size, wordlists })`, `api.cleanGrid({ grid, size })` — each returns parsed body or throws `ApiError{status,code,message,details}` (no `.response`).
+
+**The 5 migrated sites:**
+1. **startFill** — hand the *exact* old object literal (`size`, CLI-string `grid`, `wordlists`, `timeout`, `min_score` from `minScore ?? 50`, `algorithm`, `theme_entries`, `adaptive_mode`, `max_adaptations`, `partial_fill`, `cleanup`) to `api.startFill({…})`; destructure `const { task_id } = await …` (drop the old `initResponse.data`). *Not* `api.startFill(options)` — that would ship camelCase keys, lose the `?? 50` default, and send an unencoded grid.
+2. **SSE** — `api.openProgress(task_id, { onEvent, onError })` stored in `eventSourceRef.current`. `onEvent` body = the old `onmessage` body verbatim **minus** the `JSON.parse` line, keeping the inner `try/catch` (it guards the `data.data.grid` mapping, not just the parse), both `isThemeLocked` grid-map guards, and the complete/paused/error branch asymmetry (paused deliberately does *not* clear `currentTaskId`). `onError` replicates the old `onerror` exactly. Every inner `eventSource.close()` → `eventSourceRef.current?.close()` (idempotent).
+3. **cancel** — `api.cancelFill(taskId).catch(…)` (keep the `.catch`).
+4. **verify** — `api.verifyWords({ grid: <object-cell matrix>, size, wordlists: ['comprehensive'] })`; destructure the awaited body (drop `response.data`).
+5. **clean** — `api.cleanGrid({ grid: <object-cell matrix>, size })`; destructure the awaited body (drop `response.data`).
+- `handleCancelAutofill` / `handleResetAutofill` call `eventSourceRef.current.close()` unchanged — the handle exposes `close()`, so they keep working without edits.
+
+**Verification:**
+- `grep -nE "axios|fetch\(|new EventSource" src/App.jsx` → empty (Guard 2 clears).
+- `npm run build` + `npx vitest run` green — **regression-only**: no test imports `App`, so these prove syntax/imports, *not* SSE correctness.
+- Real check is an **adversarial payload diff**: read the moved SSE body line-by-line against the original; confirm startFill serializes byte-identically and verify/clean keep object-cell encoding.
+- Manual **browser SSE smoke** (start → incremental grid updates → complete/paused/error) when a dev server is up.
+
+---
+
 ### Task 5: Port CrosswordGrid + grid geometry hook
 
 **Files:**

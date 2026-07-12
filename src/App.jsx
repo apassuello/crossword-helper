@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import axios from 'axios';
+import { api } from './api/client';
 import GridEditor from './components/GridEditor';
 import PatternMatcher from './components/PatternMatcher';
 import ToolPanel from './components/ToolPanel';
@@ -208,7 +208,7 @@ function App() {
 
     try {
       // Start autofill with progress tracking
-      const initResponse = await axios.post('/api/fill/with-progress', {
+      const { task_id } = await api.startFill({
         size: gridSize,
         grid: grid.map(row => row.map(cell =>
           cell.isBlack ? '#' : (cell.letter || '.')
@@ -224,50 +224,21 @@ function App() {
         cleanup: options.cleanup || false
       });
 
-      const { task_id } = initResponse.data;
       setCurrentTaskId(task_id);
 
       // Connect to SSE for progress updates
-      const eventSource = new EventSource(`/api/progress/${task_id}`);
-      eventSourceRef.current = eventSource;
+      const progress = api.openProgress(task_id, {
+        onEvent: (data) => {
+          try {
+            setAutofillProgress({
+              status: data.status || 'running',
+              progress: data.progress || 0,
+              message: data.message || 'Processing...'
+            });
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setAutofillProgress({
-            status: data.status || 'running',
-            progress: data.progress || 0,
-            message: data.message || 'Processing...'
-          });
-
-          // Apply incremental grid updates if present
-          if (data.data && data.data.grid && data.status === 'running') {
-            // Create deep copy with new objects (not shallow copy)
-            setGrid(prevGrid => prevGrid.map((row, r) =>
-              row.map((cell, c) => {
-                // Never overwrite theme-locked cells
-                if (cell.isThemeLocked) return cell;
-                const cliCell = data.data.grid[r][c];
-                if (cliCell === '#') {
-                  return { ...cell, isBlack: true };
-                } else if (cliCell === '.' || cliCell === '') {
-                  return { ...cell, letter: '' };
-                } else {
-                  return { ...cell, letter: cliCell };
-                }
-              })
-            ));
-          }
-
-          // When complete, update grid with results from event data
-          if (data.status === 'complete') {
-            eventSource.close();
-            eventSourceRef.current = null;
-            setCurrentTaskId(null);
-
-            // Check if result grid is included in the event
-            if (data.data && data.data.grid) {
-              // Update grid with filled results (full or partial) - create deep copy with new objects
+            // Apply incremental grid updates if present
+            if (data.data && data.data.grid && data.status === 'running') {
+              // Create deep copy with new objects (not shallow copy)
               setGrid(prevGrid => prevGrid.map((row, r) =>
                 row.map((cell, c) => {
                   // Never overwrite theme-locked cells
@@ -282,62 +253,88 @@ function App() {
                   }
                 })
               ));
-
-              // Show appropriate message based on success
-              if (data.data.success) {
-                setAutofillProgress({
-                  status: 'complete',
-                  progress: 100,
-                  message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
-                });
-              } else {
-                // Partial fill with suggestions
-                const fillPct = data.data.fill_percentage || 0;
-                let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
-
-                // Add first suggestion if available
-                if (data.data.suggestions && data.data.suggestions.length > 0) {
-                  message += ` - ${data.data.suggestions[0].message}`;
-                }
-
-                setAutofillProgress({
-                  status: fillPct > 0 ? 'warning' : 'error',
-                  progress: fillPct,
-                  message: message
-                });
-              }
-            } else {
-              setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
             }
-          } else if (data.status === 'paused') {
-            // Autofill was paused - close connection and show paused state
-            eventSource.close();
-            eventSourceRef.current = null;
-            setAutofillProgress({
-              status: 'paused',
-              progress: data.progress || 0,
-              message: data.message || 'Autofill paused - state saved'
-            });
-            // currentTaskId is kept for future pause operations
-            toast.success('Autofill paused successfully! You can resume later.');
-          } else if (data.status === 'error') {
-            eventSource.close();
-            eventSourceRef.current = null;
-            setCurrentTaskId(null);
-            setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
-          }
-        } catch (error) {
-          console.error('Failed to parse SSE event:', error);
-        }
-      };
 
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        eventSource.close();
-        eventSourceRef.current = null;
-        setCurrentTaskId(null);
-        setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
-      };
+            // When complete, update grid with results from event data
+            if (data.status === 'complete') {
+              eventSourceRef.current?.close();
+              eventSourceRef.current = null;
+              setCurrentTaskId(null);
+
+              // Check if result grid is included in the event
+              if (data.data && data.data.grid) {
+                // Update grid with filled results (full or partial) - create deep copy with new objects
+                setGrid(prevGrid => prevGrid.map((row, r) =>
+                  row.map((cell, c) => {
+                    // Never overwrite theme-locked cells
+                    if (cell.isThemeLocked) return cell;
+                    const cliCell = data.data.grid[r][c];
+                    if (cliCell === '#') {
+                      return { ...cell, isBlack: true };
+                    } else if (cliCell === '.' || cliCell === '') {
+                      return { ...cell, letter: '' };
+                    } else {
+                      return { ...cell, letter: cliCell };
+                    }
+                  })
+                ));
+
+                // Show appropriate message based on success
+                if (data.data.success) {
+                  setAutofillProgress({
+                    status: 'complete',
+                    progress: 100,
+                    message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
+                  });
+                } else {
+                  // Partial fill with suggestions
+                  const fillPct = data.data.fill_percentage || 0;
+                  let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
+
+                  // Add first suggestion if available
+                  if (data.data.suggestions && data.data.suggestions.length > 0) {
+                    message += ` - ${data.data.suggestions[0].message}`;
+                  }
+
+                  setAutofillProgress({
+                    status: fillPct > 0 ? 'warning' : 'error',
+                    progress: fillPct,
+                    message: message
+                  });
+                }
+              } else {
+                setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
+              }
+            } else if (data.status === 'paused') {
+              // Autofill was paused - close connection and show paused state
+              eventSourceRef.current?.close();
+              eventSourceRef.current = null;
+              setAutofillProgress({
+                status: 'paused',
+                progress: data.progress || 0,
+                message: data.message || 'Autofill paused - state saved'
+              });
+              // currentTaskId is kept for future pause operations
+              toast.success('Autofill paused successfully! You can resume later.');
+            } else if (data.status === 'error') {
+              eventSourceRef.current?.close();
+              eventSourceRef.current = null;
+              setCurrentTaskId(null);
+              setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
+            }
+          } catch (error) {
+            console.error('Failed to parse SSE event:', error);
+          }
+        },
+        onError: (error) => {
+          console.error('SSE error:', error);
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+          setCurrentTaskId(null);
+          setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
+        },
+      });
+      eventSourceRef.current = progress;
 
     } catch (error) {
       setAutofillProgress({ status: 'error', progress: 0, message: error.message });
@@ -366,7 +363,7 @@ function App() {
 
     // Call backend to cancel the task
     if (taskId) {
-      axios.post(`/api/fill/cancel/${taskId}`).catch(err => {
+      api.cancelFill(taskId).catch(err => {
         console.warn('Failed to cancel autofill task:', err);
       });
     }
@@ -394,16 +391,14 @@ function App() {
     if (!grid) return;
 
     try {
-      const response = await axios.post('/api/grid/verify-words', {
-        size: gridSize,
+      const { invalid_words, invalid_count, total_checked, wordlist_size } = await api.verifyWords({
         grid: grid.map(row => row.map(cell => ({
           letter: cell.letter || '',
           isBlack: cell.isBlack || false
         }))),
+        size: gridSize,
         wordlists: ['comprehensive']
       });
-
-      const { invalid_words, invalid_count, total_checked, wordlist_size } = response.data;
 
       // Build set of cells that belong to invalid words
       const errorCells = new Set();
@@ -447,15 +442,13 @@ function App() {
     if (!grid) return;
 
     try {
-      const response = await axios.post('/api/grid/clean', {
-        size: gridSize,
+      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = await api.cleanGrid({
         grid: grid.map(row => row.map(cell => ({
           letter: cell.letter || '',
           isBlack: cell.isBlack || false
-        })))
+        }))),
+        size: gridSize
       });
-
-      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = response.data;
 
       if (removed_count === 0) {
         toast.success('Grid is clean — all words are valid!');
