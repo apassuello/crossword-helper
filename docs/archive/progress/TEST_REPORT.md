@@ -110,7 +110,7 @@ The new React-based advanced UI has been successfully implemented and tested. Al
 ### Current Wordlists
 - **standard.txt:** 48 words (all 4+ letters)
 - **personal.txt:** ~10 theme words
-- **gift_for_sarah.txt:** Custom theme words
+- **(custom theme list):** Custom theme words
 
 ### Recommendation
 Add comprehensive wordlists with:
