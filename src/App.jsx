@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
-import GridEditor from './components/GridEditor';
+import CrosswordGrid from './components/bench/CrosswordGrid';
 import PatternMatcher from './components/PatternMatcher';
 import ToolPanel from './components/ToolPanel';
 import AutofillPanel from './components/AutofillPanel';
@@ -145,6 +145,26 @@ function App() {
     setGrid(newGrid);
     validateGrid(newGrid);
   }, [grid]);
+
+  // Controlled-grid focus/direction handlers (CrosswordGrid, Task 5).
+  // selectedCell {row,col,direction} maps to focus {row,col} + selectedDir=direction.
+  // Arrow keys and Tab-with-switch each dispatch BOTH onMoveFocus and onRotateDir in one
+  // event, and both mutate selectedCell — use functional updates so neither clobbers the
+  // other under React batching.
+  const handleGridFocus = useCallback((row, col) => {
+    setSelectedCell(prev => ({ row, col, direction: prev?.direction || 'across' }));
+  }, []);
+
+  const handleGridMoveFocus = useCallback((row, col) => {
+    setSelectedCell(prev => ({ row, col, direction: prev?.direction || 'across' }));
+  }, []);
+
+  const handleGridRotateDir = useCallback(() => {
+    setSelectedCell(prev => {
+      const base = prev || { row: 0, col: 0, direction: 'across' };
+      return { ...base, direction: base.direction === 'across' ? 'down' : 'across' };
+    });
+  }, []);
 
   const validateGrid = useCallback((gridData) => {
     const errors = [];
@@ -613,17 +633,22 @@ function App() {
 
       <div className="app-body">
         <div className="main-panel">
-          <GridEditor
-            grid={grid}
-            gridSize={gridSize}
-            selectedCell={selectedCell}
-            onSelectCell={setSelectedCell}
-            onToggleBlack={toggleBlackSquare}
-            onSetLetter={setLetter}
-            onToggleThemeLock={toggleThemeLock}
-            validationErrors={validationErrors}
-            numbering={numbering}
-          />
+          {grid ? (
+            <CrosswordGrid
+              grid={grid}
+              focus={selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null}
+              selectedDir={selectedCell?.direction || 'across'}
+              heatmap={null}
+              onFocus={handleGridFocus}
+              onMoveFocus={handleGridMoveFocus}
+              onRotateDir={handleGridRotateDir}
+              onSetLetter={setLetter}
+              onToggleBlack={toggleBlackSquare}
+              onToggleLock={toggleThemeLock}
+            />
+          ) : (
+            <div className="grid-editor-loading">Initializing grid...</div>
+          )}
         </div>
 
         <div className="side-panel">
