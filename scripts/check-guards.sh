@@ -25,17 +25,21 @@ violations=0
 
 # --- Guard 1: scrub personal strings (fixed-string, skip if pattern file absent) ---
 #
-# .gitignore is excluded: it is the designated registry of ignored personal
-# files and legitimately NAMES them (personal wordlist filenames already tracked
-# in .gitignore match a scrub pattern). Because the scrub scans the full staged
-# blob, without this exclusion every future commit staging .gitignore would be
-# permanently blocked (and --no-verify is banned). This mirrors the URL guard's
-# src/api/ exclusion: each guard skips the one place its target strings
-# legitimately live.
+# Two locations are excluded, each because a scrub pattern legitimately lives
+# there and a full-blob fixed-string scan would otherwise block every future
+# commit touching it (and --no-verify is banned):
+#   - .gitignore: the registry of ignored personal files, which NAMES them.
+#   - data/wordlists/: public dictionaries contain real answer words that carry
+#     a personal pattern as a substring (a longer dictionary word can end with a
+#     personal phrase); personal custom wordlists are separately gitignored, so
+#     they cannot be committed here regardless.
+# This mirrors the URL guard's src/api/ exclusion: each guard skips the one
+# place its target strings legitimately live.
 if [ -f .scrub-patterns ]; then
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     [ "$file" = ".gitignore" ] && continue
+    case "$file" in data/wordlists/*) continue ;; esac
     if git show ":$file" 2>/dev/null | grep -Fqf .scrub-patterns; then
       echo "SCRUB GUARD: staged file '$file' contains a personal-content scrub pattern (.scrub-patterns)." >&2
       violations=1
