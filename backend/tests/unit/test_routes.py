@@ -164,7 +164,7 @@ class TestPatternSearch:
         mock_adapter.pattern.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=30)
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B"})
-        assert resp.status_code == 505
+        assert resp.status_code == 504
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
@@ -297,7 +297,7 @@ class TestNormalizeEntry:
         mock_adapter.normalize.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
 
         resp = _post_json(c, "/api/normalize", {"text": "foo"})
-        assert resp.status_code == 506
+        assert resp.status_code == 504
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
@@ -392,7 +392,7 @@ class TestFillGrid:
         mock_adapter.fill.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=300)
 
         resp = _post_json(c, "/api/fill", _fill_request())
-        assert resp.status_code == 507
+        assert resp.status_code == 504
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client

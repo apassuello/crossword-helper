@@ -87,7 +87,7 @@ def pattern_search():
     except ValueError as e:
         return handle_error("INVALID_PATTERN", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Pattern search timed out", 505)
+        return handle_error("TIMEOUT", "Pattern search timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
@@ -163,7 +163,7 @@ def normalize_entry():
     except ValueError as e:
         return handle_error("INVALID_TEXT", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Normalization timed out", 506)
+        return handle_error("TIMEOUT", "Normalization timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
@@ -233,7 +233,7 @@ def fill_grid():
     except ValueError as e:
         return handle_error("INVALID_REQUEST", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Grid fill timed out", 507)
+        return handle_error("TIMEOUT", "Grid fill timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 

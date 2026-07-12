@@ -58,20 +58,26 @@ def create_app(testing=False):
     app.register_blueprint(grid_api, url_prefix="/api")
     app.register_blueprint(constraint_bp, url_prefix="/api")
 
-    # Error handlers
+    # Error handlers (same envelope shape as handle_error: {"error": {"code", "message"}})
     @app.errorhandler(404)
     def not_found(error):
-        """Handle 404 Not Found errors with JSON response."""
+        """Handle 404 Not Found errors with JSON envelope."""
         from flask import jsonify
 
-        return jsonify({"error": "Not found"}), 404
+        return (
+            jsonify({"error": {"code": "NOT_FOUND", "message": "Not found"}}),
+            404,
+        )
 
     @app.errorhandler(405)
     def method_not_allowed(error):
-        """Handle 405 Method Not Allowed errors with JSON response."""
+        """Handle 405 Method Not Allowed errors with JSON envelope."""
         from flask import jsonify
 
-        return jsonify({"error": "Method not allowed"}), 405
+        return (
+            jsonify({"error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}),
+            405,
+        )
 
     # Serve frontend (Vite build)
     frontend_dist = os.path.join(base_dir, "frontend", "dist")

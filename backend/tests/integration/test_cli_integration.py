@@ -226,7 +226,7 @@ class TestFillEndpointIntegration:
         # If the transformation is wrong, this will return 500 with AttributeError
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
         if response.status_code == 200:
@@ -250,7 +250,7 @@ class TestFillEndpointIntegration:
 
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     @pytest.mark.slow
@@ -270,7 +270,7 @@ class TestFillEndpointIntegration:
 
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     def test_fill_endpoint_validates_missing_grid(self, client):
@@ -444,12 +444,12 @@ class TestGridFormatBugRegression:
         # Should NOT get 500 error with AttributeError
         assert response.status_code != 500, f"API should not crash with 500 error. Response: {response.data}"
 
-        # Accept 200 (success) or 507 (timeout) or 400 (validation error)
+        # Accept 200 (success) or 504 (timeout) or 400 (validation error)
         # Just verify it doesn't crash
         assert response.status_code in [
             200,
             400,
-            507,
+            504,
         ], f"Unexpected status code: {response.status_code}"
 
 
