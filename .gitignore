@@ -109,3 +109,7 @@ data/research/
 # Coverage reports
 coverage.xml
 .coverage.*
+
+# Personal wordlists (kept local only)
+data/wordlists/custom/gift_for_sarah.txt
+data/wordlists/custom/personal.txt
