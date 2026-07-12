@@ -29,3 +29,12 @@ repos:
           - "--select=E9,F63,F7,F82"
           - "--extend-ignore=E203"
         types: [python]
+
+  - repo: local
+    hooks:
+      - id: check-guards
+        name: scrub + api-url confinement guard
+        entry: scripts/check-guards.sh
+        language: system
+        pass_filenames: false
+        always_run: true

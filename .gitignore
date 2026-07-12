@@ -116,3 +116,6 @@ data/wordlists/custom/personal.txt
 
 # Session handoff logs (local only)
 .handoff/
+
+# Local scrub patterns for pre-commit guard (never committed; gitignored per Global Constraints)
+.scrub-patterns
