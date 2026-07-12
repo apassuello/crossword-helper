@@ -113,3 +113,6 @@ coverage.xml
 # Personal wordlists (kept local only)
 data/wordlists/custom/gift_for_sarah.txt
 data/wordlists/custom/personal.txt
+
+# Session handoff logs (local only)
+.handoff/
