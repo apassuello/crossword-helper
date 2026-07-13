@@ -23,12 +23,14 @@ import './styles/App.scss';
 // Signature of user-authored grid content, for the save machine's dirty
 // tracking. Deliberately array-shaped and limited to durable authored fields:
 // it EXCLUDES `number` (derived by auto-renumbering, would spuriously mark
-// dirty) and the transient isError/isHighlighted flags. Called in every place
-// that establishes or compares dirtiness so the strings are byte-identical.
-function contentSigOf(size, grid, symmetryEnabled) {
+// dirty), the transient isError/isHighlighted flags, and `symmetryEnabled` —
+// symmetry is a VIEW construction aid (grouped with Heatmap), persisted on its
+// own key via usePersistentState, so toggling it stays silent as it did before
+// the save machine (it still rides along in the saved `doc`). Called in every
+// place that establishes or compares dirtiness so the strings are byte-identical.
+function contentSigOf(size, grid) {
   return JSON.stringify({
     size,
-    symmetryEnabled,
     cells: grid ? grid.map((row) => row.map((c) => [c.letter, c.isBlack, c.isThemeLocked])) : null,
   });
 }
@@ -74,10 +76,7 @@ function App() {
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
   // (saved verbatim); `isDirty` is derived by comparing the current content
   // signature to the last-clean one.
-  const contentSig = useMemo(
-    () => contentSigOf(gridSize, grid, symmetryEnabled),
-    [gridSize, grid, symmetryEnabled]
-  );
+  const contentSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
   const isDirty = grid != null && contentSig !== savedSig;
   const doc = useMemo(
     () => ({ id: gridId, size: gridSize, grid, numbering, symmetryEnabled }),
@@ -121,7 +120,7 @@ function App() {
     updateNumbering(newGrid);
     // A fresh grid is a new document (F10) and is born clean.
     setGridId((n) => n + 1);
-    setSavedSig(contentSigOf(size, newGrid, symmetryEnabled));
+    setSavedSig(contentSigOf(size, newGrid));
   };
 
   const updateNumbering = useCallback((gridData) => {
@@ -588,13 +587,12 @@ function App() {
     validateGrid(importedGrid);
 
     // A freshly imported grid is a new document (F10) and is born clean.
-    const effectiveSymmetry = importedSymmetry !== undefined ? importedSymmetry : symmetryEnabled;
     setGridId((n) => n + 1);
-    setSavedSig(contentSigOf(size, importedGrid, effectiveSymmetry));
+    setSavedSig(contentSigOf(size, importedGrid));
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, symmetryEnabled, updateNumbering, validateGrid]);
+  }, [gridSize, updateNumbering, validateGrid]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
