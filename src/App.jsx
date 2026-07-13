@@ -5,6 +5,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
 import { useHealth } from './hooks/useHealth';
+import { usePersistentState } from './hooks/usePersistentState';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { TopBar } from './components/bench/TopBar';
@@ -23,17 +24,27 @@ function App() {
   const [grid, setGrid] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
   const [numbering, setNumbering] = useState({});
-  const [validationErrors, setValidationErrors] = useState([]);
+  // Only the setter is wired: `validateGrid` writes here, but the reader was
+  // the deleted ToolPanel. Kept as scaffolding for Task 8 (F2 — numbering +
+  // violations), which restores a validation-display surface. Drop the unused
+  // value binding until then so it isn't a dead read.
+  const [, setValidationErrors] = useState([]);
   const [autofillProgress, setAutofillProgress] = useState(null);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [currentTaskId, setCurrentTaskId] = useState(null);
   const [showThemePanel, setShowThemePanel] = useState(false);
-  const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
+  // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
+  // lazy-inits from storage, so a stored `false` survives reload (previously a
+  // mount-race reset it to true on every load).
+  const [symmetryEnabled, setSymmetryEnabled] = usePersistentState('crossword_symmetry_enabled', true);
   const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
-  // UI dark mode (Task 6). Lazy-init from localStorage so the initial state is
-  // correct on first render — this avoids a mount race where the [dark] persist
-  // effect (below) would fire with the default and clobber the stored value.
-  const [dark, setDark] = useState(() => localStorage.getItem('xw_theme') === 'dark');
+  // UI dark mode (Task 6), persisted as 'dark'/'light'. usePersistentState owns
+  // the lazy-init + persistence (see its mount-race note); the effect below only
+  // applies the theme to the document.
+  const [dark, setDark] = usePersistentState('xw_theme', false, {
+    parse: (v) => v === 'dark',
+    serialize: (v) => (v ? 'dark' : 'light'),
+  });
   const eventSourceRef = React.useRef(null);
 
   const health = useHealth();
@@ -44,26 +55,11 @@ function App() {
     initializeGrid(gridSize);
   }, [gridSize]);
 
-  // Persist symmetry state to localStorage
-  useEffect(() => {
-    localStorage.setItem('crossword_symmetry_enabled', JSON.stringify(symmetryEnabled));
-  }, [symmetryEnabled]);
-
-  // Load symmetry state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('crossword_symmetry_enabled');
-    if (saved !== null) {
-      setSymmetryEnabled(JSON.parse(saved));
-    }
-  }, []);
-
-  // Apply + persist UI theme whenever it changes (Task 6). App owns dark-mode
-  // state + persistence; TopBar is a controlled toggle and never touches
-  // document/storage. Initial state comes from the lazy useState initializer
-  // above, so this effect's first run writes back the already-correct value.
+  // Apply the UI theme to the document whenever it changes (Task 6). Persistence
+  // is owned by usePersistentState above; TopBar is a controlled toggle and
+  // never touches document/storage.
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    localStorage.setItem('xw_theme', dark ? 'dark' : 'light');
   }, [dark]);
 
   const initializeGrid = (size) => {
