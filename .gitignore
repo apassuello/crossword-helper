@@ -124,3 +124,7 @@ data/wordlists/custom/*
 
 # Local scrub patterns for pre-commit guard (never committed; gitignored per Global Constraints)
 .scrub-patterns
+
+# Design bundle snapshot (D2:A) — port source for Tasks 9-12/20-21; local-only,
+# contains personal fill examples so MUST stay out of this public repo.
+.design-bundle/
