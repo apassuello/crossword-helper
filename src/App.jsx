@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 // react-hot-toast's <Toaster> is intentionally KEPT: AutofillPanel, ThemeWordsPanel,
 // and BlackSquareSuggestions still call toast.* directly. App's own toasts were
 // migrated to the bench ToastProvider (pushToast); the default `toast` import is gone.
@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
 import { useHealth } from './hooks/useHealth';
 import { usePersistentState } from './hooks/usePersistentState';
+import { useSaveMachine } from './hooks/useSaveMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { TopBar } from './components/bench/TopBar';
@@ -18,6 +19,19 @@ import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
 import ThemeWordsPanel from './components/ThemeWordsPanel';
 import './styles/App.scss';
+
+// Signature of user-authored grid content, for the save machine's dirty
+// tracking. Deliberately array-shaped and limited to durable authored fields:
+// it EXCLUDES `number` (derived by auto-renumbering, would spuriously mark
+// dirty) and the transient isError/isHighlighted flags. Called in every place
+// that establishes or compares dirtiness so the strings are byte-identical.
+function contentSigOf(size, grid, symmetryEnabled) {
+  return JSON.stringify({
+    size,
+    symmetryEnabled,
+    cells: grid ? grid.map((row) => row.map((c) => [c.letter, c.isBlack, c.isThemeLocked])) : null,
+  });
+}
 
 function App() {
   const [gridSize, setGridSize] = useState(15);
@@ -38,6 +52,13 @@ function App() {
   // mount-race reset it to true on every load).
   const [symmetryEnabled, setSymmetryEnabled] = usePersistentState('crossword_symmetry_enabled', true);
   const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
+  // Save machine (Task 7). `gridId` is the doc's stable identity: it changes
+  // only when a whole new grid is created (init/resize/import), never on an
+  // edit, so the machine's F10 reset fires for "new grid" but not for typing.
+  // `savedSig` is the content signature considered clean (set on fresh grids and
+  // after a successful save); dirtiness is `contentSig !== savedSig`.
+  const [gridId, setGridId] = useState(1);
+  const [savedSig, setSavedSig] = useState(null);
   // UI dark mode (Task 6), persisted as 'dark'/'light'. usePersistentState owns
   // the lazy-init + persistence (see its mount-race note); the effect below only
   // applies the theme to the document.
@@ -49,6 +70,29 @@ function App() {
 
   const health = useHealth();
   const { pushToast } = useToasts();
+
+  // Save machine wiring (Task 7). `doc` is the full serializable grid document
+  // (saved verbatim); `isDirty` is derived by comparing the current content
+  // signature to the last-clean one.
+  const contentSig = useMemo(
+    () => contentSigOf(gridSize, grid, symmetryEnabled),
+    [gridSize, grid, symmetryEnabled]
+  );
+  const isDirty = grid != null && contentSig !== savedSig;
+  const doc = useMemo(
+    () => ({ id: gridId, size: gridSize, grid, numbering, symmetryEnabled }),
+    [gridId, gridSize, grid, numbering, symmetryEnabled]
+  );
+  const { savedLabel, save: saveDoc, status: saveStatus } = useSaveMachine({ doc, isDirty });
+
+  // When a save lands, snapshot the current content as clean. Keyed on
+  // saveStatus ONLY (adding contentSig here would re-mark clean on every edit
+  // while 'saved' and dirtiness would never re-trigger) — sig read from a ref.
+  const contentSigRef = useRef(contentSig);
+  contentSigRef.current = contentSig;
+  useEffect(() => {
+    if (saveStatus === 'saved') setSavedSig(contentSigRef.current);
+  }, [saveStatus]);
 
   // Initialize empty grid
   useEffect(() => {
@@ -75,6 +119,9 @@ function App() {
     );
     setGrid(newGrid);
     updateNumbering(newGrid);
+    // A fresh grid is a new document (F10) and is born clean.
+    setGridId((n) => n + 1);
+    setSavedSig(contentSigOf(size, newGrid, symmetryEnabled));
   };
 
   const updateNumbering = useCallback((gridData) => {
@@ -219,29 +266,6 @@ function App() {
     setGrid(newGrid);
     validateGrid(newGrid);
   }, [selectedCell, grid, gridSize]);
-
-  const handleSaveGrid = useCallback(() => {
-    try {
-      const gridData = {
-        size: gridSize,
-        grid: grid.map(row => row.map(cell => ({
-          letter: cell.letter || '',
-          isBlack: cell.isBlack || false,
-          isThemeLocked: cell.isThemeLocked || false,
-          number: cell.number || null
-        }))),
-        numbering: numbering,
-        symmetryEnabled: symmetryEnabled,
-        timestamp: new Date().toISOString()
-      };
-
-      localStorage.setItem('crossword_saved_grid', JSON.stringify(gridData));
-      pushToast({ kind: 'info', message: 'Grid saved successfully to browser storage!' });
-    } catch (err) {
-      console.error('Failed to save grid:', err);
-      pushToast({ kind: 'error', message: 'Failed to save grid: ' + err.message });
-    }
-  }, [grid, gridSize, numbering, symmetryEnabled, pushToast]);
 
   const handleAutofill = useCallback(async (options = {}) => {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
@@ -563,9 +587,14 @@ function App() {
     // Validate the imported grid
     validateGrid(importedGrid);
 
+    // A freshly imported grid is a new document (F10) and is born clean.
+    const effectiveSymmetry = importedSymmetry !== undefined ? importedSymmetry : symmetryEnabled;
+    setGridId((n) => n + 1);
+    setSavedSig(contentSigOf(size, importedGrid, effectiveSymmetry));
+
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, updateNumbering, validateGrid]);
+  }, [gridSize, symmetryEnabled, updateNumbering, validateGrid]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
@@ -610,10 +639,10 @@ function App() {
 
       <TopBar
         status={health}
-        savedLabel=""
+        savedLabel={savedLabel}
         onVerify={handleVerifyWords}
         onClean={handleCleanGrid}
-        onSave={handleSaveGrid}
+        onSave={saveDoc}
         onToggleTheme={() => setDark((v) => !v)}
         dark={dark}
       />

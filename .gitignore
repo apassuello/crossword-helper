@@ -62,6 +62,10 @@ frontend/dist/
 .vite/
 *.local
 
+# React source `src/lib/` — the Python `lib/` rule above (unanchored) would
+# otherwise ignore this JS source directory. Re-include it.
+!src/lib/
+
 # Test output files
 test_filled*.json
 
