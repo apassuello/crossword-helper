@@ -314,6 +314,27 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 .xw-flag-chip-amber { color: var(--warn); border-color: rgba(184,138,10,0.4); background: rgba(184,138,10,0.06); }
 .xw-flag-more { font-family: var(--font-display); font-style: italic; font-size: 11.5px; color: var(--ink-4); align-self: center; }
 
+/* Toast surface (Task 6, U1b) — spec 08 surface #2: red toast, top-right, ~6s auto-dismiss */
+.xw-toast-stack {
+  position: fixed; top: 66px; right: 20px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.xw-toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  min-width: 240px; max-width: 360px; padding: 10px 12px;
+  background: var(--card); border: 1px solid var(--card-edge); border-radius: 4px;
+  box-shadow: 0 12px 32px -8px rgba(26,23,19,0.25);
+  font-family: var(--font-ui); font-size: 13px; color: var(--ink); line-height: 1.4;
+  pointer-events: auto;
+  animation: xw-flag-in .2s cubic-bezier(.2,.8,.2,1);
+}
+.xw-toast-error { border-left: 3px solid var(--danger); }
+.xw-toast-info { border-left: 3px solid var(--ink-3); }
+.xw-toast-msg { flex: 1; }
+.xw-toast-dismiss { font-size: 16px; line-height: 1; color: var(--ink-4); width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; }
+.xw-toast-dismiss:hover { color: var(--accent); background: var(--paper-2); }
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--card-edge); border-radius: 4px; }
