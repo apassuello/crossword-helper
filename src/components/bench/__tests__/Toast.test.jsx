@@ -49,15 +49,21 @@ describe('ToastProvider / useToasts', () => {
     expect(screen.getByText('X')).toBeInTheDocument();
   });
 
-  it('auto-dismisses a toast after 6000ms', () => {
+  it('auto-dismisses a toast after 6000ms — and not before', () => {
     renderHarness();
     fireEvent.click(screen.getByText('push-error-x'));
     expect(screen.getByText('X')).toBeInTheDocument();
 
+    // Still present at 5999ms — pins the dismissal to ~6000ms so a wrong
+    // (shorter) timeout regression fails instead of passing.
     act(() => {
-      vi.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(5999);
     });
+    expect(screen.getByText('X')).toBeInTheDocument();
 
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     expect(screen.queryByText('X')).not.toBeInTheDocument();
   });
 
@@ -104,6 +110,7 @@ describe('ToastProvider / useToasts', () => {
     renderHarness();
     fireEvent.click(screen.getByText('push-first'));
     fireEvent.click(screen.getByText('push-second'));
+    expect(vi.getTimerCount()).toBe(2);
 
     const firstToast = screen.getByText('first').closest('.xw-toast');
     const dismissBtn = firstToast.querySelector('button');
@@ -111,6 +118,10 @@ describe('ToastProvider / useToasts', () => {
 
     expect(screen.queryByText('first')).not.toBeInTheDocument();
     expect(screen.getByText('second')).toBeInTheDocument();
+    // Manual dismiss also clears the clicked toast's auto-dismiss timer
+    // (dismiss() calls clearTimeout) — only the survivor's timer remains,
+    // so a leak regression drops this from 1 back to 2.
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it('unmounting with a pending toast clears its timer (no leak, no throw on later advance)', () => {
