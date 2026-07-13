@@ -30,7 +30,10 @@ function App() {
   const [showThemePanel, setShowThemePanel] = useState(false);
   const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
   const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
-  const [dark, setDark] = useState(false); // UI dark mode (Task 6); persisted to localStorage['xw_theme']
+  // UI dark mode (Task 6). Lazy-init from localStorage so the initial state is
+  // correct on first render — this avoids a mount race where the [dark] persist
+  // effect (below) would fire with the default and clobber the stored value.
+  const [dark, setDark] = useState(() => localStorage.getItem('xw_theme') === 'dark');
   const eventSourceRef = React.useRef(null);
 
   const health = useHealth();
@@ -54,15 +57,10 @@ function App() {
     }
   }, []);
 
-  // Load persisted UI theme on mount (Task 6). App owns dark-mode state +
-  // persistence; TopBar is a controlled toggle and never touches document/storage.
-  useEffect(() => {
-    const saved = localStorage.getItem('xw_theme');
-    if (saved === 'dark') setDark(true);
-    else if (saved === 'light') setDark(false);
-  }, []);
-
-  // Apply + persist UI theme whenever it changes (Task 6).
+  // Apply + persist UI theme whenever it changes (Task 6). App owns dark-mode
+  // state + persistence; TopBar is a controlled toggle and never touches
+  // document/storage. Initial state comes from the lazy useState initializer
+  // above, so this effect's first run writes back the already-correct value.
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     localStorage.setItem('xw_theme', dark ? 'dark' : 'light');
