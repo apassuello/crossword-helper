@@ -36,6 +36,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 .xw-status[data-kind="idle"] .xw-status-dot { background: var(--ink-4); }
 .xw-icon-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); border-radius: 6px; transition: background .15s; }
 .xw-icon-btn:hover { background: var(--card); color: var(--ink); }
+.xw-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .xw-primary-btn-sm { padding: 6px 12px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
 .xw-saved-meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); letter-spacing: 0.04em; }
 .xw-mode-btn { width: 28px; height: 28px; border-radius: 50%; color: var(--ink-3); font-size: 16px; }

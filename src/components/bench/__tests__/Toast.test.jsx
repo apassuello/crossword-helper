@@ -82,6 +82,24 @@ describe('ToastProvider / useToasts', () => {
     expect(infoToast).toHaveClass('xw-toast-info');
   });
 
+  it('an error toast is announced via role="alert" + aria-live="assertive"', () => {
+    renderHarness();
+    fireEvent.click(screen.getByText('push-first'));
+
+    const errorToast = screen.getByRole('alert');
+    expect(errorToast).toHaveTextContent('first');
+    expect(errorToast).toHaveAttribute('aria-live', 'assertive');
+  });
+
+  it('an info toast is announced via role="status" + aria-live="polite"', () => {
+    renderHarness();
+    fireEvent.click(screen.getByText('push-second'));
+
+    const infoToast = screen.getByRole('status');
+    expect(infoToast).toHaveTextContent('second');
+    expect(infoToast).toHaveAttribute('aria-live', 'polite');
+  });
+
   it('manual dismiss (x) removes only the clicked toast', () => {
     renderHarness();
     fireEvent.click(screen.getByText('push-first'));

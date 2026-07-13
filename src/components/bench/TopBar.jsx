@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-export function TopBar({ status, savedLabel, onVerify, onSave, onToggleTheme, dark }) {
+export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark }) {
   const offline = !status.online;
   const kind = offline ? 'err' : status.degraded ? 'warn' : 'ok';
   const label = offline ? 'offline' : status.degraded ? 'degraded' : 'online';
@@ -60,6 +60,18 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onToggleTheme, da
             <path d="M3 8 L7 12 L13 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span>Verify words</span>
+        </button>
+        {/* Verify+Clean are transitional here until Task 10's 06§2 verify/clean machine. */}
+        <button
+          className="xw-icon-btn"
+          onClick={onClean}
+          disabled={offline}
+          title={offline ? 'Backend offline' : 'Clean grid of invalid entries'}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16">
+            <path d="M3 3 L13 13 M13 3 L3 13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <span>Clean grid</span>
         </button>
         <button className="xw-primary-btn xw-primary-btn-sm" onClick={onSave}>
           <svg width="12" height="12" viewBox="0 0 16 16">

@@ -16,6 +16,7 @@ function baseProps(overrides = {}) {
     savedLabel: 'saved locally · 2m ago',
     onVerify: vi.fn(),
     onSave: vi.fn(),
+    onClean: vi.fn(),
     onToggleTheme: vi.fn(),
     dark: false,
     ...overrides,
@@ -97,6 +98,28 @@ describe('TopBar (mounted, controlled)', () => {
     const props = baseProps({ status: { online: false, degraded: false } });
     const { getByText } = render(<TopBar {...props} />);
     const btn = getByText('Save grid').closest('button');
+    expect(btn).not.toBeDisabled();
+  });
+
+  it('clicking Clean calls onClean when online', () => {
+    const props = baseProps({ status: { online: true, degraded: false } });
+    const { getByText } = render(<TopBar {...props} />);
+    fireEvent.click(getByText('Clean grid'));
+    expect(props.onClean).toHaveBeenCalledTimes(1);
+  });
+
+  it('Clean is disabled when status.online is false, with a tooltip explaining why', () => {
+    const props = baseProps({ status: { online: false, degraded: false } });
+    const { getByText } = render(<TopBar {...props} />);
+    const btn = getByText('Clean grid').closest('button');
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('title', 'Backend offline');
+  });
+
+  it('Clean is enabled when status.online is true', () => {
+    const props = baseProps({ status: { online: true, degraded: false } });
+    const { getByText } = render(<TopBar {...props} />);
+    const btn = getByText('Clean grid').closest('button');
     expect(btn).not.toBeDisabled();
   });
 });
