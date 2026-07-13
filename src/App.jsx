@@ -1,9 +1,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+// react-hot-toast's <Toaster> is intentionally KEPT: AutofillPanel, ThemeWordsPanel,
+// and BlackSquareSuggestions still call toast.* directly. App's own toasts were
+// migrated to the bench ToastProvider (pushToast); the default `toast` import is gone.
+import { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
+import { useHealth } from './hooks/useHealth';
+import { useToasts } from './components/bench/Toast';
+import { allSlots } from './hooks/useGridGeometry';
+import { TopBar } from './components/bench/TopBar';
+import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
 import PatternMatcher from './components/PatternMatcher';
-import ToolPanel from './components/ToolPanel';
 import AutofillPanel from './components/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
 import ImportPanel from './components/ImportPanel';
@@ -18,11 +25,16 @@ function App() {
   const [numbering, setNumbering] = useState({});
   const [validationErrors, setValidationErrors] = useState([]);
   const [autofillProgress, setAutofillProgress] = useState(null);
-  const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
+  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [currentTaskId, setCurrentTaskId] = useState(null);
   const [showThemePanel, setShowThemePanel] = useState(false);
   const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
+  const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
+  const [dark, setDark] = useState(false); // UI dark mode (Task 6); persisted to localStorage['xw_theme']
   const eventSourceRef = React.useRef(null);
+
+  const health = useHealth();
+  const { pushToast } = useToasts();
 
   // Initialize empty grid
   useEffect(() => {
@@ -41,6 +53,20 @@ function App() {
       setSymmetryEnabled(JSON.parse(saved));
     }
   }, []);
+
+  // Load persisted UI theme on mount (Task 6). App owns dark-mode state +
+  // persistence; TopBar is a controlled toggle and never touches document/storage.
+  useEffect(() => {
+    const saved = localStorage.getItem('xw_theme');
+    if (saved === 'dark') setDark(true);
+    else if (saved === 'light') setDark(false);
+  }, []);
+
+  // Apply + persist UI theme whenever it changes (Task 6).
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    localStorage.setItem('xw_theme', dark ? 'dark' : 'light');
+  }, [dark]);
 
   const initializeGrid = (size) => {
     const newGrid = Array(size).fill(null).map(() =>
@@ -216,12 +242,12 @@ function App() {
       };
 
       localStorage.setItem('crossword_saved_grid', JSON.stringify(gridData));
-      toast.success('Grid saved successfully to browser storage!');
+      pushToast({ kind: 'info', message: 'Grid saved successfully to browser storage!' });
     } catch (err) {
       console.error('Failed to save grid:', err);
-      toast.error('Failed to save grid: ' + err.message);
+      pushToast({ kind: 'error', message: 'Failed to save grid: ' + err.message });
     }
-  }, [grid, gridSize, numbering, symmetryEnabled]);
+  }, [grid, gridSize, numbering, symmetryEnabled, pushToast]);
 
   const handleAutofill = useCallback(async (options = {}) => {
     setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
@@ -335,7 +361,7 @@ function App() {
                 message: data.message || 'Autofill paused - state saved'
               });
               // currentTaskId is kept for future pause operations
-              toast.success('Autofill paused successfully! You can resume later.');
+              pushToast({ kind: 'info', message: 'Autofill paused successfully! You can resume later.' });
             } else if (data.status === 'error') {
               eventSourceRef.current?.close();
               eventSourceRef.current = null;
@@ -359,7 +385,7 @@ function App() {
     } catch (error) {
       setAutofillProgress({ status: 'error', progress: 0, message: error.message });
     }
-  }, [grid, gridSize]);
+  }, [grid, gridSize, pushToast]);
 
   const handleCancelAutofill = useCallback(() => {
     // Capture task ID before clearing state
@@ -404,8 +430,8 @@ function App() {
     localStorage.removeItem('current_autofill_task');
     localStorage.removeItem('paused_autofill_task');
 
-    toast.success('Autofill state reset - ready to start fresh!');
-  }, []);
+    pushToast({ kind: 'info', message: 'Autofill state reset - ready to start fresh!' });
+  }, [pushToast]);
 
   const handleVerifyWords = useCallback(async () => {
     if (!grid) return;
@@ -436,7 +462,7 @@ function App() {
       setGrid(newGrid);
 
       if (invalid_count === 0) {
-        toast.success(`All ${total_checked} words valid!`);
+        pushToast({ kind: 'info', message: `All ${total_checked} words valid!` });
       } else {
         const invalid = invalid_words.filter(w => w.status === 'invalid');
         const unfillable = invalid_words.filter(w => w.status === 'unfillable');
@@ -447,16 +473,16 @@ function App() {
         if (unfillable.length > 0) {
           parts.push(`${unfillable.length} unfillable: ${unfillable.map(w => w.word.replace(/\?/g, '_')).join(', ')}`);
         }
-        toast.error(
-          `${invalid_count} of ${total_checked} words flagged — ${parts.join('; ')}`,
-          { duration: 8000 }
-        );
+        pushToast({
+          kind: 'error',
+          message: `${invalid_count} of ${total_checked} words flagged — ${parts.join('; ')}`,
+        });
       }
     } catch (error) {
       console.error('Verify words failed:', error);
-      toast.error('Failed to verify words: ' + (error.response?.data?.message || error.message));
+      pushToast({ kind: 'error', message: 'Failed to verify words: ' + error.message });
     }
-  }, [grid, gridSize]);
+  }, [grid, gridSize, pushToast]);
 
   const handleCleanGrid = useCallback(async () => {
     if (!grid) return;
@@ -471,7 +497,7 @@ function App() {
       });
 
       if (removed_count === 0) {
-        toast.success('Grid is clean — all words are valid!');
+        pushToast({ kind: 'info', message: 'Grid is clean — all words are valid!' });
         return;
       }
 
@@ -494,20 +520,20 @@ function App() {
         })
       );
       setGrid(newGrid);
-      toast.success(message, { duration: 5000 });
+      pushToast({ kind: 'info', message });
     } catch (error) {
       console.error('Clean grid failed:', error);
-      toast.error('Failed to clean grid: ' + (error.response?.data?.message || error.message));
+      pushToast({ kind: 'error', message: 'Failed to clean grid: ' + error.message });
     }
-  }, [grid, gridSize]);
+  }, [grid, gridSize, pushToast]);
 
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     // Update grid with the applied theme word
     setGrid(updatedGrid);
     updateNumbering(updatedGrid);
 
-    toast.success(`Applied "${placement.word}" to grid!`);
-  }, [updateNumbering]);
+    pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
+  }, [updateNumbering, pushToast]);
 
   const handleGridImport = useCallback((importedData) => {
     const { grid: importedGrid, size, numbering: importedNumbering, symmetryEnabled: importedSymmetry } = importedData;
@@ -547,92 +573,71 @@ function App() {
     setCurrentTool('edit');
   }, [gridSize, updateNumbering, validateGrid]);
 
+  // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
+  // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
+  const selectTool = (id) =>
+    id === 'theme' ? setShowThemePanel(true) : setCurrentTool(id);
+
+  // ToolRail GRID stats (module-level calculateGridStats) + word count (geometry).
+  // Both are null-guarded so an uninitialized grid renders zeros, not a crash.
+  const gridStats = grid ? calculateGridStats(grid) : null;
+  let wordCount = 0;
+  if (grid) {
+    const slots = allSlots(grid);
+    wordCount = slots.across.length + slots.down.length;
+  }
+  const railStats = gridStats
+    ? {
+        total: gridStats.totalCells,
+        black: gridStats.blackSquares,
+        blackPct: gridStats.blackSquarePercent,
+        fillPct: gridStats.fillPercent,
+        words: wordCount,
+      }
+    : { total: 0, black: 0, blackPct: 0, fillPct: 0, words: 0 };
+
   return (
-    <div className="app">
+    <div className="xw-app">
+      {/* react-hot-toast surface — KEPT: Autofill/Theme/BlackSquare panels still call
+          toast.* directly. App's own toasts use the bench ToastProvider (pushToast). */}
       <Toaster
         position="top-right"
         toastOptions={{
           success: {
             duration: 3000,
-            style: {
-              background: '#4caf50',
-              color: '#fff',
-            },
+            style: { background: '#4caf50', color: '#fff' },
           },
           error: {
             duration: 4000,
-            style: {
-              background: '#f44336',
-              color: '#fff',
-            },
+            style: { background: '#f44336', color: '#fff' },
           },
         }}
       />
-      <header className="app-header">
-        <div className="header-brand">
-          <h1>Crossword Helper</h1>
-          <span className="version">v2.0 Advanced</span>
-        </div>
-        <div className="header-tools">
-          <button
-            className={`tool-btn ${currentTool === 'edit' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('edit')}
-          >
-            Grid Editor
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'pattern' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('pattern')}
-          >
-            Pattern Search
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'autofill' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('autofill')}
-          >
-            Autofill
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'import' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('import')}
-          >
-            Import
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'export' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('export')}
-          >
-            Export
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'wordlists' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('wordlists')}
-          >
-            Word Lists
-          </button>
-          <button
-            className={`tool-btn ${showThemePanel ? 'active' : ''}`}
-            onClick={() => setShowThemePanel(!showThemePanel)}
-          >
-            🎯 Theme Words
-          </button>
-        </div>
-      </header>
 
-      <div className="grid-toolbar">
-        <button className="verify-btn" onClick={handleVerifyWords}>
-          Verify Words
-        </button>
-        <button className="clean-btn" onClick={handleCleanGrid}>
-          Clean Grid
-        </button>
-        <button className="save-btn" onClick={handleSaveGrid}>
-          Save Grid
-        </button>
-      </div>
+      <TopBar
+        status={health}
+        savedLabel=""
+        onVerify={handleVerifyWords}
+        onClean={handleCleanGrid}
+        onSave={handleSaveGrid}
+        onToggleTheme={() => setDark((v) => !v)}
+        dark={dark}
+      />
 
-      <div className="app-body">
-        <div className="main-panel">
+      <div className="xw-body">
+        <ToolRail
+          tool={showThemePanel ? 'theme' : currentTool}
+          onSelectTool={selectTool}
+          viewToggles={{ symmetry: symmetryEnabled, heatmap: heatmapOn }}
+          onToggleView={(which) =>
+            which === 'symmetry'
+              ? setSymmetryEnabled((v) => !v)
+              : setHeatmapOn((v) => !v)
+          }
+          stats={railStats}
+        />
+
+        <main className="xw-canvas">
           {grid ? (
             <CrosswordGrid
               grid={grid}
@@ -649,67 +654,77 @@ function App() {
           ) : (
             <div className="grid-editor-loading">Initializing grid...</div>
           )}
-        </div>
+        </main>
 
-        <div className="side-panel">
+        <aside className="xw-inspector-shell">
           {currentTool === 'edit' && (
-            <ToolPanel
-              gridSize={gridSize}
-              onSizeChange={setGridSize}
-              onClearGrid={() => {
-                if (window.confirm('Clear the entire grid? This cannot be undone.')) {
-                  initializeGrid(gridSize);
-                }
-              }}
-              onLoadGrid={() => setCurrentTool('import')}
-              onSaveGrid={handleSaveGrid}
-              validationErrors={validationErrors}
-              gridStats={grid ? calculateGridStats(grid) : null}
-              symmetryEnabled={symmetryEnabled}
-              onSymmetryToggle={() => setSymmetryEnabled(!symmetryEnabled)}
-            />
+            <div className="xw-inspector-empty">
+              <div className="xw-empty-mark">▦</div>
+              <div className="xw-empty-title">Grid editor</div>
+              <div className="xw-empty-sub">
+                Select a cell to search, or pick a tool from the rail.
+              </div>
+            </div>
           )}
 
-          {currentTool === 'pattern' && (
-            <PatternMatcher
-              selectedCell={selectedCell}
-              onSelectWord={handlePatternSelect}
-            />
+          {currentTool === 'search' && (
+            <div className="xw-inspector">
+              <PatternMatcher
+                selectedCell={selectedCell}
+                onSelectWord={handlePatternSelect}
+              />
+            </div>
           )}
 
           {currentTool === 'autofill' && (
-            <AutofillPanel
-              onStartAutofill={handleAutofill}
-              onCancelAutofill={handleCancelAutofill}
-              onResetAutofill={handleResetAutofill}
-              progress={autofillProgress}
-              grid={grid}
-              currentTaskId={currentTaskId}
-            />
+            <div className="xw-inspector">
+              <AutofillPanel
+                onStartAutofill={handleAutofill}
+                onCancelAutofill={handleCancelAutofill}
+                onResetAutofill={handleResetAutofill}
+                progress={autofillProgress}
+                grid={grid}
+                currentTaskId={currentTaskId}
+              />
+            </div>
+          )}
+
+          {currentTool === 'clues' && (
+            <div className="xw-inspector-empty">
+              <div className="xw-empty-mark">§</div>
+              <div className="xw-empty-title">Clue list</div>
+              <div className="xw-empty-sub">Arrives in a later task.</div>
+            </div>
+          )}
+
+          {currentTool === 'lists' && (
+            <div className="xw-inspector">
+              <WordListPanel />
+            </div>
           )}
 
           {currentTool === 'import' && (
-            <ImportPanel
-              onImport={handleGridImport}
-              currentGridSize={gridSize}
-            />
+            <div className="xw-inspector">
+              <ImportPanel
+                onImport={handleGridImport}
+                currentGridSize={gridSize}
+              />
+            </div>
           )}
 
           {currentTool === 'export' && (
-            <ExportPanel
-              grid={grid}
-              gridSize={gridSize}
-              numbering={numbering}
-            />
+            <div className="xw-inspector">
+              <ExportPanel
+                grid={grid}
+                gridSize={gridSize}
+                numbering={numbering}
+              />
+            </div>
           )}
-
-          {currentTool === 'wordlists' && (
-            <WordListPanel />
-          )}
-        </div>
+        </aside>
       </div>
 
-      {/* Theme Words Panel (overlay) */}
+      {/* Theme Words Panel — overlay (position:fixed), toggled independently of currentTool */}
       {showThemePanel && (
         <ThemeWordsPanel
           grid={grid}
