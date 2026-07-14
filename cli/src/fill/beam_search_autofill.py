@@ -41,6 +41,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
         theme_words=None,
         partial_fill_mode: bool = False,
+        pause_controller=None,
     ):
         """
         Initialize beam search solver.
@@ -60,6 +61,10 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
                           These are NON-NEGOTIABLE and will be placed first
             theme_words: Set of words from theme wordlist to prioritize (optional)
             partial_fill_mode: Enable partial fill mode - stops when stuck instead of aggressive backtracking
+            pause_controller: Optional PauseController — forwarded to the orchestrator's
+                pause polling. task_id is intentionally NOT forwarded, so the orchestrator's
+                native beam-state writer no-ops while it still returns a paused partial;
+                the CLI owns the single canonical degenerate save.
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -77,6 +82,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             theme_entries=theme_entries,
             theme_words=theme_words,
             partial_fill_mode=partial_fill_mode,
+            pause_controller=pause_controller,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator

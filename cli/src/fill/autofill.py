@@ -183,6 +183,7 @@ class Autofill:
         self.slots_sorted = slots  # Store for potential pause/resume
 
         # Try to fill using backtracking (with or without MAC)
+        was_paused = False
         try:
             if use_mac:
                 success = self._backtrack_with_mac(slots, 0, task_id)
@@ -191,8 +192,9 @@ class Autofill:
         except TimeoutError:
             success = False
         except PausedException:
-            # Paused - state already saved in _backtrack_with_mac
+            # Paused - state already saved in _backtrack_with_mac / _handle_pause
             success = False
+            was_paused = True
 
         time_elapsed = time.time() - self.start_time
 
@@ -208,6 +210,8 @@ class Autofill:
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
+            paused=was_paused,
+            state_path=getattr(self, "_pause_state_path", None),
         )
 
     def _resume_fill(self, resume_state: CSPState, task_id: Optional[str], use_mac: bool = True) -> FillResult:
@@ -237,6 +241,7 @@ class Autofill:
         # Continue backtracking from saved position
         slots_list = [self.slot_list[slot_id] for slot_id in resume_state.slots_sorted]
 
+        was_paused = False
         try:
             if use_mac:
                 success = self._backtrack_with_mac(slots_list, resume_state.current_slot_index, task_id)
@@ -246,6 +251,7 @@ class Autofill:
             success = False
         except PausedException:
             success = False
+            was_paused = True
 
         time_elapsed = time.time() - self.start_time
 
@@ -261,6 +267,8 @@ class Autofill:
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
+            paused=was_paused,
+            state_path=getattr(self, "_pause_state_path", None),
         )
 
     def fill_with_restarts(
@@ -1152,8 +1160,10 @@ class Autofill:
         if not task_id:
             raise ValueError("task_id required for pause/resume")
 
-        # Capture current state
-        csp_state = self.state_manager.capture_csp_state(self, current_index=current_index, locked_slots=self.locked_slots)
+        # Capture current state (staticmethod param is current_slot_index)
+        csp_state = self.state_manager.capture_csp_state(
+            self, current_slot_index=current_index, locked_slots=self.locked_slots
+        )
 
         # Calculate current stats
         remaining_slots = self.grid.get_empty_slots()
@@ -1171,6 +1181,9 @@ class Autofill:
         }
 
         state_path = self.state_manager.save_csp_state(task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True)
+
+        # Persist for the FillResult (the local state_path is lost once this returns).
+        self._pause_state_path = str(state_path)
 
         # Report pause via progress reporter
         if self.progress_reporter:

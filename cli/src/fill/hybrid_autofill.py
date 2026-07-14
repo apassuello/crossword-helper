@@ -41,6 +41,7 @@ class HybridAutofill:
         theme_entries=None,
         theme_words=None,
         all_valid_words: set = None,
+        pause_controller=None,
     ):
         """
         Initialize hybrid autofill solver.
@@ -56,6 +57,8 @@ class HybridAutofill:
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
             all_valid_words: Set of ALL valid words across all wordlists (for validation only)
+            pause_controller: Optional PauseController — forwarded to both phases so a
+                pause in either beam (Phase 1) or repair (Phase 2) stops the hybrid run
         """
         self.grid = grid
         self.word_list = word_list
@@ -67,6 +70,7 @@ class HybridAutofill:
         self.theme_entries = theme_entries
         self.all_valid_words = all_valid_words or set()
         self.theme_words = theme_words or set()
+        self.pause_controller = pause_controller
 
     @staticmethod
     def _compute_beam_cap(size: int) -> int:
@@ -128,9 +132,14 @@ class HybridAutofill:
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
+            pause_controller=self.pause_controller,
         )
 
         beam_result = beam_search.fill(timeout=beam_timeout)
+
+        # Phase-1 pause: stop here, don't proceed to repair.
+        if beam_result.paused:
+            return beam_result
 
         # Early exit if beam search succeeded
         if beam_result.success:
@@ -159,9 +168,15 @@ class HybridAutofill:
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
             all_valid_words=self.all_valid_words,
+            pause_controller=self.pause_controller,
         )
 
         repair_result = repair.fill(timeout=repair_timeout)
+
+        # Phase-2 pause: return it directly so the slot-count best-of compare below
+        # doesn't mask the paused flag.
+        if repair_result.paused:
+            return repair_result
 
         # Return best result
         if repair_result.success:

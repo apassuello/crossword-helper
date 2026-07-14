@@ -101,6 +101,7 @@ class IterativeRepair:
         theme_entries=None,
         theme_words=None,
         all_valid_words: set = None,
+        pause_controller=None,
     ):
         """
         Initialize iterative repair solver.
@@ -115,6 +116,7 @@ class IterativeRepair:
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
             all_valid_words: Set of ALL valid words across all wordlists (for validation only)
+            pause_controller: Optional PauseController for graceful-stop pause support
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -132,11 +134,13 @@ class IterativeRepair:
         self.max_iterations = max_iterations
         self.progress_reporter = progress_reporter
         self.all_valid_words = all_valid_words or set()
+        self.pause_controller = pause_controller
 
         # State tracking
         self.start_time = 0.0
         self.iterations = 0
         self._last_snapshot_time = 0.0
+        self._pause_requested = False
 
     def _is_valid_word(self, word: str) -> bool:
         """Check if word is valid against all available wordlists, theme words, and theme entries."""
@@ -213,6 +217,13 @@ class IterativeRepair:
         max_restarts = max(1, min(10, timeout // 15))
 
         for restart in range(max_restarts):
+            # Pause hook #1 (restart-loop top): file-existence check, never an
+            # elapsed-time comparison. Also catches the flag set by hook #2 three
+            # levels down, so we stop restarting instead of starting the next restart.
+            if self._pause_requested or (self.pause_controller and self.pause_controller.should_pause()):
+                self._pause_requested = True
+                break
+
             elapsed = time.time() - overall_start
             if elapsed > timeout * 0.95:
                 break
@@ -262,6 +273,12 @@ class IterativeRepair:
 
         if best_result and best_grid is not None:
             self.grid.cells[:] = best_grid
+
+        # Mark the paused outcome so the CLI takes the paused branch (graceful-stop:
+        # best_grid is the partial handed back). best_result is populated whenever any
+        # attempt ran, which is guaranteed before a mid-run pause reaches hook #1.
+        if self._pause_requested and best_result is not None:
+            best_result.paused = True
 
         return best_result
 
@@ -416,6 +433,12 @@ class IterativeRepair:
             self.progress_reporter.update(80, f"Repairing {len(conflicts)} invalid words")
 
         while conflicts:
+            # Pause hook #2 (conflict-repair loop): this method returns None, so a bare
+            # break only exits this while — set the flag so hook #1 stops the restart loop.
+            if self.pause_controller and self.pause_controller.should_pause():
+                self._pause_requested = True
+                break
+
             iteration += 1
             if time.time() - repair_start > timeout:
                 break

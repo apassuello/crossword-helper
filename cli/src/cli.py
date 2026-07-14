@@ -183,6 +183,21 @@ def validate(grid_file: str):
     default=False,
     help="After autofill, remove invalid words while keeping letters shared with valid crossing words",
 )
+@click.option(
+    "--task-id",
+    type=str,
+    help="Task ID enabling pause polling + state saving (None → pause path inert)",
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(),
+    help="Directory for saved solver state (StateManager storage_dir)",
+)
+@click.option(
+    "--pause-flag-dir",
+    type=click.Path(),
+    help="Directory watched for the pause flag file (PauseController pause_dir)",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -200,6 +215,9 @@ def fill(
     max_adaptations: int,
     partial_fill: bool,
     cleanup: bool,
+    task_id: Optional[str],
+    state_dir: Optional[str],
+    pause_flag_dir: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -347,6 +365,18 @@ def fill(
             except Exception:
                 pass  # Skip unreadable files
 
+    # Set up pause/resume wiring (DD1). Only active when --task-id is present and
+    # NOT --adaptive: adaptive pause is out of scope (AdaptiveAutofill.fill has no
+    # task_id param), so its pause path stays a crash-safe no-op. When inactive both
+    # stay None and every pause hook below is a no-op (byte-identical to prior behavior).
+    pause_controller = state_manager = None
+    if task_id and not adaptive:
+        from .fill.pause_controller import PauseController
+        from .fill.state_manager import StateManager
+
+        pause_controller = PauseController(task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
+        state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
+
     # Create appropriate autofill instance based on algorithm
     if algorithm == "beam":
         autofill = BeamSearchAutofill(
@@ -359,6 +389,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             partial_fill_mode=partial_fill,
+            pause_controller=pause_controller,
         )
     elif algorithm == "repair":
         autofill = IterativeRepair(
@@ -370,6 +401,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
+            pause_controller=pause_controller,
         )
     elif algorithm == "hybrid":
         autofill = HybridAutofill(
@@ -382,6 +414,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
+            pause_controller=pause_controller,
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'
@@ -393,7 +426,22 @@ def fill(
                     fg="yellow",
                 )
             )
-        autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
+        # DD3: inject pause wiring only for single-attempt runs. fill_with_restarts
+        # (attempts>1) calls self.fill() with no task_id, which would reach _handle_pause
+        # with task_id=None → ValueError; the attempts==1 gate keeps the controller off it.
+        _pc = pause_controller if attempts == 1 else None
+        _sm = state_manager if attempts == 1 else None
+        autofill = Autofill(
+            grid,
+            word_list,
+            None,
+            timeout,
+            min_score,
+            algorithm,
+            progress,
+            pause_controller=_pc,
+            state_manager=_sm,
+        )
 
     # Wrap with adaptive autofill if enabled
     if adaptive:
@@ -494,16 +542,76 @@ def fill(
                         progress_pct = int((result.slots_filled / result.total_slots) * 100)
                         bar.update(progress_pct)
         else:
-            # Single attempt
+            # Single attempt. Thread task_id ONLY when not adaptive: AdaptiveAutofill.fill
+            # takes no task_id (would TypeError), and DD1 already withholds the controllers
+            # under --adaptive, so pause under --adaptive stays out of scope.
             if json_output:
-                result = autofill.fill()
+                result = autofill.fill(task_id=task_id) if not adaptive else autofill.fill()
             else:
                 with click.progressbar(length=100, label="Progress") as bar:
-                    result = autofill.fill()
+                    result = autofill.fill(task_id=task_id) if not adaptive else autofill.fill()
                     # Update progress bar
                     if result.total_slots > 0:
                         progress_pct = int((result.slots_filled / result.total_slots) * 100)
                         bar.update(progress_pct)
+
+    # DD6: paused outcome — save state (graceful-stop engines only), emit the paused
+    # stdout protocol, and return BEFORE cleanup/completion so no spurious "complete"
+    # status is sent. CSP (regex/trie) already persisted its real CSPState in
+    # _handle_pause; repair/beam/hybrid save a degenerate CSPState CLI-side here.
+    if task_id and result.paused:
+        if algorithm not in ("regex", "trie"):
+            from datetime import datetime
+
+            from .fill.state_manager import CSPState
+
+            degenerate = CSPState(
+                grid_dict=result.grid.to_dict(),
+                domains={},
+                constraints={},
+                used_words=[],
+                slot_id_map={},
+                slot_list=[],
+                slots_sorted=[],
+                current_slot_index=0,
+                iteration_count=0,
+                locked_slots=[],
+                timestamp=datetime.now().isoformat(),
+            )
+            state_path = state_manager.save_csp_state(
+                task_id=task_id,
+                csp_state=degenerate,
+                metadata={
+                    "algorithm": algorithm,
+                    "slots_filled": result.slots_filled,
+                    "total_slots": result.total_slots,
+                    "grid_size": [grid.size, grid.size],
+                },
+                compress=True,
+            )
+            if progress:
+                pct = int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0
+                progress.update(
+                    pct,
+                    f"Paused: {result.slots_filled}/{result.total_slots} slots filled",
+                    "paused",
+                    {"state_path": str(state_path), "grid": result.grid.to_dict()["grid"]},
+                )
+
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        "paused": True,
+                        "task_id": task_id,
+                        "slots_filled": result.slots_filled,
+                        "total_slots": result.total_slots,
+                    }
+                )
+            )
+        else:
+            click.echo(click.style("⏸ Paused — solver state saved", fg="cyan"))
+        return
 
     # Cleanup pass: remove invalid words, keep letters shared with valid crossings
     if cleanup and algorithm in ["repair", "hybrid"]:
