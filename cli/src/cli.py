@@ -559,14 +559,22 @@ def fill(
     # stdout protocol, and return BEFORE cleanup/completion so no spurious "complete"
     # status is sent. CSP (regex/trie) already persisted its real CSPState in
     # _handle_pause; repair/beam/hybrid save a degenerate CSPState CLI-side here.
-    if task_id and result.paused:
+    #
+    # None-guard: IterativeRepair.fill() returns None when the pause flag exists before
+    # restart 0 (hook #1 breaks with best_result never populated). Under an active task
+    # that unambiguously means "paused before any work happened" — treat it as a paused
+    # outcome with zero progress off the original grid, so nothing below dereferences None.
+    if task_id and (result is None or result.paused):
+        paused_grid = result.grid if result is not None else grid
+        slots_filled = result.slots_filled if result is not None else 0
+        total_slots = result.total_slots if result is not None else len(empty_slots)
         if algorithm not in ("regex", "trie"):
             from datetime import datetime
 
             from .fill.state_manager import CSPState
 
             degenerate = CSPState(
-                grid_dict=result.grid.to_dict(),
+                grid_dict=paused_grid.to_dict(),
                 domains={},
                 constraints={},
                 used_words=[],
@@ -583,19 +591,19 @@ def fill(
                 csp_state=degenerate,
                 metadata={
                     "algorithm": algorithm,
-                    "slots_filled": result.slots_filled,
-                    "total_slots": result.total_slots,
+                    "slots_filled": slots_filled,
+                    "total_slots": total_slots,
                     "grid_size": [grid.size, grid.size],
                 },
                 compress=True,
             )
             if progress:
-                pct = int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0
+                pct = int((slots_filled / total_slots) * 100) if total_slots > 0 else 0
                 progress.update(
                     pct,
-                    f"Paused: {result.slots_filled}/{result.total_slots} slots filled",
+                    f"Paused: {slots_filled}/{total_slots} slots filled",
                     "paused",
-                    {"state_path": str(state_path), "grid": result.grid.to_dict()["grid"]},
+                    {"state_path": str(state_path), "grid": paused_grid.to_dict()["grid"]},
                 )
 
         if json_output:
@@ -604,8 +612,8 @@ def fill(
                     {
                         "paused": True,
                         "task_id": task_id,
-                        "slots_filled": result.slots_filled,
-                        "total_slots": result.total_slots,
+                        "slots_filled": slots_filled,
+                        "total_slots": total_slots,
                     }
                 )
             )

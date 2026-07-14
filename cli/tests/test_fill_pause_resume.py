@@ -201,3 +201,52 @@ def test_beam_pause_routes_through_degenerate_writer(tmp_path):
     assert env["algorithm"] == "csp"
     assert env["state_data"]["domains"] == {}
     assert env["metadata"]["algorithm"] == "beam"
+
+
+@pytest.mark.slow
+def test_repair_pause_before_restart_exits_cleanly(tmp_path):
+    """
+    None-guard (Task 13 hardening): if the pause flag already exists before restart 0,
+    IterativeRepair.fill() breaks at hook #1 with best_result never populated and
+    returns None. The CLI paused branch must treat a None result under an active task
+    as a paused-with-no-progress outcome (using the original grid), NOT crash on
+    None.paused. Deterministic: the flag is written BEFORE the subprocess starts.
+    """
+    grid_file = _write_pause_grid(tmp_path / "grid.json", "repair", 15)
+    state_dir = tmp_path / "state"
+    flags_dir = tmp_path / "flags"
+    flags_dir.mkdir(parents=True, exist_ok=True)
+    (flags_dir / "crossword_pause_tNone.flag").touch()  # pre-existing → pause at restart 0
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli.src.cli",
+            "fill",
+            str(grid_file),
+            "-w",
+            str(WORDLIST),
+            "--algorithm",
+            "repair",
+            "-t",
+            "60",
+            "--json-output",
+            "--task-id",
+            "tNone",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flags_dir),
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+    assert proc.returncode == 0, f"CLI crashed on None result:\n{proc.stderr[-800:]}"
+    out = json.loads(proc.stdout)
+    assert out["paused"] is True and out["task_id"] == "tNone"
+    assert out["slots_filled"] == 0
+    assert (state_dir / "tNone.json.gz").exists()
