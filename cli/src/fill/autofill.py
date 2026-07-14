@@ -238,8 +238,11 @@ class Autofill:
         # Convert locked slots list to set
         self.locked_slots = set(resume_state.locked_slots)
 
-        # Continue backtracking from saved position
-        slots_list = [self.slot_list[slot_id] for slot_id in resume_state.slots_sorted]
+        # Continue backtracking from saved position. slots_sorted already holds the
+        # MCV-sorted slot DICTS (the exact list the fresh-fill path passes to
+        # _backtrack_with_mac at :189 and stores at :183) — not int indices — so it is
+        # consumed directly. current_slot_index indexes into this same sorted order.
+        slots_list = resume_state.slots_sorted
 
         was_paused = False
         try:

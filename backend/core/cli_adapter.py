@@ -8,6 +8,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Shared solver-state + pause-flag dirs for resume argv (DD5). Task 14 defines them
+# here concretely so `fill_with_resume` single-sources both; Task 15 replaces these
+# with imports from backend.core.state_paths (canonical PAUSE_FLAG_DIR = /tmp). The
+# value is not test-load-bearing — tests import these same constants.
+STATE_DIR = Path(__file__).parent.parent / "data" / "autofill_states"
+PAUSE_FLAG_DIR = STATE_DIR.parent / "autofill_pause_flags"
+
 
 class CLIAdapter:
     """
@@ -408,6 +415,8 @@ class CLIAdapter:
         timeout_seconds: int = 300,
         min_score: int = 30,
         algorithm: str = "trie",
+        state_dir: Optional[str] = None,
+        pause_flag_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Resume auto-fill from saved state.
@@ -419,6 +428,8 @@ class CLIAdapter:
             timeout_seconds: Maximum time to spend filling
             min_score: Minimum word quality score
             algorithm: Pattern matching algorithm ('regex' or 'trie')
+            state_dir: Dir for the resumed run's re-pause state (defaults to STATE_DIR)
+            pause_flag_dir: Dir watched for the re-pause flag (defaults to PAUSE_FLAG_DIR)
 
         Returns:
             Dict with filled grid and metadata
@@ -439,11 +450,20 @@ class CLIAdapter:
             output_path = f.name
 
         try:
-            # Build command args
+            # Build command args. DD5: always thread --state-dir/--pause-flag-dir so the
+            # resumed run is itself re-pausable and both dirs are single-sourced (never
+            # left to the CLI's split defaults). No --json-output: the result is read
+            # from the --output file (json mode writes nothing there).
             args = [
                 "fill",
                 "--resume",
                 str(state_path),
+                "--task-id",
+                task_id,
+                "--state-dir",
+                str(state_dir or STATE_DIR),
+                "--pause-flag-dir",
+                str(pause_flag_dir or PAUSE_FLAG_DIR),
                 "--output",
                 output_path,
                 "--timeout",
@@ -452,8 +472,6 @@ class CLIAdapter:
                 str(min_score),
                 "--algorithm",
                 algorithm,
-                "--task-id",
-                task_id,
             ]
 
             for wordlist_path in wordlist_paths:

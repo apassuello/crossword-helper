@@ -102,7 +102,7 @@ def validate(grid_file: str):
 
 
 @cli.command()
-@click.argument("grid_file", type=click.Path(exists=True))
+@click.argument("grid_file", type=click.Path(exists=True), required=False)
 @click.option(
     "--wordlists",
     "-w",
@@ -198,6 +198,13 @@ def validate(grid_file: str):
     type=click.Path(),
     help="Directory watched for the pause flag file (PauseController pause_dir)",
 )
+@click.option(
+    "--resume",
+    type=click.Path(exists=True),
+    default=None,
+    help="Resume a paused fill from a saved state file (<task_id>.json.gz); "
+    "supplies the grid, so grid_file becomes optional",
+)
 def fill(
     grid_file: str,
     wordlists: tuple,
@@ -218,6 +225,7 @@ def fill(
     task_id: Optional[str],
     state_dir: Optional[str],
     pause_flag_dir: Optional[str],
+    resume: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
@@ -225,15 +233,42 @@ def fill(
 
     progress = ProgressReporter(enabled=json_output)
 
-    # Load grid
-    if not json_output:
-        click.echo(f"Loading grid from {grid_file}...")
-    progress.update(5, f"Loading grid from {grid_file}")
+    # Input source (DD1): a grid file OR a resume state file. --resume wins when both
+    # are given (its saved grid is authoritative).
+    if not resume and not grid_file:
+        raise click.UsageError("Provide a grid file or --resume <state>")
 
-    with open(grid_file, "r") as f:
-        data = json.load(f)
+    # Load grid. On resume (DD2) the grid + solver state come from the saved CSPState,
+    # loaded from the resume file's own directory (so a state-dir divergence between
+    # backend and CLI defaults cannot mislocate it). resume_csp_state is the content
+    # discriminator for DD3: non-empty domains → exact-position CSP resume; empty
+    # domains → degenerate re-seed of the requested engine.
+    # DD4: the degenerate re-seed reconstructs the grid from grid_dict and runs the
+    # requested engine. It does NOT re-derive theme/user locks — Grid.to_dict does not
+    # persist locked_cells and Task 13's degenerate save records no theme_entries
+    # channel (reconciliation note 1), so M1 preserves grid structure + black squares
+    # only; repair may legitimately strip non-locked pre-filled cells. (Follow-up: if
+    # lock leakage matters, fix it in Task 13's save contract, not here.) metadata is
+    # therefore intentionally unused on load.
+    resume_csp_state = None
+    if resume:
+        from .fill.state_manager import StateManager
 
-    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+        if not json_output:
+            click.echo(f"Resuming from saved state {resume}...")
+        progress.update(5, f"Resuming from saved state {resume}")
+        sm_load = StateManager(storage_dir=Path(resume).parent)
+        resume_csp_state, _ = sm_load.load_csp_state(Path(resume).name.removesuffix(".json.gz"))
+        grid = Grid.from_dict(resume_csp_state.grid_dict, strict_size=False)
+    else:
+        if not json_output:
+            click.echo(f"Loading grid from {grid_file}...")
+        progress.update(5, f"Loading grid from {grid_file}")
+
+        with open(grid_file, "r") as f:
+            data = json.load(f)
+
+        grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
 
     # Load word lists
     if not json_output:
@@ -377,8 +412,29 @@ def fill(
         pause_controller = PauseController(task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
         state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
 
+    # DD3 content dispatch: a real CSPState (non-empty domains) resumes at its exact
+    # position under classic Autofill regardless of --algorithm (the CSPState machinery
+    # is CSP-only). A degenerate state (empty domains) falls through to the normal
+    # --algorithm dispatch and re-seeds that engine from the reconstructed grid.
+    resume_exact = resume_csp_state is not None and bool(resume_csp_state.domains)
+
     # Create appropriate autofill instance based on algorithm
-    if algorithm == "beam":
+    if resume_exact:
+        # Force classic Autofill; the pause wiring survives restore_to_autofill so the
+        # resumed CSP fill re-pauses correctly. The grid handed here is immaterial —
+        # _resume_fill overwrites self.grid from the saved state.
+        autofill = Autofill(
+            grid,
+            word_list,
+            None,
+            timeout,
+            min_score,
+            algorithm,
+            progress,
+            pause_controller=pause_controller,
+            state_manager=state_manager,
+        )
+    elif algorithm == "beam":
         autofill = BeamSearchAutofill(
             grid,
             word_list,
@@ -508,8 +564,19 @@ def fill(
             click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
 
     # Fill grid
+    if resume_exact:
+        # Exact-position resume: _resume_fill restores domains + current_slot_index and
+        # continues _backtrack_with_mac from there (use_mac default True — the pause
+        # check lives only in _backtrack_with_mac). Timeout is governed by the ctor.
+        if json_output:
+            result = autofill.fill(resume_state=resume_csp_state, task_id=task_id)
+        else:
+            with click.progressbar(length=100, label="Progress") as bar:
+                result = autofill.fill(resume_state=resume_csp_state, task_id=task_id)
+                if result.total_slots > 0:
+                    bar.update(int((result.slots_filled / result.total_slots) * 100))
     # New algorithms (beam, repair, hybrid) use fill(timeout), classic uses fill() or fill_with_restarts()
-    if algorithm in ["beam", "repair", "hybrid"]:
+    elif algorithm in ["beam", "repair", "hybrid"]:
         # New algorithms don't support multiple attempts - they use timeout directly
         if attempts > 1 and not json_output:
             click.echo(

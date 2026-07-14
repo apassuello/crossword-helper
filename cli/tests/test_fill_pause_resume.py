@@ -103,6 +103,33 @@ def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120):
     return proc, stdout, state_dir
 
 
+def _run_fill(args, timeout=180):
+    """Spawn `fill` with the given extra args (NO grid_file positional on resume);
+    return the finished CompletedProcess."""
+    return subprocess.run(
+        [sys.executable, "-m", "cli.src.cli", "fill", *args],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def _pause_a_fill(tmp_path, algorithm, task_id):
+    """
+    Run a fill, pause it mid-run (Task-13 flow), and return
+    (grid_file, state_dir, flag_dir, state_file). state_file is the on-disk
+    <state_dir>/<task_id>.json.gz written at pause.
+    """
+    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id)
+    assert proc.returncode == 0, stdout
+    assert json.loads(stdout)["paused"] is True
+    grid_file = tmp_path / "grid.json"
+    flag_dir = tmp_path / "flags"
+    state_file = state_dir / f"{task_id}.json.gz"
+    return grid_file, state_dir, flag_dir, state_file
+
+
 def test_fill_accepts_pause_options(tmp_path):
     """Test A — the three new options parse and a trivial fill still succeeds."""
     grid_file = _write_blank_grid(tmp_path / "grid.json", 5)
@@ -250,3 +277,110 @@ def test_repair_pause_before_restart_exits_cleanly(tmp_path):
     assert out["paused"] is True and out["task_id"] == "tNone"
     assert out["slots_filled"] == 0
     assert (state_dir / "tNone.json.gz").exists()
+
+
+# ---------------------------------------------------------------------------
+# Task 14 — `fill --resume`
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_resume_trie_exact_position_runs(tmp_path):
+    """
+    Exact-position resume: a real CSPState (non-empty domains) from a paused trie
+    fill resumes under classic Autofill with NO grid_file positional — grid + solver
+    state come from --resume (DD1/DD2/DD3). Proves the resume path runs end-to-end
+    and emits the terminal fill schema.
+
+    Completion is deliberately NOT asserted: the pause grid is an all-white 15×15,
+    which is not fully solvable (empirically success=False, ~4/30). Like Task 19,
+    this gates the resume MECHANISM, not fill quality.
+    """
+    gf, state_dir, flag_dir, state_file = _pause_a_fill(tmp_path, "trie", "orig-1")
+    assert state_file.exists()
+    # Sanity: the saved state is a real (non-degenerate) CSPState → exact-position path.
+    with gzip.open(state_file, "rt", encoding="utf-8") as f:
+        env = json.load(f)
+    assert len(env["state_data"]["domains"]) > 0
+
+    proc = _run_fill(
+        [
+            "--resume",
+            str(state_file),
+            "-w",
+            str(WORDLIST),
+            "--task-id",
+            "resume-1",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flag_dir),
+            "-t",
+            "10",
+            "--algorithm",
+            "trie",
+            "--json-output",
+        ],
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]
+    out = json.loads(proc.stdout.strip())
+    assert set(out) >= {
+        "success",
+        "grid",
+        "slots_filled",
+        "total_slots",
+        "fill_percentage",
+        "time_elapsed",
+        "iterations",
+        "problematic_slots_count",
+    }
+    assert len(out["grid"]) == 15 and all(len(r) == 15 for r in out["grid"])
+
+
+@pytest.mark.slow
+def test_resume_degenerate_reseed_preserves_structure(tmp_path):
+    """
+    Degenerate re-seed: a graceful-stop state (empty domains) re-seeds the requested
+    engine from grid_dict (DD3/DD4). Pauses a BEAM fill (black-squared 3×3-block grid,
+    so the black-square assertion is non-vacuous) then resumes with --algorithm repair
+    (cross-engine re-seed; repair is the web default).
+
+    Smoke gate: proves it runs and returns a correctly-shaped grid with black-square
+    structure intact. Does NOT assert completion or per-cell letter survival — repair
+    may legitimately strip non-locked pre-filled cells (DD4 accepted M1 degradation).
+    """
+    gf, state_dir, flag_dir, state_file = _pause_a_fill(tmp_path, "beam", "orig-2")
+    assert state_file.exists()
+    with gzip.open(state_file, "rt", encoding="utf-8") as f:
+        env = json.load(f)
+    assert env["state_data"]["domains"] == {}  # degenerate
+    saved = env["state_data"]["grid_dict"]["grid"]
+    black = [(r, c) for r, row in enumerate(saved) for c, cell in enumerate(row) if cell == "#"]
+    assert black, "fixture must contain black squares for a non-vacuous check"
+
+    proc = _run_fill(
+        [
+            "--resume",
+            str(state_file),
+            "-w",
+            str(WORDLIST),
+            "--task-id",
+            "resume-2",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flag_dir),
+            "-t",
+            "10",
+            "--algorithm",
+            "repair",
+            "--json-output",
+        ],
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]
+    out = json.loads(proc.stdout.strip())
+    assert "grid" in out and len(out["grid"]) == len(saved)
+    for r, c in black:
+        assert out["grid"][r][c] == "#"  # black-square structure preserved

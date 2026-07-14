@@ -34,7 +34,7 @@ class CSPState:
 
     # Slot information
     slot_list: List[Dict]  # All slots
-    slots_sorted: List[int]  # MCV-sorted slot IDs
+    slots_sorted: List[Dict]  # MCV-sorted slot dicts (NOT ids — consumed directly on resume)
 
     # Backtracking position
     current_slot_index: int  # Resume from this position
