@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from backend.core.state_paths import PAUSE_FLAG_DIR
+
 
 @pytest.fixture
 def client(mocker):
@@ -90,7 +92,9 @@ class TestPauseAutofill:
         assert data["success"] is True
         assert "task_abc" in data["message"]
         assert data["task_id"] == "task_abc"
-        mock_cls.assert_called_once_with(task_id="task_abc")
+        # DD1: the pause route now single-sources pause_dir so the flag lands where the
+        # spawned CLI reads it.
+        mock_cls.assert_called_once_with(task_id="task_abc", pause_dir=PAUSE_FLAG_DIR)
         mock_pc.request_pause.assert_called_once()
 
     def test_pause_calls_request_pause(self, client, mock_pause_controller):

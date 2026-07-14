@@ -153,8 +153,10 @@ def stream_progress(task_id: str):
                     # Send SSE event
                     yield f"data: {json.dumps(event)}\n\n"
 
-                    # If complete or error, stop streaming
-                    if event.get("status") in ["complete", "error"]:
+                    # If complete, error, or paused, stop streaming. DD4b: `paused` is a
+                    # terminal SSE state (the CLI exits and the stream must close, else
+                    # the synchronous consumer hangs). Resume opens a fresh task_id stream.
+                    if event.get("status") in ["complete", "error", "paused"]:
                         break
 
                 except queue.Empty:

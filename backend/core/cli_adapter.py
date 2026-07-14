@@ -8,12 +8,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Shared solver-state + pause-flag dirs for resume argv (DD5). Task 14 defines them
-# here concretely so `fill_with_resume` single-sources both; Task 15 replaces these
-# with imports from backend.core.state_paths (canonical PAUSE_FLAG_DIR = /tmp). The
-# value is not test-load-bearing — tests import these same constants.
-STATE_DIR = Path(__file__).parent.parent / "data" / "autofill_states"
-PAUSE_FLAG_DIR = STATE_DIR.parent / "autofill_pause_flags"
+# Solver-state + pause-flag dirs for the resume argv, single-sourced from state_paths
+# (DD5) so routes, the pause route, and this adapter all agree. Re-exported here so the
+# resume argv and its tests import one canonical source.
+from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
 
 
 class CLIAdapter:

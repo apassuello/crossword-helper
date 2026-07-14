@@ -8,12 +8,13 @@ Provides endpoints for:
 """
 
 import logging
-from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
 from backend.api.errors import handle_error
 from backend.core.edit_merger import EditMerger
+from backend.core.state_paths import PAUSE_FLAG_DIR
+from backend.core.state_paths import STATE_DIR as STATE_STORAGE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +23,10 @@ pause_resume_api = Blueprint("pause_resume", __name__)
 # Initialize edit merger
 edit_merger = EditMerger()
 
-# State storage directory
-STATE_STORAGE_DIR = Path(__file__).parent.parent / "data" / "autofill_states"
-STATE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+# State + pause-flag dirs are single-sourced from backend.core.state_paths (DD1):
+# STATE_STORAGE_DIR (alias of STATE_DIR) keeps the six StateManager(storage_dir=...)
+# call sites unchanged; PAUSE_FLAG_DIR is threaded into the PauseController constructions
+# below so the flag the backend writes lands where the spawned CLI reads it.
 
 
 @pause_resume_api.route("/fill/pause/<task_id>", methods=["POST"])
@@ -50,7 +52,7 @@ def pause_autofill(task_id: str):
         from cli.src.fill.pause_controller import PauseController
 
         # Create pause controller for this task
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=PAUSE_FLAG_DIR)
 
         # Request pause
         pause_controller.request_pause()
@@ -107,7 +109,7 @@ def cancel_autofill(task_id: str):
         from cli.src.fill.pause_controller import PauseController
 
         # Create pause controller for this task
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=PAUSE_FLAG_DIR)
 
         # Request pause (same mechanism as pause, but semantically different)
         # The CLI will save state and exit. Frontend marks this as "cancelled"
