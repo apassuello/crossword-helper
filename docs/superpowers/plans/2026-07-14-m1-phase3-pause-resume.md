@@ -255,11 +255,11 @@ Rationale — envelope tag: `save_csp_state` hardcodes top-level `algorithm="csp
 
   *Test D — beam pause routes through the same degenerate writer:* `_run_fill_until_paused(tmp_path, "beam", "tD")`. Assert: `returncode == 0`; stdout `paused is True`; state file exists; `env["algorithm"] == "csp"`; `env["state_data"]["domains"] == {}`; `env["metadata"]["algorithm"] == "beam"`. (Hybrid pauses via its Phase-1 forwarding + Phase-2 repair hook, DD5 — covered indirectly; a full hybrid subprocess test is optional and slow, omitted to keep the suite fast.)
 
-- [ ] **Step 2 — run** `pytest cli/tests/test_fill_pause_resume.py -x -v`. Expected: FAIL at collection/run of Test A with `Error: no such option: --task-id` (Click exit 2).
+- [ ] **Step 2 — run** `pytest cli/tests/test_fill_pause_resume.py -o addopts= -v`. **The `-o addopts=` is load-bearing** — it clears `pytest.ini:8`'s default `addopts = -v -m "not slow"`, without which the slow Tests B/C/D are silently *deselected* and never run. Expected: **all four** FAIL with `Error: no such option: --task-id` (Click exit 2). (Confirm the summary shows 4 failed, not `1 failed, 3 deselected`.)
 
 - [ ] **Step 3 — implement** DD1-DD6. Read the fill command (`cli.py:104-651`) first; add the local imports (`PauseController`, `StateManager`, `CSPState`, `datetime` — sibling pattern at `:1202`/`:1275`/`:1453`). Order: (1) options + params + DD1 construction (with the `not adaptive` + `Path(...) if x else None` guards); (2) DD3 CSP injection at `:396` (`attempts==1` gate) + conditional `task_id=` at `:499`/`:502` (`not adaptive`); (3) DD2 `autofill.py` two-block + `_handle_pause` persist; (4) DD4 repair hooks; (5) DD5 wrapper/hybrid forwarding + both hybrid paused returns; (6) DD6 paused branch. Do NOT try to `except PausedException` in the command — it never escapes `Autofill.fill()` (`:193`).
 
-- [ ] **Step 4 — run** `pytest cli/tests/test_fill_pause_resume.py -v` → Expected: PASS (A/B/C/D). Then `pytest cli/tests/ -q` → Expected: full CLI suite green (no regression to default fills, guaranteed by the `task_id is None` / `not adaptive` no-op gates, DD1).
+- [ ] **Step 4 — run** `pytest cli/tests/test_fill_pause_resume.py -o addopts= -v` → Expected: **PASS (A/B/C/D) — the summary MUST read `4 passed`, NOT `1 passed, 3 deselected`** (the `-o addopts=` clears `pytest.ini:8`'s `-m "not slow"` so B/C/D actually execute; a bare `-v` would verify only that the flag parses, never that pause saves state). Then `pytest cli/tests/ -q` (default markers — the fast regression sweep) → Expected: full CLI suite green (no regression to default fills, guaranteed by the `task_id is None` / `not adaptive` no-op gates, DD1).
 
 - [ ] **Step 5 — commit** — `feat(cli): fill --task-id/--state-dir/--pause-flag-dir with pause for csp+repair+beam`
 
@@ -394,8 +394,8 @@ def test_resume_repair_degenerate_returns_grid(tmp_path):
     # only over metadata["theme_entries"] cells — that is Task 13's save responsibility, not asserted
     # here, because non-locked pre-filled cells may be legitimately stripped by repair.
 ```
-Run: `python -m pytest cli/tests/test_fill_pause_resume.py -k resume -x -v`
-- [ ] **Step 2 — run → FAIL** with `Error: No such option: --resume` (Task 13 added the three dir/id options but not `--resume`). Implement per DD1-DD4 (grid_file optional + `--resume` option + validation; resume grid-load short-circuit; content dispatch at the three seams; degenerate `theme_entries` pass-through). Re-run → **PASS**; then full `python -m pytest cli/tests/test_fill_pause_resume.py -q` green.
+Run: `python -m pytest cli/tests/test_fill_pause_resume.py -o addopts= -k resume -x -v` (the `-o addopts=` clears `pytest.ini:8`'s `-m "not slow"`; the resume tests are `@pytest.mark.slow`, so `-k resume` alone AND-ed with the default `-m "not slow"` selects **nothing**).
+- [ ] **Step 2 — run → FAIL** with `Error: No such option: --resume` (Task 13 added the three dir/id options but not `--resume`). Implement per DD1-DD4 (grid_file optional + `--resume` option + validation; resume grid-load short-circuit; content dispatch at the three seams; degenerate `theme_entries` pass-through). Re-run → **PASS**; then full `python -m pytest cli/tests/test_fill_pause_resume.py -o addopts= -q` green (again `-o addopts=` so the slow resume tests actually run).
 - [ ] **Step 3 — adapter argv test** (`backend/tests/unit/test_cli_adapter.py::TestFillWithResume`). Add the failing assertions to `test_command_construction` (`:375-388`, the argv-assertion block), importing the adapter's own constants so test and code share one source:
 ```python
 from backend.core.cli_adapter import STATE_DIR, PAUSE_FLAG_DIR
