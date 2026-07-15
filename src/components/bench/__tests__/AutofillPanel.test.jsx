@@ -232,11 +232,15 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(machine.reset).toHaveBeenCalledTimes(1);
   });
 
-  it('renders wordlist checkboxes from api.getWordlists() (built-in + custom) and toggling updates the Start payload', async () => {
+  it('renders wordlist checkboxes from api.getWordlists() (built-in + custom, labeled sections) and toggling updates the Start payload', async () => {
     const machine = baseMachine();
-    const { findByText, getByRole, getByLabelText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    const { findByText, getByText, getByRole, getByLabelText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
 
     await findByText(/Comprehensive/);
+    expect(getByText('Built-in')).toBeInTheDocument();
+    expect(getByText('Custom')).toBeInTheDocument();
     expect(getByLabelText(/My Theme List/)).toBeInTheDocument();
 
     fireEvent.click(getByLabelText(/My Theme List/));
@@ -244,6 +248,18 @@ describe('AutofillPanel (mounted, controlled)', () => {
 
     const arg = machine.start.mock.calls[0][0];
     expect(arg.wordlists).toEqual(['comprehensive', 'custom/my_theme']);
+  });
+
+  it('failed message tone is danger-colored, done/cancelled tone is not (errorCard presence drives tone)', async () => {
+    const failedMachine = baseMachine({ state: 'failed', errorCard: { message: 'No solution found' } });
+    const { getByText: getFailedText } = render(<AutofillPanel machine={failedMachine} grid={themedGrid()} />);
+    await flush();
+    expect(getFailedText('No solution found')).toHaveStyle({ color: 'var(--danger)' });
+
+    const doneMachine = baseMachine({ state: 'done', message: 'Successfully filled 16/16 slots!' });
+    const { getByText: getDoneText } = render(<AutofillPanel machine={doneMachine} grid={themedGrid()} />);
+    await flush();
+    expect(getDoneText('Successfully filled 16/16 slots!')).toHaveStyle({ color: 'var(--good)' });
   });
 
   it('does not import ProgressIndicator or BlackSquareSuggestions (grep-level check)', () => {

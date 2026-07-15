@@ -233,7 +233,13 @@ export function AutofillPanel({ machine, grid }) {
       {isTerminal && (
         <div className="xw-af-progress-panel">
           <div className="xw-af-done-msg">
-            <strong>{state === 'failed' ? machine.errorCard && machine.errorCard.message : machine.message}</strong>
+            {/* Tone tracks errorCard presence (brief: "color/tone via errorCard
+                presence") — failed reads red, done/cancelled read the neutral
+                "good" token. Inline style, not a new class: matches the design
+                bundle's own approach for the equivalent done-state accent. */}
+            <strong style={{ color: state === 'failed' ? 'var(--danger)' : 'var(--good)' }}>
+              {state === 'failed' ? machine.errorCard && machine.errorCard.message : machine.message}
+            </strong>
           </div>
           <div className="xw-af-actions-row">
             <button className="xw-ghost-btn" onClick={machine.reset}>
@@ -332,40 +338,54 @@ export function AutofillPanel({ machine, grid }) {
         {wordlistsLoading ? (
           <div>Loading…</div>
         ) : (
-          <div className="xw-af-checkgrid">
-            {availableWordlists.built_in.map((wl) => {
-              const id = wl.key || wl.name;
-              return (
-                <label className="xw-check" key={id}>
-                  <input
-                    type="checkbox"
-                    checked={options.wordlists.includes(id)}
-                    onChange={(e) => toggleWordlist(id, e.target.checked)}
-                  />
-                  <span>
-                    {wl.name}
-                    {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
-                  </span>
-                </label>
-              );
-            })}
-            {availableWordlists.custom.map((wl) => {
-              const id = wl.key || wl.name;
-              return (
-                <label className="xw-check" key={id}>
-                  <input
-                    type="checkbox"
-                    checked={options.wordlists.includes(id)}
-                    onChange={(e) => toggleWordlist(id, e.target.checked)}
-                  />
-                  <span>
-                    {wl.name}
-                    {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+          <>
+            {availableWordlists.built_in.length > 0 && (
+              <>
+                <div className="xw-af-section-head">Built-in</div>
+                <div className="xw-af-checkgrid">
+                  {availableWordlists.built_in.map((wl) => {
+                    const id = wl.key || wl.name;
+                    return (
+                      <label className="xw-check" key={id}>
+                        <input
+                          type="checkbox"
+                          checked={options.wordlists.includes(id)}
+                          onChange={(e) => toggleWordlist(id, e.target.checked)}
+                        />
+                        <span>
+                          {wl.name}
+                          {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {availableWordlists.custom.length > 0 && (
+              <>
+                <div className="xw-af-section-head">Custom</div>
+                <div className="xw-af-checkgrid">
+                  {availableWordlists.custom.map((wl) => {
+                    const id = wl.key || wl.name;
+                    return (
+                      <label className="xw-check" key={id}>
+                        <input
+                          type="checkbox"
+                          checked={options.wordlists.includes(id)}
+                          onChange={(e) => toggleWordlist(id, e.target.checked)}
+                        />
+                        <span>
+                          {wl.name}
+                          {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
