@@ -128,10 +128,18 @@ const DEBOUNCE_MS = 150;
  * `unverified` true and toasts; a validation resolution surfaces
  * `violations = [...warnings, ...suggestions]`.
  *
- * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][]) => void, pushToast: (t: {kind: string, message: string}) => void}} params
+ * `enabled` (default `true`) mutes the entire effect — no optimistic paint, no
+ * API calls — while `false` (Task 11C: paused during a running/submitting
+ * autofill, whose own `onGridUpdate` adds black squares mid-fill and would
+ * otherwise churn numbering on a deliberately-incomplete grid). It joins the
+ * effect's dependency array, so flipping it back to `true` re-fires against
+ * the CURRENT `sig`, catching up any structural drift that accumulated while
+ * muted — no special-casing needed beyond the dep-array re-fire.
+ *
+ * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][]) => void, pushToast: (t: {kind: string, message: string}) => void, enabled?: boolean}} params
  * @returns {{numbering: Record<string, number>, violations: string[], unverified: boolean}}
  */
-export function useNumbering({ grid, gridSize, setGrid, pushToast }) {
+export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = true }) {
   const [numbering, setNumbering] = useState({});
   const [violations, setViolations] = useState([]);
   const [unverified, setUnverified] = useState(false);
@@ -146,6 +154,9 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast }) {
   const sig = useMemo(() => structuralSigOf(gridSize, grid), [gridSize, grid]);
 
   useEffect(() => {
+    // Muted (e.g. autofill running): no optimistic paint, no API calls.
+    if (!enabled) return undefined;
+
     // Null sig = empty/initial grid: nothing to number, do not fire.
     if (sig === null) return undefined;
 
@@ -196,10 +207,11 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast }) {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(handle);
-    // Fires ONLY on structural-signature change; grid/gridSize/setGrid/pushToast
-    // are read via ref or are stable — see the concurrency contract above.
+    // Fires on structural-signature change OR enabled flipping; grid/gridSize/
+    // setGrid/pushToast are read via ref or are stable — see the concurrency
+    // contract above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig]);
+  }, [sig, enabled]);
 
   return { numbering, violations, unverified };
 }

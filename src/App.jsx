@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-// react-hot-toast's <Toaster> is intentionally KEPT: AutofillPanel, ThemeWordsPanel,
-// and BlackSquareSuggestions still call toast.* directly. App's own toasts were
+// react-hot-toast's <Toaster> is intentionally KEPT: ThemeWordsPanel and
+// BlackSquareSuggestions still call toast.* directly. App's own toasts were
 // migrated to the bench ToastProvider (pushToast); the default `toast` import is gone.
 import { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
 import { useHealth } from './hooks/useHealth';
 import { usePersistentState } from './hooks/usePersistentState';
 import { useSaveMachine } from './hooks/useSaveMachine';
+import { useAutofillMachine } from './hooks/useAutofillMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering } from './hooks/useNumbering';
@@ -14,7 +15,7 @@ import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
 import PatternMatcher from './components/PatternMatcher';
-import AutofillPanel from './components/AutofillPanel';
+import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
 import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
@@ -40,9 +41,7 @@ function App() {
   const [gridSize, setGridSize] = useState(15);
   const [grid, setGrid] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [autofillProgress, setAutofillProgress] = useState(null);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
-  const [currentTaskId, setCurrentTaskId] = useState(null);
   const [showThemePanel, setShowThemePanel] = useState(false);
   // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
   // lazy-inits from storage, so a stored `false` survives reload (previously a
@@ -63,10 +62,19 @@ function App() {
     parse: (v) => v === 'dark',
     serialize: (v) => (v ? 'dark' : 'light'),
   });
-  const eventSourceRef = React.useRef(null);
 
   const health = useHealth();
   const { pushToast } = useToasts();
+
+  // Autofill lifecycle (Task 11, F3). Owns start/SSE-progress/done/failed/
+  // cancelled/paused; App only threads grid/gridSize in and applies the
+  // machine's grid updates back via onGridUpdate. Must precede `useNumbering`
+  // below, which gates on `autofill.state`.
+  const autofill = useAutofillMachine({
+    grid,
+    gridSize,
+    onGridUpdate: (updater) => setGrid(updater),
+  });
 
   // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
   // client-only word-start numbering pass and the validation stub: fires on
@@ -74,7 +82,19 @@ function App() {
   // renumbers server-wins after an optimistic local paint, and surfaces advisory
   // `violations`. `unverified` is true while an optimistic pass awaits reconcile.
   // Must precede `doc` below (which reads `numbering`).
-  const { numbering, violations, unverified } = useNumbering({ grid, gridSize, setGrid, pushToast });
+  // `enabled` mutes numbering while an autofill run is submitting/running (Task
+  // 11C): adaptive-mode autofill adds black squares mid-fill via onGridUpdate,
+  // and each addition is a structural edit that would otherwise churn numbering/
+  // violations against a grid that's deliberately incomplete mid-run. Flipping
+  // back to enabled on completion re-fires against the grid as it stands then
+  // (useNumbering's own [sig, enabled] dep array handles the catch-up).
+  const { numbering, violations, unverified } = useNumbering({
+    grid,
+    gridSize,
+    setGrid,
+    pushToast,
+    enabled: !['submitting', 'running'].includes(autofill.state),
+  });
 
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
   // (saved verbatim); `isDirty` is derived by comparing the current content
@@ -215,190 +235,6 @@ function App() {
     setGrid(newGrid);
     // Letter fill — no renumber/validate (structural signature unchanged).
   }, [selectedCell, grid, gridSize]);
-
-  const handleAutofill = useCallback(async (options = {}) => {
-    setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
-
-    try {
-      // Start autofill with progress tracking
-      const { task_id } = await api.startFill({
-        size: gridSize,
-        grid: grid.map(row => row.map(cell =>
-          cell.isBlack ? '#' : (cell.letter || '.')
-        )),
-        wordlists: options.wordlists || ['comprehensive'],
-        timeout: options.timeout || 300,
-        min_score: options.minScore ?? 50,
-        algorithm: options.algorithm || 'repair',
-        theme_entries: options.theme_entries || {},
-        adaptive_mode: options.adaptiveMode || false,
-        max_adaptations: options.maxAdaptations || 3,
-        partial_fill: options.partialFill || false,
-        cleanup: options.cleanup || false
-      });
-
-      setCurrentTaskId(task_id);
-
-      // Connect to SSE for progress updates
-      const progress = api.openProgress(task_id, {
-        onEvent: (data) => {
-          try {
-            setAutofillProgress({
-              status: data.status || 'running',
-              progress: data.progress || 0,
-              message: data.message || 'Processing...'
-            });
-
-            // Apply incremental grid updates if present
-            if (data.data && data.data.grid && data.status === 'running') {
-              // Create deep copy with new objects (not shallow copy)
-              setGrid(prevGrid => prevGrid.map((row, r) =>
-                row.map((cell, c) => {
-                  // Never overwrite theme-locked cells
-                  if (cell.isThemeLocked) return cell;
-                  const cliCell = data.data.grid[r][c];
-                  if (cliCell === '#') {
-                    return { ...cell, isBlack: true };
-                  } else if (cliCell === '.' || cliCell === '') {
-                    return { ...cell, letter: '' };
-                  } else {
-                    return { ...cell, letter: cliCell };
-                  }
-                })
-              ));
-            }
-
-            // When complete, update grid with results from event data
-            if (data.status === 'complete') {
-              eventSourceRef.current?.close();
-              eventSourceRef.current = null;
-              setCurrentTaskId(null);
-
-              // Check if result grid is included in the event
-              if (data.data && data.data.grid) {
-                // Update grid with filled results (full or partial) - create deep copy with new objects
-                setGrid(prevGrid => prevGrid.map((row, r) =>
-                  row.map((cell, c) => {
-                    // Never overwrite theme-locked cells
-                    if (cell.isThemeLocked) return cell;
-                    const cliCell = data.data.grid[r][c];
-                    if (cliCell === '#') {
-                      return { ...cell, isBlack: true };
-                    } else if (cliCell === '.' || cliCell === '') {
-                      return { ...cell, letter: '' };
-                    } else {
-                      return { ...cell, letter: cliCell };
-                    }
-                  })
-                ));
-
-                // Show appropriate message based on success
-                if (data.data.success) {
-                  setAutofillProgress({
-                    status: 'complete',
-                    progress: 100,
-                    message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
-                  });
-                } else {
-                  // Partial fill with suggestions
-                  const fillPct = data.data.fill_percentage || 0;
-                  let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
-
-                  // Add first suggestion if available
-                  if (data.data.suggestions && data.data.suggestions.length > 0) {
-                    message += ` - ${data.data.suggestions[0].message}`;
-                  }
-
-                  setAutofillProgress({
-                    status: fillPct > 0 ? 'warning' : 'error',
-                    progress: fillPct,
-                    message: message
-                  });
-                }
-              } else {
-                setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
-              }
-            } else if (data.status === 'paused') {
-              // Autofill was paused - close connection and show paused state
-              eventSourceRef.current?.close();
-              eventSourceRef.current = null;
-              setAutofillProgress({
-                status: 'paused',
-                progress: data.progress || 0,
-                message: data.message || 'Autofill paused - state saved'
-              });
-              // currentTaskId is kept for future pause operations
-              pushToast({ kind: 'info', message: 'Autofill paused successfully! You can resume later.' });
-            } else if (data.status === 'error') {
-              eventSourceRef.current?.close();
-              eventSourceRef.current = null;
-              setCurrentTaskId(null);
-              setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
-            }
-          } catch (error) {
-            console.error('Failed to parse SSE event:', error);
-          }
-        },
-        onError: (error) => {
-          console.error('SSE error:', error);
-          eventSourceRef.current?.close();
-          eventSourceRef.current = null;
-          setCurrentTaskId(null);
-          setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
-        },
-      });
-      eventSourceRef.current = progress;
-
-    } catch (error) {
-      setAutofillProgress({ status: 'error', progress: 0, message: error.message });
-    }
-  }, [grid, gridSize, pushToast]);
-
-  const handleCancelAutofill = useCallback(() => {
-    // Capture task ID before clearing state
-    const taskId = currentTaskId;
-
-    // Close SSE connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Update progress to cancelled state
-    setAutofillProgress({
-      status: 'error',
-      progress: autofillProgress?.progress || 0,
-      message: 'Cancelled by user'
-    });
-
-    // Clear task ID
-    setCurrentTaskId(null);
-
-    // Call backend to cancel the task
-    if (taskId) {
-      api.cancelFill(taskId).catch(err => {
-        console.warn('Failed to cancel autofill task:', err);
-      });
-    }
-  }, [currentTaskId, autofillProgress]);
-
-  const handleResetAutofill = useCallback(() => {
-    // Close SSE connection if active
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Clear all autofill state
-    setAutofillProgress(null);
-    setCurrentTaskId(null);
-
-    // Clear localStorage autofill state
-    localStorage.removeItem('current_autofill_task');
-    localStorage.removeItem('paused_autofill_task');
-
-    pushToast({ kind: 'info', message: 'Autofill state reset - ready to start fresh!' });
-  }, [pushToast]);
 
   const handleVerifyWords = useCallback(async () => {
     if (!grid) return;
@@ -636,14 +472,7 @@ function App() {
 
           {currentTool === 'autofill' && (
             <div className="xw-inspector">
-              <AutofillPanel
-                onStartAutofill={handleAutofill}
-                onCancelAutofill={handleCancelAutofill}
-                onResetAutofill={handleResetAutofill}
-                progress={autofillProgress}
-                grid={grid}
-                currentTaskId={currentTaskId}
-              />
+              <AutofillPanel machine={autofill} grid={grid} />
             </div>
           )}
 

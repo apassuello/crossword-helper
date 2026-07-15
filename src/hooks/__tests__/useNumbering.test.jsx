@@ -365,4 +365,52 @@ describe('useNumbering hook', () => {
     expect(result.current.numbering['4,4']).toBeUndefined();
     expect(setGrid.mock.calls.at(-1)[0][4][4].number).toBeNull();
   });
+
+  it('9. enabled=false suppresses the effect entirely; flipping back to true reconciles against the grid as it stands', async () => {
+    const setGrid = vi.fn();
+    const pushToast = vi.fn();
+    const numberGrid = vi.spyOn(api, 'numberGrid').mockResolvedValue({ numbering: {} });
+    const validateGrid = vi
+      .spyOn(api, 'validateGrid')
+      .mockResolvedValue({ warnings: [], suggestions: [] });
+
+    const gA = gridFromRows(WHITE_5);
+    const gB = gridFromRows(['#....', '.....', '.....', '.....', '.....']);
+    const { rerender } = renderHook((props) => useNumbering(props), {
+      initialProps: { grid: null, gridSize: 5, setGrid, pushToast, enabled: false },
+    });
+
+    // Structural rerender while disabled: sig changes (null -> gA) but the
+    // effect must be a complete no-op — no optimistic paint, no API calls.
+    rerender({ grid: gA, gridSize: 5, setGrid, pushToast, enabled: false });
+    expect(setGrid).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    expect(setGrid).not.toHaveBeenCalled();
+    expect(numberGrid).not.toHaveBeenCalled();
+    expect(validateGrid).not.toHaveBeenCalled();
+
+    // Further structural drift while still disabled (muted mid-run).
+    rerender({ grid: gB, gridSize: 5, setGrid, pushToast, enabled: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    expect(setGrid).not.toHaveBeenCalled();
+    expect(numberGrid).not.toHaveBeenCalled();
+
+    // Flip back to true against the SAME grid (gB, sig unchanged from the last
+    // rerender) — the dep-array catch-up must still fire a reconcile against
+    // the current sig, not require a further structural edit.
+    rerender({ grid: gB, gridSize: 5, setGrid, pushToast, enabled: true });
+
+    expect(setGrid).toHaveBeenCalledTimes(1);
+    expect(setGrid).toHaveBeenCalledWith(localNumber(gB).grid);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    expect(numberGrid).toHaveBeenCalledTimes(1);
+    expect(validateGrid).toHaveBeenCalledTimes(1);
+  });
 });
