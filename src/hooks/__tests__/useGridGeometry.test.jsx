@@ -7,20 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { slotAt, allSlots, mirrorOf } from '../useGridGeometry';
 import { createEmptyGrid } from '../../__tests__/fixtures/gridFixtures';
-
-// Small builder: rows described as strings, '#' = black, '.' = empty, letters = filled.
-function gridFromRows(rows) {
-  return rows.map((row) =>
-    row.split('').map((ch) => ({
-      letter: ch === '#' || ch === '.' ? '' : ch,
-      isBlack: ch === '#',
-      number: null,
-      isError: false,
-      isHighlighted: false,
-      isThemeLocked: false,
-    }))
-  );
-}
+import { gridFromRows } from './gridFixtures';
 
 describe('mirrorOf', () => {
   it('mirrors the top-left corner to the bottom-right on a 15x15', () => {
