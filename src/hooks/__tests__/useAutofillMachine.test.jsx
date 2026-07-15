@@ -1,0 +1,454 @@
+/**
+ * Tests for useAutofillMachine (Task 11A) — the F3 autofill lifecycle hook.
+ *
+ * Follows the useNumbering/useSaveMachine hook-test convention: `api` methods
+ * are mocked via `vi.spyOn`, and SSE is driven through the global
+ * `MockEventSource` already installed by setupTests.js (see
+ * `src/__tests__/setupTests.js`) — `api.openProgress` is NOT mocked, it runs
+ * for real against the mocked global `EventSource`, so `global.EventSource
+ * .sendMessage(...)` / `.sendError(...)` broadcast to whatever instance the
+ * hook opened.
+ *
+ * No fake timers: this hook has no internal timers (unlike useNumbering's
+ * debounce), just promise microtasks from api.startFill/api.cancelFill. The
+ * `flush()` helper below drains those between `act()` calls.
+ */
+
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useAutofillMachine } from '../useAutofillMachine';
+import { api } from '../../api/client';
+import { toCliStrings } from '../../api/gridCodec';
+import { gridFromRows } from './gridFixtures';
+
+/** Flush a couple of promise microtask turns inside act() (no timer advance). */
+const flush = () =>
+  act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+const WHITE_4 = ['....', '....', '....', '....'];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('useAutofillMachine', () => {
+  it('1. start() -> submitting -> (202) -> running, EventSource opened with the right taskId', async () => {
+    const grid = gridFromRows(WHITE_4);
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-1' });
+    const openProgress = vi.spyOn(api, 'openProgress');
+    const onGridUpdate = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({
+        algorithm: 'hybrid',
+        timeout: 60,
+        minScore: 30,
+        wordlists: ['comprehensive'],
+      });
+    });
+
+    expect(result.current.state).toBe('submitting');
+    expect(result.current.message).toBe('Starting autofill…');
+    expect(result.current.progress).toBe(0);
+
+    // Binding request-shape contract (brief's mapping table).
+    expect(startFill).toHaveBeenCalledWith({
+      size: 4,
+      grid: toCliStrings(grid),
+      wordlists: ['comprehensive'],
+      timeout: 60,
+      min_score: 30,
+      algorithm: 'hybrid',
+      theme_entries: {},
+      adaptive_mode: undefined,
+      max_adaptations: undefined,
+      partial_fill: undefined,
+      cleanup: undefined,
+      resumeTaskId: undefined,
+    });
+
+    await flush();
+
+    expect(result.current.state).toBe('running');
+    expect(result.current.taskId).toBe('task-1');
+    expect(openProgress).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) })
+    );
+  });
+
+  it('2. running progress events update {progress, message}', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-2' });
+    const grid = gridFromRows(WHITE_4);
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({ status: 'running', progress: 42, message: 'Filling grid…' });
+    });
+
+    expect(result.current.state).toBe('running');
+    expect(result.current.progress).toBe(42);
+    expect(result.current.message).toBe('Filling grid…');
+  });
+
+  it('3. complete + grid + success:true -> done, onGridUpdate final merge, success message', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-3' });
+    const onGridUpdate = vi.fn();
+    const grid = gridFromRows(WHITE_4);
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    const cliGrid = [
+      ['A', 'B', 'C', 'D'],
+      ['E', 'F', 'G', 'H'],
+      ['I', 'J', 'K', 'L'],
+      ['M', 'N', 'O', 'P'],
+    ];
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: { grid: cliGrid, success: true, slots_filled: 8, total_slots: 8 },
+      });
+    });
+
+    expect(result.current.state).toBe('done');
+    expect(result.current.message).toBe('Successfully filled 8/8 slots!');
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    const updater = onGridUpdate.mock.calls[0][0];
+    const nextGrid = updater(grid);
+    expect(nextGrid[0][0].letter).toBe('A');
+    expect(nextGrid[3][3].letter).toBe('P');
+  });
+
+  it('4. complete + grid + success:false, partial fill -> done, "Partial: ..." message', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-4' });
+    const onGridUpdate = vi.fn();
+    const grid = gridFromRows(WHITE_4);
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    const cliGrid = [
+      ['A', 'B', '.', '.'],
+      ['.', '.', '.', '.'],
+      ['.', '.', '.', '.'],
+      ['.', '.', '.', '.'],
+    ];
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: {
+          grid: cliGrid,
+          success: false,
+          slots_filled: 5,
+          total_slots: 8,
+          fill_percentage: 62,
+          suggestions: [{ message: 'try a different wordlist' }],
+        },
+      });
+    });
+
+    expect(result.current.state).toBe('done');
+    expect(result.current.message).toBe(
+      'Partial: 5/8 slots (62%) - try a different wordlist'
+    );
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('5. complete with NO data.data.grid -> failed, errorCard "No solution found"', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-5' });
+    const onGridUpdate = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({ status: 'complete' });
+    });
+
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'No solution found' });
+    expect(onGridUpdate).not.toHaveBeenCalled();
+  });
+
+  it('6. error event -> failed + errorCard content from data.message', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-6' });
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({ status: 'error', message: 'Solver crashed' });
+    });
+
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'Solver crashed' });
+  });
+
+  it('7. cancel() -> api.cancelFill called + stream closed + cancelled', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-7' });
+    const cancelFill = vi.spyOn(api, 'cancelFill').mockResolvedValue({});
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+    expect(result.current.state).toBe('running');
+
+    act(() => {
+      result.current.cancel();
+    });
+
+    expect(result.current.state).toBe('cancelled');
+    expect(result.current.message).toBe('Cancelled by user');
+    expect(cancelFill).toHaveBeenCalledWith('task-7');
+    expect(closeSpy).toHaveBeenCalled();
+  });
+
+  it('8. SSE status:"paused" -> paused (taskId retained), stream closed, no toast call', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-8' });
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'paused',
+        progress: 55,
+        message: 'Autofill paused - state saved',
+      });
+    });
+
+    expect(result.current.state).toBe('paused');
+    expect(result.current.taskId).toBe('task-8'); // retained, unlike done/failed/cancelled
+    expect(closeSpy).toHaveBeenCalled();
+    // The hook has no toast dependency at all — nothing to spy on; this is a
+    // design property (no import of a toast module), not a runtime assertion.
+  });
+
+  it('9. reset() from each of done/failed/cancelled/paused -> idle, all fields cleared', async () => {
+    async function toState(targetState) {
+      vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'tid' });
+      vi.spyOn(api, 'cancelFill').mockResolvedValue({});
+      const { result } = renderHook(() =>
+        useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+      );
+      act(() => {
+        result.current.start({});
+      });
+      await flush();
+
+      if (targetState === 'done') {
+        act(() => {
+          global.EventSource.sendMessage({
+            status: 'complete',
+            data: {
+              grid: [
+                ['A', '.', '.', '.'],
+                ['.', '.', '.', '.'],
+                ['.', '.', '.', '.'],
+                ['.', '.', '.', '.'],
+              ],
+              success: true,
+              slots_filled: 1,
+              total_slots: 1,
+            },
+          });
+        });
+      } else if (targetState === 'failed') {
+        act(() => {
+          global.EventSource.sendMessage({ status: 'error', message: 'boom' });
+        });
+      } else if (targetState === 'cancelled') {
+        act(() => {
+          result.current.cancel();
+        });
+      } else if (targetState === 'paused') {
+        act(() => {
+          global.EventSource.sendMessage({ status: 'paused', progress: 10 });
+        });
+      }
+      expect(result.current.state).toBe(targetState);
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(result.current.state).toBe('idle');
+      expect(result.current.taskId).toBeNull();
+      expect(result.current.progress).toBe(0);
+      expect(result.current.message).toBe('');
+      expect(result.current.errorCard).toBeNull();
+
+      vi.restoreAllMocks();
+    }
+
+    await toState('done');
+    await toState('failed');
+    await toState('cancelled');
+    await toState('paused');
+  });
+
+  it('10. stray onEvent/onerror AFTER cancel()/reset() is a no-op (ref-discipline state-guard)', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-10' });
+    vi.spyOn(api, 'cancelFill').mockResolvedValue({});
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+    expect(result.current.state).toBe('running');
+
+    act(() => {
+      result.current.cancel();
+    });
+    expect(result.current.state).toBe('cancelled');
+
+    // Stray EventSource onerror arrives after cancel() — must NOT flip to 'failed'.
+    act(() => {
+      global.EventSource.sendError();
+    });
+    expect(result.current.state).toBe('cancelled');
+
+    // Stray SSE 'error' status event also must NOT flip to 'failed'.
+    act(() => {
+      global.EventSource.sendMessage({ status: 'error', message: 'late error' });
+    });
+    expect(result.current.state).toBe('cancelled');
+    expect(result.current.errorCard).toBeNull();
+
+    act(() => {
+      result.current.reset();
+    });
+    expect(result.current.state).toBe('idle');
+
+    // Stray event after reset() must also be a no-op.
+    act(() => {
+      global.EventSource.sendError();
+    });
+    expect(result.current.state).toBe('idle');
+    act(() => {
+      global.EventSource.sendMessage({ status: 'error', message: 'late again' });
+    });
+    expect(result.current.state).toBe('idle');
+  });
+
+  it('11. unmount while running closes the EventSource', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-11' });
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const { result, unmount } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+    expect(result.current.state).toBe('running');
+
+    unmount();
+
+    expect(closeSpy).toHaveBeenCalled();
+  });
+
+  it('12. onGridUpdate merge never overwrites isThemeLocked cells (running-preview + done-final)', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-12' });
+    const onGridUpdate = vi.fn();
+    const grid = gridFromRows(WHITE_4);
+    grid[0][0] = { ...grid[0][0], letter: 'Z', isThemeLocked: true };
+
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    // Running-preview path: server tries to overwrite (0,0) with 'X'.
+    const cliGridRunning = [
+      ['X', '.', '.', '.'],
+      ['.', '.', '.', '.'],
+      ['.', '.', '.', '.'],
+      ['.', '.', '.', '.'],
+    ];
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'running',
+        progress: 20,
+        data: { grid: cliGridRunning },
+      });
+    });
+    let updater = onGridUpdate.mock.calls.at(-1)[0];
+    let merged = updater(grid);
+    expect(merged[0][0].letter).toBe('Z');
+    expect(merged[0][0].isThemeLocked).toBe(true);
+
+    // Done-final path: server tries to overwrite (0,0) with 'Y'.
+    const cliGridDone = [
+      ['Y', 'B', 'C', 'D'],
+      ['E', 'F', 'G', 'H'],
+      ['I', 'J', 'K', 'L'],
+      ['M', 'N', 'O', 'P'],
+    ];
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: { grid: cliGridDone, success: true, slots_filled: 16, total_slots: 16 },
+      });
+    });
+    updater = onGridUpdate.mock.calls.at(-1)[0];
+    merged = updater(grid);
+    expect(merged[0][0].letter).toBe('Z'); // still theme-locked, still preserved
+    expect(merged[1][1].letter).toBe('F'); // non-locked cells DO get the server fill
+  });
+});
