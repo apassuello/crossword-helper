@@ -33,13 +33,6 @@ describe('ToolRail (mounted, controlled)', () => {
     });
   });
 
-  it('clicking a tool calls onSelectTool with its id', () => {
-    const props = baseProps();
-    const { getByText } = render(<ToolRail {...props} />);
-    fireEvent.click(getByText('Autofill'));
-    expect(props.onSelectTool).toHaveBeenCalledWith('autofill');
-  });
-
   TOOL_IDS.forEach((id, i) => {
     it(`clicking ${TOOL_LABELS[i]} calls onSelectTool('${id}')`, () => {
       const props = baseProps();
@@ -88,5 +81,30 @@ describe('ToolRail (mounted, controlled)', () => {
     const { container } = render(<ToolRail {...props} />);
     const rows = Array.from(container.querySelectorAll('.xw-rail-stat')).map((el) => el.textContent);
     expect(rows).toEqual(['Total225', 'Black36·16%', 'Filled42%', 'Words78']);
+  });
+
+  // --- VIOLATIONS section (Task 8D, F2) ---
+
+  it('renders a .xw-rail-violation row per violation when violations are present', () => {
+    const props = baseProps({ violations: ['2-letter word at R3C4', 'Isolated region'] });
+    const { container, getByText } = render(<ToolRail {...props} />);
+    expect(getByText('2-letter word at R3C4')).toBeInTheDocument();
+    expect(getByText('Isolated region')).toBeInTheDocument();
+    expect(container.querySelectorAll('.xw-rail-violation')).toHaveLength(2);
+    // Label present, no "(unverified)" suffix when unverified is default (false).
+    expect(getByText('VIOLATIONS')).toBeInTheDocument();
+  });
+
+  it('renders no VIOLATIONS section when violations is empty', () => {
+    const props = baseProps({ violations: [] });
+    const { container, queryByText } = render(<ToolRail {...props} />);
+    expect(container.querySelector('.xw-rail-violation')).toBeNull();
+    expect(queryByText(/VIOLATIONS/)).toBeNull();
+  });
+
+  it('appends the "(unverified)" suffix to the VIOLATIONS label when unverified is true', () => {
+    const props = baseProps({ violations: ['2-letter word at R3C4'], unverified: true });
+    const { getByText } = render(<ToolRail {...props} />);
+    expect(getByText(/VIOLATIONS/)).toHaveTextContent('(unverified)');
   });
 });

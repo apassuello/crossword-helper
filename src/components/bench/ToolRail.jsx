@@ -83,7 +83,7 @@ const ICONS = {
   ),
 };
 
-export function ToolRail({ tool, onSelectTool, viewToggles, onToggleView, stats }) {
+export function ToolRail({ tool, onSelectTool, viewToggles, onToggleView, stats, violations = [], unverified = false }) {
   return (
     <nav className="xw-toolrail">
       <div className="xw-toolrail-top">
@@ -129,6 +129,21 @@ export function ToolRail({ tool, onSelectTool, viewToggles, onToggleView, stats 
         <div className="xw-rail-stat"><span>Black</span><span className="xw-rail-stat-val">{stats.black}<em>·</em>{stats.blackPct}%</span></div>
         <div className="xw-rail-stat"><span>Filled</span><span className="xw-rail-stat-val">{stats.fillPct}%</span></div>
         <div className="xw-rail-stat"><span>Words</span><span className="xw-rail-stat-val">{stats.words}</span></div>
+
+        {/* VIOLATIONS — advisory, live (plan Global Constraint 7): server-sourced
+            warnings/suggestions from useNumbering's /api/grid/validate pass. Shown
+            only when non-empty; `unverified` (optimistic paint awaiting reconcile)
+            tags the label so a stale/in-flight state reads as provisional. */}
+        {violations.length > 0 && (
+          <>
+            <div className="xw-rail-section-label" style={{ marginTop: 14 }}>
+              VIOLATIONS{unverified ? ' (unverified)' : ''}
+            </div>
+            {violations.map((v, i) => (
+              <div key={i} className="xw-rail-violation">{v}</div>
+            ))}
+          </>
+        )}
       </div>
     </nav>
   );

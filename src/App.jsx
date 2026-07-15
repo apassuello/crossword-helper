@@ -9,6 +9,7 @@ import { usePersistentState } from './hooks/usePersistentState';
 import { useSaveMachine } from './hooks/useSaveMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
+import { useNumbering } from './hooks/useNumbering';
 import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
@@ -39,12 +40,6 @@ function App() {
   const [gridSize, setGridSize] = useState(15);
   const [grid, setGrid] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [numbering, setNumbering] = useState({});
-  // Only the setter is wired: `validateGrid` writes here, but the reader was
-  // the deleted ToolPanel. Kept as scaffolding for Task 8 (F2 — numbering +
-  // violations), which restores a validation-display surface. Drop the unused
-  // value binding until then so it isn't a dead read.
-  const [, setValidationErrors] = useState([]);
   const [autofillProgress, setAutofillProgress] = useState(null);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [currentTaskId, setCurrentTaskId] = useState(null);
@@ -72,6 +67,14 @@ function App() {
 
   const health = useHealth();
   const { pushToast } = useToasts();
+
+  // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
+  // client-only word-start numbering pass and the validation stub: fires on
+  // STRUCTURAL edits only (size / black-square layout — never letter edits),
+  // renumbers server-wins after an optimistic local paint, and surfaces advisory
+  // `violations`. `unverified` is true while an optimistic pass awaits reconcile.
+  // Must precede `doc` below (which reads `numbering`).
+  const { numbering, violations, unverified } = useNumbering({ grid, gridSize, setGrid, pushToast });
 
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
   // (saved verbatim); `isDirty` is derived by comparing the current content
@@ -117,53 +120,11 @@ function App() {
       }))
     );
     setGrid(newGrid);
-    updateNumbering(newGrid);
+    // Numbering is now hook-driven (useNumbering): setting the grid changes the
+    // structural signature, which fires the optimistic renumber + server reconcile.
     // A fresh grid is a new document (F10) and is born clean.
     setGridId((n) => n + 1);
     setSavedSig(contentSigOf(size, newGrid));
-  };
-
-  const updateNumbering = useCallback((gridData) => {
-    // Calculate numbering based on grid state
-    const numbers = {};
-    let currentNumber = 1;
-
-    for (let row = 0; row < gridData.length; row++) {
-      for (let col = 0; col < gridData[row].length; col++) {
-        const cell = gridData[row][col];
-        if (cell.isBlack) continue;
-
-        const needsNumber =
-          (isStartOfAcrossWord(gridData, row, col) ||
-           isStartOfDownWord(gridData, row, col));
-
-        if (needsNumber) {
-          numbers[`${row},${col}`] = currentNumber;
-          gridData[row][col].number = currentNumber;
-          currentNumber++;
-        } else {
-          gridData[row][col].number = null;
-        }
-      }
-    }
-
-    setNumbering(numbers);
-  }, []);
-
-  const isStartOfAcrossWord = (gridData, row, col) => {
-    if (col === 0 || gridData[row][col - 1].isBlack) {
-      // Check if there's at least one more non-black cell to the right
-      return col < gridData[row].length - 1 && !gridData[row][col + 1].isBlack;
-    }
-    return false;
-  };
-
-  const isStartOfDownWord = (gridData, row, col) => {
-    if (row === 0 || gridData[row - 1][col].isBlack) {
-      // Check if there's at least one more non-black cell below
-      return row < gridData.length - 1 && !gridData[row + 1][col].isBlack;
-    }
-    return false;
   };
 
   const toggleBlackSquare = useCallback((row, col) => {
@@ -183,8 +144,8 @@ function App() {
     }
 
     setGrid(newGrid);
-    updateNumbering(newGrid);
-    validateGrid(newGrid);
+    // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
+    // black-square layout change. No manual renumber/validate here.
   }, [grid, gridSize, symmetryEnabled]);
 
   const toggleThemeLock = useCallback((row, col) => {
@@ -209,7 +170,7 @@ function App() {
     const newGrid = [...grid.map(row => [...row])];
     newGrid[row][col].letter = letter.toUpperCase();
     setGrid(newGrid);
-    validateGrid(newGrid);
+    // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
   }, [grid]);
 
   // Controlled-grid focus/direction handlers (CrosswordGrid, Task 5).
@@ -232,17 +193,6 @@ function App() {
     });
   }, []);
 
-  const validateGrid = useCallback((gridData) => {
-    const errors = [];
-
-    // Check for disconnected regions
-    // Check for words shorter than 3 letters
-    // Check for unchecked squares
-    // etc.
-
-    setValidationErrors(errors);
-  }, []);
-
   const handlePatternSelect = useCallback((word) => {
     // Fill word into grid at selected position
     if (!selectedCell || !grid) return;
@@ -263,7 +213,7 @@ function App() {
     }
 
     setGrid(newGrid);
-    validateGrid(newGrid);
+    // Letter fill — no renumber/validate (structural signature unchanged).
   }, [selectedCell, grid, gridSize]);
 
   const handleAutofill = useCallback(async (options = {}) => {
@@ -545,22 +495,25 @@ function App() {
   }, [grid, gridSize, pushToast]);
 
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
-    // Update grid with the applied theme word
+    // Update grid with the applied theme word. Renumbering (if the placement
+    // changed the structural layout) is handled by useNumbering.
     setGrid(updatedGrid);
-    updateNumbering(updatedGrid);
 
     pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
-  }, [updateNumbering, pushToast]);
+  }, [pushToast]);
 
   const handleGridImport = useCallback((importedData) => {
-    const { grid: importedGrid, size, numbering: importedNumbering, symmetryEnabled: importedSymmetry } = importedData;
+    const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different
     if (size !== gridSize) {
       setGridSize(size);
     }
 
-    // Update grid state
+    // Update grid state. Numbering + validation are now hook-driven: setting the
+    // imported grid changes the structural signature, so useNumbering renumbers
+    // (server-authoritative) and revalidates. The imported `numbering` field is
+    // intentionally no longer applied — the server is the source of truth.
     setGrid(importedGrid);
 
     // Update symmetry setting if provided
@@ -568,31 +521,13 @@ function App() {
       setSymmetryEnabled(importedSymmetry);
     }
 
-    // Update numbering (or recalculate if not provided)
-    if (importedNumbering && Object.keys(importedNumbering).length > 0) {
-      setNumbering(importedNumbering);
-      // Apply numbering to grid cells
-      Object.entries(importedNumbering).forEach(([coords, number]) => {
-        const [row, col] = coords.split(',').map(Number);
-        if (importedGrid[row] && importedGrid[row][col]) {
-          importedGrid[row][col].number = number;
-        }
-      });
-    } else {
-      // Recalculate numbering if not provided
-      updateNumbering(importedGrid);
-    }
-
-    // Validate the imported grid
-    validateGrid(importedGrid);
-
     // A freshly imported grid is a new document (F10) and is born clean.
     setGridId((n) => n + 1);
     setSavedSig(contentSigOf(size, importedGrid));
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, updateNumbering, validateGrid]);
+  }, [gridSize]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
@@ -656,6 +591,8 @@ function App() {
               : setHeatmapOn((v) => !v)
           }
           stats={railStats}
+          violations={violations}
+          unverified={unverified}
         />
 
         <main className="xw-canvas">
