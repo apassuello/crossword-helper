@@ -250,6 +250,44 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(arg.wordlists).toEqual(['comprehensive', 'custom/my_theme']);
   });
 
+  it('theme-list radio appears only once its custom wordlist is selected, and designating it forwards themeList through start()', async () => {
+    const machine = baseMachine();
+    const { findByText, getByText, getByLabelText, getByRole, queryByLabelText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
+    await findByText(/My Theme List/);
+
+    // Not selected yet -> no theme-designation radio.
+    expect(queryByLabelText('Priority theme list')).toBeNull();
+
+    fireEvent.click(getByLabelText(/My Theme List/));
+    expect(getByLabelText('Priority theme list')).toBeInTheDocument();
+
+    fireEvent.click(getByLabelText('Priority theme list'));
+    expect(getByText('Theme List Active: My Theme List')).toBeInTheDocument();
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    const arg = machine.start.mock.calls[0][0];
+    expect(arg.themeList).toBe('custom/my_theme');
+  });
+
+  it('deselecting the wordlist designated as the theme list clears themeList too', async () => {
+    const machine = baseMachine();
+    const { findByText, getByLabelText, getByRole } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
+    await findByText(/My Theme List/);
+
+    fireEvent.click(getByLabelText(/My Theme List/)); // select the custom wordlist
+    fireEvent.click(getByLabelText('Priority theme list')); // designate it as theme
+    fireEvent.click(getByLabelText(/My Theme List/)); // deselect it again
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    const arg = machine.start.mock.calls[0][0];
+    expect(arg.themeList).toBeNull();
+    expect(arg.wordlists).not.toContain('custom/my_theme');
+  });
+
   it('failed state is orange-banded (--warn), a DIFFERENT surface from the red toast; done/cancelled use --good with no band', async () => {
     const failedMachine = baseMachine({ state: 'failed', errorCard: { message: 'No solution found' } });
     const { getByText: getFailedText, container: failedContainer } = render(

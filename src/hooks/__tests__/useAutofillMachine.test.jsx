@@ -524,4 +524,22 @@ describe('useAutofillMachine', () => {
     expect(result.current.state).toBe('paused');
     expect(result.current.taskId).toBe('task-14');
   });
+
+  it('15. start() forwards themeList verbatim to api.startFill (owner-restored field, additive whitelist entry)', async () => {
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-15' });
+    const grid = gridFromRows(WHITE_4);
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    act(() => {
+      result.current.start({ wordlists: ['comprehensive', 'custom/my_theme'], themeList: 'custom/my_theme' });
+    });
+
+    expect(startFill).toHaveBeenCalledWith(
+      expect.objectContaining({ themeList: 'custom/my_theme' })
+    );
+
+    await flush();
+  });
 });

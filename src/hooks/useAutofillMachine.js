@@ -277,6 +277,10 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
           max_adaptations: options.maxAdaptations,
           partial_fill: options.partialFill,
           cleanup: options.cleanup,
+          // Owner-restored (F3 follow-up): the designated priority-theme
+          // custom wordlist. Field name is NOT snake_cased — the backend
+          // reads it verbatim as `themeList` (backend/api/routes.py:470).
+          themeList: options.themeList,
           resumeTaskId: options.resumeTaskId,
         })
         .then(

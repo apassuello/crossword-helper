@@ -17,12 +17,6 @@
 // Dropped vs. the old panel (see task-11B-brief.md "What to DROP"):
 //   - preferPersonalWords: removed entirely, not just hidden — the endpoint
 //     rejects it (B5 deferred), so the field doesn't exist in options state.
-//   - themeList (custom-wordlist-as-theme radio designation): also dropped.
-//     Not in the brief's port list, and useAutofillMachine's start() has a
-//     fixed whitelist of fields forwarded to api.startFill() that does NOT
-//     include it (only `themeEntries`, derived from grid theme-locked cells,
-//     is forwarded) — keeping a themeList control would render a dead UI
-//     element indistinguishable in kind from preferPersonalWords.
 //   - All pause/resume UI (state, handlers, resume-prompt banner, the
 //     mount-time localStorage read) and the black-square suggestion modal —
 //     pause lands in F11, black squares in Task 20. The "Suggest Black
@@ -34,6 +28,13 @@
 // per the 11A review finding: the hook doesn't default options itself, and
 // omitting minScore would let the backend's default (30) silently override
 // this panel's user-visible default (50, matching the old panel).
+//
+// themeList (owner decision, restored post-review): a per-custom-wordlist
+// radio designating one selected custom wordlist as the priority theme list.
+// It's a real backend field (`data["themeList"]`, backend/api/routes.py:470)
+// and useAutofillMachine's start() whitelist now forwards it verbatim —
+// ported behavior from the old panel: deselecting the designated wordlist
+// clears the designation too.
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client';
@@ -48,6 +49,7 @@ const DEFAULT_OPTIONS = {
   partialFill: false,
   cleanup: false,
   wordlists: ['comprehensive'],
+  themeList: null,
 };
 
 /** Count slots (across + down, length >= 2) that still have at least one empty cell. */
@@ -172,8 +174,14 @@ export function AutofillPanel({ machine, grid }) {
   const handleOptionChange = (key, value) => setOptions((prev) => ({ ...prev, [key]: value }));
 
   const toggleWordlist = (id, checked) => {
-    const lists = checked ? [...options.wordlists, id] : options.wordlists.filter((l) => l !== id);
-    handleOptionChange('wordlists', lists);
+    setOptions((prev) => {
+      const wordlists = checked ? [...prev.wordlists, id] : prev.wordlists.filter((l) => l !== id);
+      // Mirrors the old panel: deselecting the wordlist currently designated
+      // as the theme list clears the designation too, rather than leaving a
+      // themeList value that points at a wordlist no longer in the request.
+      const themeList = !checked && prev.themeList === id ? null : prev.themeList;
+      return { ...prev, wordlists, themeList };
+    });
   };
 
   const emptySlots = countEmptySlots(grid);
@@ -373,21 +381,41 @@ export function AutofillPanel({ machine, grid }) {
                 <div className="xw-af-checkgrid">
                   {availableWordlists.custom.map((wl) => {
                     const id = wl.key || wl.name;
+                    const selected = options.wordlists.includes(id);
                     return (
-                      <label className="xw-check" key={id}>
-                        <input
-                          type="checkbox"
-                          checked={options.wordlists.includes(id)}
-                          onChange={(e) => toggleWordlist(id, e.target.checked)}
-                        />
-                        <span>
-                          {wl.name}
-                          {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
-                        </span>
-                      </label>
+                      <div className="xw-ctrl-row" key={id}>
+                        <label className="xw-check">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(e) => toggleWordlist(id, e.target.checked)}
+                          />
+                          <span>
+                            {wl.name}
+                            {wl.word_count ? ` (${wl.word_count.toLocaleString()})` : ''}
+                          </span>
+                        </label>
+                        {selected && (
+                          <label className="xw-check">
+                            <input
+                              type="radio"
+                              name="themeList"
+                              checked={options.themeList === id}
+                              onChange={() => handleOptionChange('themeList', id)}
+                            />
+                            <span>Priority theme list</span>
+                          </label>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
+                {options.themeList && (
+                  <div className="xw-insp-mini">
+                    Theme List Active:{' '}
+                    {availableWordlists.custom.find((wl) => (wl.key || wl.name) === options.themeList)?.name}
+                  </div>
+                )}
               </>
             )}
           </>
