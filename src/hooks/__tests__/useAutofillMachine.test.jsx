@@ -451,4 +451,31 @@ describe('useAutofillMachine', () => {
     expect(merged[0][0].letter).toBe('Z'); // still theme-locked, still preserved
     expect(merged[1][1].letter).toBe('F'); // non-locked cells DO get the server fill
   });
+
+  // Bonus (not in the brief's numbered list, added per advisor review): the
+  // grid/gridSize ref-discipline claim itself — start() must read the LATEST
+  // grid via ref, never a grid closed over at an earlier render.
+  it('13. start() reads the latest grid via ref, not a stale closure from an earlier render', async () => {
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-13' });
+    const gridA = gridFromRows(WHITE_4);
+    const gridB = gridFromRows(['AAAA', '....', '....', '....']);
+
+    const { result, rerender } = renderHook(
+      (props) => useAutofillMachine(props),
+      { initialProps: { grid: gridA, gridSize: 4, onGridUpdate: vi.fn() } }
+    );
+
+    // Grid changes (e.g. a letter typed) AFTER mount, BEFORE start() fires.
+    rerender({ grid: gridB, gridSize: 4, onGridUpdate: vi.fn() });
+
+    act(() => {
+      result.current.start({});
+    });
+
+    expect(startFill).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: toCliStrings(gridB) })
+    );
+
+    await flush(); // drain the pending startFill resolution inside act()
+  });
 });
