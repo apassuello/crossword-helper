@@ -318,4 +318,51 @@ describe('useNumbering hook', () => {
     expect(setGrid).toHaveBeenCalledTimes(1);
     expect(setGrid.mock.calls[0][0]).toBe(optimisticGrid);
   });
+
+  it('8. per-edit token: a stale in-flight call from edit 1 is rejected once a slower edit 2 lands (before edit 2 fires)', async () => {
+    const setGrid = vi.fn();
+    const pushToast = vi.fn();
+    const d1 = d();
+    const numberGrid = vi
+      .spyOn(api, 'numberGrid')
+      .mockReturnValueOnce(d1.p)
+      .mockResolvedValue({ numbering: {} });
+    vi.spyOn(api, 'validateGrid').mockResolvedValue({ warnings: [], suggestions: [] });
+
+    const g1 = gridFromRows(WHITE_5);
+    const g2 = gridFromRows(['#....', '.....', '.....', '.....', '.....']);
+    const { result, rerender } = renderHook((props) => useNumbering(props), {
+      initialProps: { grid: null, gridSize: 5, setGrid, pushToast },
+    });
+
+    // Edit 1 → advance past the debounce so call 1 actually fires (in-flight on d1.p).
+    rerender({ grid: g1, gridSize: 5, setGrid, pushToast });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    expect(numberGrid).toHaveBeenCalledTimes(1);
+
+    // Edit 2 lands AFTER timer 1 already fired (its cleanup no-ops). Only the
+    // optimistic paint runs — do NOT advance to timer 2 yet.
+    rerender({ grid: g2, gridSize: 5, setGrid, pushToast });
+    expect(numberGrid).toHaveBeenCalledTimes(1); // timer 2 not fired → still one call
+    expect(result.current.unverified).toBe(true); // edit 2's optimistic paint set it
+
+    // The STALE call-1 response resolves before timer 2 fires. Its numbering
+    // targets (4,4) — a cell edit 2's optimistic pass never numbers (not a start).
+    await act(async () => {
+      d1.r({ numbering: { '(4,4)': 99 } });
+      await Promise.resolve();
+    });
+
+    // Because the token is bumped PER EDIT (in the effect body), call 1's token
+    // (1) no longer equals the current token (2) → the stale response is discarded:
+    //   - unverified must NOT be falsely cleared,
+    //   - the grid/numbering must NOT carry call 1's stale numbers.
+    // Against the pre-fix code (token bumped inside the timeout) edit 2 would not
+    // have advanced the token, call 1's guard would pass, and all three fail.
+    expect(result.current.unverified).toBe(true);
+    expect(result.current.numbering['4,4']).toBeUndefined();
+    expect(setGrid.mock.calls.at(-1)[0][4][4].number).toBeNull();
+  });
 });

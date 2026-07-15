@@ -149,14 +149,21 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast }) {
     // Null sig = empty/initial grid: nothing to number, do not fire.
     if (sig === null) return undefined;
 
+    // Bump the token PER EDIT (not at fire time): a later structural edit must
+    // invalidate an already-in-flight prior call even when that prior timer has
+    // ALREADY fired (its cleanup no-ops). Bumping inside the setTimeout would
+    // leave tokenRef stale until timer2 fires, letting call1 wrongly reconcile
+    // onto grid2 and falsely clear `unverified`. Newest edit always wins.
+    const token = ++tokenRef.current;
+
     // 1. Optimistic paint — synchronous, before the debounce or any request.
     setGrid(localNumber(gridRef.current).grid);
     setUnverified(true);
 
     // 2. Debounced server reconcile + validation. The cleanup-clear coalesces
-    //    rapid structural edits into a single fire.
+    //    rapid structural edits into a single fire; the captured `token` guards
+    //    each async branch against a superseding edit.
     const handle = setTimeout(() => {
-      const token = ++tokenRef.current;
       const cliGrid = toCliStrings(gridRef.current);
 
       // Numbering — server wins; tracks `unverified`.
