@@ -60,6 +60,11 @@ function initialSnapshot() {
  * theme-locked cell. Identical logic to today's inline mapping in
  * App.jsx:253-269 — ported verbatim (including the non-uppercased letter
  * passthrough), not redesigned.
+ *
+ * TODO: `gridCodec.js` is nominally the only CLI-string <-> canonical-grid
+ * decoder in the app; this function duplicates a slice of that decoding
+ * inline instead of calling into it. Left as-is per the brief (port, don't
+ * redesign) — noting it here for whoever eventually consolidates.
  */
 function mergeGridPreserveThemeLocked(prevGrid, cliGrid) {
   return prevGrid.map((row, r) =>
@@ -211,12 +216,44 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
     transition({ state: 'failed', errorCard: { message: 'Connection error' }, taskId: null });
   }, [transition, closeStream]);
 
+  /**
+   * Enter `running` on `taskId` and open its progress stream. Factored out
+   * of `start()` because Task 16's two-step resume re-enters `running` on a
+   * DIFFERENT taskId via this identical logic — inlining it in `start()`
+   * would force that task to duplicate this or refactor it out later.
+   *
+   * Structural invariant: ALWAYS close any existing stream FIRST, before
+   * opening the new one. This can't be left to callers to remember — the
+   * state-guard in `handleEvent`/`handleStreamError` only checks
+   * `stateRef.current === 'running'`, not stream identity, so if two live
+   * streams ever existed simultaneously, a stale one's events would still
+   * pass the guard and get misapplied to the new task. Closing here, inside
+   * the single entry point to `running`, makes "at most one live stream"
+   * hold structurally rather than merely by caller convention.
+   */
+  const enterRunning = useCallback(
+    (taskId) => {
+      closeStream();
+      transition({ state: 'running', taskId, errorCard: null });
+      const stream = api.openProgress(taskId, {
+        onEvent: handleEvent,
+        onError: handleStreamError,
+      });
+      streamRef.current = stream;
+    },
+    [closeStream, transition, handleEvent, handleStreamError]
+  );
+
   const start = useCallback(
     (options = {}) => {
-      // Defensive re-entrancy guard (not in the brief's numbered test list —
-      // flagged in the report): a second start() while already in-flight is
-      // a no-op rather than racing two api.startFill calls.
-      if (stateRef.current === 'submitting' || stateRef.current === 'running') return;
+      // Re-entrancy guard, gated to `idle` only — the brief's transition
+      // table is exhaustive and lists `idle --start()--> submitting` as the
+      // only start edge. Notably this also blocks start() from `paused`:
+      // allowing it there would null out taskId and silently orphan the
+      // paused backend state file, destroying the handle Task 16's resume()
+      // needs. Callers reach `idle` from any terminal/paused state via
+      // reset() first.
+      if (stateRef.current !== 'idle') return;
 
       closeStream();
       transition({
@@ -242,22 +279,18 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
           cleanup: options.cleanup,
           resumeTaskId: options.resumeTaskId,
         })
-        .then((res) => {
-          if (!mountedRef.current) return;
-          const taskId = res.task_id;
-          transition({ state: 'running', taskId, errorCard: null });
-          const stream = api.openProgress(taskId, {
-            onEvent: handleEvent,
-            onError: handleStreamError,
-          });
-          streamRef.current = stream;
-        })
-        .catch((error) => {
-          if (!mountedRef.current) return;
-          transition({ state: 'failed', errorCard: { message: error.message } });
-        });
+        .then(
+          (res) => {
+            if (!mountedRef.current) return;
+            enterRunning(res.task_id);
+          },
+          (error) => {
+            if (!mountedRef.current) return;
+            transition({ state: 'failed', errorCard: { message: error.message } });
+          }
+        );
     },
-    [closeStream, transition, handleEvent, handleStreamError]
+    [closeStream, transition, enterRunning]
   );
 
   const cancel = useCallback(() => {

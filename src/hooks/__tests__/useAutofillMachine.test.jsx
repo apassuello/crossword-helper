@@ -478,4 +478,50 @@ describe('useAutofillMachine', () => {
 
     await flush(); // drain the pending startFill resolution inside act()
   });
+
+  it('14. start() while submitting/running/paused is a no-op (re-entrancy guard, F3 fix)', async () => {
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-14' });
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate: vi.fn() })
+    );
+
+    // -- submitting: a second start() before the first resolves is a no-op.
+    act(() => {
+      result.current.start({});
+    });
+    expect(result.current.state).toBe('submitting');
+
+    act(() => {
+      result.current.start({});
+    });
+    expect(startFill).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('submitting');
+
+    await flush();
+    expect(result.current.state).toBe('running');
+    expect(result.current.taskId).toBe('task-14');
+
+    // -- running: start() is a no-op, does not touch state/taskId.
+    act(() => {
+      result.current.start({});
+    });
+    expect(startFill).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('running');
+    expect(result.current.taskId).toBe('task-14');
+
+    // -- paused: start() is a no-op too (guard is now idle-only, not just
+    // submitting/running) — allowing it here would null the taskId and
+    // orphan the paused backend state file.
+    act(() => {
+      global.EventSource.sendMessage({ status: 'paused', progress: 10 });
+    });
+    expect(result.current.state).toBe('paused');
+
+    act(() => {
+      result.current.start({});
+    });
+    expect(startFill).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('paused');
+    expect(result.current.taskId).toBe('task-14');
+  });
 });
