@@ -1,19 +1,26 @@
 /**
- * useNumbering — pure numbering helpers (Task 8B).
+ * useNumbering — server-authoritative numbering + validation (Task 8B pure
+ * helpers + Task 8C hook).
  *
- * These are the PURE building blocks for server-authoritative numbering
- * (plan Task 8/F2): `localNumber` is the optimistic client-side pass fired
- * immediately on a structural edit for instant paint, before the server's
- * `/api/number` response (always wins on reconcile — see gridCodec.applyNumbering)
- * lands. Task 8C wraps these in an actual React hook that detects structural
- * changes via `structuralSigOf` and drives the optimistic → server-reconcile flow.
+ * The PURE building blocks (Task 8B): `localNumber` is the optimistic
+ * client-side pass fired immediately on a structural edit for instant paint,
+ * before the server's `/api/number` response (always wins on reconcile — see
+ * gridCodec.applyNumbering) lands. `numberingMapFromGrid` derives the exposed
+ * `"row,col"` map; `structuralSigOf` is the change detector.
  *
- * All functions here are pure/immutable (no input mutation), mirroring
+ * The HOOK (Task 8C): `useNumbering` wraps those helpers, detecting structural
+ * changes via `structuralSigOf` and driving the optimistic → server-reconcile
+ * flow under a shared request token with a 150ms debounce.
+ *
+ * The pure functions here are immutable (no input mutation), mirroring
  * gridCodec.applyNumbering's contract.
  *
  * Cell shape (frontend canonical): { letter, isBlack, number, isError, isThemeLocked, ... }
  */
 
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api/client';
+import { toCliStrings, applyNumbering } from '../api/gridCodec';
 import { allSlots } from './useGridGeometry';
 
 /**
@@ -92,3 +99,102 @@ export function structuralSigOf(size, grid) {
     cells: grid.map((row) => row.map((c) => c.isBlack)),
   });
 }
+
+const DEBOUNCE_MS = 150;
+
+/**
+ * useNumbering — the Task 8C hook. Server-authoritative numbering + validation,
+ * layered on the pure helpers above (plan Task 8/F2, DD1–DD3 + concurrency
+ * contract).
+ *
+ * On every STRUCTURAL grid edit (size or isBlack layout change — never a letter
+ * edit; see structuralSigOf / plan Global Constraint 3):
+ *   1. Optimistic paint — `localNumber(grid)` → `setGrid` SYNCHRONOUSLY +
+ *      `unverified=true`, for instant display before any round-trip (DD2).
+ *   2. After a 150ms debounce, fire `/api/number` and `/api/grid/validate`
+ *      together under ONE shared request token (`++tokenRef.current`). Rapid
+ *      edits within the window coalesce to a single call pair.
+ *   3. Each async branch first guards `if (token !== tokenRef.current) return;`
+ *      so an out-of-order/stale resolution can neither reconcile nor toast.
+ *
+ * `gridRef.current` is refreshed every render and read at resolution time, so a
+ * letter typed mid-flight survives the reconcile (applyNumbering rewrites only
+ * `.number`, plan Global Constraint 2 — server wins on numbers). The paren-key
+ * `applyNumbering` stays internal; `numbering` is exposed as the unparenthesized
+ * `"row,col"` map via `numberingMapFromGrid` (DD3).
+ *
+ * `unverified` tracks the numbering call ONLY (independent `.then`s, never
+ * Promise.all): a numbering rejection keeps the optimistic numbers, flips
+ * `unverified` true and toasts; a validation resolution surfaces
+ * `violations = [...warnings, ...suggestions]`.
+ *
+ * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][]) => void, pushToast: (t: {kind: string, message: string}) => void}} params
+ * @returns {{numbering: Record<string, number>, violations: string[], unverified: boolean}}
+ */
+export function useNumbering({ grid, gridSize, setGrid, pushToast }) {
+  const [numbering, setNumbering] = useState({});
+  const [violations, setViolations] = useState([]);
+  const [unverified, setUnverified] = useState(false);
+
+  // Latest grid, read at resolution time so a mid-flight letter edit survives.
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+
+  // Monotonic request token — the newest structural edit always wins.
+  const tokenRef = useRef(0);
+
+  const sig = useMemo(() => structuralSigOf(gridSize, grid), [gridSize, grid]);
+
+  useEffect(() => {
+    // Null sig = empty/initial grid: nothing to number, do not fire.
+    if (sig === null) return undefined;
+
+    // 1. Optimistic paint — synchronous, before the debounce or any request.
+    setGrid(localNumber(gridRef.current).grid);
+    setUnverified(true);
+
+    // 2. Debounced server reconcile + validation. The cleanup-clear coalesces
+    //    rapid structural edits into a single fire.
+    const handle = setTimeout(() => {
+      const token = ++tokenRef.current;
+      const cliGrid = toCliStrings(gridRef.current);
+
+      // Numbering — server wins; tracks `unverified`.
+      api.numberGrid({ size: gridSize, grid: cliGrid }).then(
+        (resp) => {
+          if (token !== tokenRef.current) return;
+          const reconciled = applyNumbering(gridRef.current, resp.numbering || {});
+          setGrid(reconciled);
+          setNumbering(numberingMapFromGrid(reconciled));
+          setUnverified(false);
+        },
+        () => {
+          if (token !== tokenRef.current) return;
+          setUnverified(true); // keep the optimistic numbers on-screen
+          pushToast({ kind: 'error', message: 'Renumbering failed — showing local numbers.' });
+        }
+      );
+
+      // Validation — independent; surfaces advisory violations.
+      api.validateGrid({ grid: cliGrid, gridSize }).then(
+        (resp) => {
+          if (token !== tokenRef.current) return;
+          setViolations([...(resp.warnings || []), ...(resp.suggestions || [])]);
+        },
+        () => {
+          if (token !== tokenRef.current) return;
+          pushToast({ kind: 'error', message: 'Grid validation failed.' });
+        }
+      );
+    }, DEBOUNCE_MS);
+
+    return () => clearTimeout(handle);
+    // Fires ONLY on structural-signature change; grid/gridSize/setGrid/pushToast
+    // are read via ref or are stable — see the concurrency contract above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig]);
+
+  return { numbering, violations, unverified };
+}
+
+export default useNumbering;
