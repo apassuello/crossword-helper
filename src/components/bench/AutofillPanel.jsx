@@ -231,13 +231,18 @@ export function AutofillPanel({ machine, grid }) {
       )}
 
       {isTerminal && (
-        <div className="xw-af-progress-panel">
+        <div className={`xw-af-progress-panel${state === 'failed' ? ' xw-af-failed' : ''}`}>
           <div className="xw-af-done-msg">
             {/* Tone tracks errorCard presence (brief: "color/tone via errorCard
-                presence") — failed reads red, done/cancelled read the neutral
-                "good" token. Inline style, not a new class: matches the design
-                bundle's own approach for the equivalent done-state accent. */}
-            <strong style={{ color: state === 'failed' ? 'var(--danger)' : 'var(--good)' }}>
+                presence"). Per spec 08's four error surfaces, the autofill
+                error card is a DIFFERENT surface from the red toast
+                (.xw-toast-error, --danger) — failed reads the orange --warn
+                token, banded via .xw-af-failed (mirrors .xw-toast-error's
+                left-border pattern). done/cancelled read the neutral "good"
+                token. Inline style, not a new class, for the text color:
+                matches the design bundle's own approach for the equivalent
+                done-state accent. */}
+            <strong style={{ color: state === 'failed' ? 'var(--warn)' : 'var(--good)' }}>
               {state === 'failed' ? machine.errorCard && machine.errorCard.message : machine.message}
             </strong>
           </div>

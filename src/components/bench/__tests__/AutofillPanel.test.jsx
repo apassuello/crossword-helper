@@ -250,16 +250,24 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(arg.wordlists).toEqual(['comprehensive', 'custom/my_theme']);
   });
 
-  it('failed message tone is danger-colored, done/cancelled tone is not (errorCard presence drives tone)', async () => {
+  it('failed state is orange-banded (--warn), a DIFFERENT surface from the red toast; done/cancelled use --good with no band', async () => {
     const failedMachine = baseMachine({ state: 'failed', errorCard: { message: 'No solution found' } });
-    const { getByText: getFailedText } = render(<AutofillPanel machine={failedMachine} grid={themedGrid()} />);
+    const { getByText: getFailedText, container: failedContainer } = render(
+      <AutofillPanel machine={failedMachine} grid={themedGrid()} />
+    );
     await flush();
-    expect(getFailedText('No solution found')).toHaveStyle({ color: 'var(--danger)' });
+    expect(getFailedText('No solution found')).toHaveStyle({ color: 'var(--warn)' });
+    const failedPanel = failedContainer.querySelector('.xw-af-progress-panel');
+    expect(failedPanel).toHaveClass('xw-af-failed');
 
     const doneMachine = baseMachine({ state: 'done', message: 'Successfully filled 16/16 slots!' });
-    const { getByText: getDoneText } = render(<AutofillPanel machine={doneMachine} grid={themedGrid()} />);
+    const { getByText: getDoneText, container: doneContainer } = render(
+      <AutofillPanel machine={doneMachine} grid={themedGrid()} />
+    );
     await flush();
     expect(getDoneText('Successfully filled 16/16 slots!')).toHaveStyle({ color: 'var(--good)' });
+    const donePanel = doneContainer.querySelector('.xw-af-progress-panel');
+    expect(donePanel).not.toHaveClass('xw-af-failed');
   });
 
   it('does not import ProgressIndicator or BlackSquareSuggestions (grep-level check)', () => {
