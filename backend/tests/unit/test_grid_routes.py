@@ -28,3 +28,16 @@ class TestValidateGridStructuralChecks:
         grid = [["." for _ in range(11)] for _ in range(11)]
         resp = client.post("/api/grid/validate", json={"grid": grid, "grid_size": 11})
         assert resp.status_code == 200 and resp.get_json()["valid"] is True
+
+    def test_validate_degrades_gracefully_on_non_cli_string_cells(self, client):
+        """DD1 guard: dict-shaped cells (webapp format) throw AttributeError inside
+        Grid.from_dict (cell.isalpha() has no meaning for a dict) — the local
+        try/except Exception around the structural block must catch this and
+        degrade to an empty structural result, never reaching the (broken)
+        handle_error(...default_status=) fallback, and always keep HTTP 200."""
+        grid = [[{"isBlack": False, "letter": ""} for _ in range(11)] for _ in range(11)]
+        resp = client.post("/api/grid/validate", json={"grid": grid, "grid_size": 11})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["valid"] is True
+        assert data["warnings"] == []
