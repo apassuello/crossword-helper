@@ -180,6 +180,55 @@ class Grid:
 
         return True
 
+    def enumerate_white_runs(self) -> List[Tuple[List[Tuple[int, int]], int, str]]:
+        """
+        Enumerate all maximal runs of contiguous white squares, across and down,
+        with NO minimum-length filter (unlike get_word_slots, which filters
+        length >= 3). Shared run-walk so callers describe the same grid
+        consistently instead of hand-rolling a second walker.
+
+        Returns:
+            List of (cells, length, direction) tuples where:
+            - cells: list of (row, col) positions in the run, in reading order
+            - length: number of cells in the run
+            - direction: 'across' or 'down'
+        """
+        runs = []
+
+        # Find across runs
+        for row in range(self.size):
+            col = 0
+            while col < self.size:
+                if not self.is_black(row, col):
+                    # Found start of potential run
+                    cells = []
+
+                    while col < self.size and not self.is_black(row, col):
+                        cells.append((row, col))
+                        col += 1
+
+                    runs.append((cells, len(cells), "across"))
+                else:
+                    col += 1
+
+        # Find down runs
+        for col in range(self.size):
+            row = 0
+            while row < self.size:
+                if not self.is_black(row, col):
+                    # Found start of potential run
+                    cells = []
+
+                    while row < self.size and not self.is_black(row, col):
+                        cells.append((row, col))
+                        row += 1
+
+                    runs.append((cells, len(cells), "down"))
+                else:
+                    row += 1
+
+        return runs
+
     def get_word_slots(self) -> List[Dict]:
         """
         Get all across and down word slots.
@@ -194,63 +243,23 @@ class Grid:
         """
         slots = []
 
-        # Find across words
-        for row in range(self.size):
-            col = 0
-            while col < self.size:
-                if not self.is_black(row, col):
-                    # Found start of potential word
-                    start_col = col
-                    length = 0
-                    pattern = []
+        for cells, length, direction in self.enumerate_white_runs():
+            # Only add if length >= 3
+            if length < 3:
+                continue
 
-                    while col < self.size and not self.is_black(row, col):
-                        pattern.append(self.get_cell(row, col))
-                        length += 1
-                        col += 1
+            start_row, start_col = cells[0]
+            pattern = "".join(self.get_cell(r, c) for (r, c) in cells)
 
-                    # Only add if length >= 3
-                    if length >= 3:
-                        slots.append(
-                            {
-                                "direction": "across",
-                                "row": row,
-                                "col": start_col,
-                                "length": length,
-                                "pattern": "".join(pattern),
-                            }
-                        )
-                else:
-                    col += 1
-
-        # Find down words
-        for col in range(self.size):
-            row = 0
-            while row < self.size:
-                if not self.is_black(row, col):
-                    # Found start of potential word
-                    start_row = row
-                    length = 0
-                    pattern = []
-
-                    while row < self.size and not self.is_black(row, col):
-                        pattern.append(self.get_cell(row, col))
-                        length += 1
-                        row += 1
-
-                    # Only add if length >= 3
-                    if length >= 3:
-                        slots.append(
-                            {
-                                "direction": "down",
-                                "row": start_row,
-                                "col": col,
-                                "length": length,
-                                "pattern": "".join(pattern),
-                            }
-                        )
-                else:
-                    row += 1
+            slots.append(
+                {
+                    "direction": direction,
+                    "row": start_row,
+                    "col": start_col,
+                    "length": length,
+                    "pattern": pattern,
+                }
+            )
 
         return slots
 

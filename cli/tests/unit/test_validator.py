@@ -279,3 +279,111 @@ class TestGridStats:
         stats = GridValidator.get_grid_stats(grid)
 
         assert stats["meets_nyt_standards"] is False
+
+
+class TestValidateStructural:
+    """Test validate_structural: connectivity + independent short-word scan (D1:C)."""
+
+    def test_isolated_region_reported(self):
+        grid = Grid(11)
+        for col in range(11):
+            grid.set_black_square(5, col, enforce_symmetry=False)
+        ok, errors = GridValidator.validate_structural(grid)
+        assert ok is False and any("isolated" in e.lower() for e in errors)
+
+    def test_clean_grid_passes(self):
+        ok, errors = GridValidator.validate_structural(Grid(11))
+        assert ok is True and errors == []
+
+    def test_short_word_reported(self):  # now REAL (not xfail) — _scan_short_words bypasses the filter
+        grid = Grid(11)
+        grid.set_black_square(0, 2, enforce_symmetry=False)
+        grid.set_black_square(0, 3, enforce_symmetry=False)  # 2-letter across run at (0,0)-(0,1)
+        ok, errors = GridValidator.validate_structural(grid)
+        assert ok is False and any("2" in e and "across" in e.lower() for e in errors)
+
+
+class TestGetWordSlotsUnchangedByRunEnumeratorRefactor:
+    """Regression: get_word_slots() must be byte-identical after being refactored to
+    filter(length>=3) over the new shared Grid.enumerate_white_runs() (DD2)."""
+
+    @staticmethod
+    def _expected_slots(grid: Grid) -> list:
+        """Pre-refactor algorithm, reimplemented verbatim as an oracle."""
+        slots = []
+
+        for row in range(grid.size):
+            col = 0
+            while col < grid.size:
+                if not grid.is_black(row, col):
+                    start_col = col
+                    length = 0
+                    pattern = []
+                    while col < grid.size and not grid.is_black(row, col):
+                        pattern.append(grid.get_cell(row, col))
+                        length += 1
+                        col += 1
+                    if length >= 3:
+                        slots.append(
+                            {
+                                "direction": "across",
+                                "row": row,
+                                "col": start_col,
+                                "length": length,
+                                "pattern": "".join(pattern),
+                            }
+                        )
+                else:
+                    col += 1
+
+        for col in range(grid.size):
+            row = 0
+            while row < grid.size:
+                if not grid.is_black(row, col):
+                    start_row = row
+                    length = 0
+                    pattern = []
+                    while row < grid.size and not grid.is_black(row, col):
+                        pattern.append(grid.get_cell(row, col))
+                        length += 1
+                        row += 1
+                    if length >= 3:
+                        slots.append(
+                            {
+                                "direction": "down",
+                                "row": start_row,
+                                "col": col,
+                                "length": length,
+                                "pattern": "".join(pattern),
+                            }
+                        )
+                else:
+                    row += 1
+
+        return slots
+
+    def test_empty_grid(self):
+        grid = Grid(11)
+        assert grid.get_word_slots() == self._expected_slots(grid)
+
+    def test_grid_with_black_squares(self):
+        grid = Grid(15)
+        grid.set_black_square(0, 3)
+        grid.set_black_square(0, 11)
+        grid.set_black_square(3, 0)
+        grid.set_black_square(3, 7)
+        assert grid.get_word_slots() == self._expected_slots(grid)
+
+    def test_grid_with_short_and_isolated_runs(self):
+        grid = Grid(11)
+        grid.set_black_square(0, 2, enforce_symmetry=False)
+        grid.set_black_square(0, 3, enforce_symmetry=False)
+        grid.set_black_square(1, 0, enforce_symmetry=False)
+        grid.set_black_square(0, 1, enforce_symmetry=False)
+        assert grid.get_word_slots() == self._expected_slots(grid)
+
+    def test_disconnected_wall_grid(self):
+        grid = Grid(11)
+        for col in range(11):
+            grid.set_black_square(5, col, enforce_symmetry=False)
+        assert grid.get_word_slots() == self._expected_slots(grid)

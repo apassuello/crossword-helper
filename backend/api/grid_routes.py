@@ -217,6 +217,22 @@ def validate_grid():
         # Validate grid structure
         validation = validate_grid_for_black_squares(grid, grid_size)
 
+        # Structural checks (connectivity + short-word scan, D1:C) — requires CLI-string
+        # cells (Grid.from_dict calls cell.isalpha()). Guard the ENTIRE block in a broad
+        # except: this local catch is what keeps malformed/non-CLI-string input off the
+        # (buggy) handle_error(...default_status=) fallback below — degrade to an empty
+        # structural result rather than reaching it. Always preserves HTTP 200.
+        structural_valid = True
+        structural_errors = []
+        try:
+            from cli.src.core.grid import Grid
+            from cli.src.core.validator import GridValidator
+
+            structural_grid = Grid.from_dict({"grid": grid, "size": grid_size}, strict_size=False)
+            structural_valid, structural_errors = GridValidator.validate_structural(structural_grid)
+        except Exception as exc:
+            logger.warning(f"Structural validation skipped (grid not CLI-string format?): {exc}")
+
         # Count words
         suggester = BlackSquareSuggester(grid_size)
         word_count = suggester._count_words(grid)
@@ -245,12 +261,12 @@ def validate_grid():
         return (
             jsonify(
                 {
-                    "valid": validation["valid"],
+                    "valid": validation["valid"] and structural_valid,
                     "word_count": word_count,
                     "black_square_count": black_count,
                     "black_square_percentage": round(black_percentage, 1),
                     "word_count_range": [min_words, max_words],
-                    "warnings": validation.get("warnings", []),
+                    "warnings": validation.get("warnings", []) + structural_errors,
                     "suggestions": suggestions,
                 }
             ),
