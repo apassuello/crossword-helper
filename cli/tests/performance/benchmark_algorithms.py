@@ -233,7 +233,7 @@ def main():
         ("core/crosswordese.txt", None, "Medium wordlist (crosswordese)"),
         ("comprehensive.txt", 10000, "Large wordlist (10k words)"),
         ("comprehensive.txt", 50000, "Very large wordlist (50k words)"),
-        ("comprehensive.txt", None, "Huge wordlist (full comprehensive ~454k words)"),
+        ("comprehensive.txt", None, "Full comprehensive wordlist"),
     ]
 
     for wordlist_file, max_words, description in test_configs:

@@ -1,6 +1,11 @@
+---
+name: crossword-domain
+description: Use when working on grid validity, numbering, symmetry, word-length limits, or entry conventions in this repo - the NYT-standard crossword construction rules the CLI validator and autofill enforce.
+---
+
 # Crossword Domain Knowledge
 
-Progressive disclosure skill for crossword construction rules and conventions.
+Crossword construction rules and conventions enforced by this codebase.
 
 ## Grid Standards (NYT)
 
