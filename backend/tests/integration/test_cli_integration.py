@@ -594,17 +594,29 @@ class TestResumeCLIInvocationReal:
         )
 
         try:
-            # Give the fill time to load the wordlist and start iterating,
-            # then request pause via the real CLI pause command
-            time.sleep(3.0)
-            pause_result = subprocess.run(
-                [str(cli_path), "pause", task_id, "--json-output"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                cwd=cli_path.parent,
+            # Request pause via the real CLI pause command. Poll rather than
+            # blind-sleep: on slow machines (CI) the fill may still be loading
+            # the wordlist, and pause correctly refuses until the task has
+            # registered its running-marker.
+            deadline = time.time() + 45
+            pause_result = None
+            while time.time() < deadline:
+                if process.poll() is not None:
+                    out, err = process.communicate()
+                    raise AssertionError(f"fill exited before pause (rc={process.returncode}): {err[-500:]}")
+                pause_result = subprocess.run(
+                    [str(cli_path), "pause", task_id, "--json-output"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=cli_path.parent,
+                )
+                if pause_result.returncode == 0:
+                    break
+                time.sleep(1.0)
+            assert pause_result is not None and pause_result.returncode == 0, (
+                pause_result.stdout + pause_result.stderr
             )
-            assert pause_result.returncode == 0, pause_result.stdout + pause_result.stderr
 
             stdout, stderr = process.communicate(timeout=60)
             assert process.returncode == 0, stderr[-500:]

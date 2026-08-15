@@ -612,6 +612,25 @@ def fill(
 
     grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
 
+    # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
+    # Any stale pause flag for this task id is cleared before starting, and a
+    # running-marker (pid file) is written so `pause` can verify the task.
+    # Registered BEFORE wordlist loading: loading 44k words can take seconds
+    # on slow machines, and a pause request during that window must already
+    # find the task registered.
+    pause_controller = None
+    if task_id:
+        from .fill.pause_controller import PauseController
+
+        pause_controller = PauseController(task_id=task_id)
+        pause_controller.clear_pause()  # A stale flag must not insta-pause us
+        pause_controller.mark_running()
+
+        if algorithm == "repair":
+            warnings.append(f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run")
+        elif algorithm == "hybrid":
+            warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
+
     # Load word lists
     if not json_output:
         click.echo("Loading word lists...")
@@ -760,22 +779,6 @@ def fill(
                             all_valid_words.add(word)
             except Exception:
                 pass  # Skip unreadable files
-
-    # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
-    # Any stale pause flag for this task id is cleared before starting, and a
-    # running-marker (pid file) is written so `pause` can verify the task.
-    pause_controller = None
-    if task_id:
-        from .fill.pause_controller import PauseController
-
-        pause_controller = PauseController(task_id=task_id)
-        pause_controller.clear_pause()  # A stale flag must not insta-pause us
-        pause_controller.mark_running()
-
-        if algorithm == "repair":
-            warnings.append(f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run")
-        elif algorithm == "hybrid":
-            warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
 
     # Create appropriate autofill instance based on algorithm
     if algorithm == "beam":
