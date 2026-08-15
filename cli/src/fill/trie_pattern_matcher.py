@@ -1,8 +1,8 @@
 """
 Trie-based pattern matcher for crossword autofill.
 
-Drop-in replacement for PatternMatcher that uses WordTrie instead of regex
-for 10-50x faster pattern matching with large word lists.
+Drop-in replacement for PatternMatcher that uses WordTrie instead of regex,
+trading a one-off build cost for pattern lookups that do not scan the word list.
 
 API-compatible with pattern_matcher.PatternMatcher for easy switching.
 """
@@ -20,10 +20,14 @@ class TriePatternMatcher:
     Provides same API as PatternMatcher but uses WordTrie instead of regex
     for significantly faster performance on large word lists.
 
-    Performance comparison (454k word list):
-    - Regex (PatternMatcher): 200-500ms per query
-    - Trie (TriePatternMatcher): 10-50ms per query
-    - **Speedup: 10-50x**
+    Performance: trie lookup is O(pattern length) per query and does not scan the
+    word list, where the regex matcher is O(list size). The trie is therefore faster
+    on any non-trivial list, and the gap widens as the list grows.
+
+    No timing figures are quoted here on purpose: earlier versions of this docstring
+    cited measurements against a "454k word list" that this repo does not contain
+    (data/wordlists/comprehensive.txt is ~44k). To get real numbers for your list,
+    run cli/tests/performance/benchmark_algorithms.py.
 
     Supports wildcards:
     - '?' matches any single letter
@@ -45,10 +49,9 @@ class TriePatternMatcher:
         Args:
             word_list: WordList object containing scored words
 
-        Build Time: O(n * m) where n = num words, m = avg length
-        - 10k words: ~50ms
-        - 100k words: ~500ms
-        - 454k words: ~2-3 seconds
+        Build Time: O(n * m) where n = num words, m = avg length.
+        Build cost is paid once per process; run benchmark_algorithms.py to
+        measure it for a given list rather than relying on a quoted figure.
         """
         self.word_list = word_list
         self.trie = build_trie_from_wordlist(word_list)
