@@ -242,6 +242,31 @@ class TestWordSlots:
         assert not any(s["row"] == 0 and s["col"] == 0 and s["length"] == 2 for s in across_slots)
         assert not any(s["row"] == 0 and s["col"] == 3 and s["length"] == 1 for s in across_slots)
 
+    def test_min_length_parameter_exposes_short_slots(self):
+        """Test that get_word_slots(min_length=1) also returns 1-2 letter runs.
+
+        The validator relies on this to detect too-short words; the default
+        (min_length=3) must keep filtering them out for autofill consumers.
+        """
+        grid = Grid(11)
+        # Row 0: C A # T # . . . . . .
+        grid.set_letter(0, 0, "C")
+        grid.set_letter(0, 1, "A")
+        grid.set_black_square(0, 2, enforce_symmetry=False)
+        grid.set_letter(0, 3, "T")
+        grid.set_black_square(0, 4, enforce_symmetry=False)
+
+        all_slots = grid.get_word_slots(min_length=1)
+        across_slots = [s for s in all_slots if s["direction"] == "across" and s["row"] == 0]
+
+        # Both sub-standard runs are now visible
+        assert any(s["col"] == 0 and s["length"] == 2 and s["pattern"] == "CA" for s in across_slots)
+        assert any(s["col"] == 3 and s["length"] == 1 and s["pattern"] == "T" for s in across_slots)
+
+        # Default behavior is unchanged
+        default_slots = grid.get_word_slots()
+        assert all(s["length"] >= 3 for s in default_slots)
+
 
 class TestImportExport:
     """Test grid serialization."""

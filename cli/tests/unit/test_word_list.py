@@ -215,6 +215,90 @@ class TestWordList:
         assert "words=2" in repr_str
 
 
+class TestScoredWordlistFormats:
+    """Regression tests: scored wordlist formats used to load 0 words
+    (whole lines like 'CAT;50' were rejected by word validation)."""
+
+    def _load(self, content):
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write(content)
+            f.flush()
+            temp_path = f.name
+        try:
+            return WordList.from_file(temp_path, use_cache=False)
+        finally:
+            Path(temp_path).unlink()
+
+    def test_semicolon_scored_format(self):
+        """WORD;SCORE lines (comprehensive_scored.txt, *.dict) parse with scores."""
+        wl = self._load("CAT;50\nCOT;42\nCUT;77\n")
+
+        assert len(wl) == 3
+        by_text = {w.text: w.score for w in wl.words}
+        assert by_text == {"CAT": 50, "COT": 42, "CUT": 77}
+
+    def test_comma_scored_format(self):
+        """word,score CSV lines (broda.owl) parse, uppercased, with scores."""
+        wl = self._load("cat,55\ncob,33\nCUP,60\n")
+
+        assert len(wl) == 3
+        by_text = {w.text: w.score for w in wl.words}
+        assert by_text == {"CAT": 55, "COB": 33, "CUP": 60}
+
+    def test_csv_header_line_skipped(self):
+        """A 'word,score' CSV header must not become the word 'WORD'."""
+        wl = self._load("word,score\ncat,55\n")
+
+        assert len(wl) == 1
+        assert wl.words[0].text == "CAT"
+
+    def test_malformed_score_line_skipped(self):
+        """Scored lines with non-numeric scores are dropped, not mis-parsed."""
+        wl = self._load("CAT;50\nBADLINE;xx\nDOG;10\n")
+
+        assert {w.text for w in wl.words} == {"CAT", "DOG"}
+
+    def test_comment_lines_skipped(self):
+        """'#' comment headers (as in comprehensive_scored.txt) are ignored."""
+        wl = self._load("# Format: WORD;SCORE\n#\nCAT;50\n")
+
+        assert len(wl) == 1
+        assert wl.words[0].text == "CAT"
+
+    def test_plain_format_still_computes_scores(self):
+        """Plain wordlists keep the computed letter-frequency score."""
+        wl = self._load("CAT\nDOG\n")
+
+        assert len(wl) == 2
+        assert all(w.score >= 1 for w in wl.words)
+
+    def test_file_score_overrides_computed_score(self):
+        """File-supplied scores win over the internal letter formula."""
+        plain = WordList(["CAT"])
+        computed_score = plain.words[0].score
+
+        wl = self._load(f"CAT;{computed_score + 17}\n")
+        assert wl.words[0].score == computed_score + 17
+
+    def test_add_words_accepts_tuples(self):
+        """add_words accepts (word, score) tuples and plain strings mixed."""
+        wl = WordList()
+        wl.add_words([("CAT", 91), "DOG"])
+
+        by_text = {w.text: w.score for w in wl.words}
+        assert by_text["CAT"] == 91
+        assert by_text["DOG"] >= 1
+
+    def test_parse_line(self):
+        """parse_line handles all three formats plus malformed lines."""
+        assert WordList.parse_line("CAT") == ("CAT", None)
+        assert WordList.parse_line("CAT;50") == ("CAT", 50)
+        assert WordList.parse_line("cat,55") == ("cat", 55)
+        assert WordList.parse_line("CAT;50.0") == ("CAT", 50)
+        assert WordList.parse_line("word,score") is None
+        assert WordList.parse_line("BADLINE;xx") is None
+
+
 class TestScoredWord:
     """Test ScoredWord dataclass."""
 

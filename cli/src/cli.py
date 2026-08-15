@@ -26,6 +26,45 @@ def cli():
     """Crossword Builder CLI — create, fill, validate, and export crossword puzzles."""
 
 
+def _load_grid_or_exit(grid_file: str, allow_nonstandard: bool = False, json_output: bool = False):
+    """
+    Load a grid JSON file, exiting cleanly (no traceback) on invalid grids.
+
+    Args:
+        grid_file: Path to grid JSON file
+        allow_nonstandard: If True, allow non-standard grid sizes (not 11/15/21)
+        json_output: If True, emit a JSON error object instead of human text
+
+    Returns:
+        (data, grid) tuple on success; exits with code 1 on failure
+    """
+    with open(grid_file, "r") as f:
+        data = json.load(f)
+
+    try:
+        grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+    except ValueError as e:
+        message = str(e)
+        hint = None
+        if "strict_size" in message:
+            # Non-standard size error — point at the CLI flag, not the internal API
+            message = message.split(". Set strict_size")[0]
+            hint = "Use --allow-nonstandard to work with non-standard grid sizes (e.g. 5x5, 9x9)."
+
+        if json_output:
+            error_obj = {"success": False, "error": message}
+            if hint:
+                error_obj["hint"] = hint
+            click.echo(json.dumps(error_obj))
+        else:
+            click.echo(click.style(f"Error: {message}", fg="red"), err=True)
+            if hint:
+                click.echo(f"Hint: {hint}", err=True)
+        sys.exit(1)
+
+    return data, grid
+
+
 @cli.command()
 @click.option(
     "--size",
@@ -58,13 +97,16 @@ def new(size: str, output: str):
 
 @cli.command()
 @click.argument("grid_file", type=click.Path(exists=True))
-def validate(grid_file: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def validate(grid_file: str, allow_nonstandard: bool):
     """Validate a crossword grid against NYT standards."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     # Validate
     is_valid, errors = GridValidator.validate_all(grid)
@@ -655,18 +697,21 @@ def fill(
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-",
+    "-f",
     type=click.Choice(["text", "json", "grid"]),
     default="grid",
     help="Display format",
 )
-def show(grid_file: str, format: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def show(grid_file: str, format: str, allow_nonstandard: bool):
     """Display a crossword grid."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    data, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     if format == "json":
         click.echo(json.dumps(data, indent=2))
@@ -701,20 +746,23 @@ def show(grid_file: str, format: str):
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-",
+    "-f",
     type=click.Choice(["html"]),
     default="html",
     help="Export format (html)",
 )
 @click.option("--output", "-o", type=click.Path(), required=True, help="Output file path")
 @click.option("--title", "-t", default="Crossword Puzzle", help="Puzzle title")
-def export(grid_file: str, format: str, output: str, title: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def export(grid_file: str, format: str, output: str, title: str, allow_nonstandard: bool):
     """Export a crossword grid to various formats."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     # Export based on format
     if format == "html":
@@ -761,6 +809,33 @@ def pattern(
     """
     from .core.progress import ProgressReporter
     from .core.scoring import analyze_letters
+
+    # Validate the pattern up front: letters plus '?' / '.' wildcards only.
+    # Invalid patterns used to silently return 0 results (indistinguishable
+    # from a genuinely unfillable slot) - now they are a clear error.
+    normalized_pattern = pattern_arg.upper().replace(".", "?")
+    pattern_error = None
+    if not normalized_pattern:
+        pattern_error = "Pattern is empty"
+    else:
+        invalid_chars = sorted({c for c in normalized_pattern if c != "?" and not (c.isalpha() and c.isascii())})
+        if invalid_chars:
+            chars = ", ".join(repr(c) for c in invalid_chars)
+            pattern_error = (
+                f"Invalid character(s) in pattern: {chars}. "
+                "Patterns may only contain letters A-Z and wildcards '?' or '.'"
+            )
+        elif not (3 <= len(normalized_pattern) <= 21):
+            pattern_error = (
+                f"Pattern length {len(normalized_pattern)} is out of range: " "crossword words are 3-21 letters"
+            )
+
+    if pattern_error:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": pattern_error, "pattern": pattern_arg}))
+        else:
+            click.echo(f"Error: {pattern_error}", err=True)
+        sys.exit(1)
 
     # Initialize progress reporter (only for JSON output mode)
     progress = ProgressReporter(enabled=json_output)
@@ -816,8 +891,9 @@ def pattern(
         progress.update(30, "Using default wordlist")
 
     # Create pattern matcher based on algorithm
+    # Pass (word, score) tuples so scores from scored wordlists are preserved
     progress.update(50, f"Initializing {algorithm} algorithm")
-    full_word_list = WordList([word for word, _, _ in all_words])
+    full_word_list = WordList([(word, score) for word, score, _ in all_words])
 
     if algorithm == "trie":
         from .fill.trie_pattern_matcher import TriePatternMatcher
@@ -846,10 +922,14 @@ def pattern(
 
     progress.update(90, f"Found {len(matches)} matches, formatting results")
 
-    # Format results
+    # Format results (dict lookup: first list containing the word wins)
+    source_by_word = {}
+    for w, _, src in all_words:
+        source_by_word.setdefault(w, src)
+
     results = []
     for word, word_score in matches[:max_results]:
-        source = next((src for w, s, src in all_words if w == word), "unknown")
+        source = source_by_word.get(word, "unknown")
 
         results.append(
             {
@@ -953,10 +1033,7 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
         crossword number grid.json --allow-nonstandard  # For 9x9, 13x13, etc.
     """
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard, json_output=json_output)
 
     # Auto-number
     numbering = GridNumbering.auto_number(grid)
@@ -1126,7 +1203,8 @@ def build_cache(wordlist: str, output: Optional[str]):
     Build binary cache file for fast wordlist loading.
 
     This pre-processes a wordlist file (validates, scores, indexes) and saves
-    the result to a binary .pkl file. Subsequent loads will be 10-20x faster.
+    the result to a binary .pkl file. Subsequent loads will be faster
+    (measured at up to ~3x for the 44k comprehensive list).
 
     Example:
         crossword build-cache data/wordlists/comprehensive.txt
@@ -1533,11 +1611,16 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
             click.echo(click.style(f"Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
+    # Non-standard sizes (e.g. 5x5 minis) import fine, but downstream commands
+    # (number/validate/show/export/fill) need --allow-nonstandard to open them.
+    nonstandard_size = result.size not in (11, 15, 21)
+
     if json_output:
         grid_obj = result.filled_grid if filled else result.empty_grid
         output_data = {
             "success": True,
             "size": result.size,
+            "nonstandard_size": nonstandard_size,
             "grid": grid_obj.to_dict()["grid"],
             "metadata": result.metadata,
             "words": [
@@ -1576,6 +1659,15 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
         click.echo(f"Date: {m.get('date', 'Unknown')}")
         click.echo(f"Author: {m.get('author', 'Unknown')}")
         click.echo(f"Size: {result.size}x{result.size}")
+        if nonstandard_size:
+            click.echo(
+                click.style(
+                    f"Warning: Non-standard grid size ({result.size}x{result.size}). "
+                    "Use --allow-nonstandard with number/validate/show/export/fill "
+                    "to work with this grid.",
+                    fg="yellow",
+                )
+            )
         across_count = sum(1 for w in result.words if w.direction == "across")
         down_count = sum(1 for w in result.words if w.direction == "down")
         click.echo(f"Words: {len(result.words)} ({across_count} across, {down_count} down)")
