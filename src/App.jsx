@@ -23,9 +23,16 @@ function App() {
   const [showThemePanel, setShowThemePanel] = useState(false);
   const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
   const eventSourceRef = React.useRef(null);
+  // Set when a grid import changes the grid size, so the size-change effect
+  // below does not wipe the freshly imported grid with an empty one.
+  const skipNextInitRef = React.useRef(false);
 
   // Initialize empty grid
   useEffect(() => {
+    if (skipNextInitRef.current) {
+      skipNextInitRef.current = false;
+      return;
+    }
     initializeGrid(gridSize);
   }, [gridSize]);
 
@@ -36,9 +43,14 @@ function App() {
 
   // Load symmetry state from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('crossword_symmetry_enabled');
-    if (saved !== null) {
-      setSymmetryEnabled(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('crossword_symmetry_enabled');
+      if (saved !== null && saved !== undefined) {
+        setSymmetryEnabled(JSON.parse(saved));
+      }
+    } catch (err) {
+      // Ignore corrupt/unavailable localStorage — keep the default setting
+      console.warn('Could not restore symmetry setting:', err);
     }
   }, []);
 
@@ -214,6 +226,7 @@ function App() {
           cell.isBlack ? '#' : (cell.letter || '.')
         )),
         wordlists: options.wordlists || ['comprehensive'],
+        themeList: options.themeList || null,
         timeout: options.timeout || 300,
         min_score: options.minScore ?? 50,
         algorithm: options.algorithm || 'repair',
@@ -291,20 +304,39 @@ function App() {
                   message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
                 });
               } else {
-                // Partial fill with suggestions
                 const fillPct = data.data.fill_percentage || 0;
-                let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
+                const allSlotsFilled =
+                  fillPct >= 100 ||
+                  (data.data.total_slots > 0 && data.data.slots_filled === data.data.total_slots);
 
-                // Add first suggestion if available
-                if (data.data.suggestions && data.data.suggestions.length > 0) {
-                  message += ` - ${data.data.suggestions[0].message}`;
+                if (allSlotsFilled) {
+                  // Every slot is filled — don't present this as "Partial" with a
+                  // suggestion to lower the min score. Some entries may still be
+                  // flagged as problematic by the CLI.
+                  const problematicCount = data.data.problematic_slots_count || 0;
+                  const message = problematicCount > 0
+                    ? `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — ${problematicCount} entries may be invalid (use Verify Words to check)`
+                    : `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — some entries may need review (use Verify Words to check)`;
+                  setAutofillProgress({
+                    status: 'complete',
+                    progress: 100,
+                    message: message
+                  });
+                } else {
+                  // Partial fill with suggestions
+                  let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
+
+                  // Add first suggestion if available
+                  if (data.data.suggestions && data.data.suggestions.length > 0) {
+                    message += ` - ${data.data.suggestions[0].message}`;
+                  }
+
+                  setAutofillProgress({
+                    status: fillPct > 0 ? 'warning' : 'error',
+                    progress: fillPct,
+                    message: message
+                  });
                 }
-
-                setAutofillProgress({
-                  status: fillPct > 0 ? 'warning' : 'error',
-                  progress: fillPct,
-                  message: message
-                });
               }
             } else {
               setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
@@ -499,8 +531,10 @@ function App() {
   const handleGridImport = useCallback((importedData) => {
     const { grid: importedGrid, size, numbering: importedNumbering, symmetryEnabled: importedSymmetry } = importedData;
 
-    // Update grid size if different
+    // Update grid size if different (skip the re-init effect so the
+    // imported grid isn't overwritten by a fresh empty grid)
     if (size !== gridSize) {
+      skipNextInitRef.current = true;
       setGridSize(size);
     }
 

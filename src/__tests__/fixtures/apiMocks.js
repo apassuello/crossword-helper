@@ -290,21 +290,30 @@ export const handlers = [
     });
   }),
 
-  // List wordlists
+  // List wordlists (real backend items carry a `key` used for selection)
   http.get(`${API_BASE}/wordlists`, () => {
     return HttpResponse.json({
       wordlists: [
         {
-          name: 'comprehensive',
-          category: 'core',
-          word_count: 454321,
+          key: 'comprehensive',
+          name: 'Comprehensive',
+          category: 'uncategorized',
+          word_count: 44024,
           description: 'Comprehensive word list',
         },
         {
-          name: 'themed',
+          key: 'themed/foreign_words',
+          name: 'Foreign Words',
           category: 'themed',
-          word_count: 5000,
+          word_count: 5749,
           description: 'Themed words',
+        },
+        {
+          key: 'custom/my_words',
+          name: 'My Words',
+          category: 'custom',
+          word_count: 120,
+          description: 'Custom user wordlist',
         },
       ],
     });
