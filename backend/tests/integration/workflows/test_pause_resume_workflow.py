@@ -113,8 +113,7 @@ class TestPauseResumeWorkflow:
         Test cancel workflow:
         1. Start autofill
         2. Cancel operation
-        3. Verify state saved
-        4. Verify cleanup
+        3. Verify honest state_saved reporting (cancel does NOT save state)
         """
         grid = create_empty_grid(11)
 
@@ -141,4 +140,7 @@ class TestPauseResumeWorkflow:
         response = client.post(f"/api/fill/cancel/{task_id}")
 
         assert response.status_code == 200
-        assert response.json.get("state_saved")
+        assert response.json.get("success") is True
+        # Cancel kills the subprocess without a checkpoint — it must not
+        # claim a resumable state was saved (it used to hardcode true)
+        assert response.json.get("state_saved") is False

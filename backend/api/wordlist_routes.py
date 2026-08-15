@@ -14,6 +14,47 @@ wordlist_api = Blueprint("wordlist_api", __name__)
 # Initialize wordlist manager
 wordlist_manager = WordListManager()
 
+# Categories whose lists were created by users and may be freely edited or
+# deleted. Everything else (core, themed, external, root-level shipped lists
+# like comprehensive) is a built-in list and is protected from destructive
+# operations — there is no undo for rewriting a shipped wordlist.
+EDITABLE_CATEGORIES = {"custom", "imports"}
+
+
+def _get_category(name: str) -> str:
+    """Category for a wordlist: metadata first, then its directory prefix."""
+    metadata = wordlist_manager._metadata.get("wordlists", {}).get(name, {})
+    category = metadata.get("category")
+    if category:
+        return category
+    if "/" in name:
+        return name.split("/")[0]
+    # Root-level lists without metadata (comprehensive, top_50k, ...) are
+    # shipped data files.
+    return "builtin"
+
+
+def _is_builtin(name: str) -> bool:
+    """True when the wordlist is a shipped/built-in list (not user-editable)."""
+    return _get_category(name) not in EDITABLE_CATEGORIES
+
+
+def _builtin_refusal(name: str, operation: str):
+    """403 response for destructive operations on built-in lists."""
+    return (
+        jsonify(
+            {
+                "error": (
+                    f'Wordlist "{name}" is a built-in list and cannot be {operation}. '
+                    "Built-in lists are read-only; create or import a custom list instead."
+                ),
+                "category": _get_category(name),
+                "builtin": True,
+            }
+        ),
+        403,
+    )
+
 
 @wordlist_api.route("/wordlists", methods=["GET"])
 def list_wordlists():
@@ -104,6 +145,11 @@ def create_wordlist(name):
         if not data or "words" not in data:
             return jsonify({"error": "Words array required"}), 400
 
+        # Refuse overwriting/merging into an existing built-in list
+        existing = wordlist_manager.wordlist_dir / f"{name}.txt"
+        if existing.exists() and _is_builtin(name):
+            return _builtin_refusal(name, "overwritten")
+
         # Create wordlist
         wordlist_manager.add_words(name, data["words"], create=True)
 
@@ -148,6 +194,12 @@ def update_wordlist(name):
 
         if not data:
             return jsonify({"error": "Request body required"}), 400
+
+        # Word-level updates rewrite the underlying file — refuse for
+        # built-in lists (metadata-only updates remain allowed).
+        touches_words = any(key in data for key in ("words", "add_words", "remove_words"))
+        if touches_words and _is_builtin(name):
+            return _builtin_refusal(name, "modified")
 
         # Handle word updates
         if "words" in data:
@@ -208,6 +260,10 @@ def delete_wordlist(name):
 
         if not filepath.exists():
             return jsonify({"error": f'Wordlist "{name}" not found'}), 404
+
+        # Refuse deleting built-in lists
+        if _is_builtin(name):
+            return _builtin_refusal(name, "deleted")
 
         # Delete file
         filepath.unlink()

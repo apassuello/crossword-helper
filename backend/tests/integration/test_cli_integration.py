@@ -480,7 +480,7 @@ class TestCLIErrorHandling:
         """Test handling of malformed JSON from CLI."""
 
         # Mock _run_command to return invalid JSON
-        def mock_run_command(args, timeout=None):
+        def mock_run_command(args, timeout=None, **kwargs):
             # Return malformed JSON output
             return ("not valid json {{{", "", 0)
 
@@ -529,3 +529,131 @@ class TestCLIPerformance:
         adapter2 = get_adapter()
 
         assert adapter1 is adapter2, "get_adapter() should return same instance"
+
+
+# ==================================================
+# Pause -> Resume invocation (REAL CLI, no mocks)
+# ==================================================
+
+
+class TestResumeCLIInvocationReal:
+    """
+    Non-mocked end-to-end check of the resume invocation shape.
+
+    Really runs the CLI:
+    1. `fill <grid> --task-id X --json-output` as a subprocess
+    2. `pause X` while it runs (state saved to /tmp/crossword_states)
+    3. CLIAdapter.fill_with_resume() against the saved state — the exact
+       invocation the /api/fill/resume route uses
+    """
+
+    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path):
+        import time
+
+        task_id = f"itest_resume_{Path(tmp_path).name}"
+        resume_task_id = f"{task_id}_r"
+        state_dir = Path("/tmp/crossword_states")
+
+        # Wide-open 11x11: reliably too hard for trie to finish quickly,
+        # so the pause lands mid-run
+        grid_file = tmp_path / "grid11.json"
+        grid_file.write_text(
+            json.dumps(
+                {
+                    "size": 11,
+                    "grid": [["." for _ in range(11)] for _ in range(11)],
+                    "black_squares": [],
+                    "is_symmetric": True,
+                }
+            )
+        )
+
+        project_root = Path(__file__).resolve().parents[3]
+        wordlist = project_root / "data" / "wordlists" / "comprehensive.txt"
+        cli_path = cli_adapter.cli_path
+
+        process = subprocess.Popen(
+            [
+                str(cli_path),
+                "fill",
+                str(grid_file),
+                "-w",
+                str(wordlist),
+                "-t",
+                "60",
+                "-a",
+                "trie",
+                "--task-id",
+                task_id,
+                "--json-output",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cli_path.parent,
+        )
+
+        try:
+            # Give the fill time to load the wordlist and start iterating,
+            # then request pause via the real CLI pause command
+            time.sleep(3.0)
+            pause_result = subprocess.run(
+                [str(cli_path), "pause", task_id, "--json-output"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=cli_path.parent,
+            )
+            assert pause_result.returncode == 0, pause_result.stdout + pause_result.stderr
+
+            stdout, stderr = process.communicate(timeout=60)
+            assert process.returncode == 0, stderr[-500:]
+
+            result = json.loads(stdout.strip())
+            assert result["paused"] is True, f"fill did not pause: {result}"
+            state_path = result["state_path"]
+            assert Path(state_path).exists()
+            paused_slots = result["slots_filled"]
+
+            # Now the resume invocation exactly as the backend builds it
+            resume_result = cli_adapter.fill_with_resume(
+                task_id=resume_task_id,
+                state_file_path=state_path,
+                wordlist_paths=[str(wordlist)],
+                timeout_seconds=8,
+                min_score=30,
+                algorithm="trie",
+            )
+
+            # Full result object came back from the real CLI
+            assert resume_result["task_id"] == resume_task_id
+            assert "grid" in resume_result
+            # Same puzzle: the state carried the slot structure over
+            assert resume_result["total_slots"] == result["total_slots"]
+            # The resume really ran with the given wordlist (the old broken
+            # resume path ran with an EMPTY wordlist and finished in 0.00s)
+            assert resume_result["wordlists"] == [str(wordlist)]
+            assert resume_result["time_elapsed"] > 0.5
+            # Note: slots_filled may be above OR below the paused count —
+            # resumed CSP search legitimately backtracks — so only sanity
+            # bounds are asserted here
+            assert 0 <= resume_result["slots_filled"] <= resume_result["total_slots"]
+            assert paused_slots >= 0
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+            # Clean up state, flag, and output files
+            for candidate in [
+                state_dir / f"{task_id}.json.gz",
+                state_dir / f"{task_id}.json",
+                Path(f"/tmp/crossword_pause_{task_id}.flag"),
+                Path(f"/tmp/crossword_running_{task_id}.pid"),
+                Path(f"/tmp/crossword_pause_{resume_task_id}.flag"),
+                Path(f"/tmp/crossword_running_{resume_task_id}.pid"),
+                cli_path.parent / f"resumed_{resume_task_id}.json",
+            ]:
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass

@@ -14,13 +14,17 @@ from flask import Blueprint, current_app, jsonify, request
 from backend.api.errors import handle_error
 from backend.api.progress_routes import create_progress_tracker, send_progress
 from backend.api.validators import (
+    normalize_grid_to_cli,
     validate_fill_request,
     validate_grid_request,
     validate_normalize_request,
     validate_pattern_request,
 )
 from backend.core.cli_adapter import get_adapter
-from backend.core.wordlist_resolver import resolve_wordlist_paths
+from backend.core.wordlist_resolver import (
+    resolve_wordlist_paths,
+    resolve_wordlist_paths_strict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +73,17 @@ def pattern_search():
         # Validate request
         data = validate_pattern_request(data)
 
-        # Resolve wordlist paths using shared resolver
+        # Resolve wordlist paths — unknown names are a client error, never a
+        # silent fallback to the CLI's tiny builtin demo list
         wordlist_names = data.get("wordlists", ["comprehensive"])
-        wordlist_paths = resolve_wordlist_paths(wordlist_names)
+        wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+        if missing:
+            return handle_error(
+                "UNKNOWN_WORDLIST",
+                f"Unknown wordlist(s): {', '.join(missing)}",
+                400,
+                details={"unknown_wordlists": missing},
+            )
 
         # Delegate to CLI via adapter
         result = cli_adapter.pattern(
@@ -87,7 +99,7 @@ def pattern_search():
     except ValueError as e:
         return handle_error("INVALID_PATTERN", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Pattern search timed out", 505)
+        return handle_error("TIMEOUT", "Pattern search timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
@@ -157,13 +169,20 @@ def normalize_entry():
         # Delegate to CLI via adapter (with caching for performance)
         result = cli_adapter.normalize(data["text"])
 
+        # Crossword entries never contain spaces. Some CLI rules (e.g. the
+        # apostrophe rule) only strip their own punctuation, leaving interior
+        # spaces behind — contradicting the documented examples
+        # ("driver's license" -> DRIVERSLICENSE). Enforce the convention here.
+        if isinstance(result.get("normalized"), str):
+            result["normalized"] = result["normalized"].replace(" ", "")
+
         # CLI output is already in correct format!
         return jsonify(result), 200
 
     except ValueError as e:
         return handle_error("INVALID_TEXT", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Normalization timed out", 506)
+        return handle_error("TIMEOUT", "Normalization timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
@@ -191,7 +210,14 @@ def fill_grid():
 
         # Resolve wordlist paths using shared resolver
         wordlist_names = data.get("wordlists", ["comprehensive"])
-        wordlist_paths = resolve_wordlist_paths(wordlist_names)
+        wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+        if missing:
+            return handle_error(
+                "UNKNOWN_WORDLIST",
+                f"Unknown wordlist(s): {', '.join(missing)}",
+                400,
+                details={"unknown_wordlists": missing},
+            )
 
         if not wordlist_paths:
             return handle_error("INVALID_WORDLISTS", "No valid wordlists found", 400)
@@ -199,21 +225,7 @@ def fill_grid():
         # Convert frontend grid format to CLI format
         # Frontend: [{"letter": "A", "isBlack": false}, ...]
         # CLI: ["A", "#", ".", ...]
-        cli_grid = []
-        for row in data["grid"]:
-            cli_row = []
-            for cell in row:
-                if isinstance(cell, dict):
-                    if cell.get("isBlack", False):
-                        cli_row.append("#")
-                    elif cell.get("letter", ""):
-                        cli_row.append(cell["letter"].upper())
-                    else:
-                        cli_row.append(".")
-                else:
-                    # Already in CLI format (string)
-                    cli_row.append(cell)
-            cli_grid.append(cli_row)
+        cli_grid = normalize_grid_to_cli(data["grid"])
 
         # Prepare grid data
         grid_data = {"size": data["size"], "grid": cli_grid}
@@ -233,7 +245,7 @@ def fill_grid():
     except ValueError as e:
         return handle_error("INVALID_REQUEST", str(e), 400)
     except subprocess.TimeoutExpired:
-        return handle_error("TIMEOUT", "Grid fill timed out", 507)
+        return handle_error("TIMEOUT", "Grid fill timed out", 504)
     except Exception as e:
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
@@ -297,13 +309,14 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             try:
                 progress_data = json.loads(line.strip())
                 if progress_data.get("type") == "progress":
-                    # CRITICAL: Never forward 'complete'/'error' from stderr.
-                    # The CLI sends a 'complete' progress event to stderr BEFORE
-                    # writing the actual result (with grid data) to stdout.
-                    # If we forward 'complete' here, the SSE generator breaks
-                    # before the real result arrives, causing "No solution found".
+                    # CRITICAL: Never forward 'complete'/'error'/'paused' from
+                    # stderr. The CLI sends these progress events to stderr
+                    # BEFORE writing the actual result (with grid data) to
+                    # stdout. If we forward a terminal status here, the SSE
+                    # generator breaks before the real result arrives,
+                    # causing "No solution found".
                     stderr_status = progress_data.get("status", "running")
-                    if stderr_status in ("complete", "error"):
+                    if stderr_status in ("complete", "error", "paused"):
                         stderr_status = "running"
 
                     send_progress(
@@ -335,8 +348,22 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
                     f"[CLI DEBUG] Parsed result: success={result_data.get('success')}, "
                     f"filled={result_data.get('slots_filled')}/{result_data.get('total_slots')}"
                 )
-                # Send completion with grid data
-                send_progress(task_id, 100, "Complete", "complete", result_data)
+                if result_data.get("paused"):
+                    # The fill paused and saved its state — report 'paused',
+                    # not 'complete', so clients can offer resume.
+                    slots_filled = result_data.get("slots_filled", 0)
+                    total_slots = result_data.get("total_slots", 0)
+                    pct = int((slots_filled / total_slots) * 100) if total_slots else 0
+                    send_progress(
+                        task_id,
+                        pct,
+                        f"Paused: {slots_filled}/{total_slots} slots filled, state saved",
+                        "paused",
+                        result_data,
+                    )
+                else:
+                    # Send completion with grid data
+                    send_progress(task_id, 100, "Complete", "complete", result_data)
             except (json.JSONDecodeError, Exception) as e:
                 logger.error(f"[CLI DEBUG] Failed to parse stdout JSON: {e}")
                 logger.error(f"[CLI DEBUG] Raw stdout: {repr(stdout[:500])}")
@@ -394,12 +421,19 @@ def pattern_search_with_progress():
         # Validate request
         data = validate_pattern_request(request.json)
 
+        # Resolve wordlist paths — reject unknown names before starting work
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+        if missing:
+            return handle_error(
+                "UNKNOWN_WORDLIST",
+                f"Unknown wordlist(s): {', '.join(missing)}",
+                400,
+                details={"unknown_wordlists": missing},
+            )
+
         # Create progress tracker
         task_id = create_progress_tracker()
-
-        # Resolve wordlist paths using shared resolver
-        wordlist_names = data.get("wordlists", ["comprehensive"])
-        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         # Build CLI command
         cmd_args = [
@@ -438,12 +472,19 @@ def fill_with_progress():
         # Validate request
         data = validate_fill_request(request.json)
 
+        # Resolve wordlist paths — reject unknown names before starting work
+        wordlist_names = data.get("wordlists", ["comprehensive"])
+        wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+        if missing:
+            return handle_error(
+                "UNKNOWN_WORDLIST",
+                f"Unknown wordlist(s): {', '.join(missing)}",
+                400,
+                details={"unknown_wordlists": missing},
+            )
+
         # Create progress tracker
         task_id = create_progress_tracker()
-
-        # Resolve wordlist paths using shared resolver
-        wordlist_names = data.get("wordlists", ["comprehensive"])
-        wordlist_paths = resolve_wordlist_paths(wordlist_names)
 
         # Resolve theme wordlist if specified
         theme_wordlist_path = None
@@ -458,21 +499,7 @@ def fill_with_progress():
         # CLI: ["A", "#", ".", ...]
         import tempfile
 
-        cli_grid = []
-        for row in data["grid"]:
-            cli_row = []
-            for cell in row:
-                if isinstance(cell, dict):
-                    if cell.get("isBlack", False):
-                        cli_row.append("#")
-                    elif cell.get("letter", ""):
-                        cli_row.append(cell["letter"].upper())
-                    else:
-                        cli_row.append(".")
-                else:
-                    # Already in CLI format (string)
-                    cli_row.append(cell)
-            cli_grid.append(cli_row)
+        cli_grid = normalize_grid_to_cli(data["grid"])
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             grid_data = {"size": data["size"], "grid": cli_grid}
@@ -503,10 +530,15 @@ def fill_with_progress():
         empty_cells = total_cells - filled_cells - black_cells
         logger.info(f"[AUTOFILL DEBUG] Grid cells: {filled_cells} filled, " f"{black_cells} black, {empty_cells} empty")
 
-        # Build CLI command
+        # Build CLI command. --task-id wires the web pause button through to
+        # the CLI's PauseController: POST /api/fill/pause/<task_id> writes a
+        # pause flag keyed by this id, and the CLI checkpoints + saves state
+        # to /tmp/crossword_states/<task_id>.json.gz when it sees the flag.
         cmd_args = [
             "fill",
             grid_file,
+            "--task-id",
+            task_id,
             "--timeout",
             str(data.get("timeout", 300)),
             "--min-score",
@@ -582,21 +614,29 @@ def verify_words():
 
         grid_data = data["grid"]
         size = data.get("size", len(grid_data))
-        wordlist_names = data.get("wordlists", ["comprehensive"])
-        wordlist_paths = resolve_wordlist_paths(wordlist_names)
+        wordlist_names = data.get("wordlists")
 
-        # Load ALL available wordlists for validation (not just selected ones)
+        # Honor the requested wordlist selection. Only when the client sends
+        # no selection do we fall back to validating against every installed
+        # (non-custom) list merged together.
+        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
+        if wordlist_names:
+            wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+            if missing:
+                return handle_error(
+                    "UNKNOWN_WORDLIST",
+                    f"Unknown wordlist(s): {', '.join(missing)}",
+                    400,
+                    details={"unknown_wordlists": missing},
+                )
+            all_wl_paths = [Path(wp) for wp in wordlist_paths]
+        else:
+            all_wl_paths = list(wordlist_dir.rglob("*.txt"))
+            # Filter out archive and custom
+            all_wl_paths = [p for p in all_wl_paths if "archive" not in p.parts and "custom" not in p.parts]
+
         words_set = set()
         words_by_length = {}  # length -> set of words
-        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
-        all_wl_paths = list(wordlist_dir.rglob("*.txt"))
-        # Filter out archive and custom
-        all_wl_paths = [p for p in all_wl_paths if "archive" not in p.parts and "custom" not in p.parts]
-        # Also include the explicitly requested wordlists (in case of custom paths)
-        for wp in wordlist_paths:
-            wp_path = Path(wp)
-            if wp_path not in all_wl_paths:
-                all_wl_paths.append(wp_path)
 
         for wp in all_wl_paths:
             try:
@@ -770,13 +810,27 @@ def clean_grid():
 
         grid_data = data["grid"]
         size = data.get("size", len(grid_data))
+        wordlist_names = data.get("wordlists")
 
-        # Load all wordlists
-        words_set = set()
+        # Honor the requested wordlist selection; fall back to every
+        # installed list merged only when no selection was given.
         wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
-        for wp in wordlist_dir.rglob("*.txt"):
-            if "archive" in wp.parts:
-                continue
+        if wordlist_names:
+            wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
+            if missing:
+                return handle_error(
+                    "UNKNOWN_WORDLIST",
+                    f"Unknown wordlist(s): {', '.join(missing)}",
+                    400,
+                    details={"unknown_wordlists": missing},
+                )
+            wl_paths = [Path(wp) for wp in wordlist_paths]
+        else:
+            wl_paths = [p for p in wordlist_dir.rglob("*.txt") if "archive" not in p.parts]
+
+        # Load selected wordlists
+        words_set = set()
+        for wp in wl_paths:
             try:
                 with open(wp, "r") as f:
                     for line in f:

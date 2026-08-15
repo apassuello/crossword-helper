@@ -124,8 +124,18 @@ class CLIAdapter:
             for wordlist_path in wordlist_paths:
                 args.extend(["--wordlists", wordlist_path])
 
-        # Run command
-        stdout, stderr, _ = self._run_command(args, timeout=300)
+        # Run command. The CLI validates patterns itself and exits 1 with a
+        # JSON error object for invalid input — surface that as ValueError so
+        # routes can return a 400 instead of a generic 500.
+        stdout, stderr, returncode = self._run_command(args, timeout=300, check_success=False)
+
+        if returncode != 0:
+            try:
+                error_data = json.loads(stdout)
+                message = error_data.get("error", "Pattern search failed")
+            except json.JSONDecodeError:
+                message = "Pattern search failed"
+            raise ValueError(message)
 
         # Parse JSON output
         try:
@@ -454,6 +464,7 @@ class CLIAdapter:
                 algorithm,
                 "--task-id",
                 task_id,
+                "--json-output",
             ]
 
             for wordlist_path in wordlist_paths:
@@ -466,7 +477,14 @@ class CLIAdapter:
                 check_success=False,  # Partial fills are OK
             )
 
-            # Read filled grid from output file
+            # Prefer the full result object from stdout (--json-output):
+            # success, grid, slots_filled, total_slots, paused, ...
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError:
+                pass
+
+            # Fallback: read the saved grid from the output file
             with open(output_path, "r") as f:
                 result = json.load(f)
 
