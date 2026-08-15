@@ -11,6 +11,7 @@ Mark slow tests with @pytest.mark.slow to allow skipping during development.
 import json
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -547,9 +548,38 @@ class TestResumeCLIInvocationReal:
        invocation the /api/fill/resume route uses
     """
 
-    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path):
-        import time
+    def test_fill_accepts_the_argv_the_backend_builds(self, cli_adapter):
+        """
+        Zero-timing guard on the CLI/backend contract.
 
+        The original bug was that `fill_with_resume` passed flags the CLI's
+        parser rejected outright. That is a pure argv-compatibility question,
+        so it is checked here without running a fill — this test keeps the
+        seam covered even if the live pause/resume test below is ever skipped.
+        """
+        help_text = subprocess.run(
+            [str(cli_adapter.cli_path), "fill", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=cli_adapter.cli_path.parent,
+        ).stdout
+
+        for flag in ("--task-id", "--resume", "--json-output", "--output", "--algorithm"):
+            assert flag in help_text, f"CLI fill no longer accepts {flag}:\n{help_text}"
+
+        # Rejecting an unknown flag is what used to break resume: prove the
+        # parser really validates (so the assertions above mean something).
+        unknown = subprocess.run(
+            [str(cli_adapter.cli_path), "fill", "--definitely-not-a-flag"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=cli_adapter.cli_path.parent,
+        )
+        assert unknown.returncode != 0
+
+    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path):
         task_id = f"itest_resume_{Path(tmp_path).name}"
         resume_task_id = f"{task_id}_r"
         state_dir = Path("/tmp/crossword_states")
@@ -572,6 +602,10 @@ class TestResumeCLIInvocationReal:
         wordlist = project_root / "data" / "wordlists" / "comprehensive.txt"
         cli_path = cli_adapter.cli_path
 
+        # -t 300 (not 60): the fill must be able to exit ONLY via pause, never
+        # by hitting its own timeout, or "did it pause?" becomes a race the
+        # test cannot decide. Note -t bounds SOLVER time, not wall time —
+        # wordlist load and solver setup happen before that clock starts.
         process = subprocess.Popen(
             [
                 str(cli_path),
@@ -580,7 +614,7 @@ class TestResumeCLIInvocationReal:
                 "-w",
                 str(wordlist),
                 "-t",
-                "60",
+                "300",
                 "-a",
                 "trie",
                 "--task-id",
@@ -593,32 +627,54 @@ class TestResumeCLIInvocationReal:
             cwd=cli_path.parent,
         )
 
-        try:
-            # Request pause via the real CLI pause command. Poll rather than
-            # blind-sleep: on slow machines (CI) the fill may still be loading
-            # the wordlist, and pause correctly refuses until the task has
-            # registered its running-marker.
-            deadline = time.time() + 45
-            pause_result = None
-            while time.time() < deadline:
-                if process.poll() is not None:
-                    out, err = process.communicate()
-                    raise AssertionError(f"fill exited before pause (rc={process.returncode}): {err[-500:]}")
-                pause_result = subprocess.run(
-                    [str(cli_path), "pause", task_id, "--json-output"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    cwd=cli_path.parent,
-                )
-                if pause_result.returncode == 0:
-                    break
-                time.sleep(1.0)
-            assert pause_result is not None and pause_result.returncode == 0, (
-                pause_result.stdout + pause_result.stderr
-            )
+        # Drain both pipes in background threads: gating on stderr below while
+        # the child writes stdout would risk a full-pipe deadlock.
+        stdout_chunks: list = []
+        stderr_lines: list = []
+        solving = threading.Event()
 
-            stdout, stderr = process.communicate(timeout=60)
+        def _drain_stdout():
+            stdout_chunks.append(process.stdout.read())
+
+        def _drain_stderr():
+            for line in process.stderr:
+                stderr_lines.append(line)
+                # Emitted from inside the CSP solve loop (autofill.py) — the
+                # only place the pause flag is polled. "starting autofill" is
+                # NOT sufficient: solver setup runs for seconds after it with
+                # no pause checks (on CI, tens of seconds).
+                if "Filling slots" in line:
+                    solving.set()
+
+        out_thread = threading.Thread(target=_drain_stdout, daemon=True)
+        err_thread = threading.Thread(target=_drain_stderr, daemon=True)
+        out_thread.start()
+        err_thread.start()
+
+        try:
+            # Wait for the solver loop to actually be running before pausing.
+            # Pausing earlier is honored only once the loop starts, so the
+            # wait would otherwise burn the exit deadline on load+setup.
+            if not solving.wait(timeout=180):
+                raise AssertionError(
+                    "fill never reached its solving loop within 180s; "
+                    f"rc={process.poll()}, stderr tail: {''.join(stderr_lines)[-500:]}"
+                )
+
+            pause_result = subprocess.run(
+                [str(cli_path), "pause", task_id, "--json-output"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=cli_path.parent,
+            )
+            assert pause_result.returncode == 0, pause_result.stdout + pause_result.stderr
+
+            process.wait(timeout=180)
+            out_thread.join(timeout=30)
+            err_thread.join(timeout=30)
+            stdout = stdout_chunks[0] if stdout_chunks else ""
+            stderr = "".join(stderr_lines)
             assert process.returncode == 0, stderr[-500:]
 
             result = json.loads(stdout.strip())

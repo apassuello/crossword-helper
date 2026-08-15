@@ -8,6 +8,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The CLI's --timeout bounds SOLVER time only. Wall time additionally includes
+# interpreter startup, loading the 44k-word list, building the trie, and (for
+# resume) inflating the gzipped state — a fixed cost that is a couple of
+# seconds on an idle machine but tens of seconds on a loaded one. Subprocess
+# ceilings must cover that, or a healthy fill gets killed under load.
+CLI_STARTUP_BUDGET_SECONDS = 90
+
 
 class CLIAdapter:
     """
@@ -390,7 +397,7 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 60,  # Buffer for wordlist/trie/state loading on slow machines
+                timeout=timeout_seconds + CLI_STARTUP_BUDGET_SECONDS,
                 check_success=False,  # Partial fills are OK
             )
 
@@ -473,7 +480,7 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 60,  # Buffer for wordlist/trie/state loading on slow machines
+                timeout=timeout_seconds + CLI_STARTUP_BUDGET_SECONDS,
                 check_success=False,  # Partial fills are OK
             )
 
