@@ -9,6 +9,7 @@ Mark slow tests with @pytest.mark.slow to allow skipping during development.
 """
 
 import json
+import os
 import subprocess
 import tempfile
 import threading
@@ -579,7 +580,19 @@ class TestResumeCLIInvocationReal:
         )
         assert unknown.returncode != 0
 
-    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path):
+    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path, monkeypatch):
+        # pytest-cov ships a .pth that arms coverage in EVERY Python subprocess
+        # whenever COV_CORE_SOURCE is in the environment. Under the coverage
+        # job that makes the CLI children ~4x slower (measured: this test 11.5s
+        # -> 42.4s on an idle machine), which on a contended runner stretched
+        # the CLI's own startup past this test's deadlines. The children are
+        # spawned here and in CLIAdapter, both inheriting os.environ, so
+        # scrubbing these vars for the test's duration runs them at native
+        # speed. The parent's coverage collection is unaffected: the plugin
+        # collects in-process, and these vars only arm NEW interpreters.
+        for key in [k for k in os.environ if k.startswith("COV_CORE")]:
+            monkeypatch.delenv(key, raising=False)
+
         task_id = f"itest_resume_{Path(tmp_path).name}"
         resume_task_id = f"{task_id}_r"
         state_dir = Path("/tmp/crossword_states")
