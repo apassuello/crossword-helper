@@ -302,9 +302,9 @@ class TestFill:
                     with patch.object(Path, "unlink"):
                         adapter.fill({"size": 15, "grid": []}, ["w.txt"], timeout_seconds=200)
 
-        # subprocess.run should have been called with timeout=210
+        # subprocess.run should have been called with timeout=260 (60s loading buffer)
         call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 210
+        assert call_kwargs["timeout"] == 260
 
     @patch("subprocess.run")
     def test_empty_output_file_returns_error(self, mock_run, adapter):
@@ -409,7 +409,7 @@ class TestFillWithResume:
                 adapter.fill_with_resume("t", str(state_file), ["w.txt"], timeout_seconds=100)
 
         call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 110
+        assert call_kwargs["timeout"] == 160
 
 
 # ===========================================================================

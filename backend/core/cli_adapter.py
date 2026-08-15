@@ -390,7 +390,7 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 10,  # Add 10s buffer
+                timeout=timeout_seconds + 60,  # Buffer for wordlist/trie/state loading on slow machines
                 check_success=False,  # Partial fills are OK
             )
 
@@ -473,7 +473,7 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 10,  # Add 10s buffer
+                timeout=timeout_seconds + 60,  # Buffer for wordlist/trie/state loading on slow machines
                 check_success=False,  # Partial fills are OK
             )
 
