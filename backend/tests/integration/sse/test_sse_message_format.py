@@ -283,22 +283,12 @@ class TestSSEErrorHandling:
             content_type="application/json",
         )
 
-        # Should still return 202 (task started)
-        assert response.status_code == 202
-        task_id = response.json["task_id"]
-
-        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
-        sse_response = client.get(f"/api/progress/{task_id}")
-        messages = sse_parser(sse_response.data)
-
-        # Should have at least one message
-        assert len(messages) > 0
-
-        # Last message should indicate error
-        last_msg = messages[-1]
-        assert (
-            last_msg.get("status") == "error" or "error" in last_msg.get("message", "").lower()
-        ), f"Expected error status, got: {last_msg}"
+        # Unknown wordlists are now rejected upfront with a clear JSON error
+        # (they used to silently start a task that failed mid-stream)
+        assert response.status_code == 400
+        error = response.json["error"]
+        assert error["code"] == "UNKNOWN_WORDLIST"
+        assert "nonexistent_wordlist" in error["message"]
 
     def test_sse_handles_timeout(self, client, sse_parser):
         """

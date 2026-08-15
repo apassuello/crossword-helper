@@ -180,9 +180,14 @@ class Grid:
 
         return True
 
-    def get_word_slots(self) -> List[Dict]:
+    def get_word_slots(self, min_length: int = 3) -> List[Dict]:
         """
         Get all across and down word slots.
+
+        Args:
+            min_length: Minimum slot length to include (default: 3, the standard
+                crossword minimum). Pass 1 to also see sub-standard runs of 1-2
+                cells (used by the validator to detect too-short words).
 
         Returns:
             List of word slot dictionaries with keys:
@@ -209,8 +214,8 @@ class Grid:
                         length += 1
                         col += 1
 
-                    # Only add if length >= 3
-                    if length >= 3:
+                    # Only add if length >= min_length (default 3)
+                    if length >= min_length:
                         slots.append(
                             {
                                 "direction": "across",
@@ -238,8 +243,8 @@ class Grid:
                         length += 1
                         row += 1
 
-                    # Only add if length >= 3
-                    if length >= 3:
+                    # Only add if length >= min_length (default 3)
+                    if length >= min_length:
                         slots.append(
                             {
                                 "direction": "down",

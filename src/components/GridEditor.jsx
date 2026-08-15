@@ -18,6 +18,7 @@ function GridEditor({
 }) {
   const [hoveredCell, setHoveredCell] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
+  const [direction, setDirection] = useState('across');
   const [showConstraints, setShowConstraints] = useState(false);
   const [constraintData, setConstraintData] = useState(null);
   const [constraintLoading, setConstraintLoading] = useState(false);
@@ -83,9 +84,24 @@ function GridEditor({
       // Toggle black square
       onToggleBlack(row, col);
     } else {
-      // Select cell for editing
+      // Select cell for editing; clicking the focused cell again flips direction
+      const isSameCell = focusedCell?.row === row && focusedCell?.col === col;
+      const newDirection = e.altKey
+        ? 'down'
+        : isSameCell
+          ? (direction === 'across' ? 'down' : 'across')
+          : direction;
+      setDirection(newDirection);
       setFocusedCell({ row, col });
-      onSelectCell({ row, col, direction: e.altKey ? 'down' : 'across' });
+      onSelectCell({ row, col, direction: newDirection });
+    }
+  };
+
+  const toggleDirection = () => {
+    const newDirection = direction === 'across' ? 'down' : 'across';
+    setDirection(newDirection);
+    if (focusedCell) {
+      onSelectCell({ row: focusedCell.row, col: focusedCell.col, direction: newDirection });
     }
   };
 
@@ -107,6 +123,12 @@ function GridEditor({
       if (onToggleThemeLock) {
         onToggleThemeLock(row, col);
       }
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      toggleDirection();
       return;
     }
 
@@ -132,9 +154,13 @@ function GridEditor({
         return; // Cannot clear locked cells
       }
       onSetLetter(row, col, '');
-      // Move to previous cell if backspace
+      // Move to previous cell if backspace, following the typing direction
       if (e.key === 'Backspace') {
-        if (col > 0) {
+        if (direction === 'down') {
+          if (row > 0) {
+            setFocusedCell({ row: row - 1, col });
+          }
+        } else if (col > 0) {
           setFocusedCell({ row, col: col - 1 });
         } else if (row > 0) {
           setFocusedCell({ row: row - 1, col: gridSize - 1 });
@@ -147,8 +173,12 @@ function GridEditor({
         return; // Cannot edit locked cells
       }
       onSetLetter(row, col, e.key);
-      // Auto-advance to next cell
-      if (col < gridSize - 1) {
+      // Auto-advance to next cell, following the typing direction
+      if (direction === 'down') {
+        if (row < gridSize - 1) {
+          setFocusedCell({ row: row + 1, col });
+        }
+      } else if (col < gridSize - 1) {
         setFocusedCell({ row, col: col + 1 });
       } else if (row < gridSize - 1) {
         setFocusedCell({ row: row + 1, col: 0 });
@@ -400,6 +430,13 @@ function GridEditor({
 
       <div className="grid-toolbar">
         <button
+          className="direction-toggle"
+          onClick={toggleDirection}
+          title="Toggle typing direction (Enter, or click the selected cell again)"
+        >
+          Typing: {direction === 'across' ? 'Across →' : 'Down ↓'}
+        </button>
+        <button
           className={classNames('constraint-toggle', { active: showConstraints, loading: constraintLoading })}
           onClick={() => setShowConstraints(!showConstraints)}
           title="Show crossing quality heatmap (red = few options, green = many)"
@@ -412,8 +449,10 @@ function GridEditor({
         <h3>Keyboard Shortcuts</h3>
         <ul>
           <li><kbd>Click</kbd> - Select cell</li>
+          <li><kbd>Enter</kbd> or click selected cell - Toggle across/down typing</li>
+          <li><kbd>Alt+Click</kbd> - Select down word</li>
           <li><kbd>Shift+Click</kbd> - Toggle black square</li>
-          <li><kbd>A-Z</kbd> - Enter letter</li>
+          <li><kbd>A-Z</kbd> - Enter letter (advances in typing direction)</li>
           <li><kbd>Space</kbd> or <kbd>.</kbd> - Toggle black square</li>
           <li><kbd>Arrow Keys</kbd> - Move between cells</li>
           <li><kbd>Tab</kbd> - Jump to next word</li>

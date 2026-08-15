@@ -8,6 +8,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The CLI's --timeout bounds SOLVER time only. Wall time additionally includes
+# interpreter startup, loading the 44k-word list, building the trie, and (for
+# resume) inflating the gzipped state — a fixed cost that is a couple of
+# seconds on an idle machine but tens of seconds on a loaded one. Subprocess
+# ceilings must cover that, or a healthy fill gets killed under load.
+CLI_STARTUP_BUDGET_SECONDS = 90
+
 
 class CLIAdapter:
     """
@@ -124,8 +131,18 @@ class CLIAdapter:
             for wordlist_path in wordlist_paths:
                 args.extend(["--wordlists", wordlist_path])
 
-        # Run command
-        stdout, stderr, _ = self._run_command(args, timeout=300)
+        # Run command. The CLI validates patterns itself and exits 1 with a
+        # JSON error object for invalid input — surface that as ValueError so
+        # routes can return a 400 instead of a generic 500.
+        stdout, stderr, returncode = self._run_command(args, timeout=300, check_success=False)
+
+        if returncode != 0:
+            try:
+                error_data = json.loads(stdout)
+                message = error_data.get("error", "Pattern search failed")
+            except json.JSONDecodeError:
+                message = "Pattern search failed"
+            raise ValueError(message)
 
         # Parse JSON output
         try:
@@ -380,7 +397,7 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 10,  # Add 10s buffer
+                timeout=timeout_seconds + CLI_STARTUP_BUDGET_SECONDS,
                 check_success=False,  # Partial fills are OK
             )
 
@@ -454,6 +471,7 @@ class CLIAdapter:
                 algorithm,
                 "--task-id",
                 task_id,
+                "--json-output",
             ]
 
             for wordlist_path in wordlist_paths:
@@ -462,11 +480,18 @@ class CLIAdapter:
             # Run command (with extended timeout)
             stdout, stderr, _ = self._run_command(
                 args,
-                timeout=timeout_seconds + 10,  # Add 10s buffer
+                timeout=timeout_seconds + CLI_STARTUP_BUDGET_SECONDS,
                 check_success=False,  # Partial fills are OK
             )
 
-            # Read filled grid from output file
+            # Prefer the full result object from stdout (--json-output):
+            # success, grid, slots_filled, total_slots, paused, ...
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError:
+                pass
+
+            # Fallback: read the saved grid from the output file
             with open(output_path, "r") as f:
                 result = json.load(f)
 

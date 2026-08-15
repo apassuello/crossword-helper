@@ -77,7 +77,7 @@ def upload_theme_words():
 
     except Exception as e:
         logger.error(f"Error uploading theme words: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @theme_api.route("/theme/suggest-placements", methods=["POST"])
@@ -156,7 +156,7 @@ def suggest_placements():
 
     except Exception as e:
         logger.error(f"Error suggesting placements: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @theme_api.route("/theme/validate", methods=["POST"])
@@ -196,7 +196,7 @@ def validate_theme_words():
 
     except Exception as e:
         logger.error(f"Error validating theme words: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @theme_api.route("/theme/apply-placement", methods=["POST"])
@@ -241,6 +241,31 @@ def apply_placement():
         row = placement["row"]
         col = placement["col"]
         direction = placement["direction"]
+
+        grid_size = len(grid)
+
+        def _cell_state(r, c):
+            """Return ('black'|'letter'|'empty', letter) for a cell."""
+            cell = grid[r][c]
+            if isinstance(cell, dict):
+                if cell.get("isBlack", False):
+                    return "black", None
+                letter_value = (cell.get("letter") or "").strip()
+                if letter_value and letter_value != ".":
+                    return "letter", letter_value.upper()
+                return "empty", None
+            if cell == "#":
+                return "black", None
+            if not cell or cell in (".", ""):
+                return "empty", None
+            return "letter", str(cell).strip().upper()
+
+        def _set_black(r, c):
+            """Turn a cell into a black square, preserving cell format."""
+            if isinstance(grid[r][c], dict):
+                grid[r][c] = {"letter": "", "isBlack": True}
+            else:
+                grid[r][c] = "#"
 
         # CRITICAL FIX: Validate intersections BEFORE applying any changes
         # Check all cells the word will occupy to ensure no conflicts
@@ -292,6 +317,59 @@ def apply_placement():
                 )
             # If existing_letter matches letter, that's a valid intersection - allow it
 
+        # Compute the word's cells and the boundary black squares this
+        # placement needs (cell before the word and cell after it, when
+        # those cells are currently empty).
+        word_cells = set()
+        for i in range(len(word)):
+            if direction == "across":
+                word_cells.add((row, col + i))
+            else:
+                word_cells.add((row + i, col))
+
+        boundary_candidates = []
+        if direction == "across":
+            boundary_candidates = [(row, col - 1), (row, col + len(word))]
+        else:
+            boundary_candidates = [(row - 1, col), (row + len(word), col)]
+
+        boundary_blacks = []
+        for br, bc in boundary_candidates:
+            if not (0 <= br < grid_size and 0 <= bc < len(grid[br])):
+                continue
+            state, _ = _cell_state(br, bc)
+            if state == "empty":
+                boundary_blacks.append((br, bc))
+            # 'black' needs nothing; 'letter' means the word abuts existing
+            # fill and no boundary square is added (existing behavior)
+
+        # Every added black square must get its 180-degree rotational twin,
+        # or the resulting grid fails the validator's symmetry check. Refuse
+        # placements whose twin cell would land on a letter (including a
+        # letter of the word being placed).
+        twin_blacks = []
+        for br, bc in boundary_blacks:
+            tr, tc = grid_size - 1 - br, grid_size - 1 - bc
+            if (tr, tc) == (br, bc) or (tr, tc) in boundary_blacks:
+                continue  # Twin is itself / another boundary square
+            if (tr, tc) in word_cells:
+                conflicts.append(
+                    f"Boundary black square at ({br}, {bc}) requires a symmetric "
+                    f"black square at ({tr}, {tc}), which is occupied by this "
+                    f"word — placement would break grid symmetry"
+                )
+                continue
+            state, twin_letter = _cell_state(tr, tc)
+            if state == "letter":
+                conflicts.append(
+                    f"Boundary black square at ({br}, {bc}) requires a symmetric "
+                    f"black square at ({tr}, {tc}), but that cell contains "
+                    f"'{twin_letter}'"
+                )
+            elif state == "empty":
+                twin_blacks.append((tr, tc))
+            # 'black' twin already exists — nothing to add
+
         # If there are conflicts, return error with details
         if conflicts:
             return (
@@ -331,62 +409,16 @@ def apply_placement():
                     "isThemeLocked": True,
                 }
 
-        # Add black cell boundaries if needed (NO SYMMETRY)
-        # Check cell before the word
-        if direction == "across":
-            # Check cell before (left)
-            if col > 0:
-                prev_cell = grid[row][col - 1]
-                # Add black cell if the cell is empty
-                if isinstance(prev_cell, str) and (prev_cell == "." or prev_cell == ""):
-                    grid[row][col - 1] = "#"
-                elif isinstance(prev_cell, dict) and not prev_cell.get("isBlack", False):
-                    letter_val = prev_cell.get("letter", "").strip()
-                    if not letter_val or letter_val == ".":
-                        # Convert to black cell (no symmetry)
-                        grid[row][col - 1] = {"letter": "", "isBlack": True}
+        # Add boundary black squares WITH their 180-degree symmetric twins
+        # (conflicts were already checked above, so this cannot clobber a
+        # letter or a theme-locked cell)
+        added_blacks = []
+        for br, bc in boundary_blacks + twin_blacks:
+            _set_black(br, bc)
+            added_blacks.append([br, bc])
 
-            # Check cell after (right)
-            end_col = col + len(word)
-            if end_col < len(grid[row]):
-                next_cell = grid[row][end_col]
-                # Add black cell if the cell is empty
-                if isinstance(next_cell, str) and (next_cell == "." or next_cell == ""):
-                    grid[row][end_col] = "#"
-                elif isinstance(next_cell, dict) and not next_cell.get("isBlack", False):
-                    letter_val = next_cell.get("letter", "").strip()
-                    if not letter_val or letter_val == ".":
-                        # Convert to black cell (no symmetry)
-                        grid[row][end_col] = {"letter": "", "isBlack": True}
-
-        else:  # down
-            # Check cell above
-            if row > 0:
-                prev_cell = grid[row - 1][col]
-                # Add black cell if the cell is empty
-                if isinstance(prev_cell, str) and (prev_cell == "." or prev_cell == ""):
-                    grid[row - 1][col] = "#"
-                elif isinstance(prev_cell, dict) and not prev_cell.get("isBlack", False):
-                    letter_val = prev_cell.get("letter", "").strip()
-                    if not letter_val or letter_val == ".":
-                        # Convert to black cell (no symmetry)
-                        grid[row - 1][col] = {"letter": "", "isBlack": True}
-
-            # Check cell below
-            end_row = row + len(word)
-            if end_row < len(grid):
-                next_cell = grid[end_row][col]
-                # Add black cell if the cell is empty
-                if isinstance(next_cell, str) and (next_cell == "." or next_cell == ""):
-                    grid[end_row][col] = "#"
-                elif isinstance(next_cell, dict) and not next_cell.get("isBlack", False):
-                    letter_val = next_cell.get("letter", "").strip()
-                    if not letter_val or letter_val == ".":
-                        # Convert to black cell (no symmetry)
-                        grid[end_row][col] = {"letter": "", "isBlack": True}
-
-        return jsonify({"grid": grid, "applied": True}), 200
+        return jsonify({"grid": grid, "applied": True, "added_black_squares": added_blacks}), 200
 
     except Exception as e:
         logger.error(f"Error applying placement: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)

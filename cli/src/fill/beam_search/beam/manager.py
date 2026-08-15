@@ -6,8 +6,9 @@ and adaptive width adjustment.
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..state import BeamState
 
@@ -91,7 +92,13 @@ class BeamManager(BeamManagementStrategy):
         self.debug_lcv = False
         self.debug_mac = False
 
-    def expand_beam(self, beam: List[BeamState], slot: Dict, candidates_per_slot: int) -> List[BeamState]:
+    def expand_beam(
+        self,
+        beam: List[BeamState],
+        slot: Dict,
+        candidates_per_slot: int,
+        deadline: Optional[float] = None,
+    ) -> List[BeamState]:
         """
         Expand beam by trying top-K candidates in each state.
 
@@ -99,6 +106,8 @@ class BeamManager(BeamManagementStrategy):
             beam: Current beam (list of states)
             slot: Slot to fill next
             candidates_per_slot: How many words to try per state
+            deadline: Optional absolute epoch deadline — expansion stops and
+                      returns whatever it has when the deadline passes
 
         Returns:
             Expanded beam (potentially beam_width * candidates_per_slot states)
@@ -108,6 +117,11 @@ class BeamManager(BeamManagementStrategy):
         from ...crosswordese import filter_crosswordese
 
         expanded = []
+
+        # Propagate the deadline into value ordering (LCV is the single most
+        # expensive step: it does pattern searches per candidate per crossing)
+        if self.value_ordering is not None:
+            self.value_ordering.deadline = deadline
 
         # DEBUG: Track why expansion might fail
         total_skipped_duplicate = 0
@@ -126,6 +140,10 @@ class BeamManager(BeamManagementStrategy):
         offset_per_beam = 2  # Tunable: increase for more diversity, decrease for more quality overlap
 
         for beam_idx, state in enumerate(beam):
+            # Respect the time budget: stop expanding, return what we have
+            if deadline is not None and time.time() >= deadline:
+                break
+
             # THEME PRESERVATION FIX: Check if slot already has an assigned word
             # This prevents theme words from being overwritten during expansion
             slot_id = (slot["row"], slot["col"], slot["direction"])
@@ -188,6 +206,10 @@ class BeamManager(BeamManagementStrategy):
 
             # Try each candidate
             for word, word_score in candidates:
+                # Respect the time budget (viability checks do pattern searches)
+                if deadline is not None and time.time() >= deadline:
+                    break
+
                 # Skip if word already used
                 if word in state.used_words:
                     total_skipped_duplicate += 1

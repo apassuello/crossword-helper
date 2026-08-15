@@ -21,9 +21,11 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
     const loadWordlists = async () => {
       try {
         const response = await axios.get('/api/wordlists');
-        setAvailableWordlists(response.data.wordlists);
+        setAvailableWordlists(response.data.wordlists || []);
       } catch (error) {
         console.error('Failed to load wordlists:', error);
+        // Fall back to the default list so the panel stays usable
+        setAvailableWordlists([{ key: 'comprehensive', name: 'Comprehensive' }]);
       }
     };
     loadWordlists();
@@ -61,52 +63,39 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
     }
   }, [pattern, selectedWordlists, algorithm, searchProgress]);
 
-  // Watch for search completion
+  // Watch for search completion.
+  // The final SSE event already carries the results (searchProgress.data.results),
+  // so use them directly — no redundant follow-up POST to /api/pattern.
   useEffect(() => {
-    const fetchResults = async () => {
-      if (searchProgress.status === 'complete' && loading) {
-        try {
-          // Fetch final results from regular endpoint
-          const response = await axios.post('/api/pattern', {
-            pattern: pattern.toUpperCase(),
-            max_results: 50,
-            wordlists: selectedWordlists,
-            algorithm: algorithm
-          });
+    if (searchProgress.status === 'complete' && loading) {
+      let searchResults = [...(searchProgress.data?.results || [])];
 
-          let searchResults = response.data.results || [];
-
-          // Sort results
-          if (sortBy === 'score') {
-            searchResults.sort((a, b) => b.score - a.score);
-          } else if (sortBy === 'alpha') {
-            searchResults.sort((a, b) => a.word.localeCompare(b.word));
-          } else if (sortBy === 'length') {
-            searchResults.sort((a, b) => a.word.length - b.word.length);
-          }
-
-          // Filter by minimum score
-          if (filterMinScore > 0) {
-            searchResults = searchResults.filter(r => r.score >= filterMinScore);
-          }
-
-          setResults(searchResults);
-          setLoading(false);
-        } catch (err) {
-          const errorMsg = err.response?.data?.error || 'Failed to fetch results';
-          setError(errorMsg);
-          setResults([]);
-          setLoading(false);
-        }
-      } else if (searchProgress.status === 'error' && loading) {
-        setError(searchProgress.message || 'Search failed');
-        setResults([]);
-        setLoading(false);
+      // Sort results
+      if (sortBy === 'score') {
+        searchResults.sort((a, b) => b.score - a.score);
+      } else if (sortBy === 'alpha') {
+        searchResults.sort((a, b) => a.word.localeCompare(b.word));
+      } else if (sortBy === 'length') {
+        searchResults.sort((a, b) => a.word.length - b.word.length);
       }
-    };
 
-    fetchResults();
-  }, [searchProgress.status, searchProgress.message, loading, pattern, selectedWordlists, algorithm, sortBy, filterMinScore]);
+      // Filter by minimum score
+      if (filterMinScore > 0) {
+        searchResults = searchResults.filter(r => r.score >= filterMinScore);
+      }
+
+      if (searchResults.length === 0) {
+        setError('No matching words found');
+      }
+
+      setResults(searchResults);
+      setLoading(false);
+    } else if (searchProgress.status === 'error' && loading) {
+      setError(searchProgress.message || 'Search failed');
+      setResults([]);
+      setLoading(false);
+    }
+  }, [searchProgress.status, searchProgress.data, searchProgress.message, loading, sortBy, filterMinScore]);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -164,90 +153,28 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
         <div className="wordlist-selector">
           <label>Search in wordlists:</label>
           <div className="wordlist-checkboxes">
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('comprehensive')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'comprehensive']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'comprehensive'));
-                  }
-                }}
-              />
-              <span>Comprehensive (454k words)</span>
-            </label>
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('core/common_3_letter')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'core/common_3_letter']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'core/common_3_letter'));
-                  }
-                }}
-              />
-              <span>Common 3-Letter</span>
-            </label>
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('core/crosswordese')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'core/crosswordese']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'core/crosswordese'));
-                  }
-                }}
-              />
-              <span>Crosswordese</span>
-            </label>
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('themed/expressions_and_slang')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'themed/expressions_and_slang']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'themed/expressions_and_slang'));
-                  }
-                }}
-              />
-              <span>Expressions & Slang</span>
-            </label>
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('themed/foreign_classics')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'themed/foreign_classics']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'themed/foreign_classics'));
-                  }
-                }}
-              />
-              <span>Foreign Classics (ES/FR)</span>
-            </label>
-            <label className="wordlist-option">
-              <input
-                type="checkbox"
-                checked={selectedWordlists.includes('themed/foreign_words')}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedWordlists([...selectedWordlists, 'themed/foreign_words']);
-                  } else {
-                    setSelectedWordlists(selectedWordlists.filter(w => w !== 'themed/foreign_words'));
-                  }
-                }}
-              />
-              <span>Foreign Words (5.7k)</span>
-            </label>
+            {availableWordlists.length === 0 && (
+              <div className="wordlist-loading">Loading wordlists...</div>
+            )}
+            {availableWordlists.map((wl) => (
+              <label key={wl.key || wl.name} className="wordlist-option">
+                <input
+                  type="checkbox"
+                  checked={selectedWordlists.includes(wl.key)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedWordlists([...selectedWordlists, wl.key]);
+                    } else {
+                      setSelectedWordlists(selectedWordlists.filter(w => w !== wl.key));
+                    }
+                  }}
+                />
+                <span>
+                  {wl.name}
+                  {wl.word_count ? ` (${wl.word_count.toLocaleString()} words)` : ''}
+                </span>
+              </label>
+            ))}
           </div>
         </div>
 

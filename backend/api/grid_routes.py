@@ -120,7 +120,7 @@ def suggest_black_square():
 
     except Exception as e:
         logger.error(f"Error suggesting black square: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @grid_api.route("/grid/apply-black-squares", methods=["POST"])
@@ -179,7 +179,7 @@ def apply_black_squares():
 
     except Exception as e:
         logger.error(f"Error applying black squares: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @grid_api.route("/grid/validate", methods=["POST"])
@@ -259,4 +259,4 @@ def validate_grid():
 
     except Exception as e:
         logger.error(f"Error validating grid: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)

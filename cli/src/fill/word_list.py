@@ -8,7 +8,7 @@ and provides efficient lookup operations for autofill.
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple, Union
 
 # Letter frequency scoring (based on common crossword usage)
 COMMON_LETTERS = set("EARIOTNS")  # Very common, good for crosswords
@@ -35,12 +35,15 @@ class WordList:
     - Letter diversity (repeated letters score lower)
     """
 
-    def __init__(self, words: List[str] = None, progress_callback=None):
+    def __init__(self, words: List[Union[str, Tuple[str, Optional[int]]]] = None, progress_callback=None):
         """
         Initialize word list.
 
         Args:
-            words: List of words to include (will be uppercased and validated)
+            words: List of words to include (will be uppercased and validated).
+                Entries may be plain strings or (word, score) tuples; a tuple's
+                score (e.g. from a scored wordlist file) overrides the computed
+                letter-frequency score.
             progress_callback: Optional callback(current, total) for progress updates
         """
         self.words: List[ScoredWord] = []
@@ -50,19 +53,25 @@ class WordList:
         if words:
             self.add_words(words, progress_callback)
 
-    def add_words(self, words: List[str], progress_callback=None) -> None:
+    def add_words(self, words: List[Union[str, Tuple[str, Optional[int]]]], progress_callback=None) -> None:
         """
         Add words to list with automatic scoring.
 
         Args:
-            words: Words to add (will be uppercased and validated)
+            words: Words to add (will be uppercased and validated). Entries may
+                be plain strings or (word, score) tuples; a tuple's score (e.g.
+                from a scored wordlist file) overrides the computed score.
             progress_callback: Optional callback(current, total) for progress updates
         """
         total = len(words)
         # Start with existing words to prevent duplicates
         seen = {sw.text for sw in self.words}
 
-        for idx, word in enumerate(words):
+        for idx, item in enumerate(words):
+            if isinstance(item, tuple):
+                word, file_score = item
+            else:
+                word, file_score = item, None
             word = word.upper().strip()
 
             # Validate word
@@ -74,8 +83,8 @@ class WordList:
                 continue
             seen.add(word)
 
-            # Score and add
-            score = self._score_word(word)
+            # Score and add (file-supplied score wins over computed score)
+            score = file_score if file_score is not None else self._score_word(word)
             scored_word = ScoredWord(text=word, score=score, length=len(word))
 
             self.words.append(scored_word)
@@ -216,10 +225,44 @@ class WordList:
         """String representation."""
         return f"WordList(words={len(self.words)})"
 
+    @staticmethod
+    def parse_line(line: str) -> Optional[Tuple[str, Optional[int]]]:
+        """
+        Parse a single wordlist line.
+
+        Supported formats:
+        - Plain: "WORD"
+        - Semicolon-scored: "WORD;50" (comprehensive_scored.txt, *.dict files)
+        - Comma-scored: "word,50" (broda.owl style CSV)
+
+        Args:
+            line: Stripped, non-empty, non-comment line
+
+        Returns:
+            (word, score) tuple where score is None for plain lines, or
+            None if the line is malformed (e.g. a "word,score" CSV header
+            or a scored line with a non-numeric score).
+        """
+        for sep in (";", ","):
+            if sep in line:
+                parts = line.split(sep)
+                word = parts[0].strip()
+                try:
+                    score = int(float(parts[1].strip()))
+                except (ValueError, IndexError):
+                    # Malformed scored line (e.g. CSV header "word,score") - skip
+                    return None
+                return (word, score)
+        return (line, None)
+
     @classmethod
     def from_file(cls, filepath: str, progress_callback=None, use_cache=True) -> "WordList":
         """
         Load word list from file, using cache if available.
+
+        Supports plain wordlists (one word per line), semicolon-scored
+        ("WORD;50"), and comma-scored ("word,50") formats. Scores from
+        scored files are kept and override the computed letter score.
 
         Args:
             filepath: Path to text file with one word per line
@@ -274,8 +317,16 @@ class WordList:
                 raise ValueError(f"Word list file too large (max 100MB): {file_size / 1024 / 1024:.1f}MB")
 
             # Read with proper error handling
+            # Parses plain, "WORD;SCORE" and "word,score" line formats
+            words = []
             with open(resolved_path, "r", encoding="utf-8") as f:
-                words = [line.strip() for line in f if line.strip()]
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parsed = cls.parse_line(line)
+                    if parsed:
+                        words.append(parsed)
 
             return cls(words, progress_callback)
 

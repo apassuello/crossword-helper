@@ -27,12 +27,11 @@ class TestSSECLIErrorHandling:
 
     def test_sse_reports_invalid_wordlist_error(self, client, sse_parser):
         """
-        Verify SSE reports error when CLI fails due to invalid wordlist.
+        Verify unknown wordlists are rejected upfront with a clear JSON 400.
 
-        Expected behavior:
-        - Task starts (202 response)
-        - SSE sends error status
-        - Error message includes useful diagnostic info
+        The endpoint used to accept the request (202) and only surface a
+        vague error via SSE mid-run; unknown wordlist names are now a
+        validation error before any CLI work starts.
         """
         grid = create_test_grid(11)
 
@@ -52,24 +51,11 @@ class TestSSECLIErrorHandling:
             content_type="application/json",
         )
 
-        # Should still accept request (error occurs during execution)
-        assert response.status_code == 202
-        task_id = response.json["task_id"]
-
-        # Get SSE stream
-        sse_response = client.get(f"/api/progress/{task_id}")
-        messages = sse_parser(sse_response.data)
-
-        # Should have error message
-        assert len(messages) > 0
-        last_msg = messages[-1]
-
-        # Should indicate error
-        assert (
-            last_msg.get("status") == "error"
-            or "error" in last_msg.get("message", "").lower()
-            or "not found" in last_msg.get("message", "").lower()
-        ), f"Expected error status, got: {last_msg}"
+        # Unknown wordlists are rejected before a task is created
+        assert response.status_code == 400
+        error = response.json["error"]
+        assert error["code"] == "UNKNOWN_WORDLIST"
+        assert "nonexistent_wordlist_xyz" in error["message"]
 
     def test_sse_reports_malformed_grid_error(self, client, sse_parser):
         """

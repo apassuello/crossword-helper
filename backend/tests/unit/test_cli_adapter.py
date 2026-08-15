@@ -11,7 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.core.cli_adapter import CLIAdapter, cached_normalize, get_adapter
+from backend.core.cli_adapter import (
+    CLI_STARTUP_BUDGET_SECONDS,
+    CLIAdapter,
+    cached_normalize,
+    get_adapter,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -302,9 +307,10 @@ class TestFill:
                     with patch.object(Path, "unlink"):
                         adapter.fill({"size": 15, "grid": []}, ["w.txt"], timeout_seconds=200)
 
-        # subprocess.run should have been called with timeout=210
+        # The subprocess ceiling must exceed the solver budget by the startup
+        # budget (interpreter + 44k wordlist + trie build), not a token 10s.
         call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 210
+        assert call_kwargs["timeout"] == 200 + CLI_STARTUP_BUDGET_SECONDS
 
     @patch("subprocess.run")
     def test_empty_output_file_returns_error(self, mock_run, adapter):
@@ -408,8 +414,10 @@ class TestFillWithResume:
             with patch.object(Path, "unlink"):
                 adapter.fill_with_resume("t", str(state_file), ["w.txt"], timeout_seconds=100)
 
+        # Resume also inflates the gzipped state before solving — same reason
+        # the ceiling is solver budget + startup budget.
         call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 110
+        assert call_kwargs["timeout"] == 100 + CLI_STARTUP_BUDGET_SECONDS
 
 
 # ===========================================================================

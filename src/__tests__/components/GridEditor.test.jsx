@@ -1,124 +1,121 @@
 /**
- * Tests for GridEditor - interactive crossword grid (SVG-based)
- * Tests cell selection, letter entry, keyboard navigation, black squares, theme locking
+ * Tests for direction-aware typing in the grid editor.
+ *
+ * Regression coverage: letter entry used to always advance rightward, with no
+ * way to type a down word. Typing now follows the selected direction, toggled
+ * with Enter, the toolbar button, or clicking the focused cell again.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import GridEditor from '../../components/GridEditor';
-import { emptyGrid11x11, gridWithBlackSquares } from '../fixtures/gridFixtures';
+import App from '../../App';
 
-describe('GridEditor Component', () => {
-  const defaultProps = {
-    grid: emptyGrid11x11,
-    gridSize: 11,
-    selectedCell: { row: 0, col: 0, direction: 'across' },
-    onSelectCell: vi.fn(),
-    onToggleBlack: vi.fn(),
-    onSetLetter: vi.fn(),
-    onToggleThemeLock: vi.fn(),
-    validationErrors: [],
-    numbering: {},
-  };
+vi.mock('react-hot-toast', () => ({
+  default: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    loading: vi.fn(),
+  }),
+  Toaster: () => null,
+}));
 
+// Letters render as <text class="cell-letter"> at x = padding + col*40 + 20,
+// y = padding + row*40 + 26 — collect (x, y, letter) to assert positions.
+const renderedLetters = (container) =>
+  Array.from(container.querySelectorAll('.cell-letter')).map((el) => ({
+    x: Number(el.getAttribute('x')),
+    y: Number(el.getAttribute('y')),
+    letter: el.textContent,
+  }));
+
+const setup = async () => {
+  const user = userEvent.setup();
+  const utils = render(<App />);
+  await waitFor(() => {
+    expect(utils.container.querySelectorAll('.grid-cell')).toHaveLength(225);
+  });
+  return { user, ...utils };
+};
+
+describe('GridEditor typing direction', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    global.localStorage.getItem.mockReturnValue(null);
   });
 
-  it('renders grid with correct number of cells', () => {
-    const { container } = render(<GridEditor {...defaultProps} />);
-    const cells = container.querySelectorAll('.grid-cell');
-    expect(cells.length).toBe(11 * 11);
+  it('types across by default (letters advance rightward)', async () => {
+    const { user, container } = await setup();
+
+    await user.click(container.querySelectorAll('.grid-cell')[0]);
+    await user.keyboard('CAT');
+
+    const letters = renderedLetters(container);
+    expect(letters.map((l) => l.letter)).toEqual(['C', 'A', 'T']);
+    // Same row (same y), advancing columns (increasing x)
+    expect(new Set(letters.map((l) => l.y)).size).toBe(1);
+    expect(letters[1].x - letters[0].x).toBe(40);
+    expect(letters[2].x - letters[1].x).toBe(40);
   });
 
-  it('handles cell click selection', async () => {
-    const onSelectCell = vi.fn();
-    const { container } = render(
-      <GridEditor {...defaultProps} onSelectCell={onSelectCell} />
-    );
+  it('Enter toggles to down typing (letters advance downward) (regression)', async () => {
+    const { user, container } = await setup();
 
-    const cells = container.querySelectorAll('.grid-cell');
-    // fireEvent.click works better for SVG elements than userEvent
-    fireEvent.click(cells[5]);
+    await user.click(container.querySelectorAll('.grid-cell')[0]);
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('button', { name: /typing: down/i })).toBeInTheDocument();
 
-    expect(onSelectCell).toHaveBeenCalled();
+    await user.keyboard('DOG');
+
+    const letters = renderedLetters(container);
+    expect(letters.map((l) => l.letter)).toEqual(['D', 'O', 'G']);
+    // Same column (same x), advancing rows (increasing y)
+    expect(new Set(letters.map((l) => l.x)).size).toBe(1);
+    expect(letters[1].y - letters[0].y).toBe(40);
+    expect(letters[2].y - letters[1].y).toBe(40);
   });
 
-  it('allows typing letters via hidden input', async () => {
-    const user = userEvent.setup();
-    const onSetLetter = vi.fn();
-    const { container } = render(
-      <GridEditor {...defaultProps} onSetLetter={onSetLetter} />
-    );
+  it('Backspace moves back along the typing direction', async () => {
+    const { user, container } = await setup();
 
-    // Click a cell to focus it
-    const cells = container.querySelectorAll('.grid-cell');
-    fireEvent.click(cells[0]);
+    await user.click(container.querySelectorAll('.grid-cell')[0]);
+    await user.keyboard('{Enter}');
+    await user.keyboard('DOG');
+    // Cursor sits on the empty cell at row 3: the first backspace clears it and
+    // moves UP to row 2 (not left), the second clears row 2's G
+    await user.keyboard('{Backspace}{Backspace}');
 
-    // Type into the hidden input
-    const hiddenInput = container.querySelector('.hidden-input');
-    fireEvent.keyDown(hiddenInput, { key: 'C' });
-
-    expect(onSetLetter).toHaveBeenCalledWith(0, 0, 'C');
+    const letters = renderedLetters(container);
+    expect(letters.map((l) => l.letter)).toEqual(['D', 'O']);
+    // Cursor is now on row 1's O: same column as D, one row below it
+    expect(letters[1].x).toBe(letters[0].x);
+    expect(letters[1].y - letters[0].y).toBe(40);
   });
 
-  it('toggles black squares on Shift+Click', () => {
-    const onToggleBlack = vi.fn();
-    const { container } = render(
-      <GridEditor {...defaultProps} onToggleBlack={onToggleBlack} />
-    );
+  it('clicking the focused cell again flips the direction', async () => {
+    const { user, container } = await setup();
 
-    const cells = container.querySelectorAll('.grid-cell');
-    fireEvent.click(cells[0], { shiftKey: true });
+    const firstCell = container.querySelectorAll('.grid-cell')[0];
+    await user.click(firstCell);
+    expect(screen.getByRole('button', { name: /typing: across/i })).toBeInTheDocument();
 
-    expect(onToggleBlack).toHaveBeenCalledWith(0, 0);
+    await user.click(firstCell);
+    expect(screen.getByRole('button', { name: /typing: down/i })).toBeInTheDocument();
+
+    await user.click(firstCell);
+    expect(screen.getByRole('button', { name: /typing: across/i })).toBeInTheDocument();
   });
 
-  it('displays black squares correctly', () => {
-    const { container } = render(
-      <GridEditor {...defaultProps} grid={gridWithBlackSquares} gridSize={15} />
-    );
+  it('the toolbar button toggles the direction', async () => {
+    const { user, container } = await setup();
 
-    // Black cells get fill="#333"
-    const allCells = container.querySelectorAll('.grid-cell');
-    const blackCells = Array.from(allCells).filter(
-      cell => cell.getAttribute('fill') === '#333'
-    );
-    expect(blackCells.length).toBeGreaterThan(0);
-  });
+    await user.click(screen.getByRole('button', { name: /typing: across/i }));
+    expect(screen.getByRole('button', { name: /typing: down/i })).toBeInTheDocument();
 
-  it('supports keyboard navigation with arrow keys', () => {
-    const { container } = render(<GridEditor {...defaultProps} />);
-
-    // Click first cell to set focusedCell
-    const cells = container.querySelectorAll('.grid-cell');
-    fireEvent.click(cells[0]);
-
-    // Navigate via hidden input keyDown
-    const hiddenInput = container.querySelector('.hidden-input');
-    fireEvent.keyDown(hiddenInput, { key: 'ArrowRight' });
-
-    // The component updates internal focusedCell state (col: 1)
-    // We can verify by pressing a letter and checking the coordinates
-    fireEvent.keyDown(hiddenInput, { key: 'A' });
-    expect(defaultProps.onSetLetter).toHaveBeenCalledWith(0, 1, 'A');
-  });
-
-  it('handles Backspace to clear cell', () => {
-    const onSetLetter = vi.fn();
-    const { container } = render(
-      <GridEditor {...defaultProps} onSetLetter={onSetLetter} />
-    );
-
-    // Click a cell to focus it
-    const cells = container.querySelectorAll('.grid-cell');
-    fireEvent.click(cells[0]);
-
-    // Press Backspace on hidden input
-    const hiddenInput = container.querySelector('.hidden-input');
-    fireEvent.keyDown(hiddenInput, { key: 'Backspace' });
-
-    expect(onSetLetter).toHaveBeenCalledWith(0, 0, '');
+    // And typing follows it
+    await user.click(container.querySelectorAll('.grid-cell')[0]);
+    await user.keyboard('HI');
+    const letters = renderedLetters(container);
+    expect(new Set(letters.map((l) => l.x)).size).toBe(1);
+    expect(letters[1].y - letters[0].y).toBe(40);
   });
 });

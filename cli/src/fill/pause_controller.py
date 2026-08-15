@@ -5,6 +5,7 @@ Uses file-based signaling to request pause during long-running algorithms.
 Simple, reliable, and cross-platform compatible.
 """
 
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,7 @@ class PauseController:
         self.pause_dir.mkdir(parents=True, exist_ok=True)
 
         self.pause_file = self.pause_dir / f"crossword_pause_{task_id}.flag"
+        self.running_file = self.pause_dir / f"crossword_running_{task_id}.pid"
         self._last_check_time = 0.0
         self._check_interval = 0.1  # Check at most every 100ms
 
@@ -94,6 +96,54 @@ class PauseController:
         Should be called when algorithm completes (success or failure).
         """
         self.clear_pause()
+
+    def mark_running(self) -> None:
+        """
+        Record that a fill process for this task id is running.
+
+        Writes a pid file so `crossword pause` can tell whether a pause
+        request will actually be seen by a live process.
+        """
+        try:
+            self.running_file.write_text(str(os.getpid()))
+        except OSError:
+            pass  # Non-fatal: pause will just report "not running"
+
+    def clear_running(self) -> None:
+        """Remove the running marker (call on process exit, pause, or completion)."""
+        try:
+            self.running_file.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+    def is_task_running(self) -> bool:
+        """
+        Check whether a live fill process is registered for this task id.
+
+        Returns:
+            True if the pid file exists and the recorded process is alive.
+            A stale pid file (dead process) is cleaned up and reported False.
+        """
+        if not self.running_file.exists():
+            return False
+        try:
+            pid = int(self.running_file.read_text().strip())
+        except (ValueError, OSError):
+            self.clear_running()
+            return False
+        try:
+            os.kill(pid, 0)  # Signal 0: existence check only
+            return True
+        except ProcessLookupError:
+            # Stale marker from a dead process — clean it up
+            self.clear_running()
+            return False
+        except PermissionError:
+            return True  # Process exists but owned by someone else
+        except OSError:
+            return False
 
     def is_paused(self) -> bool:
         """

@@ -133,6 +133,32 @@ class TestGetEditSummary:
         assert summary["emptied_count"] >= 1
         assert word in summary["removed_words"]
 
+    def test_partial_word_edit_detected(self):
+        """Regression: a single-letter edit inside an unfinished slot used
+        to report zero changes. It must be counted and reported."""
+        saved = _make_grid_dict()
+        edited = _make_grid_dict(letters={(0, 0): "Q"})
+        slots, sid_map = _make_slot_list_and_id_map(saved)
+
+        summary = self.merger.get_edit_summary(saved, edited, slots, sid_map)
+
+        assert summary["modified_count"] >= 1
+        assert summary["partial_count"] >= 1
+        assert summary["cells_filled"] == 1
+        assert summary["cells_emptied"] == 0
+        assert summary["cells_changed"] == 0
+
+    def test_partial_letter_change_detected(self):
+        """Changing one letter of a partially filled slot is reported."""
+        saved = _make_grid_dict(letters={(0, 0): "A", (0, 1): "B"})
+        edited = _make_grid_dict(letters={(0, 0): "A", (0, 1): "Z"})
+        slots, sid_map = _make_slot_list_and_id_map(saved)
+
+        summary = self.merger.get_edit_summary(saved, edited, slots, sid_map)
+
+        assert summary["modified_count"] >= 1
+        assert summary["cells_changed"] == 1
+
     def test_changed_letters_detected(self):
         """Changing a filled slot to a different word is detected as modified."""
         old_word = "ABCDEFGHIJK"
@@ -301,7 +327,10 @@ class TestMergeEdits:
         """merge_edits returns a CSPState with the edited grid_dict."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = "ABCDEFGHIJK"
+        # All-'A' word: compatible with the synthetic "A"*length domains of
+        # the crossing down slots (partial-word edits now prune domains, so
+        # an incompatible edit would correctly raise ValueError)
+        word = "A" * GRID_SIZE
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
@@ -312,7 +341,7 @@ class TestMergeEdits:
         """Newly filled slots are added to locked_slots."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = "ABCDEFGHIJK"
+        word = "A" * GRID_SIZE
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
@@ -323,12 +352,34 @@ class TestMergeEdits:
         """New words from filled slots appear in used_words."""
         grid_dict = _make_grid_dict()
         state = self._build_state_with_domains(grid_dict)
-        word = "ABCDEFGHIJK"
+        word = "A" * GRID_SIZE
         edited = _make_grid_dict(letters=_fill_row(0, word))
 
         result = self.merger.merge_edits(state, edited)
 
         assert word in result.used_words
+
+    def test_merge_prunes_domains_for_partial_edits(self):
+        """Regression: a letter-level edit prunes crossing-slot domains to
+        pattern-compatible words (it used to be ignored entirely)."""
+        grid_dict = _make_grid_dict()
+        slots, sid_map = _make_slot_list_and_id_map(grid_dict)
+        down_0 = _find_slot_id(slots, sid_map, 0, 0, "down")
+        assert down_0 is not None
+
+        length = slots[down_0]["length"]
+        domains = {}
+        for idx, slot in enumerate(slots):
+            domains[idx] = ["A" * slot["length"], "B" * slot["length"]]
+
+        state = _make_csp_state(grid_dict, domains=domains, constraints={})
+
+        # Single-cell edit: put 'B' at (0,0) — down slot 0 becomes 'B???...'
+        edited = _make_grid_dict(letters={(0, 0): "B"})
+
+        result = self.merger.merge_edits(state, edited)
+
+        assert set(result.domains[down_0]) == {"B" * length}
 
     def test_merge_raises_on_empty_domain(self):
         """If edits cause an empty domain, ValueError is raised."""

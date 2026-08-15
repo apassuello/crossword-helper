@@ -26,6 +26,357 @@ def cli():
     """Crossword Builder CLI — create, fill, validate, and export crossword puzzles."""
 
 
+def _load_grid_or_exit(grid_file: str, allow_nonstandard: bool = False, json_output: bool = False):
+    """
+    Load a grid JSON file, exiting cleanly (no traceback) on invalid grids.
+
+    Args:
+        grid_file: Path to grid JSON file
+        allow_nonstandard: If True, allow non-standard grid sizes (not 11/15/21)
+        json_output: If True, emit a JSON error object instead of human text
+
+    Returns:
+        (data, grid) tuple on success; exits with code 1 on failure
+    """
+    with open(grid_file, "r") as f:
+        data = json.load(f)
+
+    try:
+        grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+    except ValueError as e:
+        message = str(e)
+        hint = None
+        if "strict_size" in message:
+            # Non-standard size error — point at the CLI flag, not the internal API
+            message = message.split(". Set strict_size")[0]
+            hint = "Use --allow-nonstandard to work with non-standard grid sizes (e.g. 5x5, 9x9)."
+
+        if json_output:
+            error_obj = {"success": False, "error": message}
+            if hint:
+                error_obj["hint"] = hint
+            click.echo(json.dumps(error_obj))
+        else:
+            click.echo(click.style(f"Error: {message}", fg="red"), err=True)
+            if hint:
+                click.echo(f"Hint: {hint}", err=True)
+        sys.exit(1)
+
+    return data, grid
+
+
+def _fail_fill(message: str, json_output: bool, hint: Optional[str] = None):
+    """Emit a fill/resume error (JSON or human) and exit with code 1."""
+    if json_output:
+        error_obj = {"success": False, "error": message}
+        if hint:
+            error_obj["hint"] = hint
+        click.echo(json.dumps(error_obj))
+    else:
+        click.echo(click.style(f"Error: {message}", fg="red"), err=True)
+        if hint:
+            click.echo(f"Hint: {hint}", err=True)
+    sys.exit(1)
+
+
+def _load_wordlist_words(wordlist_files) -> list:
+    """
+    Load words from wordlist files the same way `fill` does.
+
+    Handles comments and the WORD;SCORE scored format.
+    """
+    all_words = []
+    for wordlist_file in wordlist_files:
+        with open(wordlist_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # Support WORD;SCORE format (comprehensive_scored.txt)
+                word = line.split(";")[0].strip().upper()
+                if word:
+                    all_words.append(word)
+    return all_words
+
+
+def _execute_resume(
+    state_file: str,
+    output: Optional[str],
+    json_output: bool,
+    algorithm: Optional[str],
+    algorithm_explicit: bool,
+    timeout: int,
+    min_score: int,
+    wordlists: tuple,
+    task_id_override: Optional[str] = None,
+):
+    """
+    Shared implementation for `resume` and `fill --resume`.
+
+    State resolution precedence:
+    1. If state_file is an existing file, THAT file is loaded (it must be a
+       valid state file — its content is never silently ignored).
+    2. Otherwise state_file is treated as a task id and looked up in the
+       state directory (/tmp/crossword_states by default).
+
+    Wordlists come from -w if given, else from the wordlist paths recorded in
+    the saved state; a clear error is raised if neither is available.
+
+    The algorithm defaults to the one recorded in the saved state unless the
+    caller explicitly chose one (algorithm_explicit=True).
+    """
+    from .core.progress import ProgressReporter
+    from .fill.beam_search_autofill import BeamSearchAutofill
+    from .fill.hybrid_autofill import HybridAutofill
+    from .fill.iterative_repair import IterativeRepair
+    from .fill.pattern_matcher import PatternMatcher
+    from .fill.pause_controller import PauseController
+    from .fill.state_manager import StateManager
+    from .fill.trie_pattern_matcher import TriePatternMatcher
+
+    progress = ProgressReporter(enabled=json_output)
+    progress.start(f"Resuming from {state_file}")
+
+    state_manager = StateManager()
+
+    # --- 1. Resolve and load the state -------------------------------------
+    state_path = Path(state_file)
+    if state_path.is_file():
+        # Explicit existing file path wins — load THIS file
+        try:
+            state_type, state_obj, metadata, saved_task_id = state_manager.load_state_file(state_path)
+        except ValueError as e:
+            _fail_fill(str(e), json_output)
+    else:
+        # Treat the argument as a task id in the state directory
+        candidate_task_id = Path(state_file).name
+        # Accept task ids given as '<id>', '<id>.json', or '<id>.json.gz'
+        for suffix in (".gz", ".json"):
+            if candidate_task_id.endswith(suffix):
+                candidate_task_id = candidate_task_id[: -len(suffix)]
+        try:
+            state_type, state_obj, metadata, saved_task_id = state_manager.load_state_by_task_id(candidate_task_id)
+        except FileNotFoundError:
+            _fail_fill(
+                f"'{state_file}' is neither an existing state file nor a known "
+                f"task id in {state_manager.storage_dir}",
+                json_output,
+                hint="Use `crossword list-states` to see saved task ids, or pass " "the path to a .json.gz state file.",
+            )
+        except ValueError as e:
+            _fail_fill(str(e), json_output)
+
+    task_id = task_id_override or saved_task_id
+
+    if not json_output:
+        click.echo(f"Loaded {state_type} state for task '{task_id}'")
+        click.echo(f"  Saved: {metadata.get('slots_filled', '?')}/{metadata.get('total_slots', '?')} slots filled")
+
+    progress.update(20, "State loaded successfully")
+
+    # --- 2. Resolve the algorithm ------------------------------------------
+    if algorithm_explicit and algorithm:
+        chosen_algorithm = algorithm
+    else:
+        # Default to the algorithm recorded in the state
+        chosen_algorithm = metadata.get("algorithm") or ("trie" if state_type == "csp" else "beam")
+
+    # --- 3. Resolve and load wordlists -------------------------------------
+    wordlist_files = [str(w) for w in wordlists] if wordlists else list(metadata.get("wordlists", []) or [])
+    if not wordlist_files:
+        _fail_fill(
+            "No wordlists available: none passed with -w and none recorded in " "the saved state",
+            json_output,
+            hint="Re-run with -w data/wordlists/comprehensive.txt (or your " "original wordlists).",
+        )
+
+    missing = [w for w in wordlist_files if not Path(w).is_file()]
+    if missing:
+        _fail_fill(
+            f"Wordlist file(s) not found: {', '.join(missing)}",
+            json_output,
+            hint="Pass replacement wordlists with -w.",
+        )
+
+    all_words = _load_wordlist_words(wordlist_files)
+    if not all_words:
+        _fail_fill(f"Wordlists loaded 0 words: {', '.join(wordlist_files)}", json_output)
+
+    word_list = WordList(all_words)
+    progress.update(40, f"Loaded {len(word_list)} words from {len(wordlist_files)} wordlist(s)")
+    if not json_output:
+        click.echo(f"  Wordlists ({'from -w' if wordlists else 'from saved state'}): " f"{', '.join(wordlist_files)}")
+        click.echo(f"  Loaded {len(word_list)} words")
+
+    # --- 4. Rebuild grid + solver and continue -----------------------------
+    use_trie = chosen_algorithm in ["trie", "beam", "repair", "hybrid"]
+    pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
+
+    pause_controller = None
+    if task_id:
+        pause_controller = PauseController(task_id=task_id)
+        pause_controller.clear_pause()
+        pause_controller.mark_running()
+
+    exact_resume = (state_type == "csp" and chosen_algorithm in ("trie", "regex")) or (
+        state_type == "beam" and chosen_algorithm == "beam"
+    )
+
+    if state_type == "csp":
+        grid = Grid.from_dict(state_obj.grid_dict, strict_size=False)
+    else:  # beam
+        if not state_obj.beam:
+            _fail_fill("Beam state file contains an empty beam — cannot resume", json_output)
+        grid = Grid.from_dict(state_obj.beam[0]["grid_dict"], strict_size=False)
+
+    if not json_output:
+        click.echo("\nResuming autofill...")
+        click.echo(f"  Algorithm: {chosen_algorithm}" + ("" if exact_resume else " (fresh fill from the saved grid — exact " f"{state_type} position only resumes with a matching algorithm)"))
+        click.echo(f"  Timeout: {timeout}s\n")
+
+    progress.update(60, "Starting autofill from saved state")
+
+    result = None
+    try:
+        if exact_resume and state_type == "csp":
+            autofill = Autofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                timeout,
+                min_score,
+                chosen_algorithm,
+                progress,
+                pause_controller=pause_controller,
+                state_manager=state_manager,
+            )
+            autofill.wordlist_paths = wordlist_files
+            result = autofill.fill(timeout=timeout, resume_state=state_obj, task_id=task_id)
+        elif exact_resume and state_type == "beam":
+            autofill = BeamSearchAutofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                beam_width=max(1, len(state_obj.beam)),
+                min_score=min_score,
+                progress_reporter=progress,
+                pause_controller=pause_controller,
+                task_id=task_id,
+            )
+            autofill.wordlist_paths = wordlist_files
+            result = autofill.fill(timeout=timeout, resume_state=state_obj)
+        else:
+            # Algorithm mismatch: run the requested algorithm fresh on the
+            # saved (partially filled) grid — progress is kept, position isn't
+            if chosen_algorithm == "beam":
+                autofill = BeamSearchAutofill(
+                    grid,
+                    word_list,
+                    pattern_matcher,
+                    min_score=min_score,
+                    progress_reporter=progress,
+                    pause_controller=pause_controller,
+                    task_id=task_id,
+                )
+            elif chosen_algorithm == "repair":
+                autofill = IterativeRepair(
+                    grid,
+                    word_list,
+                    pattern_matcher,
+                    min_score=min_score,
+                    progress_reporter=progress,
+                )
+            elif chosen_algorithm == "hybrid":
+                autofill = HybridAutofill(
+                    grid,
+                    word_list,
+                    pattern_matcher,
+                    min_score=min_score,
+                    progress_reporter=progress,
+                    pause_controller=pause_controller,
+                    task_id=task_id,
+                )
+            else:  # trie / regex on a beam state
+                autofill = Autofill(
+                    grid,
+                    word_list,
+                    pattern_matcher,
+                    timeout,
+                    min_score,
+                    chosen_algorithm,
+                    progress,
+                    pause_controller=pause_controller,
+                    state_manager=state_manager,
+                )
+            autofill.wordlist_paths = wordlist_files
+            if chosen_algorithm in ("trie", "regex"):
+                result = autofill.fill(timeout=timeout, task_id=task_id)
+            else:
+                result = autofill.fill(timeout=timeout)
+    except ValueError as e:
+        _fail_fill(str(e), json_output)
+    finally:
+        if pause_controller:
+            pause_controller.clear_running()
+            if result is None or not result.paused:
+                pause_controller.clear_pause()
+
+    # --- 5. Save + report ---------------------------------------------------
+    # Never silently overwrite the state file with a grid: default output is a
+    # sibling file named after the task id.
+    output_file = output or f"resumed_{task_id}.json"
+    with open(output_file, "w") as f:
+        json.dump(result.grid.to_dict(), f, indent=2)
+
+    all_slots_filled = result.total_slots > 0 and result.slots_filled == result.total_slots
+
+    if json_output:
+        output_data = {
+            "success": result.success,
+            "grid": result.grid.to_dict()["grid"],
+            "slots_filled": result.slots_filled,
+            "total_slots": result.total_slots,
+            "fill_percentage": (int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0),
+            "time_elapsed": result.time_elapsed,
+            "all_slots_filled": all_slots_filled,
+            "paused": result.paused,
+            "algorithm": chosen_algorithm,
+            "task_id": task_id,
+            "wordlists": wordlist_files,
+            "output_file": str(output_file),
+        }
+        if result.paused and result.state_path:
+            output_data["state_path"] = result.state_path
+        progress.complete("Resume complete")
+        click.echo(json.dumps(output_data))
+    else:
+        click.echo(f"\n{'='*60}")
+        click.echo("Resume Results")
+        click.echo(f"{'='*60}\n")
+
+        if result.paused:
+            click.echo(click.style("⏸ PAUSED again - state saved", fg="cyan", bold=True))
+            if result.state_path:
+                click.echo(f"  State file: {result.state_path}")
+        elif result.success:
+            click.echo(click.style("✓ SUCCESS - Grid completed!", fg="green", bold=True))
+        elif all_slots_filled:
+            click.echo(
+                click.style(
+                    f"⚠ FILLED with {len(result.problematic_slots)} problematic entries",
+                    fg="yellow",
+                    bold=True,
+                )
+            )
+        else:
+            click.echo(click.style("✗ PARTIAL - Could not complete grid", fg="yellow", bold=True))
+
+        click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
+        click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
+        click.echo(f"\n✓ Saved to: {output_file}")
+        click.echo(f"{'='*60}\n")
+
+
 @cli.command()
 @click.option(
     "--size",
@@ -58,13 +409,16 @@ def new(size: str, output: str):
 
 @cli.command()
 @click.argument("grid_file", type=click.Path(exists=True))
-def validate(grid_file: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def validate(grid_file: str, allow_nonstandard: bool):
     """Validate a crossword grid against NYT standards."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     # Validate
     is_valid, errors = GridValidator.validate_all(grid)
@@ -102,13 +456,13 @@ def validate(grid_file: str):
 
 
 @cli.command()
-@click.argument("grid_file", type=click.Path(exists=True))
+@click.argument("grid_file", type=click.Path(exists=True), required=False)
 @click.option(
     "--wordlists",
     "-w",
     multiple=True,
-    required=True,
-    help="Word list files (can specify multiple)",
+    help="Word list files (can specify multiple). Required unless --resume "
+    "is used with a state that recorded its wordlists.",
 )
 @click.option("--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling")
 @click.option("--min-score", type=int, default=30, help="Minimum word quality score (1-100)")
@@ -183,8 +537,22 @@ def validate(grid_file: str):
     default=False,
     help="After autofill, remove invalid words while keeping letters shared with valid crossing words",
 )
+@click.option(
+    "--task-id",
+    default=None,
+    help="Task identifier for pause/resume: `crossword pause TASK_ID` will "
+    "make this fill save its state and exit at the next checkpoint",
+)
+@click.option(
+    "--resume",
+    "resume_state_file",
+    type=click.Path(),
+    default=None,
+    help="Resume from a saved state file (or task id) instead of starting "
+    "from GRID_FILE. Equivalent to the `resume` command.",
+)
 def fill(
-    grid_file: str,
+    grid_file: Optional[str],
     wordlists: tuple,
     timeout: int,
     min_score: int,
@@ -200,12 +568,39 @@ def fill(
     max_adaptations: int,
     partial_fill: bool,
     cleanup: bool,
+    task_id: Optional[str],
+    resume_state_file: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
     # Create progress reporter (only for JSON output - stderr goes to web API)
     from .core.progress import ProgressReporter
 
     progress = ProgressReporter(enabled=json_output)
+
+    # --resume: delegate to the shared resume implementation (same code path
+    # as the `resume` command; used by the backend's fill_with_resume)
+    if resume_state_file:
+        _execute_resume(
+            state_file=resume_state_file,
+            output=output,
+            json_output=json_output,
+            algorithm=algorithm,
+            algorithm_explicit=True,  # fill always has a concrete -a value
+            timeout=timeout,
+            min_score=min_score,
+            wordlists=wordlists,
+            task_id_override=task_id,
+        )
+        return
+
+    if not grid_file:
+        _fail_fill("GRID_FILE is required (or use --resume STATE_FILE)", json_output)
+    if not wordlists:
+        _fail_fill("At least one wordlist is required (-w/--wordlists)", json_output)
+
+    # Collected non-fatal warnings — echoed in human mode, and included as a
+    # "warnings" array in --json-output so API callers see them too
+    warnings: list = []
 
     # Load grid
     if not json_output:
@@ -216,6 +611,25 @@ def fill(
         data = json.load(f)
 
     grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+
+    # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
+    # Any stale pause flag for this task id is cleared before starting, and a
+    # running-marker (pid file) is written so `pause` can verify the task.
+    # Registered BEFORE wordlist loading: loading 44k words can take seconds
+    # on slow machines, and a pause request during that window must already
+    # find the task registered.
+    pause_controller = None
+    if task_id:
+        from .fill.pause_controller import PauseController
+
+        pause_controller = PauseController(task_id=task_id)
+        pause_controller.clear_pause()  # A stale flag must not insta-pause us
+        pause_controller.mark_running()
+
+        if algorithm == "repair":
+            warnings.append(f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run")
+        elif algorithm == "hybrid":
+            warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
 
     # Load word lists
     if not json_output:
@@ -302,6 +716,25 @@ def fill(
             for (row, col, direction), word in theme_entries_dict.items():
                 click.echo(f"    • {direction.capitalize()} at ({row},{col}): {word}")
 
+        # Validate theme entries against the grid's slot structure UP FRONT.
+        # A mismatched length used to silently become a prefix constraint
+        # (e.g. "STO" in a 5-letter slot quietly filled as "STONE").
+        slot_lengths = {(s["row"], s["col"], s["direction"]): s["length"] for s in grid.get_word_slots()}
+        theme_errors = []
+        for (row, col, direction), word in theme_entries_dict.items():
+            slot_len = slot_lengths.get((row, col, direction))
+            if slot_len is None:
+                theme_errors.append(
+                    f"Theme entry '{word}' at ({row},{col},{direction}) does not " "start a word slot in this grid"
+                )
+            elif slot_len != len(word):
+                theme_errors.append(
+                    f"Theme entry '{word}' is {len(word)} letters but the "
+                    f"{direction} slot at ({row},{col}) is {slot_len} letters long"
+                )
+        if theme_errors:
+            _fail_fill("Invalid theme entries: " + "; ".join(theme_errors), json_output)
+
     # Create pattern matcher based on algorithm
     from .fill.beam_search_autofill import BeamSearchAutofill
     from .fill.hybrid_autofill import HybridAutofill
@@ -359,6 +792,8 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             partial_fill_mode=partial_fill,
+            pause_controller=pause_controller,
+            task_id=task_id,
         )
     elif algorithm == "repair":
         autofill = IterativeRepair(
@@ -382,18 +817,33 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
+            pause_controller=pause_controller,
+            task_id=task_id,
         )
     else:
         # Default to classic Autofill for 'regex' and 'trie'
         # Note: Classic autofill doesn't support theme entries
-        if theme_entries_dict and not json_output:
-            click.echo(
-                click.style(
-                    f"Warning: Theme entries not supported for {algorithm} algorithm. Use beam, repair, or hybrid.",
-                    fg="yellow",
-                )
-            )
-        autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
+        if theme_entries_dict:
+            warnings.append(f"Theme entries are not supported for the {algorithm} algorithm " "and were IGNORED. Use beam, repair, or hybrid.")
+        autofill = Autofill(
+            grid,
+            word_list,
+            None,
+            timeout,
+            min_score,
+            algorithm,
+            progress,
+            pause_controller=pause_controller,
+        )
+
+    # Record the wordlist paths on the solver so a paused state stores them
+    # (resume reloads the same wordlists without needing -w)
+    autofill.wordlist_paths = [str(w) for w in wordlists]
+
+    # Emit any warnings collected so far (human mode; JSON gets them in the result)
+    if warnings and not json_output:
+        for w in warnings:
+            click.echo(click.style(f"Warning: {w}", fg="yellow"))
 
     # Wrap with adaptive autofill if enabled
     if adaptive:
@@ -429,6 +879,10 @@ def fill(
     # Get empty slots
     empty_slots = grid.get_empty_slots()
     if not empty_slots:
+        # Nothing to fill — release the pause/running markers before returning
+        if pause_controller:
+            pause_controller.clear_running()
+            pause_controller.clear_pause()
         if json_output:
             all_slots = grid.get_word_slots()
             click.echo(
@@ -442,6 +896,8 @@ def fill(
                         "time_elapsed": 0.0,
                         "iterations": 0,
                         "problematic_slots_count": 0,
+                        "all_slots_filled": True,
+                        "paused": False,
                         "message": "Grid was already completely filled",
                     }
                 )
@@ -460,50 +916,43 @@ def fill(
             click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
 
     # Fill grid
-    # New algorithms (beam, repair, hybrid) use fill(timeout), classic uses fill() or fill_with_restarts()
-    if algorithm in ["beam", "repair", "hybrid"]:
-        # New algorithms don't support multiple attempts - they use timeout directly
-        if attempts > 1 and not json_output:
-            click.echo(
-                click.style(
-                    f"Warning: --attempts parameter ignored for {algorithm} algorithm",
-                    fg="yellow",
-                )
+    # Adaptive and the new algorithms (beam, repair, hybrid) use fill(timeout);
+    # classic uses fill() or fill_with_restarts(). The -t value is ALWAYS
+    # forwarded (adaptive runs of classic algorithms used to ignore it).
+    def _run_fill():
+        if adaptive or algorithm in ["beam", "repair", "hybrid"]:
+            if attempts > 1 and not json_output:
+                mode = "adaptive mode" if adaptive else f"{algorithm} algorithm"
+                click.echo(click.style(f"Warning: --attempts parameter ignored for {mode}", fg="yellow"))
+            return autofill.fill(timeout=timeout)
+        # Classic autofill (regex, trie)
+        if attempts > 1:
+            timeout_per_attempt = timeout // attempts
+            return autofill.fill_with_restarts(
+                attempts=attempts,
+                timeout_per_attempt=timeout_per_attempt,
+                task_id=task_id,
             )
+        return autofill.fill(task_id=task_id)
 
+    result = None
+    try:
         if json_output:
-            result = autofill.fill(timeout=timeout)
+            result = _run_fill()
         else:
             with click.progressbar(length=100, label="Progress") as bar:
-                result = autofill.fill(timeout=timeout)
+                result = _run_fill()
                 # Update progress bar
                 if result.total_slots > 0:
                     progress_pct = int((result.slots_filled / result.total_slots) * 100)
                     bar.update(progress_pct)
-    else:
-        # Classic autofill (regex, trie)
-        if attempts > 1:
-            timeout_per_attempt = timeout // attempts
-            if json_output:
-                result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
-            else:
-                with click.progressbar(length=100, label="Progress") as bar:
-                    result = autofill.fill_with_restarts(attempts=attempts, timeout_per_attempt=timeout_per_attempt)
-                    # Update progress bar
-                    if result.total_slots > 0:
-                        progress_pct = int((result.slots_filled / result.total_slots) * 100)
-                        bar.update(progress_pct)
-        else:
-            # Single attempt
-            if json_output:
-                result = autofill.fill()
-            else:
-                with click.progressbar(length=100, label="Progress") as bar:
-                    result = autofill.fill()
-                    # Update progress bar
-                    if result.total_slots > 0:
-                        progress_pct = int((result.slots_filled / result.total_slots) * 100)
-                        bar.update(progress_pct)
+    finally:
+        # Clean up pause/running marker files. On a real pause the state was
+        # already saved and the flag consumed; anything left here is stale.
+        if pause_controller:
+            pause_controller.clear_running()
+            if result is None or not result.paused:
+                pause_controller.clear_pause()
 
     # Cleanup pass: remove invalid words, keep letters shared with valid crossings
     if cleanup and algorithm in ["repair", "hybrid"]:
@@ -530,11 +979,25 @@ def fill(
             )
         result = cleanup_result
 
+    all_slots_filled = result.total_slots > 0 and result.slots_filled == result.total_slots
+
     # Send completion status for API integration with diagnostic info
-    if result.success:
+    if result.paused:
+        progress.update(
+            (int((result.slots_filled / result.total_slots) * 100) if result.total_slots > 0 else 0),
+            f"Paused: {result.slots_filled}/{result.total_slots} slots filled, state saved",
+            "paused",
+        )
+    elif result.success:
         progress.update(
             100,
             f"Successfully filled {result.slots_filled}/{result.total_slots} slots",
+            "complete",
+        )
+    elif all_slots_filled:
+        progress.update(
+            100,
+            f"Filled all {result.total_slots} slots with " f"{len(result.problematic_slots)} problematic entries",
             "complete",
         )
     else:
@@ -558,6 +1021,14 @@ def fill(
             "complete",
         )
 
+    # Save result grid. Human mode defaults to overwriting the input;
+    # --json-output writes the file whenever -o is given (it used to silently
+    # skip the output file entirely).
+    output_file = output if json_output else (output or grid_file)
+    if output_file:
+        with open(output_file, "w") as f:
+            json.dump(result.grid.to_dict(), f, indent=2)
+
     # Output results based on format
     if json_output:
         # JSON output for API integration
@@ -570,10 +1041,25 @@ def fill(
             "time_elapsed": result.time_elapsed,
             "iterations": result.iterations,
             "problematic_slots_count": len(result.problematic_slots),
+            # Explicit semantics: success=False with all_slots_filled=True means
+            # every slot has letters but some entries are not dictionary words
+            "all_slots_filled": all_slots_filled,
+            "paused": result.paused,
         }
+        if warnings:
+            output_data["warnings"] = warnings
+        if result.paused and result.state_path:
+            output_data["state_path"] = result.state_path
+            output_data["task_id"] = task_id
+        if output_file:
+            output_data["output_file"] = str(output_file)
+        if getattr(result, "adaptations_applied", 0):
+            output_data["adaptations_applied"] = result.adaptations_applied
+        if getattr(result, "message", None):
+            output_data["message"] = result.message
 
         # Add suggestions for partial fills
-        if not result.success:
+        if not result.success and not result.paused:
             suggestions = []
             if min_score > 20:
                 suggestions.append(
@@ -617,10 +1103,30 @@ def fill(
         click.echo("Autofill Results")
         click.echo(f"{'='*60}\n")
 
-        if result.success:
+        if result.paused:
+            click.echo(click.style("⏸ PAUSED - State saved, resume to continue", fg="cyan", bold=True))
+            if result.state_path:
+                click.echo(f"  State file: {result.state_path}")
+                click.echo(f"  Resume with: crossword resume {task_id}")
+        elif result.success:
             click.echo(click.style("✓ SUCCESS - Grid filled completely!", fg="green", bold=True))
+        elif all_slots_filled:
+            # Every slot has letters, but some entries are not dictionary words —
+            # calling this "PARTIAL" alongside "36/36 slots" was contradictory
+            click.echo(
+                click.style(
+                    f"⚠ FILLED with {len(result.problematic_slots)} problematic entries",
+                    fg="yellow",
+                    bold=True,
+                )
+            )
         else:
             click.echo(click.style("✗ PARTIAL - Could not fill entire grid", fg="yellow", bold=True))
+
+        if getattr(result, "adaptations_applied", 0):
+            click.echo(f"Adaptive black square pairs added: {result.adaptations_applied}")
+        if getattr(result, "message", None):
+            click.echo(f"Note: {result.message}")
 
         click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
         click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
@@ -643,30 +1149,29 @@ def fill(
 
         click.echo(f"\n{'='*60}\n")
 
-        # Save result (only in CLI mode)
-        output_file = output or grid_file
-        with open(output_file, "w") as f:
-            json.dump(result.grid.to_dict(), f, indent=2)
-
-        click.echo(f"✓ Saved to: {output_file}")
+        if output_file:
+            click.echo(f"✓ Saved to: {output_file}")
 
 
 @cli.command()
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-",
+    "-f",
     type=click.Choice(["text", "json", "grid"]),
     default="grid",
     help="Display format",
 )
-def show(grid_file: str, format: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def show(grid_file: str, format: str, allow_nonstandard: bool):
     """Display a crossword grid."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    data, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     if format == "json":
         click.echo(json.dumps(data, indent=2))
@@ -701,20 +1206,23 @@ def show(grid_file: str, format: str):
 @click.argument("grid_file", type=click.Path(exists=True))
 @click.option(
     "--format",
-    "-",
+    "-f",
     type=click.Choice(["html"]),
     default="html",
     help="Export format (html)",
 )
 @click.option("--output", "-o", type=click.Path(), required=True, help="Output file path")
 @click.option("--title", "-t", default="Crossword Puzzle", help="Puzzle title")
-def export(grid_file: str, format: str, output: str, title: str):
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+def export(grid_file: str, format: str, output: str, title: str, allow_nonstandard: bool):
     """Export a crossword grid to various formats."""
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard)
 
     # Export based on format
     if format == "html":
@@ -761,6 +1269,33 @@ def pattern(
     """
     from .core.progress import ProgressReporter
     from .core.scoring import analyze_letters
+
+    # Validate the pattern up front: letters plus '?' / '.' wildcards only.
+    # Invalid patterns used to silently return 0 results (indistinguishable
+    # from a genuinely unfillable slot) - now they are a clear error.
+    normalized_pattern = pattern_arg.upper().replace(".", "?")
+    pattern_error = None
+    if not normalized_pattern:
+        pattern_error = "Pattern is empty"
+    else:
+        invalid_chars = sorted({c for c in normalized_pattern if c != "?" and not (c.isalpha() and c.isascii())})
+        if invalid_chars:
+            chars = ", ".join(repr(c) for c in invalid_chars)
+            pattern_error = (
+                f"Invalid character(s) in pattern: {chars}. "
+                "Patterns may only contain letters A-Z and wildcards '?' or '.'"
+            )
+        elif not (3 <= len(normalized_pattern) <= 21):
+            pattern_error = (
+                f"Pattern length {len(normalized_pattern)} is out of range: " "crossword words are 3-21 letters"
+            )
+
+    if pattern_error:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": pattern_error, "pattern": pattern_arg}))
+        else:
+            click.echo(f"Error: {pattern_error}", err=True)
+        sys.exit(1)
 
     # Initialize progress reporter (only for JSON output mode)
     progress = ProgressReporter(enabled=json_output)
@@ -816,8 +1351,9 @@ def pattern(
         progress.update(30, "Using default wordlist")
 
     # Create pattern matcher based on algorithm
+    # Pass (word, score) tuples so scores from scored wordlists are preserved
     progress.update(50, f"Initializing {algorithm} algorithm")
-    full_word_list = WordList([word for word, _, _ in all_words])
+    full_word_list = WordList([(word, score) for word, score, _ in all_words])
 
     if algorithm == "trie":
         from .fill.trie_pattern_matcher import TriePatternMatcher
@@ -846,10 +1382,14 @@ def pattern(
 
     progress.update(90, f"Found {len(matches)} matches, formatting results")
 
-    # Format results
+    # Format results (dict lookup: first list containing the word wins)
+    source_by_word = {}
+    for w, _, src in all_words:
+        source_by_word.setdefault(w, src)
+
     results = []
     for word, word_score in matches[:max_results]:
-        source = next((src for w, s, src in all_words if w == word), "unknown")
+        source = source_by_word.get(word, "unknown")
 
         results.append(
             {
@@ -953,10 +1493,7 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
         crossword number grid.json --allow-nonstandard  # For 9x9, 13x13, etc.
     """
     # Load grid
-    with open(grid_file, "r") as f:
-        data = json.load(f)
-
-    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+    _, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard, json_output=json_output)
 
     # Auto-number
     numbering = GridNumbering.auto_number(grid)
@@ -1126,7 +1663,8 @@ def build_cache(wordlist: str, output: Optional[str]):
     Build binary cache file for fast wordlist loading.
 
     This pre-processes a wordlist file (validates, scores, indexes) and saves
-    the result to a binary .pkl file. Subsequent loads will be 10-20x faster.
+    the result to a binary .pkl file. Subsequent loads will be faster
+    (measured at up to ~3x for the 44k comprehensive list).
 
     Example:
         crossword build-cache data/wordlists/comprehensive.txt
@@ -1202,6 +1740,19 @@ def pause(task_id: str, json_output: bool):
         from .fill.pause_controller import PauseController
 
         controller = PauseController(task_id=task_id)
+
+        # Only pause tasks that are actually running (a fill started with
+        # --task-id registers a pid marker). Pausing a nonexistent task used
+        # to report success and leave an orphaned flag file in /tmp.
+        if not controller.is_task_running():
+            controller.clear_pause()  # Remove any stale flag while we're here
+            message = f"Task '{task_id}' is not running (start a fill with " f"--task-id {task_id} first)"
+            if json_output:
+                click.echo(json.dumps({"success": False, "task_id": task_id, "error": message}))
+            else:
+                click.echo(click.style(f"✗ {message}", fg="red"), err=True)
+            sys.exit(1)
+
         controller.request_pause()
 
         if json_output:
@@ -1215,6 +1766,8 @@ def pause(task_id: str, json_output: bool):
             click.echo(click.style(f"✓ Pause requested for task: {task_id}", fg="green"))
             click.echo("The task will save its state and exit at the next checkpoint.")
 
+    except SystemExit:
+        raise
     except Exception as e:
         if json_output:
             click.echo(json.dumps({"success": False, "error": str(e)}))
@@ -1224,12 +1777,12 @@ def pause(task_id: str, json_output: bool):
 
 
 @cli.command()
-@click.argument("state_file", type=click.Path(exists=True))
+@click.argument("state_file")
 @click.option(
     "--output",
     "-o",
     type=click.Path(),
-    help="Output file (defaults to overwriting state file)",
+    help="Output grid file (defaults to resumed_<task_id>.json — the state file is never overwritten)",
 )
 @click.option(
     "--json-output",
@@ -1241,176 +1794,56 @@ def pause(task_id: str, json_output: bool):
     "--algorithm",
     "-a",
     type=click.Choice(["regex", "trie", "beam", "repair", "hybrid"]),
-    default="hybrid",
-    help="Fill algorithm to use for resumption",
+    default=None,
+    help="Fill algorithm for resumption (defaults to the algorithm recorded in the saved state)",
 )
 @click.option("--timeout", "-t", type=int, default=300, help="Maximum seconds to spend filling")
 @click.option("--min-score", type=int, default=30, help="Minimum word quality score (1-100)")
+@click.option(
+    "--wordlists",
+    "-w",
+    multiple=True,
+    help="Word list files (defaults to the wordlists recorded in the saved state)",
+)
 def resume(
     state_file: str,
     output: Optional[str],
     json_output: bool,
-    algorithm: str,
+    algorithm: Optional[str],
     timeout: int,
     min_score: int,
+    wordlists: tuple,
 ):
     """
-    Resume autofill from a saved state file.
+    Resume autofill from a saved state file or task id.
 
-    Loads a previously saved autofill state and continues filling from
-    where it left off. The state file preserves all progress, assignments,
-    and constraints.
+    STATE_FILE may be either the path to a saved .json.gz/.json state file, or
+    a bare task id (as shown by `crossword list-states`), which is looked up
+    in the state directory. An explicit existing file path always wins.
+
+    Wordlists and algorithm default to what the saved state recorded, so a
+    plain `crossword resume TASK_ID` continues exactly where the paused fill
+    left off.
 
     Examples:
-        crossword resume autofill_state_task_abc123.json
-        crossword resume state.json -o completed.json
-        crossword resume state.json --algorithm hybrid --timeout 600
+        crossword resume mytask
+        crossword resume /tmp/crossword_states/mytask.json.gz
+        crossword resume mytask -o completed.json -t 600
+        crossword resume mytask -a repair -w data/wordlists/comprehensive.txt
     """
     try:
-        from .core.progress import ProgressReporter
-        from .fill.beam_search_autofill import BeamSearchAutofill
-        from .fill.hybrid_autofill import HybridAutofill
-        from .fill.iterative_repair import IterativeRepair
-        from .fill.pattern_matcher import PatternMatcher
-        from .fill.state_manager import StateManager
-        from .fill.trie_pattern_matcher import TriePatternMatcher
-
-        # Initialize progress reporter
-        progress = ProgressReporter(enabled=json_output)
-        progress.start(f"Resuming from {Path(state_file).name}")
-
-        # Load state
-        if not json_output:
-            click.echo(f"Loading saved state from {state_file}...")
-
-        state_manager = StateManager()
-
-        # Extract task_id from filename (format: autofill_state_<task_id>.json)
-        task_id = Path(state_file).stem.replace("autofill_state_", "")
-
-        try:
-            csp_state, metadata = state_manager.load_csp_state(task_id)
-        except FileNotFoundError:
-            # Try loading directly by path
-            with open(state_file, "r") as f:
-                state_data = json.load(f)
-                csp_state = state_data["csp_state"]
-                metadata = state_data.get("metadata", {})
-
-        progress.update(20, "State loaded successfully")
-
-        # Reconstruct grid and wordlist
-        grid = Grid.from_dict(csp_state.grid_dict)
-
-        # Load word list (use same as original if available)
-        original_wordlists = metadata.get("wordlists", [])
-        all_words = []
-
-        if original_wordlists:
-            for wl_file in original_wordlists:
-                try:
-                    with open(wl_file, "r") as f:
-                        words = [line.strip().upper() for line in f if line.strip()]
-                        all_words.extend(words)
-                except FileNotFoundError:
-                    if not json_output:
-                        click.echo(
-                            click.style(
-                                f"Warning: Original wordlist {wl_file} not found, using default",
-                                fg="yellow",
-                            )
-                        )
-
-        if not all_words:
-            # Fallback to default wordlist
-            default_wl = Path(__file__).parent.parent / "data" / "wordlists" / "comprehensive.txt"
-            if default_wl.exists():
-                with open(default_wl, "r") as f:
-                    all_words = [line.strip().upper() for line in f if line.strip()]
-
-        word_list = WordList(all_words)
-
-        progress.update(40, f"Loaded {len(word_list)} words")
-
-        # Create pattern matcher
-        use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
-        pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
-
-        # Create autofill instance
-        if algorithm == "beam":
-            autofill = BeamSearchAutofill(
-                grid,
-                word_list,
-                pattern_matcher,
-                beam_width=5,
-                min_score=min_score,
-                progress_reporter=progress,
-            )
-        elif algorithm == "repair":
-            autofill = IterativeRepair(
-                grid,
-                word_list,
-                pattern_matcher,
-                min_score=min_score,
-                progress_reporter=progress,
-            )
-        elif algorithm == "hybrid":
-            autofill = HybridAutofill(
-                grid,
-                word_list,
-                pattern_matcher,
-                beam_width=5,
-                min_score=min_score,
-                progress_reporter=progress,
-            )
-        else:
-            autofill = Autofill(grid, word_list, None, timeout, min_score, algorithm, progress)
-
-        # Restore CSP state
-        autofill.csp = csp_state
-
-        if not json_output:
-            click.echo("\nResuming autofill...")
-            click.echo(f"  Previously filled: {metadata.get('slots_filled', 0)} slots")
-            click.echo(f"  Algorithm: {algorithm}")
-            click.echo(f"  Timeout: {timeout}s\n")
-
-        progress.update(60, "Starting autofill from saved state")
-
-        # Continue filling
-        result = autofill.fill(timeout=timeout)
-
-        # Save result
-        output_file = output or state_file
-        with open(output_file, "w") as f:
-            json.dump(result.grid.to_dict(), f, indent=2)
-
-        if json_output:
-            output_data = {
-                "success": result.success,
-                "grid": result.grid.to_dict()["grid"],
-                "slots_filled": result.slots_filled,
-                "total_slots": result.total_slots,
-                "time_elapsed": result.time_elapsed,
-                "output_file": output_file,
-            }
-            progress.complete("Resume complete")
-            click.echo(json.dumps(output_data))
-        else:
-            click.echo(f"\n{'='*60}")
-            click.echo("Resume Results")
-            click.echo(f"{'='*60}\n")
-
-            if result.success:
-                click.echo(click.style("✓ SUCCESS - Grid completed!", fg="green", bold=True))
-            else:
-                click.echo(click.style("✗ PARTIAL - Could not complete grid", fg="yellow", bold=True))
-
-            click.echo(f"\nSlots filled: {result.slots_filled}/{result.total_slots}")
-            click.echo(f"Time elapsed: {result.time_elapsed:.2f}s")
-            click.echo(f"\n✓ Saved to: {output_file}")
-            click.echo(f"{'='*60}\n")
-
+        _execute_resume(
+            state_file=state_file,
+            output=output,
+            json_output=json_output,
+            algorithm=algorithm,
+            algorithm_explicit=algorithm is not None,
+            timeout=timeout,
+            min_score=min_score,
+            wordlists=wordlists,
+        )
+    except SystemExit:
+        raise
     except Exception as e:
         if json_output:
             click.echo(json.dumps({"success": False, "error": str(e)}))
@@ -1533,11 +1966,16 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
             click.echo(click.style(f"Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
+    # Non-standard sizes (e.g. 5x5 minis) import fine, but downstream commands
+    # (number/validate/show/export/fill) need --allow-nonstandard to open them.
+    nonstandard_size = result.size not in (11, 15, 21)
+
     if json_output:
         grid_obj = result.filled_grid if filled else result.empty_grid
         output_data = {
             "success": True,
             "size": result.size,
+            "nonstandard_size": nonstandard_size,
             "grid": grid_obj.to_dict()["grid"],
             "metadata": result.metadata,
             "words": [
@@ -1576,6 +2014,15 @@ def import_nyt(nyt_file: str, output: Optional[str], filled: bool, verify: bool,
         click.echo(f"Date: {m.get('date', 'Unknown')}")
         click.echo(f"Author: {m.get('author', 'Unknown')}")
         click.echo(f"Size: {result.size}x{result.size}")
+        if nonstandard_size:
+            click.echo(
+                click.style(
+                    f"Warning: Non-standard grid size ({result.size}x{result.size}). "
+                    "Use --allow-nonstandard with number/validate/show/export/fill "
+                    "to work with this grid.",
+                    fg="yellow",
+                )
+            )
         across_count = sum(1 for w in result.words if w.direction == "across")
         down_count = sum(1 for w in result.words if w.direction == "down")
         click.echo(f"Words: {len(result.words)} ({across_count} across, {down_count} down)")

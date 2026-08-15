@@ -8,7 +8,6 @@ import BlackSquareSuggestions from './BlackSquareSuggestions';
 function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, progress, grid, currentTaskId }) {
   const [options, setOptions] = useState({
     minScore: 50,
-    preferPersonalWords: true,
     timeout: 300,
     wordlists: ['comprehensive'],
     themeList: null,  // NEW: designated theme list for priority (null or wordlist key)
@@ -546,14 +545,9 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
         </div>
 
         <div className="checkbox-row">
-          <label>
-            <input
-              type="checkbox"
-              checked={options.preferPersonalWords}
-              onChange={(e) => handleOptionChange('preferPersonalWords', e.target.checked)}
-            />
-            Prefer personal words
-          </label>
+          {/* NOTE: a "Prefer personal words" checkbox used to live here, but no
+              backend/CLI parameter consumes it, so it was removed rather than
+              shipping a dead control. */}
           <label>
             <input
               type="checkbox"
@@ -606,7 +600,7 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
                   <h4>Built-in</h4>
                   <div className="wordlist-checkboxes">
                     {availableWordlists.built_in.map(wl => (
-                      <label key={wl.key}>
+                      <label key={wl.key || wl.filepath || wl.name}>
                         <input
                           type="checkbox"
                           checked={options.wordlists.includes(wl.key)}
@@ -629,7 +623,7 @@ function AutofillPanel({ onStartAutofill, onCancelAutofill, onResetAutofill, pro
                   <h4>Custom</h4>
                   <div className="wordlist-checkboxes">
                     {availableWordlists.custom.map(wl => (
-                      <div key={wl.key} className="wordlist-item-container">
+                      <div key={wl.key || wl.filepath || wl.name} className="wordlist-item-container">
                         <label className="wordlist-checkbox">
                           <input
                             type="checkbox"

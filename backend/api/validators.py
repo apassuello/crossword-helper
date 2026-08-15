@@ -5,6 +5,87 @@ This module validates incoming request data before processing in service layer.
 """
 
 
+def normalize_grid_to_cli(grid, reference_grid=None):
+    """
+    Convert a grid from any client cell format to CLI string format.
+
+    Accepted cell formats:
+    - CLI strings: '#' (black), '.' or '' (empty), 'A'-'Z' (letter)
+    - Frontend dicts: {"letter": "A", "isBlack": false, ...}
+    - Single-letter lists: ["A"] / ["."] (legacy AutofillPanel resume format)
+
+    Args:
+        grid: 2D list of cells in any supported format
+        reference_grid: Optional CLI-format grid with the same shape. Cell
+            formats that carry no black-square information (strings without
+            '#', lists) inherit '#' cells from the reference grid — this
+            keeps black squares intact when the client round-trips a grid
+            through a lossy format.
+
+    Returns:
+        2D list of CLI-format string cells ('#', '.', or a letter)
+
+    Raises:
+        ValueError: If the grid or any cell is malformed
+    """
+    if not isinstance(grid, list) or not grid:
+        raise ValueError("Grid must be a non-empty 2D array")
+
+    cli_grid = []
+    for r, row in enumerate(grid):
+        if not isinstance(row, list):
+            raise ValueError("Grid must be a 2D array (array of arrays)")
+        cli_row = []
+        for c, cell in enumerate(row):
+            has_black_info = False
+
+            if isinstance(cell, dict):
+                has_black_info = True
+                if cell.get("isBlack", False):
+                    value = "#"
+                else:
+                    letter = (cell.get("letter") or "").strip()
+                    value = letter.upper() if letter and letter != "." else "."
+            elif isinstance(cell, (list, tuple)):
+                inner = cell[0] if cell else "."
+                if not isinstance(inner, str):
+                    raise ValueError(f"Invalid grid cell at ({r},{c}): {cell!r}")
+                inner = inner.strip()
+                value = inner.upper() if inner and inner != "." else "."
+                if value == "#":
+                    has_black_info = True
+            elif isinstance(cell, str):
+                stripped = cell.strip()
+                if stripped == "#":
+                    value = "#"
+                    has_black_info = True
+                elif stripped in ("", "."):
+                    value = "."
+                else:
+                    value = stripped.upper()
+            else:
+                raise ValueError(f"Invalid grid cell at ({r},{c}): {cell!r}")
+
+            if value not in ("#", ".") and not (len(value) == 1 and value.isalpha()):
+                raise ValueError(f"Invalid grid cell at ({r},{c}): {cell!r}")
+
+            # Preserve black squares from the reference grid for lossy formats
+            if (
+                not has_black_info
+                and value == "."
+                and reference_grid is not None
+                and r < len(reference_grid)
+                and c < len(reference_grid[r])
+                and reference_grid[r][c] == "#"
+            ):
+                value = "#"
+
+            cli_row.append(value)
+        cli_grid.append(cli_row)
+
+    return cli_grid
+
+
 def validate_pattern_request(data: dict) -> dict:
     """
     Validate pattern search request.

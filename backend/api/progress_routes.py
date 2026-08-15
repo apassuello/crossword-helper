@@ -109,8 +109,20 @@ def register_process(task_id: str, process):
         running_processes[task_id] = process
 
 
-def cleanup_process(task_id: str):
-    """Terminate subprocess if still running."""
+def is_process_running(task_id: str) -> bool:
+    """Check whether a registered subprocess for this task is still alive."""
+    with running_processes_lock:
+        process = running_processes.get(task_id)
+    return process is not None and process.poll() is None
+
+
+def cleanup_process(task_id: str) -> bool:
+    """
+    Terminate subprocess if still running.
+
+    Returns:
+        True if a live process was found and terminated, False otherwise.
+    """
     with running_processes_lock:
         process = running_processes.pop(task_id, None)
     if process and process.poll() is None:
@@ -122,6 +134,8 @@ def cleanup_process(task_id: str):
                 process.kill()
             except OSError:
                 pass
+        return True
+    return False
 
 
 @progress_api.route("/progress/<task_id>", methods=["GET"])
@@ -153,8 +167,8 @@ def stream_progress(task_id: str):
                     # Send SSE event
                     yield f"data: {json.dumps(event)}\n\n"
 
-                    # If complete or error, stop streaming
-                    if event.get("status") in ["complete", "error"]:
+                    # If complete, paused, or error, stop streaming
+                    if event.get("status") in ["complete", "error", "paused"]:
                         break
 
                 except queue.Empty:

@@ -127,7 +127,10 @@ class ThemePlacer:
                         row=placement["row"],
                         col=placement["col"],
                         direction=placement["direction"],
-                        score=score,
+                        # Reported scores stay in the documented 0-100 range
+                        # (raw ranking scores can exceed 100 via diversity
+                        # bonuses, which used to leak out as e.g. 110.5)
+                        score=max(0, min(100, score)),
                         reasoning=reasoning,
                     ).to_dict()
                 )
@@ -266,6 +269,9 @@ class ThemePlacer:
         elif word_index % 2 == 1 and direction == "down":
             diversity_score += 5
 
+        # NOTE: this raw score is used for RANKING only and may exceed 100;
+        # reported suggestion scores are clamped to 0-100 where suggestions
+        # are built (suggest_placements).
         return base_score + diversity_score
 
     def _score_placement(self, placement: Dict, word: str) -> int:

@@ -15,15 +15,18 @@ import userEvent from '@testing-library/user-event';
 import PatternMatcher from '../../components/PatternMatcher';
 import { mockApiEndpoint, mockApiError } from '../fixtures/apiMocks';
 
-// Mock useSSEProgress hook — allow tests to control status
+// Mock useSSEProgress hook — allow tests to control status and final data payload
 let mockSSEStatus = 'idle';
+let mockSSEData = null;
+let mockSSEMessage = '';
 let mockSSEConnect = vi.fn();
 
 vi.mock('../../hooks/useSSEProgress', () => ({
   useSSEProgress: () => ({
     status: mockSSEStatus,
     progress: 0,
-    message: '',
+    message: mockSSEMessage,
+    data: mockSSEData,
     connect: mockSSEConnect,
     disconnect: vi.fn(),
   }),
@@ -43,6 +46,8 @@ describe('PatternMatcher Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSSEStatus = 'idle';
+    mockSSEData = null;
+    mockSSEMessage = '';
     mockSSEConnect = vi.fn();
   });
 
@@ -201,10 +206,28 @@ describe('PatternMatcher Component', () => {
   });
 
   describe('Wordlist Selection', () => {
-    it('has comprehensive wordlist checkbox checked by default', () => {
+    it('renders wordlist checkboxes from GET /api/wordlists (not hardcoded)', async () => {
       render(<PatternMatcher {...defaultProps} />);
 
-      // The comprehensive checkbox is checked by default
+      // All lists returned by the API appear as checkboxes
+      await waitFor(() => {
+        expect(screen.getByText(/Foreign Words/)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/My Words/)).toBeInTheDocument();
+
+      // The previously hardcoded nonexistent key must not be rendered
+      expect(screen.queryByText(/Common 3-Letter/)).not.toBeInTheDocument();
+    });
+
+    it('has comprehensive wordlist checkbox checked by default', async () => {
+      render(<PatternMatcher {...defaultProps} />);
+
+      // Checkboxes are rendered after the wordlists load from the API
+      await waitFor(() => {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
       const checkboxes = document.querySelectorAll('input[type="checkbox"]');
       const comprehensiveCheckbox = Array.from(checkboxes).find(
         cb => cb.closest('label')?.textContent?.includes('Comprehensive')
@@ -216,6 +239,11 @@ describe('PatternMatcher Component', () => {
     it('allows toggling wordlist checkboxes', async () => {
       const user = userEvent.setup();
       render(<PatternMatcher {...defaultProps} />);
+
+      await waitFor(() => {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
 
       const checkboxes = document.querySelectorAll('input[type="checkbox"]');
       const comprehensiveCheckbox = Array.from(checkboxes).find(
@@ -276,6 +304,99 @@ describe('PatternMatcher Component', () => {
 
       // Button text changes to "Searching..." and is disabled
       expect(searchButton).toBeDisabled();
+    });
+
+    it('renders results from the final SSE event without a follow-up POST to /api/pattern (regression)', async () => {
+      const user = userEvent.setup();
+      const axios = await import('axios');
+      const postSpy = vi.spyOn(axios.default, 'post');
+
+      const { rerender } = render(<PatternMatcher {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText(/enter pattern/i);
+      await user.type(input, 'C?T');
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      await user.click(searchButton);
+
+      // Search initiated: only the with-progress endpoint is called
+      await waitFor(() => {
+        expect(mockSSEConnect).toHaveBeenCalled();
+      });
+      expect(searchButton).toBeDisabled();
+
+      // Simulate the SSE stream completing WITH the final results payload
+      mockSSEStatus = 'complete';
+      mockSSEData = {
+        results: [
+          { word: 'CAT', score: 95, source: 'comprehensive' },
+          { word: 'COT', score: 92, source: 'comprehensive' },
+        ],
+        meta: { total_found: 2 },
+      };
+      rerender(<PatternMatcher {...defaultProps} />);
+
+      // Results render directly from the SSE payload
+      await waitFor(() => {
+        expect(screen.getByText(/results \(2\)/i)).toBeInTheDocument();
+      });
+
+      // Search button is re-enabled (no soft-lock at "Complete 100%")
+      expect(screen.getByRole('button', { name: /^search$/i })).not.toBeDisabled();
+
+      // No redundant follow-up POST to /api/pattern was fired
+      const patternPosts = postSpy.mock.calls.filter(call => call[0] === '/api/pattern');
+      expect(patternPosts).toHaveLength(0);
+
+      // Exactly one search request went out (the with-progress init)
+      const initPosts = postSpy.mock.calls.filter(call => call[0] === '/api/pattern/with-progress');
+      expect(initPosts).toHaveLength(1);
+
+      postSpy.mockRestore();
+    });
+
+    it('re-enables search button when SSE completes with no results', async () => {
+      const user = userEvent.setup();
+
+      const { rerender } = render(<PatternMatcher {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText(/enter pattern/i);
+      await user.type(input, 'XQZ');
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      await user.click(searchButton);
+      await waitFor(() => expect(mockSSEConnect).toHaveBeenCalled());
+
+      mockSSEStatus = 'complete';
+      mockSSEData = { results: [], meta: { total_found: 0 } };
+      rerender(<PatternMatcher {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^search$/i })).not.toBeDisabled();
+      });
+      expect(screen.getByText(/no matching words found/i)).toBeInTheDocument();
+    });
+
+    it('re-enables search button when SSE reports an error', async () => {
+      const user = userEvent.setup();
+
+      const { rerender } = render(<PatternMatcher {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText(/enter pattern/i);
+      await user.type(input, 'C?T');
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      await user.click(searchButton);
+      await waitFor(() => expect(mockSSEConnect).toHaveBeenCalled());
+
+      mockSSEStatus = 'error';
+      mockSSEMessage = 'CLI Error (code 1): something broke';
+      rerender(<PatternMatcher {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^search$/i })).not.toBeDisabled();
+      });
+      expect(screen.getByText(/CLI Error/i)).toBeInTheDocument();
     });
 
     it('clears previous results on new search', async () => {

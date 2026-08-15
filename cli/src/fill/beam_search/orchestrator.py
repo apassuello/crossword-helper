@@ -101,6 +101,9 @@ class BeamSearchOrchestrator:
         # State tracking
         self.start_time = 0.0
         self.iterations = 0
+        self.deadline = None  # Absolute epoch deadline, set by fill()
+        self.paused_state_path = None  # Set when a pause saves state
+        self.wordlist_paths = []  # Original wordlist file paths (for resume)
 
         # Failure tracking (prevents thrashing on impossible slots)
         self.slot_attempt_history = {}  # (beam_signature, slot_id) -> attempt_count
@@ -177,6 +180,10 @@ class BeamSearchOrchestrator:
             # Use user's min_score for all other lengths
             return self.min_score
 
+    def _deadline_exceeded(self) -> bool:
+        """True if the fill deadline (set by fill/_resume_fill) has passed."""
+        return self.deadline is not None and time.time() >= self.deadline
+
     def _get_beam_signature(self, beam: List[BeamState]) -> int:
         """
         Create signature representing current beam configuration.
@@ -224,6 +231,10 @@ class BeamSearchOrchestrator:
             return self._resume_fill(resume_state, timeout)
 
         self.start_time = time.time()
+        # Hard deadline enforced inside slot selection, beam expansion, and
+        # backtracking — a single iteration can take minutes on open grids,
+        # so checking only between iterations is not enough.
+        self.deadline = self.start_time + timeout
         self.iterations = 0
         self.failed_expansions = 0
         self.max_failed_expansions = 10  # Allow 10 failures before giving up
@@ -306,10 +317,12 @@ class BeamSearchOrchestrator:
                     best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
                     result = self._create_result(best_state, all_slots, total_slots, success=False)
                     result.paused = True  # Mark as paused
+                    if self.paused_state_path:
+                        result.state_path = str(self.paused_state_path)
                     return result
 
             # Check timeout
-            if time.time() - self.start_time > timeout:
+            if self._deadline_exceeded():
                 break
 
             # Select next slot (Dynamic MRV)
@@ -318,8 +331,13 @@ class BeamSearchOrchestrator:
             if not unfilled_slots:
                 break
 
-            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
-            if slot is None:
+            slot = self.slot_selector.select_next_slot(
+                unfilled_slots,
+                beam[0],
+                recently_failed=self.recently_failed,
+                deadline=self.deadline,
+            )
+            if slot is None or self._deadline_exceeded():
                 break
 
             slot_id = (slot["row"], slot["col"], slot["direction"])
@@ -336,11 +354,20 @@ class BeamSearchOrchestrator:
                 )
 
             # Expand beam
-            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
+            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot, deadline=self.deadline)
 
-            # Backtracking if needed (only if we have successfully filled slots to backtrack from)
-            if not expanded_beam and len(filled_slots) > 0:
+            # Backtracking if needed (only if we have successfully filled slots
+            # to backtrack from, and only within the time budget)
+            if not expanded_beam and len(filled_slots) > 0 and not self._deadline_exceeded():
                 expanded_beam = self._try_backtracking(beam, slot)
+
+            # Out of time: keep the best states we have and stop
+            if self._deadline_exceeded():
+                if expanded_beam:
+                    beam = self.beam_manager.prune_beam(expanded_beam, self.beam_width)
+                else:
+                    filled_slots.discard(slot_id)
+                break
 
             if not expanded_beam:
                 # Track this failure to prevent thrashing on same (beam, slot) combination
@@ -536,6 +563,9 @@ class BeamSearchOrchestrator:
 
         # Get all filled intersecting slots
         for slot_id, word in state.slot_assignments.items():
+            # Respect the time budget — this loop does pattern searches
+            if self._deadline_exceeded():
+                break
             row, col, direction = slot_id
 
             # Check if slots intersect
@@ -696,6 +726,11 @@ class BeamSearchOrchestrator:
         """
         logger.debug("\nDEBUG: Trying backtracking strategies...")
 
+        # Out of time: don't start any backtracking strategy
+        if self._deadline_exceeded():
+            logger.debug("  Deadline exceeded, skipping backtracking")
+            return []
+
         # In partial fill mode, use gentler strategies
         if self.partial_fill_mode:
             logger.debug("  (Partial fill mode: using gentle strategies)")
@@ -737,20 +772,20 @@ class BeamSearchOrchestrator:
                 backjumped_beam.append(new_state)
 
             # Try expanding from backjumped state
-            expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10)
+            expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline)
             if expanded:
                 logger.debug("  ✓ Success with conflict-directed backjumping")
                 return expanded
 
         # Try 2: More candidates (2x)
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2)
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 2, deadline=self.deadline)
         if expanded:
             logger.debug("  ✓ Success with 2x candidates")
             return expanded
 
         # Try 3: Even more candidates (5x)
         logger.debug("  Trying 5x candidates...")
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5)
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 5, deadline=self.deadline)
         if expanded:
             logger.debug("  ✓ Success with 5x candidates")
             return expanded
@@ -759,7 +794,7 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying min_score=0...")
         old_min_score = self.min_score
         self.min_score = 0
-        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10)
+        expanded = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot * 10, deadline=self.deadline)
         self.min_score = old_min_score
         if expanded:
             logger.debug("  ✓ Success with no score filter")
@@ -769,7 +804,7 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying chronological backtracking (depth=1)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10)
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline)
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
@@ -783,7 +818,7 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying deeper chronological backtracking (depth=2)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=2)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15)
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15, deadline=self.deadline)
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=2)")
                 return expanded
@@ -792,7 +827,7 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying very deep backtracking (depth=3)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=3)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20)
+            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20, deadline=self.deadline)
             if expanded:
                 logger.debug("  ✓ Success with deep backtracking (depth=3)")
                 return expanded
@@ -824,6 +859,7 @@ class BeamSearchOrchestrator:
         # Restore tracking state
         self.iterations = resume_state.iterations
         self.start_time = time.time()  # Fresh timeout
+        self.deadline = self.start_time + timeout
 
         # Restore failure tracking
         self.slot_attempt_history = {}
@@ -869,10 +905,12 @@ class BeamSearchOrchestrator:
                     best_state = max(beam, key=lambda s: (s.slots_filled, s.score))
                     result = self._create_result(best_state, all_slots, total_slots, success=False)
                     result.paused = True  # Mark as paused
+                    if self.paused_state_path:
+                        result.state_path = str(self.paused_state_path)
                     return result
 
             # Check timeout
-            if time.time() - self.start_time > timeout:
+            if self._deadline_exceeded():
                 break
 
             # Select next slot (Dynamic MRV)
@@ -881,8 +919,13 @@ class BeamSearchOrchestrator:
             if not unfilled_slots:
                 break
 
-            slot = self.slot_selector.select_next_slot(unfilled_slots, beam[0], recently_failed=self.recently_failed)
-            if slot is None:
+            slot = self.slot_selector.select_next_slot(
+                unfilled_slots,
+                beam[0],
+                recently_failed=self.recently_failed,
+                deadline=self.deadline,
+            )
+            if slot is None or self._deadline_exceeded():
                 break
 
             slot_id = (slot["row"], slot["col"], slot["direction"])
@@ -899,11 +942,20 @@ class BeamSearchOrchestrator:
                 )
 
             # Expand beam
-            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot)
+            expanded_beam = self.beam_manager.expand_beam(beam, slot, self.candidates_per_slot, deadline=self.deadline)
 
-            # Backtracking if needed (only if we have successfully filled slots to backtrack from)
-            if not expanded_beam and len(filled_slots) > 0:
+            # Backtracking if needed (only if we have successfully filled slots
+            # to backtrack from, and only within the time budget)
+            if not expanded_beam and len(filled_slots) > 0 and not self._deadline_exceeded():
                 expanded_beam = self._try_backtracking(beam, slot)
+
+            # Out of time: keep the best states we have and stop
+            if self._deadline_exceeded():
+                if expanded_beam:
+                    beam = self.beam_manager.prune_beam(expanded_beam, self.beam_width)
+                else:
+                    filled_slots.discard(slot_id)
+                break
 
             if not expanded_beam:
                 # Track this failure to prevent thrashing on same (beam, slot) combination
@@ -1049,14 +1101,17 @@ class BeamSearchOrchestrator:
             # Capture current state
             beam_search_state = StateManager.capture_beam_search_state(self, beam, filled_slots, slot_idx)
 
-            # Create metadata
+            # Create metadata (algorithm + wordlists are recorded so `resume`
+            # can pick the right solver and reload the same wordlists)
             metadata = {
                 "min_score": self.min_score,
-                "timeout": 300,  # Default timeout, will be overridden on resume
+                "timeout": (int(self.deadline - self.start_time) if self.deadline else 300),
+                "algorithm": "beam",
                 "grid_size": [self.grid.size, self.grid.size],
                 "total_slots": total_slots,
                 "slots_filled": len(filled_slots),
                 "iterations": self.iterations,
+                "wordlists": list(getattr(self, "wordlist_paths", []) or []),
             }
 
             # Save to disk
@@ -1067,6 +1122,11 @@ class BeamSearchOrchestrator:
                 metadata=metadata,
                 compress=True,
             )
+            self.paused_state_path = file_path
+
+            # Consume the pause flag so it cannot pause a future run
+            if self.pause_controller:
+                self.pause_controller.clear_pause()
 
             logger.info(f"Beam search state saved to {file_path}")
 

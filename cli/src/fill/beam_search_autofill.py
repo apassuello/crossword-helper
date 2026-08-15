@@ -41,6 +41,8 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         theme_entries: Optional[Dict[Tuple[int, int, str], str]] = None,
         theme_words=None,
         partial_fill_mode: bool = False,
+        pause_controller=None,
+        task_id: Optional[str] = None,
     ):
         """
         Initialize beam search solver.
@@ -77,6 +79,8 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             theme_entries=theme_entries,
             theme_words=theme_words,
             partial_fill_mode=partial_fill_mode,
+            pause_controller=pause_controller,
+            task_id=task_id,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator
