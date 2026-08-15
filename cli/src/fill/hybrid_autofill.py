@@ -41,6 +41,8 @@ class HybridAutofill:
         theme_entries=None,
         theme_words=None,
         all_valid_words: set = None,
+        pause_controller=None,
+        task_id=None,
     ):
         """
         Initialize hybrid autofill solver.
@@ -67,6 +69,9 @@ class HybridAutofill:
         self.theme_entries = theme_entries
         self.all_valid_words = all_valid_words or set()
         self.theme_words = theme_words or set()
+        self.pause_controller = pause_controller
+        self.task_id = task_id
+        self.wordlist_paths = []  # Original wordlist file paths (for resume)
 
     @staticmethod
     def _compute_beam_cap(size: int) -> int:
@@ -108,12 +113,11 @@ class HybridAutofill:
                 f"{beam_timeout_ratio + repair_timeout_ratio}"
             )
 
-        time.time()
+        overall_start = time.time()
 
         # Scale beam timeout cap with grid size (linear: 30s at size 11, +9s per size step, max 120s)
         beam_cap = self._compute_beam_cap(self.grid.size)
         beam_timeout = min(beam_cap, max(10, int(timeout * beam_timeout_ratio)))
-        repair_timeout = max(10, timeout - beam_timeout)
 
         # Phase 1: Beam Search
         if self.progress_reporter:
@@ -128,18 +132,27 @@ class HybridAutofill:
             progress_reporter=self.progress_reporter,
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
+            pause_controller=self.pause_controller,
+            task_id=self.task_id,
         )
+        beam_search.wordlist_paths = list(self.wordlist_paths)
 
         beam_result = beam_search.fill(timeout=beam_timeout)
 
-        # Early exit if beam search succeeded
-        if beam_result.success:
-            if self.progress_reporter:
+        # Early exit if beam search succeeded (or was paused with state saved)
+        if beam_result.success or beam_result.paused:
+            if self.progress_reporter and beam_result.success:
                 self.progress_reporter.update(
                     100,
                     f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
+            beam_result.time_elapsed = time.time() - overall_start
             return beam_result
+
+        # Phase 2 budget: whatever remains of the OVERALL budget after the
+        # beam phase actually finished (the beam phase used to be able to
+        # overrun massively while repair still claimed its full share)
+        repair_timeout = max(10, int(timeout - (time.time() - overall_start)))
 
         # Phase 2: Iterative Repair (start from beam result)
         if self.progress_reporter:
@@ -171,7 +184,7 @@ class HybridAutofill:
                     100,
                     f"Repair complete: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
-            return repair_result
+            best = repair_result
         elif repair_result.slots_filled >= beam_result.slots_filled:
             # Repair improved or maintained - use it
             if self.progress_reporter:
@@ -179,7 +192,7 @@ class HybridAutofill:
                     100,
                     f"Repair improved: {repair_result.slots_filled}/{repair_result.total_slots}",
                 )
-            return repair_result
+            best = repair_result
         else:
             # Beam was better - use beam result
             if self.progress_reporter:
@@ -187,4 +200,8 @@ class HybridAutofill:
                     100,
                     f"Beam best: {beam_result.slots_filled}/{beam_result.total_slots}",
                 )
-            return beam_result
+            best = beam_result
+
+        # Report the TOTAL wall time (beam + repair), not just the last phase
+        best.time_elapsed = time.time() - overall_start
+        return best

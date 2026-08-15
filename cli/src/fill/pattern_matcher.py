@@ -5,7 +5,7 @@ Efficiently finds words matching wildcard patterns using regex and indexing.
 """
 
 import re
-from typing import Dict, List, Pattern, Tuple
+from typing import Dict, List, Optional, Pattern, Tuple
 
 from .word_list import WordList
 
@@ -38,7 +38,7 @@ class PatternMatcher:
         self,
         pattern: str,
         min_score: int = 30,
-        max_results: int = 100,
+        max_results: Optional[int] = 100,
         progress_callback=None,
     ) -> List[Tuple[str, int]]:
         """
@@ -47,7 +47,7 @@ class PatternMatcher:
         Args:
             pattern: Pattern string (e.g., "?I?A" or ".I.A")
             min_score: Minimum crossword-ability score
-            max_results: Maximum number of results
+            max_results: Maximum number of results (None = unlimited)
             progress_callback: Optional callback(current, total) for progress updates
 
         Returns:
@@ -86,7 +86,8 @@ class PatternMatcher:
                 progress_callback(idx, total_words)
 
             # Stop if we have enough high-scoring matches
-            if len(matches) >= max_results:
+            # (max_results=None means unlimited — used by the CSP solver)
+            if max_results is not None and len(matches) >= max_results:
                 break
 
         # Sort by score (descending)
@@ -107,7 +108,7 @@ class PatternMatcher:
         Returns:
             All matching words with scores
         """
-        return self.find(pattern, min_score=0, max_results=float("inf"))
+        return self.find(pattern, min_score=0, max_results=None)
 
     def count_matches(self, pattern: str, min_score: int = 30) -> int:
         """
@@ -120,7 +121,7 @@ class PatternMatcher:
         Returns:
             Number of matching words
         """
-        return len(self.find(pattern, min_score=min_score, max_results=float("inf")))
+        return len(self.find(pattern, min_score=min_score, max_results=None))
 
     def _pattern_to_regex(self, pattern: str) -> Pattern:
         """
