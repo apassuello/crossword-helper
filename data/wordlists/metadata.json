@@ -127,7 +127,7 @@
       "auto_generated": false,
       "key": "comprehensive",
       "filepath": "data/wordlists/comprehensive.txt",
-      "word_count": null
+      "word_count": 44024
     },
     "comprehensive_scored": {
       "name": "Comprehensive Dictionary (Scored)",
