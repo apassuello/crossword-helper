@@ -71,6 +71,26 @@ incomplete contract, mark it `xfail(strict=True)` rather than skipping or deleti
 contract is fixed the test XPASSes, which *fails* the suite under `strict`, forcing someone to
 remove the marker. A plain `xfail` lapses silently and the test never comes back.
 
+**[SPEC] Assert the effect, not the existence.** A test that confirms a mechanism is *present*
+without measuring what it *does* is worse than no test: it reports green while the mechanism is
+dead, and its passing status argues against anyone looking. `should_pause()` had a documented
+rate limit guarded only by `isinstance(result, bool)`; the limit gated nothing and the cache
+fields were unused until `876a54c`. The replacement in `cli/tests/unit/test_state_manager.py`
+counts the filesystem calls the rate limit exists to remove — run it to see the figures. Where a
+mechanism claims to reduce, cache, batch or throttle something, the test must count that thing.
+
+**[SPEC] jsdom does not evaluate stylesheet rules.** `toHaveStyle` reads the inline value on the
+JSX element, so a design-token assertion passes even after the underlying CSS rule is reverted —
+the test is green and the colour is wrong. Token correctness of *CSS rules* can only be checked in
+a real browser; from a unit test, the closest honest check is `getComputedStyle` against an
+injected probe element. Treat any stylesheet-level claim as unguarded until a browser gate runs.
+
+**[SPEC] `setupTests.js` stubs `localStorage` with no-op mocks.** `src/__tests__/setupTests.js`
+assigns `global.localStorage` a set of bare `vi.fn()`s, so `getItem` returns `undefined` forever.
+A test that writes a value and reads it back passes trivially against a dead stub without ever
+exercising persistence. Back the stub with a `Map` in any test where storage behaviour is the
+thing under test.
+
 ---
 
 ## 4. Documentation rules
@@ -88,6 +108,10 @@ remove the marker. A plain `xfail` lapses silently and the test never comes back
 - **Archiving a doc needs `git add -f`.** `.gitignore` carries a bare `archive/` pattern, so
   `docs/archive/` content is tracked only by grandfathering. A new file moved there is ignored,
   and the move lands as a plain deletion — the archive silently becomes a delete.
+- **`.gitignore` unanchored directory patterns match at every depth.** `.gitignore:13` is a bare
+  `lib/`, meant for Python build output, and it also swallows `src/lib/`. Nothing under such a
+  path can be committed until a negation (`!src/lib/`) is added. There is no `src/lib/` on this
+  branch, so the trap is latent — it fires the moment frontend work introduces one.
 
 ---
 
@@ -98,6 +122,13 @@ remove the marker. A plain `xfail` lapses silently and the test never comes back
 - Commit: `type(scope): imperative description` — e.g. `fix(ci): widen CLI subprocess timeout`.
 - Types in use: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Before pushing: `pytest`, `npm run build`, and let pre-commit run (do not `--no-verify`).
+- **Merge with a merge commit when anything outside the repo cites individual commits.** A squash
+  replaces every commit on the branch with one new hash, so references to the originals stop
+  resolving against `main`. PR #5 merged as `f727f1a` (two parents) and its commits are still
+  reachable; PR #7 squashed to `c756a99` (one parent), so `4994e3d`, `8bbff08`, `901fa60` and
+  `876a54c` are not in `main` and resolve only through `refs/pull/7/head`, which GitHub retains.
+  Check with `git merge-base --is-ancestor <sha> main`. Squashing is fine for branches nothing
+  external points at.
 
 ---
 
