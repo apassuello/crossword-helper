@@ -238,10 +238,17 @@ class TestPauseResumeAPI:
 
         monkeypatch.setattr(pr_routes, "STATE_STORAGE_DIR", tmp_path)
 
-        # Resume without edits
+        # Resume without edits.
+        #
+        # timeout is deliberately small. This fixture's saved position is a dead
+        # end, so the resume falls back to unwind-and-re-search (#9) and runs
+        # until it either solves the grid or exhausts the budget. With the
+        # previous timeout of 300 this test alone took 301s and dominated the
+        # whole suite; before #9 it returned instantly because the resume was a
+        # no-op. A few seconds still exercises the fallback path end to end.
         response = client.post(
             "/api/fill/resume",
-            data=json.dumps({"task_id": task_id, "options": {"min_score": 50, "timeout": 300}}),
+            data=json.dumps({"task_id": task_id, "options": {"min_score": 50, "timeout": 3}}),
             content_type="application/json",
         )
 

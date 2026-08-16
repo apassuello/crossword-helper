@@ -207,7 +207,10 @@ If the saved partial assignment was already contradictory when the pause
 landed, that search fails without filling a single additional slot; the resume
 then strips the dead-end assignments and re-searches the restored grid, which
 gives up the saved position in exchange for making progress. A pause or a
-timeout is not a dead end and does not trigger the fallback. Pinned by
+timeout is not a dead end and does not trigger the fallback. Note the cost:
+resuming into a position that is genuinely unsatisfiable now spends the whole
+`--timeout` budget searching before reporting failure, where it previously
+returned in milliseconds without having tried. Pinned by
 `backend/tests/integration/test_cli_integration.py::TestResumeCLIInvocationReal::test_pause_then_fill_with_resume`
 (`time_elapsed > 0.5`), the guard that caught the no-progress case
 ([issue #9](https://github.com/apassuello/crossword-helper/issues/9)).
