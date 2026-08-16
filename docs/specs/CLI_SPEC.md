@@ -1,6 +1,6 @@
 # CLI Reference
 
-**Version 3.0.0**
+**Version 3.1.0**
 
 ---
 
@@ -150,7 +150,7 @@ Connected: ✓ Yes
 ============================================================
 ```
 
-**[SPEC] Exit codes** — verified against `cli.py`: `sys.exit(0 if is_valid else 1)`. `0` = valid, `1` = invalid or load error. This is the only command in this reference with a confirmed non-trivial exit-code contract besides `fill`'s preflight failures — see the `fill` BUG block below before relying on any other command's exit code.
+**[SPEC] Exit codes** — verified against `cli.py`: `sys.exit(0 if is_valid else 1)`. `0` = valid, `1` = invalid or load error. Along with `fill` (see its **Exit codes** table below), this is one of only two commands in this reference with a confirmed exit-code contract; do not assume one for the others.
 
 ---
 
@@ -166,7 +166,7 @@ crossword fill [GRID_FILE] -w/--wordlists PATH [...] [OPTIONS]
 | Option | Type | Default | Notes |
 |---|---|---|---|
 | `--wordlists`, `-w` | Path, multiple | required unless `--resume` state recorded its own | — |
-| `--timeout`, `-t` | int | `300` | Seconds. `repair` and `hybrid` raise `ValueError` if given &lt;10 |
+| `--timeout`, `-t` | int | `300` | Seconds. `repair` and `hybrid` reject values &lt;10 with an error and exit `1` |
 | `--min-score` | int | `30` | 1–100 |
 | `--algorithm`, `-a` | Choice `regex`\|`trie`\|`beam`\|`repair`\|`hybrid` | **`repair`** | See note below |
 | `--beam-width` | int | `5` | Beam search / hybrid |
@@ -198,24 +198,29 @@ python -m cli.src.cli fill puzzle.json -w data/wordlists/comprehensive.txt -t 10
 fills). Progress updates are streamed to stderr as
 `{"progress": N, "message": "...", "status": "running"|"complete"}` lines.
 
-**[BUG] `fill` always exits 0 on a normal run**
-- Symptom: a caller that checks the process exit code to detect a failed or
-  partial fill sees `0` even when `success` is `false` in the JSON body.
-- Cause: `fill`'s body contains no `sys.exit()` call; only its preflight
-  helper `_fail_fill()` exits (with code `1`, for missing grid file /
-  missing wordlists). Click's default success exit code (`0`) applies to
-  every other outcome, filled or not.
-- Fix/workaround: parse the `success` field of the JSON result — never the
-  exit code — to determine fill outcome.
+**[SPEC] Exit codes**
 
-**[BUG] Default algorithm rejects short timeouts**
-- Symptom: `crossword fill grid.json -w list.txt -t 3` (or any `-t` under 10
-  with the default/`repair`/`hybrid` algorithm) crashes with an uncaught
-  `ValueError: timeout must be ≥10 seconds, got 3` and a full Python
-  traceback, rather than a clean CLI error.
-- Cause: `iterative_repair.py`'s `fill()` enforces a 10-second floor with a
-  raw `raise`, not caught by the CLI layer.
-- Fix/workaround: always pass `-t 10` or higher.
+| Code | Meaning |
+|---|---|
+| `0` | The solver ran and produced a result — **including a partial or unsuccessful fill** |
+| `1` | The run could not happen or could not finish: missing grid file, unreadable wordlist, invalid theme entries, out-of-range `--timeout` |
+
+- A caller must never infer fill quality from the exit code. Parse the JSON
+  `success` field for that. A grid the solver could not complete is a result,
+  not an error.
+- This is deliberate, not an oversight. `backend/core/cli_adapter.py` raises
+  `CalledProcessError` on any non-zero exit, and the web UI renders a partial
+  fill as a normal outcome; exiting non-zero on an unsuccessful fill would turn
+  that outcome into an error at the seam.
+- Pinned by `cli/tests/unit/test_fill_command.py`. Reproduce with:
+
+      pytest cli/tests/unit/test_fill_command.py
+
+**[SPEC] `--timeout` has a 10-second floor under `repair` and `hybrid`**
+- `iterative_repair.py`'s `fill()` rejects a timeout below 10 seconds. The CLI
+  reports this as a normal error and exits `1`; with `--json-output` the error
+  is returned as `{"success": false, "error": ...}` on stdout.
+- Pass `-t 10` or higher. `beam` and the classic algorithms have no such floor.
 
 **[NOTE]** `repair` (and therefore the default run) can report
 `all_slots_filled: true` together with `success: false` — every slot has a
@@ -645,10 +650,17 @@ wordlist, and machine.
 
 ## Known Issues
 
-**[BUG] See `fill` and default-algorithm entries above** — duplicated here
-only as a pointer: (1) `fill` exits 0 regardless of success, always check
-the JSON `success` field; (2) `-t` under 10 seconds crashes with a raw
-traceback under the default (`repair`) algorithm.
+**[SPEC]** The two entries previously listed here are no longer defects. `fill`
+exiting `0` on an unsuccessful fill is the intended contract — see **Exit
+codes** above — and a sub-10-second `--timeout` now produces a normal CLI error
+instead of a traceback.
+
+**[BUG] `backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary`
+does not pass.** The defect is in the test fixture, not in `--theme-entries`:
+it asks the flag to place the 3-letter entry `CAT` at `(0,0,across)` of a 5x5
+grid with no black squares, which is a 5-letter slot. The CLI rejects it
+correctly. The test is `slow`-marked, so `pytest` deselects it by default and
+CI has never run it.
 
 **[?]** Whether `pause`/`list-states`/`resume` behave correctly for tasks
 started via the *backend* (as opposed to a bare `crossword fill --task-id`
@@ -658,6 +670,15 @@ invocation) was not re-verified for this rewrite — see
 ---
 
 ## Changelog
+
+- **3.1.0** — Exit-code contract specified and pinned by
+  `cli/tests/unit/test_fill_command.py`: `0` for any completed run including a
+  partial fill, `1` for a run that could not happen. The two prior `[BUG]`
+  entries are resolved — `fill` exiting `0` on an unsuccessful fill is now
+  documented as the intended contract rather than a defect, and a sub-floor
+  `--timeout` produces a clean CLI error instead of a traceback. An unreadable
+  `-w` wordlist likewise now errors instead of raising `FileNotFoundError`.
+  New `[BUG]`: the `--theme-entries` canary fails on a broken fixture.
 
 - **3.0.0** — Full rewrite to HADS format, audience narrowed to CLI users.
   Verified every command's option set against live `--help` output and
