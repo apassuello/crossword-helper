@@ -1,8 +1,16 @@
 # Algorithm Deep Dive: Crossword Construction Science & Tech Stack
 
-This document provides a comprehensive technical review of all crossword-specific concepts, algorithms, and techniques used in this codebase.
+Technical review of the crossword-specific concepts and algorithms used in this codebase.
 
-**Last Updated:** March 2026
+**[NOTE] Locating the code**
+This document cites code by **symbol**, not by line number. It previously carried line
+ranges throughout; every one of them had drifted — by tens to roughly 150 lines — so
+following a citation landed on unrelated code while looking authoritative. To find any
+routine described here:
+
+```bash
+grep -rn "def <function_name>" cli/src/fill/
+```
 
 ---
 
@@ -12,7 +20,7 @@ This document provides a comprehensive technical review of all crossword-specifi
 2. [Crossword Construction Rules](#2-crossword-construction-rules)
 3. [Auto-Numbering](#3-auto-numbering)
 4. [Word Quality Scoring](#4-word-quality-scoring)
-5. [Pattern Matching (3 Implementations)](#5-pattern-matching-3-implementations)
+5. [Pattern Matching (2 Implementations)](#5-pattern-matching-2-implementations)
 6. [Autofill Algorithms](#6-autofill-algorithms)
 7. [Pause/Resume System](#7-pauseresume-system)
 8. [Theme Word Support](#8-theme-word-support)
@@ -89,14 +97,14 @@ score = clamp(base + length_bonus − penalties, 1, 150)
 
 ---
 
-## 5. Pattern Matching (3 Implementations)
+## 5. Pattern Matching (2 Implementations)
 
 Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 
 ### A. Regex (`cli/src/fill/pattern_matcher.py`)
 - Converts `"C?T"` → regex `^C.T$`
 - Filters by length first, then regex match
-- ~200–500ms per query on 454k words
+- Scans the whole list per query: cost grows linearly with list size
 - LRU cache for repeated patterns
 
 ### B. Trie (`cli/src/fill/trie_pattern_matcher.py` + `word_trie.py`)
@@ -104,7 +112,7 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 - Each node stores min/max score bounds → **early subtree pruning** when min_score threshold eliminates branch
 - Wildcard `?` branches to all children simultaneously
 - **10–50× faster than regex** (~10–50ms per query)
-- Build time: ~2–3s for 454k words
+- Build cost is paid once per process and grows with list size
 - Default for autofill algorithms
 
 ---
@@ -236,7 +244,7 @@ Standard crossword entry normalization:
 - CSS Grid layout with auto-numbering integration
 - Responsive: 40px cells (screen), 30px (print)
 - Separate Across/Down clue sections with letter counts
-- Supports HTML and PDF output formats
+- Supports HTML output only
 
 ---
 
@@ -245,35 +253,35 @@ Standard crossword entry normalization:
 **File:** `cli/src/fill/autofill.py`
 
 ### Recursion Structure (`_backtrack_with_mac()`, lines 853–999)
-1. **Base case** (line 904): All slots filled → return True
-2. **Skip filled** (line 908–913): If slot already has a word, recurse to next
-3. **Two-tier LCV scoring** (lines 916–955):
+1. **Base case**: All slots filled → return True
+2. **Skip filled**: If slot already has a word, recurse to next
+3. **Two-tier LCV scoring**:
    - If >100 candidates: fast heuristic LCV first (letter frequency table), then accurate LCV on top 100
    - If ≤100: direct accurate LCV (temporarily places each word, counts remaining crossing options)
-4. **Backtracking loop** (lines 963–997):
+4. **Backtracking loop**:
    - Place candidate word
-   - **Snapshot all domains** (line 972): `saved_domains = {k: v.copy() for k, v in self.domains.items()}`
+   - **Snapshot all domains**: `saved_domains = {k: v.copy() for k, v in self.domains.items()}`
    - Run `_ac3_incremental()` from assigned slot
-   - Recurse; on failure, **restore all domains** (line 993)
+   - Recurse; on failure, **restore all domains**
 
 ### Domain Snapshot/Restore
 - Full copy of ALL domain dictionaries on each placement — O(n × m) memory
 - No incremental restore (restores everything, even unaffected domains)
 - **Weakness:** Memory-intensive for large grids with 10k+ words per domain
 
-### AC-3 Arc Consistency (lines 661–760)
+### AC-3 Arc Consistency
 - Queue-based: maintains arcs `(slot_i, slot_j)` to check
 - `_revise()` removes words from domain_i that have no compatible partner in domain_j at their crossing position
 - **Wipeout:** If any domain becomes empty → return False → triggers backtrack
 - **No conflict learning:** Doesn't record WHY a domain emptied (no nogood recording)
 
-### Letter Frequency Table (lines 465–497)
+### Letter Frequency Table
 - Structure: `{word_length: {position: {letter: frequency_count}}}`
 - Built once from entire word list at initialization
 - Used by `_lcv_score_fast()` to estimate constraining impact in O(1)
 - **Gap:** Only individual letter frequencies — ignores bigrams (QU, TH, CH always co-occur)
 
-### Stratified Sampling (lines 408–463)
+### Stratified Sampling
 - Triggered when domain >10,000 words
 - Divides into 10 score deciles, samples proportionally
 - Ensures letter diversity at each position (all 26 letters represented)
@@ -284,7 +292,7 @@ Standard crossword entry normalization:
 
 **File:** `cli/src/fill/beam_search/orchestrator.py`
 
-### Main Loop (lines 208–462)
+### Main Loop
 ```
 while filled_slots < total_slots:
   1. Check pause/timeout
@@ -295,12 +303,12 @@ while filled_slots < total_slots:
   6. Check for complete solution
 ```
 
-### Stratified Candidate Selection (lines 140–204)
+### Stratified Candidate Selection
 - Each beam gets overlapping slice of shuffled candidates
 - Offset per beam = 2 (hardcoded)
 - Beam 0: candidates[0:10], Beam 1: candidates[2:12], etc.
 
-### Dead End Recovery (lines 349–435)
+### Dead End Recovery
 Four escalating strategies:
 1. Double candidates (2× normal)
 2. Quintuple candidates (5× normal)
@@ -312,7 +320,7 @@ Four escalating strategies:
 - 50–80% → gentle backtrack (depth=1)
 - <50% → aggressive backtrack (undo recent assignments)
 
-### Stale Beam Detection (lines 187–206)
+### Stale Beam Detection
 - Hashes first beam state's slot assignments as signature
 - Tracks `(signature, slot_id) → attempt_count`, max 3 attempts
 - **Bug:** Only uses first state — different 2nd–5th states treated as duplicate
@@ -339,9 +347,9 @@ Four escalating strategies:
 - Returns better of beam vs. repair result
 
 ### Iterative Repair (`cli/src/fill/iterative_repair.py`)
-- **Region-based fill** (lines 256–336): Finds dead-end slots → identifies blocking words → strips region → CSP backtrack fills the conflict zone → greedy fills remainder
-- **Multi-pass greedy** (lines 338–393): Pass 0 strict gibberish check, passes 1–2 relaxed, randomized for restart diversity
-- **Tabu search** (lines 395–465): Tracks recent swaps, tenure = √(num_slots), swaps words to reduce conflicts, restores best-seen solution
+- **Region-based fill**: Finds dead-end slots → identifies blocking words → strips region → CSP backtrack fills the conflict zone → greedy fills remainder
+- **Multi-pass greedy**: Pass 0 strict gibberish check, passes 1–2 relaxed, randomized for restart diversity
+- **Tabu search**: Tracks recent swaps, tenure = √(num_slots), swaps words to reduce conflicts, restores best-seen solution
 
 ---
 
@@ -350,7 +358,7 @@ Four escalating strategies:
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | Grid storage | NumPy int8 arrays | Fast bulk operations, memory-efficient cell encoding |
-| Pattern matching | Trie (default) / Regex | 10–50× speedup over naive regex for 454k word dictionary |
+| Pattern matching | Trie (default) / Regex | Trie lookup is O(pattern), regex is O(list size) |
 | Autofill core | CSP + AC-3 + MAC | Proven constraint satisfaction with arc consistency pruning |
 | Autofill quality | Beam Search + Diverse Beam | Global optimization, prevents local optima, better word quality |
 | Heuristics | MCV/MRV + LCV + Forward Checking | Standard AI search heuristics adapted for crossword domain |
