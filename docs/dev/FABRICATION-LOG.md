@@ -96,12 +96,15 @@ only — and both are recorded here as open:
   but is applied once per risky slot without reset, so it compounds — two severe-risk slots give
   0.49.
 
-**[BUG] `backend/tests/integration/test_theme_priority.py`** — `TestThemeEntriesCLICanary` does
-not pass, and the cause is a defect in the test, not in `--theme-entries`. The fixture builds a
-5x5 grid with no black squares and asks the flag to place the 3-letter entry `CAT` at
-`(0,0,across)`, a 5-letter slot. The CLI rejects it correctly and exits 1. The class previously
-carried a `KNOWN BROKEN` note about the flag; the flag is not what is broken. The test is
-`slow`-marked, so `pytest` deselects it by default (`pytest.ini:8`) and CI has never run it.
+**[SPEC] `backend/tests/integration/test_theme_priority.py`** — `TestThemeEntriesCLICanary`
+carried a `KNOWN BROKEN` note claiming `--theme-entries` does not preserve theme words. The flag
+works; the test's fixture was wrong. It built a 5x5 grid with no black squares and asked the flag
+to place the 3-letter entry `CAT` at `(0,0,across)`, a 5-letter slot, so the CLI rejected the
+entry and the run ended before any locking happened. Fixed by making that slot 3 cells wide.
+Confirmed to discriminate: with the flag the fill preserves `CAT`, without it the solver
+overwrites row 0. The test is `slow`-marked, so `pytest` deselects it by default
+(`pytest.ini:8`) and CI has never run it — that is why a test asserting a false claim about a
+working feature survived.
 
 ---
 

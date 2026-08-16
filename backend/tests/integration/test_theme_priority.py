@@ -324,17 +324,16 @@ class TestThemeWordAPIIntegration:
 class TestThemeEntriesCLICanary:
     """Canary tests for the --theme-entries CLI flag.
 
-    [BUG] The test below does not currently pass, and its failure is a defect
-    in the test fixture, not in the flag. The fixture builds a 5x5 grid with no
-    black squares and asks --theme-entries to place the 3-letter word CAT at
-    (0,0,across), which is a 5-letter slot. The CLI rejects it correctly:
+    The flag works. This class spent time asserting otherwise because its own
+    fixture was wrong: it built a 5x5 grid with no black squares and asked
+    --theme-entries to place the 3-letter word CAT at (0,0,across), a 5-letter
+    slot. The CLI rejected it correctly, the run ended at entry validation
+    before any locking happened, and the failure was read as a broken flag.
 
-        Invalid theme entries: Theme entry 'CAT' is 3 letters but the across
-        slot at (0,0) is 5 letters long
-
-    So this class does not currently demonstrate anything about locking either
-    way - the run ends at entry validation, before any locking happens.
-    Reproduce with:
+    The fixture now makes that slot 3 cells wide. The test discriminates:
+    with --theme-entries the fill preserves CAT, without it the solver
+    overwrites row 0 with its own word. Run it - it is slow-marked, so a plain
+    pytest deselects it:
 
         pytest backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary -m "slow or not slow"
     """
@@ -343,25 +342,27 @@ class TestThemeEntriesCLICanary:
     def test_theme_entries_flag_preserves_words(self):
         """Test that --theme-entries preserves 'CAT' at (0,0,across) in a 5x5 grid.
 
-        [BUG] Does not pass. An earlier fix corrected one defect here - the
-        test passed a raw JSON string where the CLI expects a file path
-        (click.Path(exists=True)) - but a second defect remains: the grid
-        below has no black squares, so (0,0,across) is 5 cells wide and the
-        3-letter entry CAT is rejected before locking is reached. The claim
-        that this proves locking works was never demonstrated by this test.
+        Two fixture defects had to be fixed before this asserted anything.
+        The first: it passed a raw JSON string where the CLI expects a file
+        path (click.Path(exists=True)). The second: the grid had no black
+        squares, so (0,0,across) was 5 cells wide and the 3-letter entry was
+        rejected before locking was reached.
         """
         import os
         import subprocess
         import sys
 
+        # (0,0,across) must be exactly 3 cells wide, or --theme-entries
+        # rejects the 3-letter entry CAT before any locking happens. The
+        # black squares are placed 180-degree symmetrically.
         grid_data = {
             "size": 5,
             "grid": [
-                ["C", "A", "T", ".", "."],
+                ["C", "A", "T", "#", "#"],
                 [".", ".", ".", ".", "."],
                 [".", ".", ".", ".", "."],
-                [".", ".", ".", ".", "."],
-                [".", ".", ".", ".", "."],
+                ["#", ".", ".", ".", "."],
+                ["#", "#", ".", ".", "."],
             ],
         }
 
