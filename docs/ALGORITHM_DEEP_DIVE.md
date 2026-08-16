@@ -111,7 +111,7 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 - **Length-indexed tries** — separate trie per word length (3–21)
 - Each node stores min/max score bounds → **early subtree pruning** when min_score threshold eliminates branch
 - Wildcard `?` branches to all children simultaneously
-- **10–50× faster than regex** (~10–50ms per query)
+- Lookup does not scan the word list, unlike the regex matcher
 - Build cost is paid once per process and grows with list size
 - Default for autofill algorithms
 
@@ -147,10 +147,9 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 |-----------|------|------|
 | `BeamSearchOrchestrator` | `orchestrator.py` | Main coordinator |
 | `MRVSlotSelector` | `selection/slot_selector.py` | Minimum Remaining Values slot selection |
-| `MACConstraintEngine` | `constraints/engine.py` | Constraint propagation after placement |
 | `CompositeValueOrdering` | `selection/value_ordering.py` | Chained value ordering strategies |
 | `DiversityManager` | `beam/diversity.py` | Prevents beam collapse |
-| `BeamManager` | `beam/beam_manager.py` | Beam expansion and pruning |
+| `BeamManager` | `beam/manager.py` | Beam expansion and pruning |
 | `StateEvaluator` | `evaluation/state_evaluator.py` | Viability + risk scoring |
 
 **Value ordering pipeline:**
@@ -267,7 +266,7 @@ Standard crossword entry normalization:
 ### Domain Snapshot/Restore
 - Full copy of ALL domain dictionaries on each placement — O(n × m) memory
 - No incremental restore (restores everything, even unaffected domains)
-- **Weakness:** Memory-intensive for large grids with 10k+ words per domain
+- **Weakness:** Memory-intensive for large grids with 10k+ words per domain <!-- docs-check: allow -->
 
 ### AC-3 Arc Consistency
 - Queue-based: maintains arcs `(slot_i, slot_j)` to check

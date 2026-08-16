@@ -42,11 +42,17 @@ BANNED=(
   '✅[[:space:]]*FIXED'
   '\*\*FIXED\*\*'
   '[0-9]+k\+? words'
-  '[0-9]+x faster'
+  '[0-9]+[x×] faster'
+  '[0-9]+[-–][0-9]+[x×] (faster|speedup)'
 )
+# Escape hatch: a line containing "docs-check: allow" is exempt. Needed for lines
+# that legitimately quote a banned string - the contributing guide documenting the
+# rule, or a complexity discussion citing a capacity rather than a stale count.
+# Deliberately per-line and greppable, so every exemption stays auditable:
+#   grep -rn "docs-check: allow" -- '*.md'
 for pat in "${BANNED[@]}"; do
   while IFS= read -r f; do
-    if out=$(grep -nE "$pat" "$f" 2>/dev/null); then
+    if out=$(grep -nE "$pat" "$f" 2>/dev/null | grep -v 'docs-check: allow'); then
       echo "  BANNED     $f"
       echo "$out" | sed 's/^/               /'
       echo "banned" >> "$MARKER"

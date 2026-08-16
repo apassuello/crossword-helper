@@ -66,7 +66,7 @@ Markers registered in `pytest.ini`: `slow`, `integration`, `unit`.
 **[SPEC]**
 - **No derivable state in prose.** If a command produces the number, print the command, not the
   number. Banned in living docs: test counts, pass rates, coverage %, wordlist sizes, `Status:
-  Complete`, `✅ FIXED`. CI enforces this.
+  Complete`, `✅ FIXED`. CI enforces this. <!-- docs-check: allow -->
 - Living docs in `docs/` follow HADS (`[SPEC]` / `[NOTE]` / `[BUG]` / `[?]` blocks + AI manifest).
 - `.claude/CLAUDE.md` follows the claude-meta template instead, and stays under 80 lines.
 - Unverified claims go in a `[?]` block. Never assert them as fact.
