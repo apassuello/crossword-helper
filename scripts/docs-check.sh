@@ -18,6 +18,12 @@ EXCLUDE='^(docs/archive/|\.archive/|docs/dev/FABRICATION-LOG\.md)'
 
 live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 
+# Source comments are documentation too. The 2026-08 audit found the SAME false
+# figure ("454k words") in cli/ docstrings as in the docs, which is why checking
+# docs against code silently failed - see docs/dev/FABRICATION-LOG.md. Only the
+# banned-claim check runs over these; the link check stays markdown-only.
+live_code() { git ls-files '*.py' | grep -E '^(cli|backend)/'; }
+
 echo "==> Checking relative links"
 while IFS= read -r f; do
   dir=$(dirname "$f")
@@ -49,7 +55,7 @@ BANNED=(
 # that legitimately quote a banned string - the contributing guide documenting the
 # rule, or a complexity discussion citing a capacity rather than a stale count.
 # Deliberately per-line and greppable, so every exemption stays auditable:
-#   grep -rn "docs-check: allow" -- '*.md'
+#   grep -rn "docs-check: allow" -- '*.md' '*.py'
 for pat in "${BANNED[@]}"; do
   while IFS= read -r f; do
     if out=$(grep -nE "$pat" "$f" 2>/dev/null | grep -v 'docs-check: allow'); then
@@ -57,7 +63,7 @@ for pat in "${BANNED[@]}"; do
       echo "$out" | sed 's/^/               /'
       echo "banned" >> "$MARKER"
     fi
-  done < <(live_docs)
+  done < <(live_docs; live_code)
 done
 
 if [ -s "$MARKER" ]; then
