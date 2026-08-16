@@ -9,6 +9,7 @@ export function useSSEProgress() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('idle'); // idle, running, complete, error
   const [message, setMessage] = useState('');
+  const [data, setData] = useState(null); // payload of the latest event carrying data (e.g. final results)
   const eventSourceRef = useRef(null);
 
   const connect = useCallback((taskId) => {
@@ -25,18 +26,24 @@ export function useSSEProgress() {
     setProgress(0);
     setStatus('running');
     setMessage('Starting...');
+    setData(null);
 
     // Handle progress events
     eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const eventData = JSON.parse(event.data);
 
-        setProgress(data.progress || 0);
-        setMessage(data.message || 'Processing...');
-        setStatus(data.status || 'running');
+        setProgress(eventData.progress || 0);
+        setMessage(eventData.message || 'Processing...');
+        // Capture the data payload BEFORE the status flips to complete/error,
+        // so consumers reacting to status always see the final payload.
+        if (eventData.data !== undefined && eventData.data !== null) {
+          setData(eventData.data);
+        }
+        setStatus(eventData.status || 'running');
 
         // Close connection when complete or error
-        if (data.status === 'complete' || data.status === 'error') {
+        if (eventData.status === 'complete' || eventData.status === 'error') {
           eventSource.close();
           eventSourceRef.current = null;
         }
@@ -71,6 +78,7 @@ export function useSSEProgress() {
     setProgress(0);
     setStatus('idle');
     setMessage('');
+    setData(null);
   }, [disconnect]);
 
   // Cleanup on unmount
@@ -86,6 +94,7 @@ export function useSSEProgress() {
     progress,
     status,
     message,
+    data,
     connect,
     disconnect,
     reset

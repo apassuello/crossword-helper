@@ -106,7 +106,9 @@ class GridValidator:
     @staticmethod
     def validate_structural(grid: Grid) -> Tuple[bool, List[str]]:
         """Connectivity + short-word(<3) only. Excludes symmetry + black% (owned elsewhere).
-        Uses _scan_short_words (fresh run-length walk), NOT the dead _check_minimum_word_length."""
+        Uses _scan_short_words (fresh run-length walk). _check_minimum_word_length is the
+        other implementation of the same rule, reached from the full NYT check above; the
+        two emit different message formats."""
         errors = []
         if not GridValidator._check_connectivity(grid):
             errors.append("Grid has isolated white square regions")
@@ -134,13 +136,16 @@ class GridValidator:
             List of error messages for short words
         """
         errors = []
-        slots = grid.get_word_slots()
+        # min_length=1 so runs of 1-2 cells are visible here
+        # (the default get_word_slots() filters them out for autofill use)
+        slots = grid.get_word_slots(min_length=1)
 
         for slot in slots:
             if slot["length"] < 3:
                 errors.append(
                     f"{slot['direction'].capitalize()} word at "
-                    f"({slot['row']}, {slot['col']}) is only {slot['length']} letters"
+                    f"({slot['row']}, {slot['col']}) is only {slot['length']} "
+                    f"letter{'s' if slot['length'] != 1 else ''} (minimum is 3)"
                 )
 
         return errors

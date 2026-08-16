@@ -6,8 +6,9 @@ and adaptive width adjustment.
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..state import BeamState
 
@@ -91,7 +92,13 @@ class BeamManager(BeamManagementStrategy):
         self.debug_lcv = False
         self.debug_mac = False
 
-    def expand_beam(self, beam: List[BeamState], slot: Dict, candidates_per_slot: int) -> List[BeamState]:
+    def expand_beam(
+        self,
+        beam: List[BeamState],
+        slot: Dict,
+        candidates_per_slot: int,
+        deadline: Optional[float] = None,
+    ) -> List[BeamState]:
         """
         Expand beam by trying top-K candidates in each state.
 
@@ -99,15 +106,24 @@ class BeamManager(BeamManagementStrategy):
             beam: Current beam (list of states)
             slot: Slot to fill next
             candidates_per_slot: How many words to try per state
+            deadline: Optional absolute epoch deadline — expansion stops and
+                      returns whatever it has when the deadline passes
 
         Returns:
             Expanded beam (potentially beam_width * candidates_per_slot states)
 
-        Complexity: O(beam_width * candidates_per_slot * pattern_match_time)
+        Complexity: O(beam_width * pattern_match_time) for the per-beam pattern_matcher.find()
+                    call, plus O(beam_width * candidates_per_slot * viability_check_time) for
+                    the inner per-candidate loop (state clone + evaluate_viability)
         """
         from ...crosswordese import filter_crosswordese
 
         expanded = []
+
+        # Propagate the deadline into value ordering (LCV is the single most
+        # expensive step: it does pattern searches per candidate per crossing)
+        if self.value_ordering is not None:
+            self.value_ordering.deadline = deadline
 
         # DEBUG: Track why expansion might fail
         total_skipped_duplicate = 0
@@ -126,6 +142,10 @@ class BeamManager(BeamManagementStrategy):
         offset_per_beam = 2  # Tunable: increase for more diversity, decrease for more quality overlap
 
         for beam_idx, state in enumerate(beam):
+            # Respect the time budget: stop expanding, return what we have
+            if deadline is not None and time.time() >= deadline:
+                break
+
             # THEME PRESERVATION FIX: Check if slot already has an assigned word
             # This prevents theme words from being overwritten during expansion
             slot_id = (slot["row"], slot["col"], slot["direction"])
@@ -175,8 +195,10 @@ class BeamManager(BeamManagementStrategy):
                 all_candidates = self.value_ordering.order_values(slot, all_candidates, state)
             # If no value ordering, use candidates as-is
 
-            # STRATIFIED SAMPLING: Each beam gets overlapping slice from shuffled candidates
-            # With 48k+ shuffled candidates, overlapping slices give diversity + coherence
+            # STRATIFIED SAMPLING: Each beam gets an overlapping slice from the shuffled
+            # candidate list. The slice size and count scale with the candidate list size
+            # for the current slot/wordlist, so overlapping slices give diversity + coherence
+            # regardless of how many candidates matched.
             offset = beam_idx * offset_per_beam
             start_idx = offset
             end_idx = offset + candidates_per_slot
@@ -188,6 +210,10 @@ class BeamManager(BeamManagementStrategy):
 
             # Try each candidate
             for word, word_score in candidates:
+                # Respect the time budget (viability checks do pattern searches)
+                if deadline is not None and time.time() >= deadline:
+                    break
+
                 # Skip if word already used
                 if word in state.used_words:
                     total_skipped_duplicate += 1
@@ -267,7 +293,9 @@ class BeamManager(BeamManagementStrategy):
         Returns:
             Pruned beam (diverse states, up to beam_width)
 
-        Complexity: O(n log n) for sorting + O(nx) for diversity check
+        Complexity: O(n log n) for sorting + O(n * beam_width) for the greedy diversity loop
+                    (each of the n candidates is compared against up to beam_width
+                    already-selected states)
         """
         if len(beam) <= beam_width:
             return beam
@@ -349,7 +377,8 @@ class BeamManager(BeamManagementStrategy):
             slot: Current slot being filled
 
         Returns:
-            Adaptive beam width (3-20)
+            Adaptive beam width, clamped to the bounds enforced by the max(3, min(20, ...))
+            call below
         """
         # Calculate depth
         depth = 1.0 - (len(unfilled_slots) / total_slots)

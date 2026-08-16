@@ -120,7 +120,7 @@ def suggest_black_square():
 
     except Exception as e:
         logger.error(f"Error suggesting black square: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @grid_api.route("/grid/apply-black-squares", methods=["POST"])
@@ -179,7 +179,7 @@ def apply_black_squares():
 
     except Exception as e:
         logger.error(f"Error applying black squares: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
 @grid_api.route("/grid/validate", methods=["POST"])
@@ -219,9 +219,9 @@ def validate_grid():
 
         # Structural checks (connectivity + short-word scan, D1:C) — requires CLI-string
         # cells (Grid.from_dict calls cell.isalpha()). Guard the ENTIRE block in a broad
-        # except: this local catch is what keeps malformed/non-CLI-string input off the
-        # (buggy) handle_error(...default_status=) fallback below — degrade to an empty
-        # structural result rather than reaching it. Always preserves HTTP 200.
+        # except: malformed or non-CLI-string input is not an internal error, so degrade
+        # to an empty structural result instead of falling through to the 500 handler
+        # below. Always preserves HTTP 200.
         structural_valid = True
         structural_errors = []
         try:
@@ -275,4 +275,4 @@ def validate_grid():
 
     except Exception as e:
         logger.error(f"Error validating grid: {e}", exc_info=True)
-        return handle_error(e, default_status=500)
+        return handle_error("INTERNAL_ERROR", str(e), 500)

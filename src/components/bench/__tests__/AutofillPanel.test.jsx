@@ -117,6 +117,47 @@ describe('AutofillPanel (mounted, controlled)', () => {
     });
   });
 
+  // Guards the "Theme List designation is dropped before the request goes out"
+  // defect, which the field-report ledger records as fixed with NO regression
+  // test. The designation only earns its keep if it survives all the way into
+  // machine.start — useAutofillMachine forwards it verbatim as `themeList`.
+  it('designating a custom wordlist as priority theme passes themeList to machine.start', async () => {
+    const machine = baseMachine();
+    const { getByRole, getByLabelText, getByText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
+    await flush();
+
+    // The priority-theme radio only appears once the custom list is selected.
+    fireEvent.click(getByLabelText(/My Theme List/i));
+    fireEvent.click(getByLabelText(/Priority theme list/i));
+
+    expect(getByText(/Theme List Active:/i)).toBeInTheDocument();
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    expect(machine.start).toHaveBeenCalledTimes(1);
+    expect(machine.start.mock.calls[0][0]).toMatchObject({
+      themeList: 'custom/my_theme',
+    });
+  });
+
+  // Deselecting the wordlist must clear the designation too, or the request
+  // carries a themeList pointing at a list it no longer sends.
+  it('deselecting the designated wordlist clears themeList', async () => {
+    const machine = baseMachine();
+    const { getByRole, getByLabelText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
+    await flush();
+
+    fireEvent.click(getByLabelText(/My Theme List/i));
+    fireEvent.click(getByLabelText(/Priority theme list/i));
+    fireEvent.click(getByLabelText(/My Theme List/i));
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    expect(machine.start.mock.calls[0][0].themeList).toBeNull();
+  });
+
   it('has no preferPersonalWords field in the rendered options or in the machine.start call', async () => {
     const machine = baseMachine();
     const { getByRole, queryByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);

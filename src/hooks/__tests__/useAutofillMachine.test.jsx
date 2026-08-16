@@ -180,6 +180,87 @@ describe('useAutofillMachine', () => {
     expect(onGridUpdate).toHaveBeenCalledTimes(1);
   });
 
+  // 4b/4c guard main's fix, dropped when the inline App.jsx block was ported to
+  // this hook: success:false with EVERY slot filled must not be reported as a
+  // "Partial" fill with a lower-the-min-score suggestion. The CLI returns
+  // success:false whenever entries are flagged problematic, even at 100% fill.
+  it('4b. complete + success:false but all slots filled -> done, review message not "Partial"', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-4b' });
+    const onGridUpdate = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: {
+          grid: [
+            ['A', 'B', '.', '.'],
+            ['.', '.', '.', '.'],
+            ['.', '.', '.', '.'],
+            ['.', '.', '.', '.'],
+          ],
+          success: false,
+          slots_filled: 8,
+          total_slots: 8,
+          fill_percentage: 100,
+          problematic_slots_count: 2,
+          suggestions: [{ message: 'try lowering the minimum score' }],
+        },
+      });
+    });
+
+    expect(result.current.state).toBe('done');
+    expect(result.current.progress).toBe(100);
+    expect(result.current.message).toBe(
+      'Filled 8/8 slots — 2 entries may be invalid (use Verify Words to check)'
+    );
+    expect(result.current.message).not.toContain('Partial');
+    expect(result.current.message).not.toContain('minimum score');
+  });
+
+  it('4c. complete + success:false, all slots filled, no problematic count -> review message', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-4c' });
+    const onGridUpdate = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate })
+    );
+
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: {
+          grid: [
+            ['A', 'B', '.', '.'],
+            ['.', '.', '.', '.'],
+            ['.', '.', '.', '.'],
+            ['.', '.', '.', '.'],
+          ],
+          success: false,
+          slots_filled: 8,
+          total_slots: 8,
+          fill_percentage: 100,
+        },
+      });
+    });
+
+    expect(result.current.state).toBe('done');
+    expect(result.current.message).toBe(
+      'Filled 8/8 slots — some entries may need review (use Verify Words to check)'
+    );
+  });
+
   it('5. complete with NO data.data.grid -> failed, errorCard "No solution found"', async () => {
     vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-5' });
     const onGridUpdate = vi.fn();

@@ -2,6 +2,7 @@
   "name": "crossword-helper",
   "version": "1.0.0",
   "description": "Crossword Construction Helper - Web Interface",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

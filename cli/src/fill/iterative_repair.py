@@ -784,7 +784,8 @@ class IterativeRepair:
         slot is the root cause of the conflict.
 
         Research (Prosser 1993): "Jump directly to culprit variable"
-        Research (Ginsberg 1990): "Intelligent backtracking reduced time by 10×"
+        Research (Ginsberg 1990): intelligent backtracking targets the
+        conflict's root cause instead of retrying the symptom slot
 
         Heuristics for identifying culprit:
         1. Number of alternatives: More alternatives = easier to change (better culprit)
@@ -1706,12 +1707,10 @@ class IterativeRepair:
         """
         Sort slots by constraint level using length-first ordering.
 
-        CRITICAL: Fill LONGEST words first (research-backed).
-
-        Research consensus (Ginsberg 1990, Shortz, Crossfire, Dr.Fill):
-        - Long words (9-11 letters): Structural backbone, ~1k real candidates
-        - Short words (3-5 letters): Flexible "glue", ~2k candidates
-        - Filling short first creates impossible long patterns → gibberish
+        Fill longest slots first, then break ties by domain size (MRV) and
+        empty-cell count. Longer slots are placed while more of the grid is
+        open, so a long slot is less likely to end up unfillable because
+        short crossings already used up its remaining candidates.
 
         Sorting priority:
         1. Length (descending): Longest slots first

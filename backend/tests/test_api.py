@@ -389,3 +389,176 @@ class TestInputSanitization:
 
         # Should reject with error, not crash
         assert response.status_code == 400
+
+
+class TestNormalizeConventionParity:
+    """Regression: /api/normalize must never return interior spaces
+    (CLI parity: 'Tina Fey' -> TINAFEY; documented apostrophe examples
+    remove spaces too)."""
+
+    def test_two_word_name(self, client):
+        response = client.post("/api/normalize", json={"text": "Tina Fey"})
+        assert response.status_code == 200
+        assert json.loads(response.data)["normalized"] == "TINAFEY"
+
+    def test_hyphenated(self, client):
+        response = client.post("/api/normalize", json={"text": "self-aware"})
+        assert response.status_code == 200
+        assert json.loads(response.data)["normalized"] == "SELFAWARE"
+
+    def test_apostrophe_with_space(self, client):
+        """The apostrophe rule used to keep the interior space."""
+        response = client.post("/api/normalize", json={"text": "don't stop"})
+        assert response.status_code == 200
+        assert json.loads(response.data)["normalized"] == "DONTSTOP"
+
+
+class TestPatternWordlistResolution:
+    """Regression: names with .txt used to silently fall back to the CLI's
+    8-word builtin list; unknown names must be a clear 400."""
+
+    def test_txt_extension_resolves_to_real_list(self, client):
+        response = client.post(
+            "/api/pattern",
+            json={"pattern": "C?T", "wordlists": ["comprehensive.txt"]},
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        sources = data["meta"]["sources_searched"]
+        assert "builtin" not in sources
+        assert any("comprehensive" in s for s in sources)
+        # comprehensive.txt has more real C?T matches than the 8-word builtin
+        # demo list (grep -icE '^C.T$' data/wordlists/comprehensive.txt -> 7;
+        # builtin demo list only contains CAT -> 1)
+        assert data["meta"]["total_found"] >= 5
+
+    def test_unknown_wordlist_returns_400(self, client):
+        response = client.post(
+            "/api/pattern",
+            json={"pattern": "C?T", "wordlists": ["definitely_not_a_list"]},
+        )
+        assert response.status_code == 400
+        error = json.loads(response.data)["error"]
+        assert error["code"] == "UNKNOWN_WORDLIST"
+        assert "definitely_not_a_list" in error["message"]
+
+
+class TestVerifyWordsWordlistSelection:
+    """Regression: verify-words/clean used to ignore the requested wordlists
+    and validate against every installed list merged."""
+
+    def _grid_with_word(self, word="CAT", size=5):
+        grid = [["." for _ in range(size)] for _ in range(size)]
+        for i, ch in enumerate(word):
+            grid[0][i] = ch
+        return grid
+
+    def test_verify_words_honors_selection(self, client):
+        # crosswordese (wc -l data/wordlists/core/crosswordese.txt) does not
+        # contain ZUGZWANG-ish junk; use a word that only exists in the comprehensive list
+        grid = self._grid_with_word("CAT")
+
+        response = client.post(
+            "/api/grid/verify-words",
+            json={"size": 5, "grid": grid, "wordlists": ["core/crosswordese"]},
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Selected list only: must be crosswordese's size, not the full merge
+        # of every non-archive/non-custom list under data/wordlists/ (see
+        # backend/api/routes.py verify_words(), wordlist_dir.rglob('*.txt'))
+        assert data["wordlist_size"] < 1000
+
+    def test_verify_words_unknown_wordlist_returns_400(self, client):
+        grid = self._grid_with_word("CAT")
+        response = client.post(
+            "/api/grid/verify-words",
+            json={"size": 5, "grid": grid, "wordlists": ["nope_not_here"]},
+        )
+        assert response.status_code == 400
+        assert json.loads(response.data)["error"]["code"] == "UNKNOWN_WORDLIST"
+
+    def test_verify_words_default_is_merged(self, client):
+        grid = self._grid_with_word("CAT")
+        response = client.post(
+            "/api/grid/verify-words",
+            json={"size": 5, "grid": grid},
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # No selection: falls back to the merged dictionary (see assertion
+        # below for the size threshold this enforces)
+        assert data["wordlist_size"] > 40000
+
+    def test_clean_honors_selection(self, client):
+        # ETUI is classic crosswordese (present in core/crosswordese);
+        # a junk word must be removed under any selection
+        grid = self._grid_with_word("ETUI", size=5)
+        response = client.post(
+            "/api/grid/clean",
+            json={"size": 5, "grid": grid, "wordlists": ["core/crosswordese"]},
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # ETUI is valid in the selected list, so nothing should be removed
+        assert data["removed_count"] == 0
+
+    def test_clean_unknown_wordlist_returns_400(self, client):
+        grid = self._grid_with_word("CAT")
+        response = client.post(
+            "/api/grid/clean",
+            json={"size": 5, "grid": grid, "wordlists": ["nope_not_here"]},
+        )
+        assert response.status_code == 400
+        assert json.loads(response.data)["error"]["code"] == "UNKNOWN_WORDLIST"
+
+
+class TestBuiltinWordlistProtection:
+    """Regression: the wordlist API used to allow editing/overwriting the
+    shipped lists (comprehensive.txt etc.) with no undo."""
+
+    def test_put_add_words_to_builtin_refused(self, client):
+        response = client.put(
+            "/api/wordlists/comprehensive",
+            json={"add_words": ["ZZZZQQQ"]},
+        )
+        assert response.status_code == 403
+        data = json.loads(response.data)
+        assert "built-in" in data["error"]
+
+    def test_put_replace_words_of_builtin_refused(self, client):
+        response = client.put(
+            "/api/wordlists/core/crosswordese",
+            json={"words": ["ONLYME"]},
+        )
+        assert response.status_code == 403
+
+    def test_delete_builtin_refused(self, client):
+        response = client.delete("/api/wordlists/comprehensive")
+        assert response.status_code == 403
+        assert "built-in" in json.loads(response.data)["error"]
+
+    def test_post_overwrite_builtin_refused(self, client):
+        response = client.post(
+            "/api/wordlists/comprehensive",
+            json={"words": ["HIJACKED"]},
+        )
+        assert response.status_code == 403
+
+    def test_custom_list_lifecycle_still_editable(self, client):
+        """Custom lists remain fully editable (create, update, delete)."""
+        name = "custom/test_protection_tmp"
+
+        create = client.post(f"/api/wordlists/{name}", json={"words": ["ALPHA", "BETA"]})
+        assert create.status_code == 201
+
+        try:
+            update = client.put(f"/api/wordlists/{name}", json={"add_words": ["GAMMA"]})
+            assert update.status_code == 200
+
+            get = client.get(f"/api/wordlists/{name}")
+            assert get.status_code == 200
+            assert "GAMMA" in json.loads(get.data)["words"]
+        finally:
+            delete = client.delete(f"/api/wordlists/{name}")
+            assert delete.status_code == 200

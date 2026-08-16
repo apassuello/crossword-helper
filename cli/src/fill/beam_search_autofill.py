@@ -42,6 +42,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         theme_words=None,
         partial_fill_mode: bool = False,
         pause_controller=None,
+        task_id: Optional[str] = None,
     ):
         """
         Initialize beam search solver.
@@ -83,6 +84,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             theme_words=theme_words,
             partial_fill_mode=partial_fill_mode,
             pause_controller=pause_controller,
+            task_id=task_id,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator
@@ -171,7 +173,7 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
         Check if word is likely real (not gibberish).
 
         Uses linguistic heuristics to filter obvious gibberish:
-        1. Vowel ratio (~40% in English)
+        1. Vowel ratio outside the accepted range is rejected (see state_evaluator.py threshold)
         2. No excessive letter repetition
         3. No excessive consonant clusters
         4. Q followed by U (standard pattern)

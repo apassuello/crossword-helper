@@ -1,104 +1,90 @@
-# Crossword Builder - Phase 2 CLI Tool
+# Crossword CLI
 
-**Status:** 🚧 In Development
-**Type:** Command-line application
-**Primary Feature:** CSP-based automated grid filling
+**Version 2.0.0** · 2026-08-16
 
-## Overview
+---
 
-Python CLI tool for comprehensive crossword puzzle construction with automated filling using constraint satisfaction algorithms.
+## AI READING INSTRUCTION
 
-## Components
+Read `[SPEC]` and `[BUG]` blocks for authoritative facts.
+Read `[NOTE]` only if additional context is needed.
+`[?]` blocks are unverified.
 
-### 1. Grid Engine (`src/core/`)
-- Grid data structure (NumPy-based)
-- 180° rotational symmetry enforcement
-- Validation (connectivity, minimum word length)
-- Auto-numbering system
+---
 
-### 2. Fill Engine (`src/fill/`)
-- **CSP Solver** - Backtracking with heuristics (MCV, LCV, forward checking)
-- Pattern matcher - Enhanced from Phase 1
-- Word scorer - Crossword-ability scoring
-- Word list manager
+## 1. What this is
 
-### 3. Clue Manager (`src/clues/`)
-- Local clue database (JSON/SQLite)
-- Difficulty tagging (Monday-Saturday NYT style)
-- Multiple clue types per word
+**[SPEC]**
+- The crossword construction engine. All puzzle logic lives here.
+- The Flask backend is a thin wrapper that invokes these commands via subprocess,
+  so this CLI is the single source of truth for behaviour.
+- Full command reference: `docs/specs/CLI_SPEC.md`. Per-command truth: `--help`.
 
-### 4. Export Engine (`src/export/`)
-- HTML export
-- PDF export (reportlab)
-- .puz format (pypuz)
-- JSON export
+---
 
-### 5. CLI Interface (`src/cli/`)
-- Click-based command framework
-- Rich terminal UI
-- Interactive mode
+## 2. Invocation
 
-## Commands
+**[SPEC]**
+There is no installed `crossword` entrypoint and no `setup.py`. Run as a module
+from the repository root:
 
 ```bash
-# Create new grid
-crossword new --size 15 --output puzzle.json
-
-# Fill grid automatically
-crossword fill puzzle.json --wordlists personal.txt standard.txt
-
-# Validate grid
-crossword validate puzzle.json
-
-# Export to formats
-crossword export puzzle.json --format puz --output puzzle.puz
-crossword export puzzle.json --format pdf --output puzzle.pdf
-
-# Interactive mode
-crossword interactive puzzle.json
+python -m cli.src.cli --help          # list all commands
+python -m cli.src.cli <command> --help # authoritative options for one command
 ```
 
-## Architecture
+Dependencies come from the repo-root `requirements.txt`; `cli/requirements.txt`
+lists the CLI-only subset.
 
-```
-CLI Layer (Click + Rich)
-    ↓
-Grid Engine (NumPy)
-    ↓
-Fill Engine (CSP Solver)
-    ↓
-Export Engine (HTML/PDF/.puz)
-```
+---
 
-## Performance Targets
+## 3. Layout
 
-| Grid Size | Fill Time Target |
-|-----------|------------------|
-| 11×11     | <30 seconds      |
-| 15×15     | <5 minutes       |
-| 21×21     | <30 minutes      |
+**[SPEC]**
 
-## Installation
+| Package | Contents |
+|---|---|
+| `src/core/` | grid structure (NumPy), numbering, validation, scoring, entry conventions |
+| `src/fill/` | autofill algorithms, pattern matchers, wordlist handling, pause/resume state |
+| `src/export/` | export (HTML) |
 
+`src/cli.py` is a flat module, not a package.
+
+---
+
+## 4. Capabilities
+
+**[SPEC]**
+- Autofill: CSP with backtracking + AC-3 (`fill/autofill.py`), beam search
+  (`fill/beam_search/`), iterative repair (the `--algorithm` default), and a beam+repair hybrid.
+- Pattern matching: regex (`fill/pattern_matcher.py`) and trie
+  (`fill/trie_pattern_matcher.py`).
+- Pause/resume: solver state serialises to gzipped JSON; resume applies user edits
+  as locked cells and continues from the saved position.
+- Export: **HTML only.** PDF, `.puz` and JSON export do not exist.
+
+**[NOTE]**
+An earlier version of this file described a Clue Manager (`src/clues/`), a `src/cli/`
+package, PDF/`.puz`/JSON export, and an `interactive` command. None were ever built.
+The file was written at project scaffold time and never revised. See
+`docs/dev/FABRICATION-LOG.md` for the wider pattern.
+
+---
+
+## 5. Development
+
+**[SPEC]**
 ```bash
-cd cli
-pip install -r requirements.txt
-pip install -e .
+pytest cli/tests/ -q      # CLI suite
+black cli/src/            # formatting (also enforced by pre-commit)
 ```
 
-## Development
+Benchmarks are manual scripts, not pytest tests — see `cli/tests/performance/README.md`.
+That directory is the only place timing figures belong; do not quote them elsewhere.
 
-```bash
-# Run tests
-pytest tests/ -v
+---
 
-# Type checking
-mypy src/
+## 6. Changelog
 
-# Format code
-black src/
-```
-
-## Documentation
-
-See `docs/phase2-cli/` for detailed architecture and implementation guides.
+- 2.0.0 (2026-08-16) — rewritten against the actual codebase. The previous version
+  described a scaffold that had been superseded in every particular.

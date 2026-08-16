@@ -1,10 +1,12 @@
 """
 Grid data structure for crossword puzzles.
 
-Uses NumPy for efficient grid operations and enforces standard crossword rules:
-- 180° rotational symmetry
+Uses a NumPy int8 array for O(1) cell access and enforces grid-size constraints. The
+following constraints are opt-in, not automatic -- see each method's docstring:
+- 180° rotational symmetry (default; `set_black_square(..., enforce_symmetry=False)` opts out)
 - Minimum 3-letter words
-- All white squares must be connected
+- All white squares must be connected (NOT enforced by Grid itself; GridValidator._check_connectivity
+  applies this as a separate, opt-in check -- see validator.py)
 - Standard sizes: 11×11, 15×15, 21×21
 """
 
@@ -229,9 +231,12 @@ class Grid:
 
         return runs
 
-    def get_word_slots(self) -> List[Dict]:
+    def get_word_slots(self, min_length: int = 3) -> List[Dict]:
         """
         Get all across and down word slots.
+
+        Args:
+            min_length: Minimum run length to include (default: 3).
 
         Returns:
             List of word slot dictionaries with keys:
@@ -244,8 +249,8 @@ class Grid:
         slots = []
 
         for cells, length, direction in self.enumerate_white_runs():
-            # Only add if length >= 3
-            if length < 3:
+            # Only add if length >= min_length
+            if length < min_length:
                 continue
 
             start_row, start_col = cells[0]

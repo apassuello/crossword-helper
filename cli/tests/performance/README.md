@@ -11,22 +11,16 @@ This directory contains **manual performance benchmarks** for the crossword auto
   - Measures time and memory usage
   - Generates detailed performance reports
 
-- **benchmark_memory_optimization.py** - Memory optimization benchmarks
-  - Tests memory usage during autofill
-  - Validates memory optimization strategies
-  - Monitors memory leaks
-
 ## Running Benchmarks
 
 These are **standalone scripts** that should be run directly with Python:
 
 ```bash
-# Run algorithm benchmarks
 python cli/tests/performance/benchmark_algorithms.py
-
-# Run memory benchmarks
-python cli/tests/performance/benchmark_memory_optimization.py
 ```
+
+This is the authoritative source for pattern-matching timings. Docstrings and docs
+must not quote figures of their own — they point here instead.
 
 **Note:** Do NOT run with pytest - these are not pytest tests.
 

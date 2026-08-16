@@ -8,9 +8,10 @@ These tests verify that SSE streams follow the EventSource specification:
 - Progressive updates during long operations
 - Error state handling
 
-Context: SSE is used for real-time progress updates during autofill operations
-that can take 30s-5min. These tests ensure the frontend can reliably consume
-the event stream.
+Context: SSE is used for real-time progress updates during autofill operations,
+which can run long (see the 10-1800s timeout bound enforced in
+backend/api/validators.py:validate_fill_request). These tests ensure the
+frontend can reliably consume the event stream regardless of run length.
 """
 
 import json
@@ -220,9 +221,12 @@ class TestSSEProgressiveUpdates:
         """
         Verify SSE sends intermediate updates during autofill, not just start/end.
 
-        For operations >5s, should receive updates every 1-2s.
+        For long-running operations, should receive multiple intermediate progress
+        updates (not just start/end).
         """
-        # Start autofill with small grid (should take ~5-15s)
+        # Start autofill with small grid; timing: `pytest
+        # backend/tests/integration/sse/test_sse_message_format.py::TestSSEProgressiveUpdates::
+        # test_sse_provides_intermediate_updates -v --durations=1 -m slow`
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",
@@ -283,22 +287,12 @@ class TestSSEErrorHandling:
             content_type="application/json",
         )
 
-        # Should still return 202 (task started)
-        assert response.status_code == 202
-        task_id = response.json["task_id"]
-
-        # Get SSE stream (blocks synchronously until stream ends — no sleep needed)
-        sse_response = client.get(f"/api/progress/{task_id}")
-        messages = sse_parser(sse_response.data)
-
-        # Should have at least one message
-        assert len(messages) > 0
-
-        # Last message should indicate error
-        last_msg = messages[-1]
-        assert (
-            last_msg.get("status") == "error" or "error" in last_msg.get("message", "").lower()
-        ), f"Expected error status, got: {last_msg}"
+        # Unknown wordlists are now rejected upfront with a clear JSON error
+        # (they used to silently start a task that failed mid-stream)
+        assert response.status_code == 400
+        error = response.json["error"]
+        assert error["code"] == "UNKNOWN_WORDLIST"
+        assert "nonexistent_wordlist" in error["message"]
 
     def test_sse_handles_timeout(self, client, sse_parser):
         """

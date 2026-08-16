@@ -75,7 +75,8 @@ class StateEvaluator(StateEvaluationStrategy):
         - 5-9 candidates: Medium risk (0.95x score penalty)
         - 10+ candidates: No penalty (1.0x)
 
-        Research (Ginsberg 1990): "Look-ahead is critical"
+        Rationale: look-ahead into intersecting slots catches paths that would otherwise
+        commit several moves before failing, at the cost of checking more candidates per step.
 
         OPTIMIZATION: Only checks intersecting slots for efficiency.
 
@@ -86,7 +87,9 @@ class StateEvaluator(StateEvaluationStrategy):
         Returns:
             (is_viable, risk_penalty) tuple where:
             - is_viable: True if no dead ends
-            - risk_penalty: Multiplier  [0.70, 1.0] based on risk
+            - risk_penalty: Multiplicative penalty in (0.0, 1.0]; one factor of
+              0.70/0.85/0.95 is applied per risky/constrained slot, so it can
+              compound below 0.70 when multiple slots are risky
         """
         # Get slots to check (only intersecting ones if we have a reference)
         if last_filled_slot:
@@ -162,18 +165,31 @@ class StateEvaluator(StateEvaluationStrategy):
         - Completion weight: 70%
         - Quality weight: 30%
 
+        Those weights are nominal, not exact. completion_score is bounded to
+        0-100, but word_score is not (see below), so on a word scoring 150 the
+        quality term contributes up to 45 rather than 30. The result is used
+        only to rank beam states against each other - nothing compares it to
+        100 or renders it as a percentage - so the overflow changes relative
+        ordering, not correctness. Rebalancing it is a solver-tuning decision
+        and needs a fill-quality benchmark, not a clamp.
+
         Args:
             state: State to score
-            word_score: Score of most recently placed word (1-100)
+            word_score: Score of most recently placed word, as returned by
+                the pattern matcher (ScoredWord.score in fill/word_list.py);
+                file-supplied scores are unclamped, computed fallback scores
+                are clamped to 1-150
 
         Returns:
-            Score in range 0.0-100.0
+            Weighted blend of completion_score (0-100) and word_score; the
+            result is not clamped, so it can exceed 100.0 when word_score does
+            (see word_score below)
         """
         completion_weight = 70.0
         quality_weight = 30.0
 
         completion_score = (state.slots_filled / state.total_slots) * 100
-        quality_score = word_score  # 1-100
+        quality_score = word_score
 
         total = (completion_score * completion_weight / 100) + (quality_score * quality_weight / 100)
 
@@ -184,7 +200,7 @@ class StateEvaluator(StateEvaluationStrategy):
         Check if word is likely real (not gibberish).
 
         Uses linguistic heuristics to filter obvious gibberish:
-        1. Vowel ratio (~40% in English)
+        1. Vowel ratio (rejects words below 0.20 or above 0.65; see check below)
         2. No excessive letter repetition
         3. No excessive consonant clusters
         4. Q followed by U (standard pattern)

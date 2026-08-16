@@ -4,6 +4,8 @@ HTML export for crossword grids.
 Generates clean, printable HTML output for crossword puzzles.
 """
 
+from html import escape as html_escape
+
 from ..core.grid import Grid
 from ..core.numbering import GridNumbering
 
@@ -25,6 +27,8 @@ class HTMLExporter:
         """
         numbering = GridNumbering.auto_number(grid)
         clue_positions = GridNumbering.get_clue_positions(grid)
+
+        safe_title = html_escape(title)
 
         html = """<!DOCTYPE html>
 <html lang="en">
@@ -113,7 +117,9 @@ class HTMLExporter:
     <h1>{title}</h1>
     <div class="grid-container">
         <div class="grid">
-"""
+""".format(
+            title=safe_title, grid=grid
+        )
 
         # Generate grid cells
         for row in range(grid.size):

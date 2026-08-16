@@ -1,8 +1,8 @@
 """
 Trie-based pattern matcher for crossword autofill.
 
-Drop-in replacement for PatternMatcher that uses WordTrie instead of regex
-for 10-50x faster pattern matching with large word lists.
+Drop-in replacement for PatternMatcher that uses WordTrie instead of regex,
+trading a one-off build cost for pattern lookups that do not scan the word list.
 
 API-compatible with pattern_matcher.PatternMatcher for easy switching.
 """
@@ -17,13 +17,18 @@ class TriePatternMatcher:
     """
     Fast pattern matching using trie data structure.
 
-    Provides same API as PatternMatcher but uses WordTrie instead of regex
-    for significantly faster performance on large word lists.
+    Provides same API as PatternMatcher but uses WordTrie instead of regex,
+    avoiding a full scan of the word list on each query (see Complexity below).
 
-    Performance comparison (454k word list):
-    - Regex (PatternMatcher): 200-500ms per query
-    - Trie (TriePatternMatcher): 10-50ms per query
-    - **Speedup: 10-50x**
+    Performance: trie lookup does not scan the word list, where the regex matcher is O(list size). A pattern with no wildcards
+    resolves in O(pattern length): each character follows a single child edge. Each '?' wildcard branches over that node's
+    children instead of following one edge, so runtime for wildcard patterns scales with the number and branching of
+    wildcards (pruned by score thresholds), not pattern length alone. Either way the trie avoids the full-list scan the
+    regex matcher performs.
+
+    No timing figures are quoted here on purpose: earlier versions of this docstring cited measurements against a
+    "454k word list" that this repo does not contain (run `wc -l data/wordlists/comprehensive.txt` to check the actual
+    count). To get real timing numbers for your list, run cli/tests/performance/benchmark_algorithms.py.
 
     Supports wildcards:
     - '?' matches any single letter
@@ -45,10 +50,9 @@ class TriePatternMatcher:
         Args:
             word_list: WordList object containing scored words
 
-        Build Time: O(n * m) where n = num words, m = avg length
-        - 10k words: ~50ms
-        - 100k words: ~500ms
-        - 454k words: ~2-3 seconds
+        Build Time: O(n * m) where n = num words, m = avg length.
+        Build cost is paid once per process; run benchmark_algorithms.py to
+        measure it for a given list rather than relying on a quoted figure.
         """
         self.word_list = word_list
         self.trie = build_trie_from_wordlist(word_list)

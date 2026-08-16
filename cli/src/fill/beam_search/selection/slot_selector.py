@@ -7,6 +7,7 @@ and other heuristics.
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -54,6 +55,7 @@ class MRVSlotSelector(SlotSelectionStrategy):
         unfilled_slots: List[Dict],
         state: BeamState,
         recently_failed: Optional[List[Tuple]] = None,
+        deadline: Optional[float] = None,
     ) -> Optional[Dict]:
         """
         Select next slot using Dynamic MRV with intelligent tie-breaking.
@@ -77,8 +79,17 @@ class MRVSlotSelector(SlotSelectionStrategy):
         if not unfilled_slots:
             return None
 
+        # Invariant across the loop — hoist out (was recomputed per slot)
+        all_slots = state.grid.get_word_slots()
+
         candidates = []
         for slot in unfilled_slots:
+            # Respect the time budget: domain counting does a pattern search
+            # per slot. Once we have at least one candidate, stop scanning and
+            # pick from what we have so the caller can wind down quickly.
+            if deadline is not None and candidates and time.time() >= deadline:
+                break
+
             # Get current pattern for this slot
             pattern = state.grid.get_pattern_for_slot(slot)
 
@@ -89,7 +100,6 @@ class MRVSlotSelector(SlotSelectionStrategy):
 
             # Degree: Count unfilled crossing slots
             degree = 0
-            all_slots = state.grid.get_word_slots()
             for other_slot in all_slots:
                 if self._slots_intersect(slot, other_slot):
                     other_pattern = state.grid.get_pattern_for_slot(other_slot)

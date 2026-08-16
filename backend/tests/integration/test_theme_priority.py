@@ -324,32 +324,45 @@ class TestThemeWordAPIIntegration:
 class TestThemeEntriesCLICanary:
     """Canary tests for the --theme-entries CLI flag.
 
-    KNOWN BROKEN: The --theme-entries flag does NOT actually preserve theme
-    words during autofill. This test documents the broken behavior so we
-    detect when/if it gets fixed. See CLAUDE.md "Known Issues" section.
+    The flag works. This class spent time asserting otherwise because its own
+    fixture was wrong: it built a 5x5 grid with no black squares and asked
+    --theme-entries to place the 3-letter word CAT at (0,0,across), a 5-letter
+    slot. The CLI rejected it correctly, the run ended at entry validation
+    before any locking happened, and the failure was read as a broken flag.
+
+    The fixture now makes that slot 3 cells wide. The test discriminates:
+    with --theme-entries the fill preserves CAT, without it the solver
+    overwrites row 0 with its own word. Run it - it is slow-marked, so a plain
+    pytest deselects it:
+
+        pytest backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary -m "slow or not slow"
     """
 
     @pytest.mark.slow
     def test_theme_entries_flag_preserves_words(self):
         """Test that --theme-entries preserves 'CAT' at (0,0,across) in a 5x5 grid.
 
-        Previously a canary for a known-broken feature. The test itself was
-        broken: it passed a raw JSON string to --theme-entries, but the CLI
-        expects a file path (click.Path(exists=True)). After fixing the test
-        to use a temp file, the underlying locking works correctly.
+        Two fixture defects had to be fixed before this asserted anything.
+        The first: it passed a raw JSON string where the CLI expects a file
+        path (click.Path(exists=True)). The second: the grid had no black
+        squares, so (0,0,across) was 5 cells wide and the 3-letter entry was
+        rejected before locking was reached.
         """
         import os
         import subprocess
         import sys
 
+        # (0,0,across) must be exactly 3 cells wide, or --theme-entries
+        # rejects the 3-letter entry CAT before any locking happens. The
+        # black squares are placed 180-degree symmetrically.
         grid_data = {
             "size": 5,
             "grid": [
-                ["C", "A", "T", ".", "."],
+                ["C", "A", "T", "#", "#"],
                 [".", ".", ".", ".", "."],
                 [".", ".", ".", ".", "."],
-                [".", ".", ".", ".", "."],
-                [".", ".", ".", ".", "."],
+                ["#", ".", ".", ".", "."],
+                ["#", "#", ".", ".", "."],
             ],
         }
 

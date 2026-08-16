@@ -34,7 +34,7 @@ class CSPState:
 
     # Slot information
     slot_list: List[Dict]  # All slots
-    slots_sorted: List[Dict]  # MCV-sorted slot dicts (NOT ids — consumed directly on resume)
+    slots_sorted: List[int]  # MCV-sorted slot IDs, indexing into slot_list (see capture_csp_state)
 
     # Backtracking position
     current_slot_index: int  # Resume from this position
@@ -186,36 +186,101 @@ class StateManager:
             FileNotFoundError: If state file doesn't exist
             ValueError: If state format is invalid or incompatible
         """
-        # Try compressed first, then uncompressed
-        file_path_gz = self.storage_dir / f"{task_id}.json.gz"
-        file_path_json = self.storage_dir / f"{task_id}.json"
-
-        if file_path_gz.exists():
-            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
-                json_data = f.read()
-        elif file_path_json.exists():
-            with open(file_path_json, "r", encoding="utf-8") as f:
-                json_data = f.read()
-        else:
-            raise FileNotFoundError(f"State file not found for task_id: {task_id}")
-
-        # Parse JSON
-        data = json.loads(json_data)
-
-        # Validate version
-        if data.get("version") != self.VERSION:
-            raise ValueError(f"Incompatible state version: {data.get('version')} " f"(expected {self.VERSION})")
+        data = self._read_state_data_for_task(task_id)
 
         # Validate algorithm
         if data.get("algorithm") != "csp":
             raise ValueError(f"Wrong algorithm: {data.get('algorithm')} (expected 'csp')")
 
-        # Extract state data
+        csp_state = self._reconstruct_csp_state(data)
+        return csp_state, data.get("metadata", {})
+
+    def _read_state_data_for_task(self, task_id: str) -> Dict[str, Any]:
+        """Read and parse a state file by task id from the storage dir."""
+        # Try compressed first, then uncompressed
+        file_path_gz = self.storage_dir / f"{task_id}.json.gz"
+        file_path_json = self.storage_dir / f"{task_id}.json"
+
+        if file_path_gz.exists():
+            return self.read_state_data(file_path_gz)
+        elif file_path_json.exists():
+            return self.read_state_data(file_path_json)
+        raise FileNotFoundError(f"State file not found for task_id: {task_id}")
+
+    def read_state_data(self, file_path) -> Dict[str, Any]:
+        """
+        Read and parse a state file from an explicit path.
+
+        Detects gzip by magic bytes, so it works for both .json and .json.gz
+        files regardless of extension.
+
+        Raises:
+            ValueError: If the file is not a valid state file
+        """
+        file_path = Path(file_path)
+        with open(file_path, "rb") as f:
+            magic = f.read(2)
+
+        try:
+            if magic == b"\x1f\x8b":
+                with gzip.open(file_path, "rt", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+            raise ValueError(f"Not a valid autofill state file: {file_path} ({e})")
+
+        if not isinstance(data, dict) or "state_data" not in data or "algorithm" not in data:
+            raise ValueError(f"Not a valid autofill state file: {file_path} " "(missing 'algorithm'/'state_data' fields)")
+
+        # Validate version
+        if data.get("version") != self.VERSION:
+            raise ValueError(f"Incompatible state version: {data.get('version')} " f"(expected {self.VERSION})")
+
+        return data
+
+    def load_state_file(self, file_path) -> Tuple[str, Any, Dict[str, Any], str]:
+        """
+        Load a state file from an explicit path, whatever its algorithm.
+
+        Returns:
+            Tuple of (algorithm, state_object, metadata, task_id) where
+            algorithm is 'csp' or 'beam' and state_object is the matching
+            CSPState / BeamSearchState.
+        """
+        data = self.read_state_data(file_path)
+        return self._dispatch_state_data(data)
+
+    def load_state_by_task_id(self, task_id: str) -> Tuple[str, Any, Dict[str, Any], str]:
+        """
+        Load a state by task id from the storage dir, whatever its algorithm.
+
+        Returns:
+            Same tuple as load_state_file().
+        """
+        data = self._read_state_data_for_task(task_id)
+        return self._dispatch_state_data(data)
+
+    def _dispatch_state_data(self, data: Dict[str, Any]) -> Tuple[str, Any, Dict[str, Any], str]:
+        """Reconstruct the right state object from parsed state data."""
+        algorithm = data.get("algorithm")
+        metadata = data.get("metadata", {})
+        task_id = data.get("task_id", "unknown")
+
+        if algorithm == "csp":
+            return "csp", self._reconstruct_csp_state(data), metadata, task_id
+        elif algorithm == "beam":
+            return "beam", self._reconstruct_beam_state(data), metadata, task_id
+        raise ValueError(f"Unknown state algorithm: {algorithm!r} (expected 'csp' or 'beam')")
+
+    @staticmethod
+    def _reconstruct_csp_state(data: Dict[str, Any]) -> CSPState:
+        """Reconstruct a CSPState from parsed state file data."""
         state_data = data["state_data"]
-        metadata = data["metadata"]
 
         # Reconstruct CSPState (converting Lists back to Sets where needed)
-        csp_state = CSPState(
+        return CSPState(
             grid_dict=state_data["grid_dict"],
             domains={int(k): v for k, v in state_data["domains"].items()},  # Keep as List
             constraints={int(k): v for k, v in state_data["constraints"].items()},
@@ -230,8 +295,6 @@ class StateManager:
             random_seed=state_data.get("random_seed"),
             letter_frequency_table=state_data.get("letter_frequency_table"),
         )
-
-        return csp_state, metadata
 
     def get_state_info(self, task_id: str) -> Dict[str, Any]:
         """
@@ -393,6 +456,19 @@ class StateManager:
         # Keys are tuples like (row, col, direction), convert to lists
         slot_id_map_str = {json.dumps(list(key)): value for key, value in autofill_instance.slot_id_map.items()}
 
+        # Serialize slots_sorted as slot IDs (ints). Autofill stores the
+        # MCV-sorted list as slot dicts, but resume indexes slot_list by ID —
+        # convert dicts to IDs here so serialization and restore agree.
+        slots_sorted_ids: List[int] = []
+        for entry in getattr(autofill_instance, "slots_sorted", []) or []:
+            if isinstance(entry, dict):
+                key = (entry["row"], entry["col"], entry["direction"])
+                slot_id = autofill_instance.slot_id_map.get(key)
+                if slot_id is not None:
+                    slots_sorted_ids.append(slot_id)
+            else:
+                slots_sorted_ids.append(int(entry))
+
         return CSPState(
             grid_dict=autofill_instance.grid.to_dict(),
             domains=domains_list,
@@ -400,7 +476,7 @@ class StateManager:
             used_words=list(autofill_instance.used_words),
             slot_id_map=slot_id_map_str,
             slot_list=autofill_instance.slot_list,
-            slots_sorted=getattr(autofill_instance, "slots_sorted", []),
+            slots_sorted=slots_sorted_ids,
             current_slot_index=current_slot_index,
             iteration_count=autofill_instance.iterations,
             locked_slots=list(locked_slots),
@@ -446,9 +522,10 @@ class StateManager:
         if csp_state.letter_frequency_table is not None:
             autofill_instance.letter_frequency_table = csp_state.letter_frequency_table
 
-        # Store sorted slots for resume
-        if not hasattr(autofill_instance, "slots_sorted"):
-            autofill_instance.slots_sorted = csp_state.slots_sorted
+        # Store sorted slot IDs for resume. Always overwrite: Autofill.__init__
+        # initializes slots_sorted to [], so the old hasattr() guard meant the
+        # saved ordering was never actually restored.
+        autofill_instance.slots_sorted = list(csp_state.slots_sorted)
 
     def save_beam_search_state(
         self,
@@ -508,36 +585,22 @@ class StateManager:
             FileNotFoundError: If state file doesn't exist
             ValueError: If state format is invalid or incompatible
         """
-        # Try compressed first, then uncompressed
-        file_path_gz = self.storage_dir / f"{task_id}.json.gz"
-        file_path_json = self.storage_dir / f"{task_id}.json"
-
-        if file_path_gz.exists():
-            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
-                json_data = f.read()
-        elif file_path_json.exists():
-            with open(file_path_json, "r", encoding="utf-8") as f:
-                json_data = f.read()
-        else:
-            raise FileNotFoundError(f"State file not found for task_id: {task_id}")
-
-        # Parse JSON
-        data = json.loads(json_data)
-
-        # Validate version
-        if data.get("version") != self.VERSION:
-            raise ValueError(f"Incompatible state version: {data.get('version')} " f"(expected {self.VERSION})")
+        data = self._read_state_data_for_task(task_id)
 
         # Validate algorithm
         if data.get("algorithm") != "beam":
             raise ValueError(f"Wrong algorithm: {data.get('algorithm')} (expected 'beam')")
 
-        # Extract state data
+        beam_state = self._reconstruct_beam_state(data)
+        return beam_state, data.get("metadata", {})
+
+    @staticmethod
+    def _reconstruct_beam_state(data: Dict[str, Any]) -> BeamSearchState:
+        """Reconstruct a BeamSearchState from parsed state file data."""
         state_data = data["state_data"]
-        metadata = data["metadata"]
 
         # Reconstruct BeamSearchState
-        beam_state = BeamSearchState(
+        return BeamSearchState(
             beam=state_data["beam"],
             filled_slots=state_data["filled_slots"],
             slot_idx=state_data["slot_idx"],
@@ -553,8 +616,6 @@ class StateManager:
             total_slots=state_data["total_slots"],
             timestamp=state_data["timestamp"],
         )
-
-        return beam_state, metadata
 
     @staticmethod
     def serialize_beam_state(beam_state_obj) -> Dict:

@@ -7,6 +7,7 @@ including LCV (Least Constraining Value) and quality-based ordering.
 
 import logging
 import random
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
 
@@ -18,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 class ValueOrderingStrategy(ABC):
     """Abstract base class for value ordering strategies."""
+
+    # Optional absolute epoch deadline. Set by BeamManager before each
+    # expansion; strategies with expensive per-candidate work (LCV) honor it.
+    deadline: Optional[float] = None
 
     @abstractmethod
     def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
@@ -81,7 +86,15 @@ class LCVValueOrdering(ValueOrderingStrategy):
             return sorted(candidates, key=lambda x: -x[1])
 
         lcv_scored = []
+        deadline = self.deadline
         for word, quality_score in candidates:
+            # Respect the time budget: LCV does a pattern search per candidate
+            # per crossing slot, so cost scales with the number of crossings
+            # and grid openness. When the deadline passes, fall back to
+            # quality ordering for the rest.
+            if deadline is not None and time.time() >= deadline:
+                break
+
             # Skip already used words
             if word in state.used_words:
                 continue
@@ -118,6 +131,12 @@ class LCVValueOrdering(ValueOrderingStrategy):
             lcv_scored.append((word, quality_score, total_remaining))
 
         if not lcv_scored:
+            if deadline is not None and time.time() >= deadline:
+                # Deadline hit before any candidate could be LCV-scored:
+                # fall back to plain quality ordering instead of reporting
+                # "no candidates" (which would falsely kill the beam state).
+                unused = [(w, s) for w, s in candidates if w not in state.used_words]
+                return sorted(unused, key=lambda x: -x[1])
             return []
 
         # Calculate adjusted scores that preserve LCV information
@@ -262,6 +281,8 @@ class CompositeValueOrdering(ValueOrderingStrategy):
         """
         result = candidates
         for strategy in self.strategies:
+            # Propagate the current deadline to child strategies
+            strategy.deadline = self.deadline
             result = strategy.order_values(slot, result, state)
         return result
 
@@ -318,9 +339,9 @@ class QualityValueOrdering(ValueOrderingStrategy):
 
 class ThresholdDiverseOrdering(ValueOrderingStrategy):
     """
-    Threshold-based ordering with temperature for exploration.
-
-    Research-validated approach from Stanford crossword paper.
+    Threshold-and-temperature ordering: filters candidates by a quality
+    threshold, then applies temperature-based randomization for exploration
+    while preserving top candidates for exploitation.
 
     Algorithm:
     1. Set quality threshold (e.g., score >= 50)
@@ -334,8 +355,11 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
     (preferring high-quality words).
 
     Based on:
-    - Stanford crossword research (temperature=0.9, p-sampling=0.9)
     - Diverse Beam Search paper (Vijayakumar et al. 2016)
+
+    This module's actual default parameters are set in __init__ below
+    (threshold, temperature) and in the instantiation at
+    cli/src/fill/beam_search/orchestrator.py.
     """
 
     def __init__(self, threshold: int = 50, temperature: float = 0.8):

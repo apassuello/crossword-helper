@@ -67,8 +67,11 @@ class TestPauseResumeWorkflow:
         response = client.get(f"/api/fill/state/{task_id}")
 
         if response.status_code == 200:
-            state_path = f"/tmp/state-{task_id}.json.gz"  # Mock path
-
+            # This block used to post a `state_path`/`new_grid`/`size` body against a
+            # `task_id`/`edited_grid` API — a shape neither branch ever accepted. It
+            # never ran while the state GET returned non-200, so it passed vacuously;
+            # it became reachable once pause actually saved state. Corrected against
+            # the real contract, not the merge's.
             # Step 4: User edits (simulate by creating modified grid)
             edited_grid = create_empty_grid(11)
             edited_grid[0][0] = {"letter": "C", "isBlack": False}
@@ -78,43 +81,49 @@ class TestPauseResumeWorkflow:
             # Get edit summary
             response = client.post(
                 "/api/fill/edit-summary",
-                data=json.dumps({"state_path": state_path, "new_grid": edited_grid, "size": 11}),
+                data=json.dumps({"task_id": task_id, "edited_grid": edited_grid}),
                 content_type="application/json",
             )
 
             assert response.status_code == 200
             summary = response.json
-            assert "edits" in summary
+            assert "filled_count" in summary
 
             # Step 5: Resume with edits
             response = client.post(
                 "/api/fill/resume",
                 data=json.dumps(
                     {
-                        "state_path": state_path,
+                        "task_id": task_id,
                         "edited_grid": edited_grid,
-                        "size": 11,
                         "timeout": 30,
                     }
                 ),
                 content_type="application/json",
             )
 
-            assert response.status_code == 202
-            new_task_id = response.json["task_id"]
+            # 200, not 202: resume is synchronous and reports the completed run.
+            # No branch (bench, main, or base) ever returned 202 here — this block was
+            # never reachable, so its assertions were never checked against the route.
+            assert response.status_code == 200
+            assert response.json["success"] is True
+            assert response.json["new_task_id"]
+            assert response.json["original_task_id"] == task_id
 
-            # Verify resumed task completes
-            # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
-            sse_response = client.get(f"/api/progress/{new_task_id}")
-            assert sse_response.status_code == 200
+            # The original block subscribed to /api/progress/<new_task_id> here,
+            # expecting an async task to observe. Resume is synchronous — it returns
+            # the finished run — so no progress channel is ever registered under that
+            # id and the subscribe 404s by design. Assert on the completed result
+            # instead, which is what this workflow actually produces.
+            assert "result" in response.json
+            assert response.json["total_slots"] >= response.json["slots_filled"] >= 0
 
     def test_cancel_autofill_workflow(self, client):
         """
         Test cancel workflow:
         1. Start autofill
         2. Cancel operation
-        3. Verify state saved
-        4. Verify cleanup
+        3. Verify honest state_saved reporting (cancel does NOT save state)
         """
         grid = create_empty_grid(11)
 
@@ -141,4 +150,7 @@ class TestPauseResumeWorkflow:
         response = client.post(f"/api/fill/cancel/{task_id}")
 
         assert response.status_code == 200
-        assert response.json.get("state_saved")
+        assert response.json.get("success") is True
+        # Cancel kills the subprocess without a checkpoint — it must not
+        # claim a resumable state was saved (it used to hardcode true)
+        assert response.json.get("state_saved") is False

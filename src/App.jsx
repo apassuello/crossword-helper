@@ -116,8 +116,19 @@ function App() {
     if (saveStatus === 'saved') setSavedSig(contentSigRef.current);
   }, [saveStatus]);
 
+  // Set when a grid import changes the grid size, so the size-change effect
+  // below does not wipe the freshly imported grid with an empty one. Bench's
+  // rewrite of App.jsx dropped main's declaration while both use sites
+  // auto-merged in; keeping the guard is a merge acceptance criterion
+  // (App.test.jsx:50, :91).
+  const skipNextInitRef = useRef(false);
+
   // Initialize empty grid
   useEffect(() => {
+    if (skipNextInitRef.current) {
+      skipNextInitRef.current = false;
+      return;
+    }
     initializeGrid(gridSize);
   }, [gridSize]);
 
@@ -341,8 +352,10 @@ function App() {
   const handleGridImport = useCallback((importedData) => {
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
-    // Update grid size if different
+    // Update grid size if different (skip the re-init effect so the
+    // imported grid isn't overwritten by a fresh empty grid)
     if (size !== gridSize) {
+      skipNextInitRef.current = true;
       setGridSize(size);
     }
 

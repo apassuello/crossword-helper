@@ -50,10 +50,14 @@ def client(mocker):
     mocker.patch("backend.api.routes.get_adapter", return_value=mock_adapter)
     # Also patch the module-level cli_adapter that is already bound
     mocker.patch("backend.api.routes.cli_adapter", mock_adapter)
-    # Patch resolve_wordlist_paths to return deterministic paths
+    # Patch resolvers to return deterministic paths
     mocker.patch(
         "backend.api.routes.resolve_wordlist_paths",
         return_value=["/fake/wordlists/comprehensive.txt"],
+    )
+    mocker.patch(
+        "backend.api.routes.resolve_wordlist_paths_strict",
+        return_value=(["/fake/wordlists/comprehensive.txt"], []),
     )
 
     from backend.app import create_app
@@ -269,7 +273,8 @@ class TestNormalizeEntry:
         resp = _post_json(c, "/api/normalize", {"text": "hello world"})
         assert resp.status_code == 200
         body = resp.get_json()
-        assert body["normalized"] == "HELLO WORLD"
+        # Interior spaces are stripped — crossword entries never contain them
+        assert body["normalized"] == "HELLOWORLD"
         mock_adapter.normalize.assert_called_once_with("hello world")
 
     def test_missing_text(self, client):
@@ -367,10 +372,10 @@ class TestFillGrid:
 
     def test_no_valid_wordlists(self, client, mocker):
         c, _ = client
-        # Override resolve_wordlist_paths to return empty list
+        # Override the strict resolver to report nothing resolvable
         mocker.patch(
-            "backend.api.routes.resolve_wordlist_paths",
-            return_value=[],
+            "backend.api.routes.resolve_wordlist_paths_strict",
+            return_value=([], []),
         )
 
         resp = _post_json(c, "/api/fill", _fill_request())
@@ -645,3 +650,48 @@ class TestPatternWithProgress:
         )
         resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "A?B"})
         assert resp.status_code == 500
+
+
+class TestFillWithProgress:
+    """Tests for /api/fill/with-progress (async fill with SSE)."""
+
+    def _start_fill(self, client, mocker, payload_overrides=None):
+        c, mock_adapter = client
+        mock_adapter.cli_path = MagicMock()
+        mock_adapter.cli_path.parent = "/fake"
+        mocker.patch("backend.api.routes.create_progress_tracker", return_value="fill-task-1")
+        mock_thread = mocker.patch("backend.api.routes.threading.Thread")
+
+        payload = _fill_request()
+        payload.update(payload_overrides or {})
+        resp = _post_json(c, "/api/fill/with-progress", payload)
+        return resp, mock_thread
+
+    def test_passes_task_id_to_cli(self, client, mocker):
+        """Regression (headline): the CLI fill command must receive
+        --task-id <task_id>, otherwise the pause flag written by
+        /api/fill/pause/<task_id> never reaches a PauseController and web
+        pause is a silent no-op."""
+        resp, mock_thread = self._start_fill(client, mocker)
+
+        assert resp.status_code == 202
+        assert resp.get_json()["task_id"] == "fill-task-1"
+
+        # run_cli_with_progress(task_id, cmd_args, timeout, temp_files)
+        thread_kwargs = mock_thread.call_args.kwargs
+        cmd_args = thread_kwargs["args"][1]
+        assert "--task-id" in cmd_args
+        assert cmd_args[cmd_args.index("--task-id") + 1] == "fill-task-1"
+
+    def test_unknown_wordlist_returns_400(self, client, mocker):
+        c, _ = client
+        mocker.patch(
+            "backend.api.routes.resolve_wordlist_paths_strict",
+            return_value=([], ["no_such_list"]),
+        )
+        resp = _post_json(c, "/api/fill/with-progress", _fill_request(wordlists=["no_such_list"]))
+
+        assert resp.status_code == 400
+        error = resp.get_json()["error"]
+        assert error["code"] == "UNKNOWN_WORDLIST"
+        assert "no_such_list" in error["message"]

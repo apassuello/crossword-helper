@@ -167,11 +167,27 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
             });
           } else {
             const fillPct = data.data.fill_percentage || 0;
-            let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
-            if (data.data.suggestions && data.data.suggestions.length > 0) {
-              message += ` - ${data.data.suggestions[0].message}`;
+            const allSlotsFilled =
+              fillPct >= 100 ||
+              (data.data.total_slots > 0 && data.data.slots_filled === data.data.total_slots);
+
+            if (allSlotsFilled) {
+              // Every slot is filled — don't present this as "Partial" with a
+              // suggestion to lower the min score. Some entries may still be
+              // flagged as problematic by the CLI.
+              const problematicCount = data.data.problematic_slots_count || 0;
+              const message =
+                problematicCount > 0
+                  ? `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — ${problematicCount} entries may be invalid (use Verify Words to check)`
+                  : `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — some entries may need review (use Verify Words to check)`;
+              transition({ state: 'done', progress: 100, message, errorCard: null, taskId: null });
+            } else {
+              let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
+              if (data.data.suggestions && data.data.suggestions.length > 0) {
+                message += ` - ${data.data.suggestions[0].message}`;
+              }
+              transition({ state: 'done', progress: fillPct, message, errorCard: null, taskId: null });
             }
-            transition({ state: 'done', progress: fillPct, message, errorCard: null, taskId: null });
           }
         } else {
           transition({

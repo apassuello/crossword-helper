@@ -231,9 +231,10 @@ def main():
         # (wordlist_file, max_words, description)
         ("core/common_3_letter.txt", None, "Small wordlist (3-letter words)"),
         ("core/crosswordese.txt", None, "Medium wordlist (crosswordese)"),
-        ("comprehensive.txt", 10000, "Large wordlist (10k words)"),
-        ("comprehensive.txt", 50000, "Very large wordlist (50k words)"),
-        ("comprehensive.txt", None, "Huge wordlist (full comprehensive ~454k words)"),
+        # docs-check: allow - the figure in each label is the max_words argument on the same line
+        ("comprehensive.txt", 10000, "Large wordlist (10k words)"),  # docs-check: allow
+        ("comprehensive.txt", 50000, "Very large wordlist (50k words)"),  # docs-check: allow
+        ("comprehensive.txt", None, "Full comprehensive wordlist"),
     ]
 
     for wordlist_file, max_words, description in test_configs:

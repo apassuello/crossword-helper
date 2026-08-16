@@ -5,6 +5,7 @@ Uses file-based signaling to request pause during long-running algorithms.
 Simple, reliable, and cross-platform compatible.
 """
 
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -38,32 +39,40 @@ class PauseController:
         self.pause_dir.mkdir(parents=True, exist_ok=True)
 
         self.pause_file = self.pause_dir / f"crossword_pause_{task_id}.flag"
+        self.running_file = self.pause_dir / f"crossword_running_{task_id}.pid"
         self._last_check_time = 0.0
-        self._check_interval = 0.1  # Check at most every 100ms
+        self._check_interval = 0.1
+        self._last_result = False
+
+    def _invalidate_check_cache(self) -> None:
+        """Force the next should_pause() to hit the filesystem.
+
+        Called by the local mutators. A pause requested by *another* process is
+        picked up within _check_interval instead; this only shortcuts the case
+        where the same object just changed the flag itself.
+        """
+        self._last_check_time = 0.0
 
     def should_pause(self) -> bool:
         """
         Check if pause has been requested.
 
-        Implements rate limiting to avoid excessive file system checks.
+        Called from solver inner loops, so the filesystem check is rate limited
+        to once per _check_interval (0.1s) and the result is cached in between.
+        A pause requested by another process is therefore observed within
+        _check_interval, not instantly. Callers needing the current on-disk
+        state with no caching should use is_paused().
 
         Returns:
             True if pause requested, False otherwise
         """
-        # Check for pause flag file
-        paused = self.pause_file.exists()
+        now = time.monotonic()
+        if self._last_check_time and now - self._last_check_time < self._check_interval:
+            return self._last_result
 
-        # If paused, always return True immediately
-        if paused:
-            return True
-
-        # If not paused, apply rate limiting to avoid excessive checks
-        current_time = time.time()
-        if current_time - self._last_check_time < self._check_interval:
-            return False
-
-        self._last_check_time = current_time
-        return False  # No pause flag exists
+        self._last_check_time = now
+        self._last_result = self.pause_file.exists()
+        return self._last_result
 
     def request_pause(self) -> None:
         """
@@ -73,6 +82,7 @@ class PauseController:
         Creates a flag file that CLI will detect.
         """
         self.pause_file.touch()
+        self._invalidate_check_cache()
 
     def clear_pause(self) -> None:
         """
@@ -86,6 +96,7 @@ class PauseController:
             except FileNotFoundError:
                 # Already deleted, that's fine
                 pass
+        self._invalidate_check_cache()
 
     def cleanup(self) -> None:
         """
@@ -94,6 +105,54 @@ class PauseController:
         Should be called when algorithm completes (success or failure).
         """
         self.clear_pause()
+
+    def mark_running(self) -> None:
+        """
+        Record that a fill process for this task id is running.
+
+        Writes a pid file so `crossword pause` can tell whether a pause
+        request will actually be seen by a live process.
+        """
+        try:
+            self.running_file.write_text(str(os.getpid()))
+        except OSError:
+            pass  # Non-fatal: pause will just report "not running"
+
+    def clear_running(self) -> None:
+        """Remove the running marker (call on process exit, pause, or completion)."""
+        try:
+            self.running_file.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+    def is_task_running(self) -> bool:
+        """
+        Check whether a live fill process is registered for this task id.
+
+        Returns:
+            True if the pid file exists and the recorded process is alive.
+            A stale pid file (dead process) is cleaned up and reported False.
+        """
+        if not self.running_file.exists():
+            return False
+        try:
+            pid = int(self.running_file.read_text().strip())
+        except (ValueError, OSError):
+            self.clear_running()
+            return False
+        try:
+            os.kill(pid, 0)  # Signal 0: existence check only
+            return True
+        except ProcessLookupError:
+            # Stale marker from a dead process — clean it up
+            self.clear_running()
+            return False
+        except PermissionError:
+            return True  # Process exists but owned by someone else
+        except OSError:
+            return False
 
     def is_paused(self) -> bool:
         """

@@ -44,10 +44,8 @@ Our filter keeps only score >= 40 (with exceptions for longer words).
 
 ## Backup
 
-The previous wordlist (contaminated version) is backed up as:
-```
-comprehensive.txt.backup_20251227
-```
+No backup file is kept in-tree. The pre-filtering wordlist is recoverable from git
+history, or by re-deriving it from the upstream source linked above.
 
 ---
 

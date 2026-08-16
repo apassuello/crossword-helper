@@ -105,7 +105,7 @@ class TestMinimumWordLength:
         assert len(word_length_errors) == 0
 
     def test_grid_with_short_across_word_fails(self):
-        """Test that grid with 2-letter across word fails."""
+        """Test that grid with 2-letter across word fails with a word-length error."""
         grid = Grid(11)
         # Create 2-letter word: row 0, columns 0-1
         grid.set_black_square(0, 2, enforce_symmetry=False)
@@ -113,14 +113,11 @@ class TestMinimumWordLength:
 
         is_valid, errors = GridValidator.validate_all(grid)
 
-        # Grid with short words should fail validation since get_word_slots excludes <3 letter words
-        # But it might fail for other reasons (connectivity, symmetry)
-        # This test may not fail as expected because get_word_slots filters out <3 letter words
-        # So the validator won't see them. Let's just check that it's invalid
         assert not is_valid
+        assert any("Across word at (0, 0)" in e and "2 letters" in e for e in errors)
 
     def test_grid_with_short_down_word_fails(self):
-        """Test that grid with 2-letter down word fails."""
+        """Test that grid with 2-letter down word fails with a word-length error."""
         grid = Grid(11)
         # Create 2-letter word: column 0, rows 0-1
         grid.set_black_square(2, 0, enforce_symmetry=False)
@@ -128,8 +125,8 @@ class TestMinimumWordLength:
 
         is_valid, errors = GridValidator.validate_all(grid)
 
-        # Grid with short words should fail validation (likely for symmetry)
         assert not is_valid
+        assert any("Down word at (0, 0)" in e and "2 letters" in e for e in errors)
 
     def test_single_letter_word_fails(self):
         """Test that grid with 1-letter word fails."""
@@ -140,8 +137,28 @@ class TestMinimumWordLength:
 
         is_valid, errors = GridValidator.validate_all(grid)
 
-        # This will fail connectivity (isolated cell) OR minimum word length
+        # This fails connectivity (isolated cell) AND minimum word length
         assert not is_valid
+        assert any("1 letter" in e for e in errors)
+
+    def test_symmetric_grid_with_short_word_fails(self):
+        """Regression test: a symmetric, connected grid whose only flaw is a
+        2-letter word must be INVALID (the short-word check used to be dead
+        code because get_word_slots() filtered out slots shorter than 3)."""
+        grid = Grid(11)
+        # Black at (0, 2) with symmetry adds (10, 8): creates 2-letter across
+        # words at (0,0)-(0,1) and (10,9)-(10,10). Grid stays connected.
+        grid.set_black_square(0, 2)
+
+        assert grid.check_symmetry()
+
+        is_valid, errors = GridValidator.validate_all(grid)
+
+        assert not is_valid
+        short_word_errors = [e for e in errors if "only 2 letters" in e]
+        assert len(short_word_errors) == 2
+        assert any("Across word at (0, 0)" in e for e in short_word_errors)
+        assert any("Across word at (10, 9)" in e for e in short_word_errors)
 
 
 class TestBlackSquarePercentage:

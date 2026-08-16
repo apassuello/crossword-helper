@@ -16,11 +16,15 @@ logger = logging.getLogger(__name__)
 class GridChanges:
     """Tracks changes between saved and edited grids."""
 
-    filled_slots: List[int]  # Slot IDs that were filled by user
+    filled_slots: List[int]  # Slot IDs that were completely filled by user
     emptied_slots: List[int]  # Slot IDs that were emptied by user
-    modified_slots: List[int]  # Slot IDs where content changed
+    modified_slots: List[int]  # Slot IDs where a complete word changed
+    partial_slots: List[int]  # Slot IDs with letter-level (partial) edits
     new_words: Set[str]  # New words added by user
     removed_words: Set[str]  # Words removed by user
+    cells_filled: int = 0  # Individual cells that went empty -> letter
+    cells_emptied: int = 0  # Individual cells that went letter -> empty
+    cells_changed: int = 0  # Individual cells that changed letter
 
 
 class EditMerger:
@@ -67,9 +71,10 @@ class EditMerger:
         from cli.src.core.grid import Grid
         from cli.src.fill.state_manager import CSPState
 
-        # Load grids
-        saved_grid = Grid.from_dict(saved_state.grid_dict)
-        edited_grid = Grid.from_dict(edited_grid_dict)
+        # Load grids (allow non-standard sizes — the web fill always passes
+        # --allow-nonstandard, so states can hold e.g. 5x5 grids)
+        saved_grid = Grid.from_dict(saved_state.grid_dict, strict_size=False)
+        edited_grid = Grid.from_dict(edited_grid_dict, strict_size=False)
 
         # Detect changes
         changes = self._detect_changes(saved_grid, edited_grid, saved_state.slot_list, saved_state.slot_id_map)
@@ -77,7 +82,8 @@ class EditMerger:
         self.logger.info(
             f"Detected changes: {len(changes.filled_slots)} filled, "
             f"{len(changes.emptied_slots)} emptied, "
-            f"{len(changes.modified_slots)} modified"
+            f"{len(changes.modified_slots)} modified, "
+            f"{len(changes.partial_slots)} partially edited"
         )
 
         # Update locked slots (add newly filled slots)
@@ -147,6 +153,7 @@ class EditMerger:
         filled_slots = []
         emptied_slots = []
         modified_slots = []
+        partial_slots = []
         new_words = set()
         removed_words = set()
 
@@ -185,12 +192,42 @@ class EditMerger:
                 removed_words.add(saved_pattern)
                 new_words.add(edited_pattern)
 
+            elif saved_has_gaps and edited_has_gaps and saved_pattern != edited_pattern:
+                # Letter-level edit: the slot still has gaps but individual
+                # cells changed (e.g. '.' -> 'Q' inside an unfinished word).
+                # These used to be silently dropped, so edit summaries
+                # reported zero changes for partial-word edits.
+                partial_slots.append(slot_id)
+
+        # Cell-level diff (counts each changed cell exactly once)
+        cells_filled = 0
+        cells_emptied = 0
+        cells_changed = 0
+        saved_cells = saved_grid.to_dict()["grid"]
+        edited_cells = edited_grid.to_dict()["grid"]
+        for saved_row, edited_row in zip(saved_cells, edited_cells):
+            for saved_cell, edited_cell in zip(saved_row, edited_row):
+                saved_letter = saved_cell if saved_cell not in (".", "#", "") else ""
+                edited_letter = edited_cell if edited_cell not in (".", "#", "") else ""
+                if saved_letter == edited_letter:
+                    continue
+                if not saved_letter and edited_letter:
+                    cells_filled += 1
+                elif saved_letter and not edited_letter:
+                    cells_emptied += 1
+                else:
+                    cells_changed += 1
+
         return GridChanges(
             filled_slots=filled_slots,
             emptied_slots=emptied_slots,
             modified_slots=modified_slots,
+            partial_slots=partial_slots,
             new_words=new_words,
             removed_words=removed_words,
+            cells_filled=cells_filled,
+            cells_emptied=cells_emptied,
+            cells_changed=cells_changed,
         )
 
     def _update_domains_with_edits(
@@ -219,6 +256,19 @@ class EditMerger:
                 if "?" not in pattern:
                     # Set domain to just this word
                     updated_domains[slot_id] = {pattern}
+
+        # For partially edited slots, prune the domain to words compatible
+        # with the edited letters (pattern letters must match, '?' is a gap)
+        for slot_id in changes.partial_slots:
+            if slot_id not in updated_domains:
+                continue
+            slot = saved_state.slot_list[slot_id]
+            pattern = edited_grid.get_pattern_for_slot(slot)
+            updated_domains[slot_id] = {
+                word
+                for word in updated_domains[slot_id]
+                if len(word) == len(pattern) and all(p == "?" or p == w for p, w in zip(pattern, word))
+            }
 
         # For emptied slots, keep original domain
         # (will be recomputed during AC-3 if needed)
@@ -386,15 +436,21 @@ class EditMerger:
         """
         from cli.src.core.grid import Grid
 
-        saved_grid = Grid.from_dict(saved_grid_dict)
-        edited_grid = Grid.from_dict(edited_grid_dict)
+        saved_grid = Grid.from_dict(saved_grid_dict, strict_size=False)
+        edited_grid = Grid.from_dict(edited_grid_dict, strict_size=False)
 
         changes = self._detect_changes(saved_grid, edited_grid, slot_list, slot_id_map)
 
         return {
             "filled_count": len(changes.filled_slots),
             "emptied_count": len(changes.emptied_slots),
-            "modified_count": len(changes.modified_slots),
+            # Letter-level (partial-word) edits count as modifications too —
+            # they used to be invisible, reporting zero changes.
+            "modified_count": len(changes.modified_slots) + len(changes.partial_slots),
+            "partial_count": len(changes.partial_slots),
+            "cells_filled": changes.cells_filled,
+            "cells_emptied": changes.cells_emptied,
+            "cells_changed": changes.cells_changed,
             "new_words": list(changes.new_words),
             "removed_words": list(changes.removed_words),
         }

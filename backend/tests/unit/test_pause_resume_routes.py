@@ -32,11 +32,30 @@ def edit_merger():
 def mock_pause_controller(mocker):
     """Patch PauseController at its source module so local imports pick it up."""
     mock_pc = MagicMock()
+    mock_pc.is_task_running.return_value = True
     mock_cls = mocker.patch(
         "cli.src.fill.pause_controller.PauseController",
         return_value=mock_pc,
     )
     return mock_cls, mock_pc
+
+
+@pytest.fixture
+def mock_adapter(mocker):
+    """Patch the CLI adapter used by the resume route."""
+    adapter = MagicMock()
+    adapter.fill_with_resume.return_value = {
+        "success": True,
+        "grid": [["A", "B", "C"]] * 3,
+        "slots_filled": 12,
+        "total_slots": 40,
+        "paused": False,
+    }
+    mocker.patch(
+        "backend.api.pause_resume_routes.get_adapter",
+        return_value=adapter,
+    )
+    return adapter
 
 
 @pytest.fixture
@@ -104,20 +123,36 @@ class TestPauseAutofill:
 
         mock_pc.request_pause.assert_called_once()
 
+    def test_pause_nonexistent_task_returns_404(self, client, mock_pause_controller, mocker):
+        """Regression: pausing a task that is not running must 404 with JSON,
+        not return 200 success."""
+        _, mock_pc = mock_pause_controller
+        mock_pc.is_task_running.return_value = False
+        mocker.patch(
+            "backend.api.progress_routes.is_process_running",
+            return_value=False,
+        )
+
+        resp = client.post("/api/fill/pause/no_such_task")
+        data = resp.get_json()
+
+        assert resp.status_code == 404
+        assert "error" in data
+        mock_pc.request_pause.assert_not_called()
+
     def test_pause_exception_returns_error(self, client, mocker):
         mocker.patch(
             "cli.src.fill.pause_controller.PauseController",
             side_effect=RuntimeError("disk full"),
         )
-        mock_handle = mocker.patch(
-            "backend.api.pause_resume_routes.handle_error",
-            return_value=(json.dumps({"error": "fail"}), 500),
-        )
 
         resp = client.post("/api/fill/pause/task_err")
+        data = resp.get_json()
 
+        # Errors must come back as JSON, never an HTML debugger page
         assert resp.status_code == 500
-        mock_handle.assert_called_once()
+        assert resp.content_type.startswith("application/json")
+        assert data["error"]["code"] == "INTERNAL_ERROR"
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +161,16 @@ class TestPauseAutofill:
 
 
 class TestCancelAutofill:
-    def test_cancel_returns_200(self, client, mock_pause_controller, mocker):
+    def test_cancel_returns_200_and_honest_state_saved(self, client, mock_pause_controller, mocker):
+        """Regression: cancel must NOT claim state_saved: true — killing the
+        subprocess saves nothing."""
+        mocker.patch(
+            "backend.api.progress_routes.is_process_running",
+            return_value=True,
+        )
         mocker.patch(
             "backend.api.progress_routes.cleanup_process",
+            return_value=True,
         )
 
         resp = client.post("/api/fill/cancel/task_c1")
@@ -137,33 +179,59 @@ class TestCancelAutofill:
         assert resp.status_code == 200
         assert data["success"] is True
         assert data["task_id"] == "task_c1"
-        assert data["state_saved"] is True
+        assert data["state_saved"] is False
         assert "cancelled" in data["message"].lower()
 
-    def test_cancel_requests_pause_and_cleanup(self, client, mock_pause_controller, mocker):
+    def test_cancel_kills_process_and_clears_flags(self, client, mock_pause_controller, mocker):
         _, mock_pc = mock_pause_controller
+        mocker.patch(
+            "backend.api.progress_routes.is_process_running",
+            return_value=True,
+        )
         mock_cleanup = mocker.patch(
             "backend.api.progress_routes.cleanup_process",
+            return_value=True,
         )
 
         client.post("/api/fill/cancel/task_c2")
 
-        mock_pc.request_pause.assert_called_once()
         mock_cleanup.assert_called_once_with("task_c2")
+        # Cancel is a hard stop: it must clear stale flags, not request pause
+        mock_pc.request_pause.assert_not_called()
+        mock_pc.clear_pause.assert_called_once()
+        mock_pc.clear_running.assert_called_once()
+
+    def test_cancel_nonexistent_task_returns_404(self, client, mock_pause_controller, mocker):
+        """Regression: cancelling an unknown/finished task must 404 with JSON,
+        not return 200 success."""
+        mocker.patch(
+            "backend.api.progress_routes.is_process_running",
+            return_value=False,
+        )
+        mock_cleanup = mocker.patch(
+            "backend.api.progress_routes.cleanup_process",
+        )
+
+        resp = client.post("/api/fill/cancel/no_such_task")
+        data = resp.get_json()
+
+        assert resp.status_code == 404
+        assert "error" in data
+        mock_cleanup.assert_not_called()
 
     def test_cancel_exception_returns_error(self, client, mocker):
         mocker.patch(
-            "cli.src.fill.pause_controller.PauseController",
+            "backend.api.progress_routes.is_process_running",
             side_effect=RuntimeError("boom"),
-        )
-        mocker.patch(
-            "backend.api.pause_resume_routes.handle_error",
-            return_value=(json.dumps({"error": "fail"}), 500),
         )
 
         resp = client.post("/api/fill/cancel/task_err")
+        data = resp.get_json()
 
+        # Errors must come back as JSON, never an HTML debugger page
         assert resp.status_code == 500
+        assert resp.content_type.startswith("application/json")
+        assert data["error"]["code"] == "INTERNAL_ERROR"
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +240,7 @@ class TestCancelAutofill:
 
 
 class TestResumeAutofill:
-    def test_resume_valid_request_no_edits(self, client, mock_state_manager):
+    def test_resume_valid_request_no_edits(self, client, mock_state_manager, mock_adapter):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -187,11 +255,38 @@ class TestResumeAutofill:
         assert data["success"] is True
         assert data["original_task_id"] == "task_r1"
         assert data["new_task_id"].startswith("resume_")
-        assert data["slots_filled"] == 10
+        assert data["result"]["slots_filled"] == 12
         assert data["total_slots"] == 40
         mock_state_manager.save_csp_state.assert_called_once()
+        mock_adapter.fill_with_resume.assert_called_once()
 
-    def test_resume_with_edited_grid(self, client, mock_state_manager, edit_merger, mocker):
+    def test_resume_actually_runs_cli_resume(self, client, mock_state_manager, mock_adapter):
+        """Regression (headline): /api/fill/resume must actually RUN the
+        resumed fill via the CLI, from the shared /tmp/crossword_states
+        store — not just re-save the state and return."""
+        saved = _make_saved_state()
+        meta = _make_metadata(algorithm="csp", wordlists=[])
+        mock_state_manager.load_csp_state.return_value = (saved, meta)
+
+        resp = client.post(
+            "/api/fill/resume",
+            json={"task_id": "task_run", "options": {"timeout": 60, "min_score": 40}},
+        )
+        data = resp.get_json()
+
+        assert resp.status_code == 200
+        kwargs = mock_adapter.fill_with_resume.call_args.kwargs
+        # The state file handed to the CLI lives in the CLI's own store
+        assert kwargs["state_file_path"].startswith("/tmp/crossword_states/")
+        assert kwargs["state_file_path"].endswith(f"{data['new_task_id']}.json.gz")
+        assert kwargs["task_id"] == data["new_task_id"]
+        assert kwargs["timeout_seconds"] == 60
+        assert kwargs["min_score"] == 40
+        # 'csp' (state manager's name for classic fills) maps to CLI 'trie'
+        assert kwargs["algorithm"] == "trie"
+        assert kwargs["wordlist_paths"], "resume must run with a real wordlist"
+
+    def test_resume_with_edited_grid(self, client, mock_state_manager, edit_merger, mocker, mock_adapter):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -209,6 +304,40 @@ class TestResumeAutofill:
         assert resp.status_code == 200
         assert data["success"] is True
         edit_merger.merge_edits.assert_called_once()
+
+    def test_resume_accepts_frontend_cell_formats(self, client, mock_state_manager, edit_merger, mocker, mock_adapter):
+        """Regression: the exact frontend payload (dict cells and
+        single-letter list cells) used to crash resume with an
+        AttributeError. It must be normalized to CLI strings, preserving
+        black squares from the saved state."""
+        saved = _make_saved_state(grid=[["A", "B", "#"], [".", ".", "."], [".", ".", "."]])
+        meta = _make_metadata()
+        mock_state_manager.load_csp_state.return_value = (saved, meta)
+        mocker.patch.object(edit_merger, "merge_edits", return_value=saved)
+
+        # Row 0: frontend dict cells (carry isBlack); rows 1-2: legacy
+        # ["A"] / ["."] cells, which are LOSSY — the saved state's black
+        # square at (1, 2)... none here, but blacks in list rows must be
+        # inherited from the saved grid.
+        saved.grid_dict["grid"][1][2] = "#"
+        edited = [
+            [
+                {"letter": "A", "isBlack": False},
+                {"letter": "Q", "isBlack": False},
+                {"letter": "", "isBlack": True},
+            ],
+            [["C"], ["."], ["."]],  # (1,2) is '#' in saved state
+            [["."], ["."], ["."]],
+        ]
+        resp = client.post(
+            "/api/fill/resume",
+            json={"task_id": "task_fmt", "edited_grid": edited},
+        )
+
+        assert resp.status_code == 200
+        merged_grid_dict = edit_merger.merge_edits.call_args.kwargs["edited_grid_dict"]
+        assert merged_grid_dict["grid"][0] == ["A", "Q", "#"]  # dict isBlack honored
+        assert merged_grid_dict["grid"][1] == ["C", ".", "#"]  # black inherited
 
     def test_resume_missing_task_id_returns_400(self, client):
         resp = client.post("/api/fill/resume", json={"options": {}})
@@ -258,7 +387,7 @@ class TestResumeAutofill:
         assert resp.status_code == 409
         assert "unsolvable" in data["error"].lower()
 
-    def test_resume_saves_with_correct_metadata(self, client, mock_state_manager):
+    def test_resume_saves_with_correct_metadata(self, client, mock_state_manager, mock_adapter):
         saved = _make_saved_state()
         meta = _make_metadata(algorithm="csp")
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -274,7 +403,7 @@ class TestResumeAutofill:
         assert saved_meta["resumed_from"] == "task_r4"
         assert saved_meta["resume_options"] == {"timeout": 300}
 
-    def test_resume_no_options_defaults_to_empty(self, client, mock_state_manager):
+    def test_resume_no_options_defaults_to_empty(self, client, mock_state_manager, mock_adapter):
         saved = _make_saved_state()
         meta = _make_metadata()
         mock_state_manager.load_csp_state.return_value = (saved, meta)
@@ -294,7 +423,7 @@ class TestResumeAutofill:
 
 
 class TestGetSavedState:
-    def test_state_found_returns_200(self, client, mock_state_manager, mock_grid):
+    def test_state_found_returns_200(self, client, mock_state_manager):
         saved = _make_saved_state(grid=[["A", ".", "#"]] * 3)
         meta = _make_metadata()
         info = {"task_id": "task_s1", "timestamp": "2025-12-26T10:00:00Z"}
@@ -308,7 +437,6 @@ class TestGetSavedState:
         assert resp.status_code == 200
         assert data["task_id"] == "task_s1"
         assert "grid_preview" in data
-        mock_grid.from_dict.assert_called_once()
 
     def test_state_not_found_returns_404(self, client, mock_state_manager):
         mock_state_manager.get_state_info.side_effect = FileNotFoundError("nope")

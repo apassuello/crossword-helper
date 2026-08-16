@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -448,7 +449,13 @@ class TestPauseController:
         assert not controller2.is_paused()
 
     def test_pause_controller_rate_limiting(self, temp_dir):
-        """Test that should_pause() is rate limited."""
+        """should_pause() must not stat the filesystem on every call.
+
+        It runs in solver inner loops. A previous version tracked
+        _last_check_time and _check_interval but never applied them, so every
+        iteration paid a stat(); the test that was meant to catch this only
+        asserted isinstance(result, bool), which holds either way.
+        """
         import time
 
         from cli.src.fill.pause_controller import PauseController
@@ -456,18 +463,30 @@ class TestPauseController:
         task_id = "test_task_rate"
         controller = PauseController(task_id=task_id, pause_dir=temp_dir)
 
-        # Request pause
+        calls = {"n": 0}
+        real_exists = type(controller.pause_file).exists
+
+        def counting_exists(self):
+            calls["n"] += 1
+            return real_exists(self)
+
+        # Not paused: 100 rapid calls must collapse into a single filesystem check
+        with patch.object(type(controller.pause_file), "exists", counting_exists):
+            assert controller.should_pause() is False
+            first = calls["n"]
+            for _ in range(100):
+                assert controller.should_pause() is False
+            assert calls["n"] == first, f"expected the interval to gate the check, got {calls['n']} stats"
+
+            # Past the interval, it checks again
+            time.sleep(0.15)
+            assert controller.should_pause() is False
+            assert calls["n"] == first + 1
+
+        # A locally requested pause is observed immediately, not after the interval
         controller.request_pause()
-
-        # First check should detect pause
         assert controller.should_pause() is True
 
-        # Immediate second check might be rate-limited
-        # (depends on timing, but test the mechanism exists)
-        result = controller.should_pause()
-        # Result can be True or False depending on timing
-        assert isinstance(result, bool)
-
-        # After waiting, should definitely detect pause
-        time.sleep(0.2)  # Wait longer than check_interval
-        assert controller.should_pause() is True
+        # And clearing it is likewise observed immediately
+        controller.clear_pause()
+        assert controller.should_pause() is False

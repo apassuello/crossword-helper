@@ -79,6 +79,8 @@ class Autofill:
         self.progress_reporter = progress_reporter
         self.pause_controller = pause_controller
         self.state_manager = state_manager or StateManager()
+        self.paused_state_path = None  # Set by _handle_pause when a state is saved
+        self.wordlist_paths: List[str] = []  # Original wordlist file paths (for resume)
 
         # Create pattern matcher if not provided
         if pattern_matcher is None:
@@ -136,6 +138,15 @@ class Autofill:
             FillResult with success status and filled grid
         """
         self.start_time = time.time()
+
+        # Honor an explicit per-call timeout (overrides constructor value)
+        if timeout is not None:
+            self.timeout = timeout
+
+        # Default the task id from the pause controller so callers that only
+        # wired a controller (e.g. AdaptiveAutofill) can still pause safely
+        if task_id is None and self.pause_controller is not None:
+            task_id = self.pause_controller.task_id
 
         # Resume from saved state if provided
         if resume_state is not None:
@@ -211,12 +222,22 @@ class Autofill:
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
             paused=was_paused,
-            state_path=getattr(self, "_pause_state_path", None),
+            state_path=str(self.paused_state_path) if was_paused and getattr(self, "paused_state_path", None) else None,
         )
 
     def _resume_fill(self, resume_state: CSPState, task_id: Optional[str], use_mac: bool = True) -> FillResult:
         """
         Resume fill from saved state.
+
+        Restores the saved grid and word assignments, then continues the CSP
+        search from the saved position — `current_slot_index` into the restored
+        MCV-sorted slot order — with the filled cells as constraints.
+
+        Note: this is exact-position continuation. It does not unwind a
+        contradictory partial assignment; the recursion stack above the saved
+        frame is not serialized, so a branch that was already doomed when the
+        pause landed stays doomed. See `_unwind_dead_ends` below, which
+        implements that recovery but is not currently wired into this path.
 
         Args:
             resume_state: Saved CSP state
@@ -226,23 +247,25 @@ class Autofill:
         Returns:
             FillResult
         """
-        # Restore state into this instance
+        # Restore state into this instance (grid, used_words, iterations, ...)
         self.state_manager.restore_to_autofill(self, resume_state)
 
         # Resume timing (fresh timeout)
         self.start_time = time.time()
 
-        # Get total slots
-        total_slots = len(self.slot_list)
+        # Report progress against the original slot count
+        total_slots = len(resume_state.slot_list) or len(self.grid.get_empty_slots())
 
         # Convert locked slots list to set
         self.locked_slots = set(resume_state.locked_slots)
 
-        # Continue backtracking from saved position. slots_sorted already holds the
-        # MCV-sorted slot DICTS (the exact list the fresh-fill path passes to
-        # _backtrack_with_mac at :189 and stores at :183) — not int indices — so it is
-        # consumed directly. current_slot_index indexes into this same sorted order.
-        slots_list = resume_state.slots_sorted
+        # Continue backtracking from the saved position. capture_csp_state serializes
+        # slots_sorted as slot IDs, while _backtrack_with_mac consumes slot DICTS, so map
+        # IDs back through slot_list — repopulated by restore_to_autofill just above.
+        # Entries that are already dicts pass through unchanged, so state files written
+        # before the ID serialization landed still resume. current_slot_index indexes
+        # into this same sorted order either way.
+        slots_list = [self.slot_list[entry] if isinstance(entry, int) else entry for entry in resume_state.slots_sorted]
 
         was_paused = False
         try:
@@ -271,8 +294,111 @@ class Autofill:
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
             paused=was_paused,
-            state_path=getattr(self, "_pause_state_path", None),
+            state_path=str(self.paused_state_path) if was_paused and getattr(self, "paused_state_path", None) else None,
         )
+
+    def _unwind_dead_ends(self, max_rounds: int = 10) -> int:
+        """
+        Remove restored word assignments that make remaining slots unfillable.
+
+        After restoring a paused state, some empty slots may have zero
+        candidates because the search was paused inside a contradictory
+        branch. This strips filled crossing words (never locked cells) around
+        such dead-end slots so the resumed search has room to move.
+
+        Args:
+            max_rounds: Safety bound on strip-and-recheck rounds
+
+        Returns:
+            Number of words removed
+        """
+        removed_count = 0
+
+        for _ in range(max_rounds):
+            empty_slots = self.grid.get_empty_slots()
+            if not empty_slots:
+                break
+
+            # Build the CSP over the current empty slots and run arc
+            # consistency: if it passes, the position is searchable
+            self._initialize_csp(empty_slots)
+            if self._ac3():
+                break
+
+            # AC-3 wiped out at least one domain — those slots are dead
+            dead_slots = [slot for idx, slot in enumerate(empty_slots) if len(self.domains.get(idx, set())) == 0]
+
+            if not dead_slots:
+                break
+
+            # Strip filled words crossing each dead slot
+            stripped_this_round = False
+            for dead in dead_slots:
+                for word_slot in self.grid.get_word_slots():
+                    filled_word = self.grid.get_pattern_for_slot(word_slot)
+                    if "?" in filled_word:
+                        continue  # Not (fully) filled
+                    if not self._slots_intersect(dead, word_slot):
+                        continue
+                    self.grid.remove_word(
+                        word_slot["row"],
+                        word_slot["col"],
+                        word_slot["length"],
+                        word_slot["direction"],
+                    )
+                    self.used_words.discard(filled_word)
+                    removed_count += 1
+                    stripped_this_round = True
+
+            if not stripped_this_round:
+                break  # Nothing left to strip (e.g. everything locked)
+
+        return removed_count
+
+    def _strip_words_around_constrained_slots(self, max_targets: int = 3) -> int:
+        """
+        Strip filled words crossing the most constrained empty slots.
+
+        Used when a resumed search proves the restored partial assignment
+        unsatisfiable: freeing the crossings of the tightest slots gives the
+        next search round room to move.
+
+        Args:
+            max_targets: How many of the most constrained slots to free up
+
+        Returns:
+            Number of words removed
+        """
+        empty_slots = self.grid.get_empty_slots()
+        if not empty_slots:
+            return 0
+
+        # Rank empty slots by candidate count (cheap: capped count)
+        ranked = []
+        for slot in empty_slots:
+            pattern = self.grid.get_pattern_for_slot(slot)
+            count = len(self.pattern_matcher.find(pattern, min_score=self.min_score, max_results=50))
+            ranked.append((count, slot))
+        ranked.sort(key=lambda x: x[0])
+
+        removed = 0
+        for _count, target in ranked[:max_targets]:
+            for word_slot in self.grid.get_word_slots():
+                filled_word = self.grid.get_pattern_for_slot(word_slot)
+                if "?" in filled_word:
+                    continue
+                if not self._slots_intersect(target, word_slot):
+                    continue
+                self.grid.remove_word(
+                    word_slot["row"],
+                    word_slot["col"],
+                    word_slot["length"],
+                    word_slot["direction"],
+                )
+                self.used_words.discard(filled_word)
+                removed += 1
+
+        return removed
 
     def fill_with_restarts(
         self,
@@ -280,6 +406,7 @@ class Autofill:
         timeout_per_attempt: int = 100,
         interactive: bool = False,
         use_mac: bool = True,
+        task_id: Optional[str] = None,
     ) -> FillResult:
         """
         Fill grid with randomized restart strategy.
@@ -312,7 +439,12 @@ class Autofill:
 
             # Try filling with this seed
             try:
-                result = self.fill(interactive=interactive, use_mac=use_mac, random_seed=random_seed)
+                result = self.fill(
+                    interactive=interactive,
+                    use_mac=use_mac,
+                    random_seed=random_seed,
+                    task_id=task_id,
+                )
 
                 # Track best result
                 if best_result is None or result.slots_filled > best_result.slots_filled:
@@ -320,6 +452,11 @@ class Autofill:
                     # If perfect solution, stop early
                     if result.success:
                         break
+
+                # Paused: stop restarting immediately, propagate the pause
+                if result.paused:
+                    best_result = result
+                    break
 
             except TimeoutError:
                 # Attempt timed out, continue to next
@@ -854,13 +991,14 @@ class Autofill:
         """
         self.iterations += 1
 
-        # Check every 100 iterations for timeout and pause
-        if self.iterations % 100 == 0:
-            # Check timeout
-            if time.time() - self.start_time > self.timeout:
-                raise TimeoutError("Autofill timeout")
+        # Check timeout every iteration (a time.time() call is cheap; checking only
+        # every 100 iterations let slow-running grids overrun the timeout budget,
+        # since iteration count alone does not track wall-clock time)
+        if time.time() - self.start_time > self.timeout:
+            raise TimeoutError("Autofill timeout")
 
-            # Check pause signal
+        # Check pause signal every 20 iterations (file stat is cheap but not free)
+        if self.iterations % 20 == 0:
             if self.pause_controller and self.pause_controller.should_pause():
                 self._handle_pause(current_index, task_id, len(slots))
                 raise PausedException("Autofill paused by user")
@@ -1172,7 +1310,8 @@ class Autofill:
         remaining_slots = self.grid.get_empty_slots()
         slots_filled = total_slots - len(remaining_slots)
 
-        # Save state with metadata
+        # Save state with metadata (wordlist paths are recorded so `resume`
+        # can reload the same wordlists without requiring -w)
         metadata = {
             "min_score": self.min_score,
             "timeout": self.timeout,
@@ -1181,9 +1320,16 @@ class Autofill:
             "total_slots": total_slots,
             "slots_filled": slots_filled,
             "time_elapsed": time.time() - self.start_time,
+            "wordlists": list(getattr(self, "wordlist_paths", []) or []),
         }
 
         state_path = self.state_manager.save_csp_state(task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True)
+        self.paused_state_path = state_path
+
+        # The pause request has been consumed — remove the flag file so it
+        # cannot accidentally pause a future run with the same task id.
+        if self.pause_controller:
+            self.pause_controller.clear_pause()
 
         # Persist for the FillResult (the local state_path is lost once this returns).
         self._pause_state_path = str(state_path)

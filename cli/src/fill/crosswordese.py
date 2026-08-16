@@ -5,10 +5,13 @@ PHASE 2.1 - Research Gap #8: Crosswordese Acceptance Policy
 
 Crosswordese = words that appear frequently in crosswords but rarely in speech.
 
-Research (Will Shortz, NYT Crossword Construction Guidelines):
-- Short words (3-4 letters): Crosswordese acceptable as "glue"
-- Medium words (5-6 letters): Crosswordese discouraged but tolerated
-- Long words (7+ letters): Crosswordese completely unacceptable
+Policy: crosswordese acceptance is length-gated (implemented in
+get_crosswordese_penalty below, lines 205-210):
+- Short words (3-4 letters): accepted as "glue"
+- Medium words (5-6 letters): discouraged but tolerated (penalized)
+- Long words (7+ letters): unacceptable (filtered out)
+
+This is this module's own design policy, not a cited external standard.
 
 Examples:
 - ESNE (archaic "to be") - OK at 4 letters, terrible at 8

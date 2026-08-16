@@ -78,17 +78,35 @@ class TestPauseResumeAPI:
         return task_id, tmp_path, csp_state, metadata
 
     def test_pause_request(self, client):
-        """Test requesting pause for a task."""
+        """Test requesting pause for a running task."""
+        from cli.src.fill.pause_controller import PauseController
+
         task_id = "test_pause_task"
 
-        response = client.post(f"/api/fill/pause/{task_id}")
+        # Simulate a live CLI fill for this task id (running marker with a
+        # live pid) — pause requests are only accepted for running tasks
+        controller = PauseController(task_id=task_id)
+        controller.mark_running()
+        try:
+            response = client.post(f"/api/fill/pause/{task_id}")
 
-        assert response.status_code == 200
+            assert response.status_code == 200
+            data = json.loads(response.data)
+
+            assert data["success"] is True
+            assert data["task_id"] == task_id
+            assert "message" in data
+        finally:
+            controller.clear_running()
+            controller.clear_pause()
+
+    def test_pause_request_unknown_task_returns_404(self, client):
+        """Pausing a task that is not running returns a JSON 404."""
+        response = client.post("/api/fill/pause/definitely_not_running_task")
+
+        assert response.status_code == 404
         data = json.loads(response.data)
-
-        assert data["success"] is True
-        assert data["task_id"] == task_id
-        assert "message" in data
+        assert "error" in data
 
     def test_get_saved_state(self, client, sample_state, monkeypatch):
         """Test retrieving saved state info."""
