@@ -56,7 +56,7 @@ lists the CLI-only subset.
 
 **[SPEC]**
 - Autofill: CSP with backtracking + AC-3 (`fill/autofill.py`), beam search
-  (`fill/beam_search/`), and a hybrid default.
+  (`fill/beam_search/`), iterative repair (the `--algorithm` default), and a beam+repair hybrid.
 - Pattern matching: regex (`fill/pattern_matcher.py`) and trie
   (`fill/trie_pattern_matcher.py`).
 - Pause/resume: solver state serialises to gzipped JSON; resume applies user edits

@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 # Marker file: the link check runs its inner loop in a subshell (grep | while),
 # so a plain variable would not survive. Clear any stale marker from a prior run.
-MARKER=$(mktemp -t docs-check)
+MARKER=$(mktemp "${TMPDIR:-/tmp}/docs-check.XXXXXXXX")
 trap 'rm -f "$MARKER"' EXIT
 
 EXCLUDE='^(docs/archive/|\.archive/|docs/dev/FABRICATION-LOG\.md)'

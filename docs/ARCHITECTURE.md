@@ -129,7 +129,7 @@ Location: `cli/src/fill/`. Three strategies, selectable via `--algorithm`:
 |---|---|---|
 | CSP + backtracking (AC-3, MAC, MCV/LCV heuristics) | `autofill.py` | Small grids, guaranteed completeness |
 | Beam Search | `beam_search/orchestrator.py` | Medium/large grids, better word quality, no completeness guarantee |
-| Hybrid (default) | `hybrid_autofill.py` | Beam Search first, then Iterative Repair |
+| Hybrid | `hybrid_autofill.py` | Beam Search first, then Iterative Repair |
 
 Iterative Repair (`iterative_repair.py`) is Hybrid's second phase: region-based conflict
 detection plus tabu search, used to fix crossing mismatches Beam Search leaves behind.
@@ -262,7 +262,7 @@ overwrites a theme-entry slot.
 | Grid representation | NumPy 2D array | Python nested lists | Vectorized symmetry checks (180° rotation via `np.rot90`) and repeated cell access are both meaningfully faster and simpler to express. |
 | Backend↔CLI integration | `subprocess.run()`, no `shell=True`, array argv | Direct Python import of CLI modules | Keeps the CLI a genuinely standalone tool and avoids coupling backend and CLI import graphs; array argv avoids shell-injection risk entirely rather than sanitizing against it. |
 | Persistence | Flat JSON / gzipped JSON files | A database | Single-user, local-only tool; file-based state is simpler to inspect, version, and back up, and there is no concurrent-writer problem to solve. |
-| Default autofill algorithm | Hybrid (Beam Search → Iterative Repair) | Beam Search alone / CSP alone | Beam Search finds a high-quality partial fill quickly but has no completeness guarantee; Iterative Repair spends the remainder of the timeout resolving the crossing conflicts Beam Search leaves behind. |
+| Default autofill algorithm | Iterative Repair (`--algorithm` default is `repair`) | Beam Search alone / CSP alone | Beam Search finds a high-quality partial fill quickly but has no completeness guarantee; Iterative Repair spends the remainder of the timeout resolving the crossing conflicts Beam Search leaves behind. |
 
 ---
 

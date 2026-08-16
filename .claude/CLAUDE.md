@@ -42,7 +42,8 @@ Add capability CLI-first, then adapter, then route, then UI.
 ## Code Patterns
 
 - **New capability**: CLI command → `cli_adapter.py` method → Flask route → React. Never skip a layer.
-- **Autofill**: CSP (`fill/autofill.py`), beam search (`fill/beam_search/`), hybrid (default).
+- **Autofill**: CSP (`fill/autofill.py`), beam search (`fill/beam_search/`), iterative repair
+  (`fill/iterative_repair.py`, the `--algorithm` default), and a `hybrid` of beam+repair.
 - **Pattern matching**: `fill/pattern_matcher.py` (regex) and `fill/trie_pattern_matcher.py` (trie).
 - **Pause/resume**: file-based IPC. CLI serializes solver state to gzipped JSON; resume applies user
   edits as locked cells and continues from that position.
