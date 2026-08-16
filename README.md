@@ -115,4 +115,4 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
