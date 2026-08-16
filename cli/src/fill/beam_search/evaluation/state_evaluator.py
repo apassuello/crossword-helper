@@ -165,6 +165,14 @@ class StateEvaluator(StateEvaluationStrategy):
         - Completion weight: 70%
         - Quality weight: 30%
 
+        Those weights are nominal, not exact. completion_score is bounded to
+        0-100, but word_score is not (see below), so on a word scoring 150 the
+        quality term contributes up to 45 rather than 30. The result is used
+        only to rank beam states against each other - nothing compares it to
+        100 or renders it as a percentage - so the overflow changes relative
+        ordering, not correctness. Rebalancing it is a solver-tuning decision
+        and needs a fill-quality benchmark, not a clamp.
+
         Args:
             state: State to score
             word_score: Score of most recently placed word, as returned by
@@ -181,7 +189,7 @@ class StateEvaluator(StateEvaluationStrategy):
         quality_weight = 30.0
 
         completion_score = (state.slots_filled / state.total_slots) * 100
-        quality_score = word_score  # 1-100
+        quality_score = word_score
 
         total = (completion_score * completion_weight / 100) + (quality_score * quality_weight / 100)
 
