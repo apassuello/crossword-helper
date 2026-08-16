@@ -15,9 +15,8 @@ docs/
 ├── ops/
 │   └── TESTING.md           # Testing guide
 ├── dev/
-│   └── DEVELOPMENT.md       # Developer setup and workflow
-├── project-status/
-│   └── KNOWN_ISSUES.md      # Known issues tracker
+│   ├── DEVELOPMENT.md       # Developer setup and workflow
+│   └── FABRICATION-LOG.md   # Claims found false against code; unaudited backlog
 └── resources/
     └── art-of-construction.pdf  # Reference: The Art of Crossword Construction
 ```
@@ -30,7 +29,8 @@ docs/
 - **Use the CLI**: [specs/CLI_SPEC.md](./specs/CLI_SPEC.md)
 - **Understand algorithms**: [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md)
 - **Write tests**: [ops/TESTING.md](./ops/TESTING.md)
-- **Check known issues**: [project-status/KNOWN_ISSUES.md](./project-status/KNOWN_ISSUES.md)
+- **Contribute**: [../CONTRIBUTING.md](../CONTRIBUTING.md)
+- **Check what documentation to trust**: [dev/FABRICATION-LOG.md](./dev/FABRICATION-LOG.md)
 - **Reference**: [resources/art-of-construction.pdf](./resources/art-of-construction.pdf)
 
 ## Archived Documentation

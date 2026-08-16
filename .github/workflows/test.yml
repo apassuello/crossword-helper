@@ -112,6 +112,18 @@ jobs:
       run: |
         isort --check-only backend/ cli/ || true
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Guards the two failure modes that rotted this repo's docs: dead relative
+    # links, and derivable state (counts, pass rates, "FIXED") asserted in prose.
+    # Archives and docs/dev/FABRICATION-LOG.md are excluded by the script.
+    - name: Check documentation
+      run: ./scripts/docs-check.sh
+
   # Performance job removed - benchmarks are manual scripts, not automated tests
   # Run manually when needed: python cli/tests/performance/benchmark_algorithms.py
   # See cli/tests/performance/README.md for details
