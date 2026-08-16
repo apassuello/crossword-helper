@@ -651,7 +651,15 @@ def fill(
         )
         if not json_output:
             click.echo(f"  • {wordlist_file}")
-        with open(wordlist_file, "r") as f:
+        try:
+            wordlist_handle = open(wordlist_file, "r")
+        except OSError as e:
+            _fail_fill(
+                f"Could not read wordlist {wordlist_file}: {e.strerror}",
+                json_output,
+                hint="Check the path, or list available wordlists with: python -m cli.src.cli wordlists",
+            )
+        with wordlist_handle as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -960,6 +968,13 @@ def fill(
                 if result.total_slots > 0:
                     progress_pct = int((result.slots_filled / result.total_slots) * 100)
                     bar.update(progress_pct)
+    except ValueError as e:
+        # Solvers reject out-of-range arguments with a bare `raise` (for
+        # example iterative_repair.fill()'s 10-second timeout floor).
+        # Uncaught, those reach the user as a Python traceback; _fail_fill
+        # turns them into the same CLI error shape as every preflight check.
+        # The `finally` below still runs, so pause markers are cleaned up.
+        _fail_fill(str(e), json_output)
     finally:
         # Clean up pause/running marker files. On a real pause the state was
         # already saved and the flag consumed; anything left here is stale.
