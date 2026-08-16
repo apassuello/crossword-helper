@@ -427,7 +427,9 @@ class TestPatternWordlistResolution:
         sources = data["meta"]["sources_searched"]
         assert "builtin" not in sources
         assert any("comprehensive" in s for s in sources)
-        # comprehensive.txt has 7 C?T matches; the builtin demo list has 1
+        # comprehensive.txt has more real C?T matches than the 8-word builtin
+        # demo list (grep -icE '^C.T$' data/wordlists/comprehensive.txt -> 7;
+        # builtin demo list only contains CAT -> 1)
         assert data["meta"]["total_found"] >= 5
 
     def test_unknown_wordlist_returns_400(self, client):
@@ -452,8 +454,8 @@ class TestVerifyWordsWordlistSelection:
         return grid
 
     def test_verify_words_honors_selection(self, client):
-        # crosswordese (446 words) does not contain ZUGZWANG-ish junk; use a
-        # word that only exists in the comprehensive list
+        # crosswordese (wc -l data/wordlists/core/crosswordese.txt) does not
+        # contain ZUGZWANG-ish junk; use a word that only exists in the comprehensive list
         grid = self._grid_with_word("CAT")
 
         response = client.post(
@@ -462,7 +464,9 @@ class TestVerifyWordsWordlistSelection:
         )
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Selected list only: must be crosswordese's size, not the 400k+ merge
+        # Selected list only: must be crosswordese's size, not the full merge
+        # of every non-archive/non-custom list under data/wordlists/ (see
+        # backend/api/routes.py verify_words(), wordlist_dir.rglob('*.txt'))
         assert data["wordlist_size"] < 1000
 
     def test_verify_words_unknown_wordlist_returns_400(self, client):
@@ -482,7 +486,8 @@ class TestVerifyWordsWordlistSelection:
         )
         assert response.status_code == 200
         data = json.loads(response.data)
-        # No selection: falls back to the merged dictionary (much larger)
+        # No selection: falls back to the merged dictionary (see assertion
+        # below for the size threshold this enforces)
         assert data["wordlist_size"] > 40000
 
     def test_clean_honors_selection(self, client):

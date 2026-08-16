@@ -110,7 +110,7 @@ class BlackSquareSuggester:
         """
         Score a candidate black square position.
 
-        Scoring factors (0-1000 scale):
+        Scoring factors:
         - Length balance: Prefer even splits
         - Ideal range: 3-7 letter words
         - Symmetry: Must maintain rotational symmetry
@@ -125,7 +125,7 @@ class BlackSquareSuggester:
         right_len = slot["length"] - position - 1
 
         # ===================================
-        # FACTOR 1: Length Balance (0-100)
+        # FACTOR 1: Length Balance
         # ===================================
         balance = abs(left_len - right_len)
         balance_score = 100 - (balance * 10)
@@ -170,13 +170,13 @@ class BlackSquareSuggester:
             score += (min_words - new_word_count) * 10
 
         # ===================================
-        # FACTOR 5: Constraint Reduction (0-200)
+        # FACTOR 5: Constraint Reduction
         # ===================================
         constraint_reduction = self._estimate_constraint_reduction(slot, position)
         score += constraint_reduction * 40
 
         # ===================================
-        # FACTOR 6: Unchecked Squares (0-50)
+        # FACTOR 6: Unchecked Squares
         # ===================================
         unchecked_penalty = self._count_unchecked_created(grid, slot, position)
         score -= unchecked_penalty * 25
@@ -426,7 +426,7 @@ def validate_grid_for_black_squares(grid: List[List], grid_size: int) -> Dict:
         1 for row in grid for cell in row if (isinstance(cell, dict) and cell.get("isBlack", False)) or cell == "#"
     )
 
-    # Typical max black squares: ~16% of grid
+    # Warn when black square count exceeds the maximum ratio
     max_black = grid_size * grid_size * 0.16
     if black_count > max_black:
         warnings.append(f"High black square count ({black_count}). " "Adding more may reduce grid quality.")

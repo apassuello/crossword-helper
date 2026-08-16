@@ -172,7 +172,12 @@ class TestThemeLocking:
         for i in range(5):
             assert new_grid.get_cell(0, i) == "THEME"[i]
 
-        # Note: locked_cells are NOT serialized in to_dict/from_dict
-        # This is intentional as the lock state is session-specific
-        # The orchestrator handles re-locking theme words when resuming
+        # Note: locked_cells are NOT serialized in to_dict/from_dict.
+        # Grid.from_dict() always initializes locked_cells to an empty set
+        # (cli/src/grid.py, from_dict). Beam search resume restores
+        # self.theme_entries for candidate scoring (orchestrator._resume_fill)
+        # but never calls place_word(..., lock=True) to re-lock grid cells;
+        # grid.locked_cells is read only by IterativeRepair, which the repair-
+        # algorithm resume path constructs without theme_entries at all
+        # (cli/src/cli.py, _execute_resume, the "repair" branch).
         assert len(new_grid.locked_cells) == 0  # Locks not serialized

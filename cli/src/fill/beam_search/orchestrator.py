@@ -232,8 +232,9 @@ class BeamSearchOrchestrator:
 
         self.start_time = time.time()
         # Hard deadline enforced inside slot selection, beam expansion, and
-        # backtracking — a single iteration can take minutes on open grids,
-        # so checking only between iterations is not enough.
+        # backtracking — per-iteration cost scales with beam width x branching
+        # factor and is unbounded on open grids, so checking only between
+        # iterations is not enough.
         self.deadline = self.start_time + timeout
         self.iterations = 0
         self.failed_expansions = 0
@@ -772,7 +773,9 @@ class BeamSearchOrchestrator:
                 backjumped_beam.append(new_state)
 
             # Try expanding from backjumped state
-            expanded = self.beam_manager.expand_beam(backjumped_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline)
+            expanded = self.beam_manager.expand_beam(
+                backjumped_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline
+            )
             if expanded:
                 logger.debug("  ✓ Success with conflict-directed backjumping")
                 return expanded
@@ -804,7 +807,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying chronological backtracking (depth=1)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=1)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 10, deadline=self.deadline
+            )
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=1)")
                 return expanded
@@ -818,7 +823,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying deeper chronological backtracking (depth=2)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=2)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 15, deadline=self.deadline)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 15, deadline=self.deadline
+            )
             if expanded:
                 logger.debug("  ✓ Success with chronological backtracking (depth=2)")
                 return expanded
@@ -827,7 +834,9 @@ class BeamSearchOrchestrator:
         logger.debug("  Trying very deep backtracking (depth=3)...")
         backtracked_beam = self._backtrack_beam_states(beam, depth=3)
         if backtracked_beam:
-            expanded = self.beam_manager.expand_beam(backtracked_beam, slot, self.candidates_per_slot * 20, deadline=self.deadline)
+            expanded = self.beam_manager.expand_beam(
+                backtracked_beam, slot, self.candidates_per_slot * 20, deadline=self.deadline
+            )
             if expanded:
                 logger.debug("  ✓ Success with deep backtracking (depth=3)")
                 return expanded

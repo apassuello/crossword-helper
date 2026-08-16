@@ -236,7 +236,10 @@ class TestHybridIntegration:
         """Test that timeout is allocated correctly between phases."""
         hybrid = HybridAutofill(small_grid, word_list, pattern_matcher_trie, beam_width=2)
 
-        # With 70/30 split, beam gets 21s and repair gets 9s
+        # beam_timeout is capped at min(beam_cap, int(timeout * beam_timeout_ratio)) = 21s here;
+        # repair_timeout is whatever remains of the 30s budget after beam actually finishes
+        # (beam typically returns well before its cap, so repair gets most of the 30s -- see
+        # hybrid_autofill.py:_compute_beam_cap and the repair_timeout calculation in fill()).
         result = hybrid.fill(timeout=30, beam_timeout_ratio=0.7, repair_timeout_ratio=0.3)
 
         # Just verify it completes without error

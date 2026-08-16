@@ -185,13 +185,13 @@ class DiversityManager(DiversityStrategy):
 
         PHASE 4 - Critical Fix #1: Replace adaptive beam width with diversity mechanism.
 
-        Research (Cohen et al. 2019 "Beam Search Curse"):
-        - Adaptive narrowing (8->5->3->1) is NOT validated
-        - Beam quality is "highly non-monotonic" - narrowing can worsen solutions
+        Research (Cohen & Beck 2019, "beam search curse" / performance degradation study):
+        - Adaptive narrowing (8->5->3->1) is NOT validated by that work
+        - Beam-width changes can produce non-monotonic quality effects; narrowing can worsen solutions
         - Instead, use constant width + diversity to prevent beam collapse
 
         Research (Vijayakumar et al. 2016 "Diverse Beam Search"):
-        - 300% increase in distinct solutions
+        - Reports higher solution diversity vs. standard beam search (see paper for figures)
         - Better top-1 solutions through exploration/exploitation balance
 
         Args:
@@ -318,7 +318,7 @@ class DiversityManager(DiversityStrategy):
         Returns:
             Beam with updated scores (modified in-place)
 
-        Complexity: O(beam_widthx x slots)
+        Complexity: O(beam_width^2 * slots)
 
         Rationale: Encourages exploration of different search paths
         """

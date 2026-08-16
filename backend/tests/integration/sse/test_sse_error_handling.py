@@ -244,8 +244,8 @@ class TestSSETimeoutHandling:
 
         elapsed = time.time() - start_time
 
-        # Operation should not run significantly longer than timeout
-        # (allowing 3s buffer for subprocess overhead)
+        # Operation should not run significantly longer than the requested
+        # timeout, allowing headroom for subprocess spawn/teardown overhead.
         assert elapsed < 8, f"Operation ran too long ({elapsed}s) for 2s timeout"
 
         # Verify SSE stream completed

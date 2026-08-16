@@ -41,13 +41,15 @@ class PauseController:
         self.pause_file = self.pause_dir / f"crossword_pause_{task_id}.flag"
         self.running_file = self.pause_dir / f"crossword_running_{task_id}.pid"
         self._last_check_time = 0.0
-        self._check_interval = 0.1  # Check at most every 100ms
+        self._check_interval = 0.1  # NOTE: not currently enforced -- should_pause() calls
+        # pause_file.exists() unconditionally on every call; this interval has no effect.
 
     def should_pause(self) -> bool:
         """
         Check if pause has been requested.
 
-        Implements rate limiting to avoid excessive file system checks.
+        NOTE: rate-limiting fields (_last_check_time, _check_interval) are tracked but
+        not enforced -- pause_file.exists() is called unconditionally on every call.
 
         Returns:
             True if pause requested, False otherwise

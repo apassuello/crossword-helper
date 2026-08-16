@@ -88,9 +88,10 @@ class LCVValueOrdering(ValueOrderingStrategy):
         lcv_scored = []
         deadline = self.deadline
         for word, quality_score in candidates:
-            # Respect the time budget: LCV does pattern searches per candidate
-            # per crossing slot, which can take minutes on open grids. When
-            # the deadline passes, fall back to quality ordering for the rest.
+            # Respect the time budget: LCV does a pattern search per candidate
+            # per crossing slot, so cost scales with the number of crossings
+            # and grid openness. When the deadline passes, fall back to
+            # quality ordering for the rest.
             if deadline is not None and time.time() >= deadline:
                 break
 
@@ -338,9 +339,9 @@ class QualityValueOrdering(ValueOrderingStrategy):
 
 class ThresholdDiverseOrdering(ValueOrderingStrategy):
     """
-    Threshold-based ordering with temperature for exploration.
-
-    Research-validated approach from Stanford crossword paper.
+    Threshold-and-temperature ordering: filters candidates by a quality
+    threshold, then applies temperature-based randomization for exploration
+    while preserving top candidates for exploitation.
 
     Algorithm:
     1. Set quality threshold (e.g., score >= 50)
@@ -354,8 +355,11 @@ class ThresholdDiverseOrdering(ValueOrderingStrategy):
     (preferring high-quality words).
 
     Based on:
-    - Stanford crossword research (temperature=0.9, p-sampling=0.9)
     - Diverse Beam Search paper (Vijayakumar et al. 2016)
+
+    This module's actual default parameters are set in __init__ below
+    (threshold, temperature) and in the instantiation at
+    cli/src/fill/beam_search/orchestrator.py.
     """
 
     def __init__(self, threshold: int = 50, temperature: float = 0.8):

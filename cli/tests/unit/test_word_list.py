@@ -160,7 +160,9 @@ class TestWordList:
                 WordList.from_file(tmpdir)
 
     def test_from_file_too_large(self):
-        """Test that ValueError is raised for files > 100MB."""
+        """Test that a normal-sized file loads successfully; this does not exercise
+        the >100MB ValueError guard itself (impractical to create a 100MB+
+        fixture here) -- see fill/word_list.py's file-size check."""
         # Create a file that appears to be too large
         # (We'll mock this by checking the error message)
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:

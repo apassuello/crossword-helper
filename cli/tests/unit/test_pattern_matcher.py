@@ -223,7 +223,7 @@ class TestPatternMatcher:
         assert elapsed < 1.0
 
     def test_cache_effectiveness(self, matcher):
-        """Test that cache improves performance."""
+        """Test that a cached lookup does not regress in wall-clock time beyond a small tolerance."""
         import time
 
         # First call (no cache)
