@@ -59,6 +59,18 @@ Markers registered in `pytest.ini`: `slow`, `integration`, `unit`.
 - Fix: scrub `COV_CORE_*` from the child environment (monkeypatch) before spawning.
 - Do not diagnose this as "slow CI runners" — that misdiagnosis cost three CI attempts.
 
+**[SPEC] A `slow`-marked test runs nowhere automatically.** `pytest.ini` sets
+`addopts = -m "not slow"`, and CI invokes plain `pytest` (`.github/workflows/test.yml`), so no
+gate anywhere executes `pytest -m slow`. Marking a test `slow` opts it out of all automated
+verification — it can assert something false indefinitely and nothing will notice. One did:
+`test_theme_priority.py::TestThemeEntriesCLICanary` claimed `--theme-entries` was broken, when
+the flag worked and the test's own fixture was wrong. If you slow-mark a test, you own running it.
+
+**[SPEC] `xfail(strict=True)` as a self-removing scaffold.** When a test must wait on an
+incomplete contract, mark it `xfail(strict=True)` rather than skipping or deleting it. Once the
+contract is fixed the test XPASSes, which *fails* the suite under `strict`, forcing someone to
+remove the marker. A plain `xfail` lapses silently and the test never comes back.
+
 ---
 
 ## 4. Documentation rules
@@ -73,6 +85,9 @@ Markers registered in `pytest.ini`: `slow`, `integration`, `unit`.
 - Timing or size figures in **code comments** need the command that reproduces them, or state
   complexity instead. See `docs/dev/FABRICATION-LOG.md` for why this rule exists.
 - Dated historical records are archival. Do not "correct" them — archive them.
+- **Archiving a doc needs `git add -f`.** `.gitignore` carries a bare `archive/` pattern, so
+  `docs/archive/` content is tracked only by grandfathering. A new file moved there is ignored,
+  and the move lands as a plain deletion — the archive silently becomes a delete.
 
 ---
 
