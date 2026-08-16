@@ -27,23 +27,23 @@ info:
 
 servers:
   - url: http://localhost:5000/api
-    description: Development server
-  - url: https://api.crosswordhelper.example.com/api
-    description: Production server (TBD)
+    description: Development server (this is a local-only tool; no other deployment exists)
 
 tags:
   - name: Core Operations
     description: Pattern search, numbering, normalization, autofill
   - name: Grid Helpers
-    description: Grid validation and black square suggestions
+    description: Grid validation, black square suggestions, word verification/cleanup
   - name: Theme Management
-    description: Theme word upload, placement, and application
+    description: Theme word upload, validation, placement, and application
   - name: Pause/Resume
-    description: Pause autofill and resume with user edits
+    description: Pause, cancel, and resume autofill with user edits
   - name: Progress Tracking
     description: Real-time SSE progress updates
   - name: Wordlist Management
     description: CRUD operations for wordlists
+  - name: Constraint Analysis
+    description: Per-cell constraint heatmap and placement-impact analysis
 
 paths:
   # ============================================================================
@@ -100,8 +100,8 @@ paths:
                 $ref: '#/components/schemas/PatternResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '505':
-          description: Pattern search timeout
+        '504':
+          description: Pattern search timeout (subprocess.TimeoutExpired)
           content:
             application/json:
               schema:
@@ -170,8 +170,8 @@ paths:
                 $ref: '#/components/schemas/NormalizeResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '506':
-          description: Normalization timeout
+        '504':
+          description: Normalization timeout (subprocess.TimeoutExpired)
           content:
             application/json:
               schema:
@@ -205,8 +205,8 @@ paths:
                 $ref: '#/components/schemas/AutofillResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '507':
-          description: Grid fill timeout
+        '504':
+          description: Grid fill timeout (subprocess.TimeoutExpired)
           content:
             application/json:
               schema:
@@ -233,6 +233,35 @@ paths:
       responses:
         '202':
           description: Autofill task started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /pattern/with-progress:
+    post:
+      tags:
+        - Core Operations
+        - Progress Tracking
+      summary: Pattern search with SSE progress
+      description: |
+        Same search as `/pattern`, run as a background task with progress
+        reported over `/progress/{task_id}`. Intended for patterns broad
+        enough that the synchronous endpoint's timeout is a risk.
+      operationId: patternSearchWithProgress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatternRequest'
+      responses:
+        '202':
+          description: Pattern search task started
           content:
             application/json:
               schema:
@@ -355,6 +384,112 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /grid/verify-words:
+    post:
+      tags:
+        - Grid Helpers
+      summary: Verify filled words against a wordlist
+      description: |
+        Checks every slot in the grid. Fully-filled slots are checked by exact
+        lookup; partially-filled slots are checked with `?`-wildcard pattern
+        matching (unfillable if no candidate matches); fully-empty slots are
+        skipped. If `wordlists` is omitted, every installed non-custom
+        wordlist is merged for the check.
+      operationId: verifyWords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                size:
+                  type: integer
+                  description: Defaults to the grid's row count
+                wordlists:
+                  type: array
+                  items:
+                    type: string
+                  description: Defaults to every installed non-custom wordlist merged
+      responses:
+        '200':
+          description: Verification results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invalid_words:
+                    type: array
+                    items:
+                      type: object
+                  invalid_count:
+                    type: integer
+                  total_checked:
+                    type: integer
+                  wordlist_size:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /grid/clean:
+    post:
+      tags:
+        - Grid Helpers
+      summary: Remove invalid words from grid
+      description: |
+        For every fully-filled slot: keeps the word if it exists in the
+        wordlist; otherwise clears its letters unless a cell also belongs to
+        a valid crossing word (those cells are protected).
+      operationId: cleanGrid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                size:
+                  type: integer
+                  description: Defaults to the grid's row count
+                wordlists:
+                  type: array
+                  items:
+                    type: string
+                  description: Defaults to every installed non-custom wordlist merged
+      responses:
+        '200':
+          description: Cleaned grid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grid:
+                    $ref: '#/components/schemas/Grid'
+                  removed_count:
+                    type: integer
+                  valid_count:
+                    type: integer
+                  cleared_cells:
+                    type: integer
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   # ============================================================================
   # Theme Management
   # ============================================================================
@@ -418,6 +553,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ThemePlacementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /theme/validate:
+    post:
+      tags:
+        - Theme Management
+      summary: Validate theme words
+      description: |
+        Validate theme words (length, alphabetic characters) without
+        generating placement suggestions.
+      operationId: validateThemeWords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - theme_words
+              properties:
+                theme_words:
+                  type: array
+                  items:
+                    type: string
+                grid_size:
+                  type: integer
+                  default: 15
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -499,6 +671,48 @@ paths:
                     type: string
         '404':
           description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /fill/cancel/{task_id}:
+    post:
+      tags:
+        - Pause/Resume
+      summary: Cancel autofill task
+      description: |
+        Hard-stops a running autofill subprocess immediately. Unlike pause,
+        no state is saved — a cancelled task cannot be resumed. Also clears
+        any stale pause/running marker for the task id.
+      operationId: cancelAutofill
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancel request processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  task_id:
+                    type: string
+                  message:
+                    type: string
+                  state_saved:
+                    type: boolean
+                    description: Always false — cancel never checkpoints
+        '404':
+          description: No running fill found for this task_id
           content:
             application/json:
               schema:
@@ -754,6 +968,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /progress/start:
+    post:
+      tags:
+        - Progress Tracking
+      summary: Create a progress tracker
+      description: |
+        Allocates a task id and an event queue without starting any work.
+        Used when a caller wants a task id up front and will push its own
+        updates via `/progress/{task_id}/update`.
+      operationId: startProgressTracking
+      responses:
+        '200':
+          description: Tracker created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                    format: uuid
+
+  /progress/{task_id}/update:
+    post:
+      tags:
+        - Progress Tracking
+      summary: Manually push a progress update
+      description: |
+        Pushes one event onto a task's SSE queue. Intended for testing and
+        for callers driving their own background work.
+
+        **Note**: if `task_id` was never created via `/progress/start` (or
+        already finished and was cleaned up), this still returns
+        `200 {"success": true}` — the update is silently discarded rather
+        than rejected. There is no way to distinguish "delivered" from
+        "discarded" from the response alone.
+      operationId: updateProgress
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                progress:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  default: 0
+                message:
+                  type: string
+                  default: "Processing..."
+                status:
+                  type: string
+                  enum: [running, complete, error]
+                  default: running
+      responses:
+        '200':
+          description: Update accepted (not proof it was delivered — see note above)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   # ============================================================================
   # Wordlist Management
   # ============================================================================
@@ -976,6 +1264,60 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /wordlists/search:
+    post:
+      tags:
+        - Wordlist Management
+      summary: Search for words across wordlists
+      description: |
+        Pattern search scoped to specific wordlists (or all, if omitted),
+        with results grouped by word and annotated with every source
+        wordlist that contains it.
+      operationId: searchWordlists
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pattern
+              properties:
+                pattern:
+                  type: string
+                  example: "?A?E"
+                wordlists:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Search results grouped by word
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pattern:
+                    type: string
+                  total_matches:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        word:
+                          type: string
+                        sources:
+                          type: array
+                          items:
+                            type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /wordlists/import:
     post:
       tags:
@@ -1024,6 +1366,137 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '501':
           description: URL import not implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # Constraint Analysis
+  # ============================================================================
+
+  /constraints:
+    post:
+      tags:
+        - Constraint Analysis
+      summary: Get per-cell constraint heatmap
+      description: |
+        Returns candidate-count data for every slot in the grid, for
+        rendering a crossing-quality heatmap. Grid cells may be given as CLI
+        strings (`#`/`.`/letter) or frontend dict cells — both are accepted.
+
+        Response shape (`constraints`, `summary`) is produced by the CLI via
+        subprocess and not independently re-validated by the backend; treat
+        the fields below as a guide, not a guarantee.
+      operationId: getConstraints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                wordlists:
+                  type: array
+                  items:
+                    type: string
+                  default: ["comprehensive"]
+      responses:
+        '200':
+          description: Constraint data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  constraints:
+                    type: object
+                    additionalProperties: true
+                  summary:
+                    type: object
+                    additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '504':
+          description: Constraint analysis timeout (subprocess.TimeoutExpired)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /constraints/impact:
+    post:
+      tags:
+        - Constraint Analysis
+      summary: Get placement impact for a candidate word
+      description: |
+        Analyzes how placing a specific word in a specific slot would affect
+        the candidate counts of every slot it crosses. Same grid-format and
+        response-shape caveats as `/constraints`.
+      operationId: getPlacementImpact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grid
+                - word
+                - slot
+              properties:
+                grid:
+                  $ref: '#/components/schemas/Grid'
+                word:
+                  type: string
+                slot:
+                  type: object
+                  required:
+                    - row
+                    - col
+                    - direction
+                    - length
+                  properties:
+                    row:
+                      type: integer
+                    col:
+                      type: integer
+                    direction:
+                      type: string
+                      enum: [across, down]
+                    length:
+                      type: integer
+                wordlists:
+                  type: array
+                  items:
+                    type: string
+                  default: ["comprehensive"]
+      responses:
+        '200':
+          description: Placement impact data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  impacts:
+                    type: object
+                    additionalProperties: true
+                  summary:
+                    type: object
+                    additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '504':
+          description: Placement impact analysis timeout (subprocess.TimeoutExpired)
           content:
             application/json:
               schema:
@@ -1711,17 +2184,40 @@ components:
             type: string
 
     Error:
+      description: |
+        Two shapes are actually in use (backend/api/errors.py vs. ad-hoc
+        jsonify calls) — there is no single canonical error schema.
+      oneOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - $ref: '#/components/schemas/ErrorFlat'
+
+    ErrorEnvelope:
       type: object
+      description: |
+        Shape returned by the shared handle_error() helper — most endpoints
+        (core operations, grid/theme mutation routes, pause/resume).
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+
+    ErrorFlat:
+      type: object
+      description: |
+        Shape returned by endpoints that build jsonify() directly instead of
+        going through handle_error() — constraint analysis, wordlist search,
+        and several validation branches in grid/theme routes.
       properties:
         error:
           type: string
           description: Error message
-        details:
-          type: string
-          description: Detailed error information
-        code:
-          type: string
-          description: Error code
         validation:
           $ref: '#/components/schemas/ValidationResult'
 
@@ -1740,13 +2236,4 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
 
-  securitySchemes:
-    # Currently no authentication required (local-only tool)
-    # Future: Add API key or OAuth2 for production deployment
-    apiKey:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: API key for authentication (not yet implemented)
-
-security: []  # No security required for local development
+security: []  # No authentication scheme exists — this is a local-only tool
