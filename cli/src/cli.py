@@ -158,8 +158,7 @@ def _execute_resume(
             state_type, state_obj, metadata, saved_task_id = state_manager.load_state_by_task_id(candidate_task_id)
         except FileNotFoundError:
             _fail_fill(
-                f"'{state_file}' is neither an existing state file nor a known "
-                f"task id in {state_manager.storage_dir}",
+                f"'{state_file}' is neither an existing state file nor a known " f"task id in {state_manager.storage_dir}",
                 json_output,
                 hint="Use `crossword list-states` to see saved task ids, or pass " "the path to a .json.gz state file.",
             )
@@ -231,7 +230,15 @@ def _execute_resume(
 
     if not json_output:
         click.echo("\nResuming autofill...")
-        click.echo(f"  Algorithm: {chosen_algorithm}" + ("" if exact_resume else " (fresh fill from the saved grid — exact " f"{state_type} position only resumes with a matching algorithm)"))
+        click.echo(
+            f"  Algorithm: {chosen_algorithm}"
+            + (
+                ""
+                if exact_resume
+                else " (fresh fill from the saved grid — exact "
+                f"{state_type} position only resumes with a matching algorithm)"
+            )
+        )
         click.echo(f"  Timeout: {timeout}s\n")
 
     progress.update(60, "Starting autofill from saved state")
@@ -615,9 +622,8 @@ def fill(
     # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
     # Any stale pause flag for this task id is cleared before starting, and a
     # running-marker (pid file) is written so `pause` can verify the task.
-    # Registered BEFORE wordlist loading: loading 44k words can take seconds
-    # on slow machines, and a pause request during that window must already
-    # find the task registered.
+    # Registered BEFORE wordlist loading, so a pause request issued while the
+    # wordlist is still loading still finds the task already registered.
     pause_controller = None
     if task_id:
         from .fill.pause_controller import PauseController
@@ -627,7 +633,9 @@ def fill(
         pause_controller.mark_running()
 
         if algorithm == "repair":
-            warnings.append(f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run")
+            warnings.append(
+                f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run"
+            )
         elif algorithm == "hybrid":
             warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
 
@@ -742,7 +750,10 @@ def fill(
     from .fill.pattern_matcher import PatternMatcher
     from .fill.trie_pattern_matcher import TriePatternMatcher
 
-    # Use trie for beam/repair/hybrid algorithms for better performance
+    # Use trie for beam/repair/hybrid: O(pattern length) lookup vs the regex
+    # matcher's O(list size) scan per query (see trie_pattern_matcher.py); these
+    # algorithms issue many repeated lookups, so run
+    # cli/tests/performance/benchmark_algorithms.py for measured numbers.
     use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
     pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
 
@@ -824,7 +835,10 @@ def fill(
         # Default to classic Autofill for 'regex' and 'trie'
         # Note: Classic autofill doesn't support theme entries
         if theme_entries_dict:
-            warnings.append(f"Theme entries are not supported for the {algorithm} algorithm " "and were IGNORED. Use beam, repair, or hybrid.")
+            warnings.append(
+                f"Theme entries are not supported for the {algorithm} algorithm "
+                "and were IGNORED. Use beam, repair, or hybrid."
+            )
         autofill = Autofill(
             grid,
             word_list,
@@ -1282,13 +1296,10 @@ def pattern(
         if invalid_chars:
             chars = ", ".join(repr(c) for c in invalid_chars)
             pattern_error = (
-                f"Invalid character(s) in pattern: {chars}. "
-                "Patterns may only contain letters A-Z and wildcards '?' or '.'"
+                f"Invalid character(s) in pattern: {chars}. " "Patterns may only contain letters A-Z and wildcards '?' or '.'"
             )
         elif not (3 <= len(normalized_pattern) <= 21):
-            pattern_error = (
-                f"Pattern length {len(normalized_pattern)} is out of range: " "crossword words are 3-21 letters"
-            )
+            pattern_error = f"Pattern length {len(normalized_pattern)} is out of range: " "crossword words are 3-21 letters"
 
     if pattern_error:
         if json_output:
@@ -1663,8 +1674,9 @@ def build_cache(wordlist: str, output: Optional[str]):
     Build binary cache file for fast wordlist loading.
 
     This pre-processes a wordlist file (validates, scores, indexes) and saves
-    the result to a binary .pkl file. Subsequent loads will be faster
-    (measured at up to ~3x for the 44k comprehensive list).
+    the result to a binary .pkl file. Subsequent loads skip re-parsing the
+    source text; this command prints the measured load time, cache-write
+    time, and speedup for your machine and wordlist when it runs.
 
     Example:
         crossword build-cache data/wordlists/comprehensive.txt

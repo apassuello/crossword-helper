@@ -8,9 +8,10 @@ These tests verify that SSE streams follow the EventSource specification:
 - Progressive updates during long operations
 - Error state handling
 
-Context: SSE is used for real-time progress updates during autofill operations
-that can take 30s-5min. These tests ensure the frontend can reliably consume
-the event stream.
+Context: SSE is used for real-time progress updates during autofill operations,
+which can run long (see the 10-1800s timeout bound enforced in
+backend/api/validators.py:validate_fill_request). These tests ensure the
+frontend can reliably consume the event stream regardless of run length.
 """
 
 import json
@@ -220,9 +221,12 @@ class TestSSEProgressiveUpdates:
         """
         Verify SSE sends intermediate updates during autofill, not just start/end.
 
-        For operations >5s, should receive updates every 1-2s.
+        For long-running operations, should receive multiple intermediate progress
+        updates (not just start/end).
         """
-        # Start autofill with small grid (should take ~5-15s)
+        # Start autofill with small grid; timing: `pytest
+        # backend/tests/integration/sse/test_sse_message_format.py::TestSSEProgressiveUpdates::
+        # test_sse_provides_intermediate_updates -v --durations=1 -m slow`
         grid = create_test_grid(11)
         response = client.post(
             "/api/fill/with-progress",

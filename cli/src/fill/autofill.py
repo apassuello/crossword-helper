@@ -1016,9 +1016,9 @@ class Autofill:
         """
         self.iterations += 1
 
-        # Check timeout every iteration (a time.time() call is cheap and slow
-        # grids may only manage a few iterations per second, so a 100-iteration
-        # granularity used to overrun the budget by tens of seconds)
+        # Check timeout every iteration (a time.time() call is cheap; checking only
+        # every 100 iterations let slow-running grids overrun the timeout budget,
+        # since iteration count alone does not track wall-clock time)
         if time.time() - self.start_time > self.timeout:
             raise TimeoutError("Autofill timeout")
 

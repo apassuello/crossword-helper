@@ -1,8 +1,14 @@
 """
 Trie data structure for fast pattern matching in crossword autofill.
 
+Pattern lookup descends the trie by character; with wildcards present it branches
+per wildcard position instead of scanning every word. See find_pattern() below for
+the exact best/typical/worst-case complexity, which depends on wildcard count.
+
 Provides O(m) pattern lookup where m = pattern length, compared to O(n)
-linear search. Particularly effective for large word lists (100k+ words).
+linear search. Lookup cost depends on pattern length, not on how many
+words are stored, so the advantage over linear search grows with word
+list size.
 
 Key optimizations:
 - Length-indexed tries (separate trie per word length)
@@ -280,8 +286,8 @@ class WordTrie:
         Returns:
             Number of matching words
 
-        Note: Slightly faster than len(find_pattern(...)) because
-        it doesn't need to sort or copy results.
+        Note: Implemented as len(find_pattern(pattern, min_score));
+        provided as a convenience wrapper, not a separate fast path.
         """
         results = self.find_pattern(pattern, min_score, max_results=None)
         return len(results)
@@ -297,8 +303,10 @@ class WordTrie:
         Returns:
             True if at least one word matches
 
-        Note: Much faster than count_matches() because it stops after
-        finding the first match.
+        Note: Stops as soon as one match is found (max_results=1 triggers
+        the early-exit check in _search_trie), unlike count_matches()
+        which passes max_results=None and enumerates every match in the
+        subtree.
         """
         results = self.find_pattern(pattern, min_score, max_results=1)
         return len(results) > 0

@@ -582,14 +582,13 @@ class TestResumeCLIInvocationReal:
 
     def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path, monkeypatch):
         # pytest-cov ships a .pth that arms coverage in EVERY Python subprocess
-        # whenever COV_CORE_SOURCE is in the environment. Under the coverage
-        # job that makes the CLI children ~4x slower (measured: this test 11.5s
-        # -> 42.4s on an idle machine), which on a contended runner stretched
-        # the CLI's own startup past this test's deadlines. The children are
-        # spawned here and in CLIAdapter, both inheriting os.environ, so
-        # scrubbing these vars for the test's duration runs them at native
-        # speed. The parent's coverage collection is unaffected: the plugin
-        # collects in-process, and these vars only arm NEW interpreters.
+        # whenever COV_CORE_SOURCE is in the environment. That slows CLI child
+        # processes enough to risk this test's own deadlines on a contended
+        # runner. The children are spawned here and in CLIAdapter, both
+        # inheriting os.environ, so scrubbing these vars for the test's
+        # duration runs them at native speed. The parent's coverage collection
+        # is unaffected: the plugin collects in-process, and these vars only
+        # arm NEW interpreters.
         for key in [k for k in os.environ if k.startswith("COV_CORE")]:
             monkeypatch.delenv(key, raising=False)
 
@@ -652,10 +651,12 @@ class TestResumeCLIInvocationReal:
         def _drain_stderr():
             for line in process.stderr:
                 stderr_lines.append(line)
-                # Emitted from inside the CSP solve loop (autofill.py) — the
-                # only place the pause flag is polled. "starting autofill" is
-                # NOT sufficient: solver setup runs for seconds after it with
-                # no pause checks (on CI, tens of seconds).
+                # Emitted from inside the CSP solve loop (autofill.py), which
+                # is where this test's chosen -a trie algorithm polls the
+                # pause flag; beam search's orchestrator polls its own
+                # pause_controller separately. "starting autofill" is NOT
+                # sufficient: solver setup runs for a while after it with no
+                # pause checks.
                 if "Filling slots" in line:
                     solving.set()
 

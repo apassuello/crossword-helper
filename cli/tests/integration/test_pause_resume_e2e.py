@@ -159,8 +159,11 @@ class TestPauseResumeEndToEnd:
 
 @pytest.mark.slow
 class TestBeamTimeoutEnforcement:
-    """Regression: beam search overran -t by ~7x (checked only between
-    iterations, each of which could take minutes on open grids)."""
+    """Regression: beam search overran -t because the deadline was only
+    checked between iterations, and a single open-grid iteration could run
+    long. Fixed by enforcing the deadline inside the hot paths (orchestrator
+    loop, backtracking, expansion, slot selection, LCV ordering) -- see
+    cli/src/fill/beam_search/orchestrator.py, commit 2ef7d47."""
 
     def _load_words(self):
         words = []

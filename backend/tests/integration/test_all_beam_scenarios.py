@@ -10,8 +10,9 @@ This suite ensures that all combinations of:
 
 ...work correctly without crashes.
 
-Uses a 7x7 grid with standard black square pattern and the `comprehensive` wordlist
-for fast, reliable test execution (~2-20s per test).
+Uses a 7x7 grid with standard black square pattern and the `comprehensive` wordlist for
+fast, reliable test execution. Timings vary by machine; reproduce with:
+`pytest -m slow backend/tests/integration/test_all_beam_scenarios.py::TestCLIAutofillScenarios --durations=0`.
 """
 
 import json
@@ -22,7 +23,7 @@ import tempfile
 
 import pytest
 
-# Realistic 7x7 grid with symmetric black squares (22 slots)
+# Realistic 7x7 grid with symmetric black squares
 STANDARD_GRID_7x7 = {
     "size": 7,
     "grid": [

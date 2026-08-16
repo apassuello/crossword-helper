@@ -27,13 +27,13 @@ def score_word(word: str) -> int:
     Returns:
         Score from 1-100 (higher = more crossword-friendly)
 
-    Examples:
+    Examples (verify with ``python3 -m doctest cli/src/core/scoring.py``):
         >>> score_word('AREA')
-        48  # 4 common (40) + 0 uncommon + length 4 (8) = 48
+        48
         >>> score_word('QUIZ')
-        1   # 1 common (10) + 1 regular (5) + 2 uncommon (-30) + length 4 (8) = -7 → 1
+        1
         >>> score_word('YOGA')
-        33  # 1 common (10) + 3 regular (15) + 0 uncommon + length 4 (8) = 33
+        38
     """
     word = word.upper()
 
@@ -63,7 +63,7 @@ def analyze_letters(word: str) -> dict:
             'regular': count of other letters
         }
 
-    Example:
+    Example (verify with ``python3 -m doctest cli/src/core/scoring.py``):
         >>> analyze_letters('QUIZ')
         {'common': 1, 'uncommon': 2, 'regular': 1}
     """

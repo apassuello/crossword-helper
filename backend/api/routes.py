@@ -74,7 +74,8 @@ def pattern_search():
         data = validate_pattern_request(data)
 
         # Resolve wordlist paths — unknown names are a client error, never a
-        # silent fallback to the CLI's tiny builtin demo list
+        # silent fallback to the CLI's builtin demo list (see the
+        # default_words fallback in cli/src/cli.py's pattern command)
         wordlist_names = data.get("wordlists", ["comprehensive"])
         wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
         if missing:
@@ -166,7 +167,7 @@ def normalize_entry():
         # Validate request
         data = validate_normalize_request(data)
 
-        # Delegate to CLI via adapter (with caching for performance)
+        # Delegate to CLI via adapter
         result = cli_adapter.normalize(data["text"])
 
         # Crossword entries never contain spaces. Some CLI rules (e.g. the
@@ -692,7 +693,8 @@ def verify_words():
                     pattern += "?"
                     has_empty = True
 
-            # Skip slots shorter than 3 (wordlist has no 2-letter words)
+            # Skip slots shorter than 3 — the loader above only keeps
+            # words with 3 <= len(w) <= 21, so a shorter slot can never match
             if len(pattern) < 3:
                 return
 

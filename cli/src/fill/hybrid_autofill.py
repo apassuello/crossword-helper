@@ -77,8 +77,8 @@ class HybridAutofill:
     def _compute_beam_cap(size: int) -> int:
         """Compute beam timeout cap for a given grid size.
 
-        Linear scale: 30s at size 11, +9s per size step, max 120s.
-        Examples: 11→30, 15→66, 19→102, 21→120
+        Linear scale: 30s at size 11, +9s per size step, max 120s (see the
+        formula in the return statement below).
         """
         return min(120, max(30, (size - 11) * 9 + 30))
 

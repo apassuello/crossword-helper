@@ -32,7 +32,7 @@ class TestAdaptiveOnBacktrackIntegration:
         for c in range(11):
             grid.set_black_square(3, c)
             grid.set_black_square(7, c)
-        # This creates 54 crossing 3-letter slots — enough to force backtracking
+        # This creates many crossing 3-letter slots — enough to force backtracking
         # with a limited word list.
 
         words = [

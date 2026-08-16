@@ -324,19 +324,31 @@ class TestThemeWordAPIIntegration:
 class TestThemeEntriesCLICanary:
     """Canary tests for the --theme-entries CLI flag.
 
-    KNOWN BROKEN: The --theme-entries flag does NOT actually preserve theme
-    words during autofill. This test documents the broken behavior so we
-    detect when/if it gets fixed. See CLAUDE.md "Known Issues" section.
+    [BUG] The test below does not currently pass, and its failure is a defect
+    in the test fixture, not in the flag. The fixture builds a 5x5 grid with no
+    black squares and asks --theme-entries to place the 3-letter word CAT at
+    (0,0,across), which is a 5-letter slot. The CLI rejects it correctly:
+
+        Invalid theme entries: Theme entry 'CAT' is 3 letters but the across
+        slot at (0,0) is 5 letters long
+
+    So this class does not currently demonstrate anything about locking either
+    way - the run ends at entry validation, before any locking happens.
+    Reproduce with:
+
+        pytest backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary -m "slow or not slow"
     """
 
     @pytest.mark.slow
     def test_theme_entries_flag_preserves_words(self):
         """Test that --theme-entries preserves 'CAT' at (0,0,across) in a 5x5 grid.
 
-        Previously a canary for a known-broken feature. The test itself was
-        broken: it passed a raw JSON string to --theme-entries, but the CLI
-        expects a file path (click.Path(exists=True)). After fixing the test
-        to use a temp file, the underlying locking works correctly.
+        [BUG] Does not pass. An earlier fix corrected one defect here - the
+        test passed a raw JSON string where the CLI expects a file path
+        (click.Path(exists=True)) - but a second defect remains: the grid
+        below has no black squares, so (0,0,across) is 5 cells wide and the
+        3-letter entry CAT is rejected before locking is reached. The claim
+        that this proves locking works was never demonstrated by this test.
         """
         import os
         import subprocess

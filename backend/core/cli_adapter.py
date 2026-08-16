@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # The CLI's --timeout bounds SOLVER time only. Wall time additionally includes
-# interpreter startup, loading the 44k-word list, building the trie, and (for
-# resume) inflating the gzipped state — a fixed cost that is a couple of
-# seconds on an idle machine but tens of seconds on a loaded one. Subprocess
-# ceilings must cover that, or a healthy fill gets killed under load.
+# interpreter startup, loading the default wordlist (word count: `wc -l
+# data/wordlists/comprehensive.txt`), building the trie, and (for resume)
+# inflating the gzipped state — a fixed cost that grows under system load.
+# Subprocess ceilings must cover that, or a healthy fill gets killed under load.
 CLI_STARTUP_BUDGET_SECONDS = 90
 
 

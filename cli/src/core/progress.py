@@ -38,8 +38,10 @@ class ProgressReporter:
         if not self.enabled:
             return
 
-        # Enforce monotonicity: progress should never decrease
-        # This handles backtracking scenarios where filled slots may temporarily decrease
+        # Enforce monotonicity only for status == "running": clamp to the running maximum
+        # (backtracking may transiently lower the raw progress value passed in).
+        # status == "error" intentionally bypasses this and reports progress 0, which is
+        # not monotonic by design (see error()) and status == "complete" is forced to 100.
         if status == "running":
             progress = max(progress, self.max_progress)
             self.max_progress = progress

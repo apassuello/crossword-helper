@@ -308,7 +308,9 @@ class TestFill:
                         adapter.fill({"size": 15, "grid": []}, ["w.txt"], timeout_seconds=200)
 
         # The subprocess ceiling must exceed the solver budget by the startup
-        # budget (interpreter + 44k wordlist + trie build), not a token 10s.
+        # budget (interpreter start + wordlist load + trie build; see
+        # wc -l data/wordlists/comprehensive.txt for current wordlist size),
+        # not a token 10s.
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["timeout"] == 200 + CLI_STARTUP_BUDGET_SECONDS
 

@@ -74,10 +74,12 @@ def collect_sse_messages(client, task_id):
     NOTE: Flask test client's client.get() on an SSE endpoint blocks
     synchronously until the generator finishes. No sleep needed before calling this.
 
-    Safety: The SSE generator sends heartbeats every 30s if no events arrive.
-    If the fill thread crashes without posting complete/error, the generator
-    loops forever. In practice the fill runner always posts a terminal event,
-    but if a test hangs here, that's the likely cause.
+    Safety: The SSE generator sends a heartbeat whenever the progress queue's
+    get() call times out (see the timeout in stream_progress's generator,
+    backend/api/progress_routes.py). If the fill thread crashes without
+    posting complete/error, the generator loops forever. In practice the
+    fill runner always posts a terminal event, but if a test hangs here,
+    that's the likely cause.
     """
     sse_response = client.get(f"/api/progress/{task_id}")
     messages = []

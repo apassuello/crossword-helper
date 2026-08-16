@@ -112,7 +112,9 @@ class BeamManager(BeamManagementStrategy):
         Returns:
             Expanded beam (potentially beam_width * candidates_per_slot states)
 
-        Complexity: O(beam_width * candidates_per_slot * pattern_match_time)
+        Complexity: O(beam_width * pattern_match_time) for the per-beam pattern_matcher.find()
+                    call, plus O(beam_width * candidates_per_slot * viability_check_time) for
+                    the inner per-candidate loop (state clone + evaluate_viability)
         """
         from ...crosswordese import filter_crosswordese
 
@@ -193,8 +195,10 @@ class BeamManager(BeamManagementStrategy):
                 all_candidates = self.value_ordering.order_values(slot, all_candidates, state)
             # If no value ordering, use candidates as-is
 
-            # STRATIFIED SAMPLING: Each beam gets overlapping slice from shuffled candidates
-            # With 48k+ shuffled candidates, overlapping slices give diversity + coherence
+            # STRATIFIED SAMPLING: Each beam gets an overlapping slice from the shuffled
+            # candidate list. The slice size and count scale with the candidate list size
+            # for the current slot/wordlist, so overlapping slices give diversity + coherence
+            # regardless of how many candidates matched.
             offset = beam_idx * offset_per_beam
             start_idx = offset
             end_idx = offset + candidates_per_slot
@@ -289,7 +293,9 @@ class BeamManager(BeamManagementStrategy):
         Returns:
             Pruned beam (diverse states, up to beam_width)
 
-        Complexity: O(n log n) for sorting + O(nx) for diversity check
+        Complexity: O(n log n) for sorting + O(n * beam_width) for the greedy diversity loop
+                    (each of the n candidates is compared against up to beam_width
+                    already-selected states)
         """
         if len(beam) <= beam_width:
             return beam
@@ -371,7 +377,8 @@ class BeamManager(BeamManagementStrategy):
             slot: Current slot being filled
 
         Returns:
-            Adaptive beam width (3-20)
+            Adaptive beam width, clamped to the bounds enforced by the max(3, min(20, ...))
+            call below
         """
         # Calculate depth
         depth = 1.0 - (len(unfilled_slots) / total_slots)

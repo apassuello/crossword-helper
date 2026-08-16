@@ -50,7 +50,8 @@ class AdaptiveAutofill:
     - Apply best suggestion, resume
 
     Limits:
-    - Max 3 adaptations per autofill session
+    - Adaptation cap defaults to 3 (configurable via the `max_adaptations` option;
+      see `AdaptiveAutofill.__init__`)
     - Only adapt slots with length >= 6
     - Maintain grid quality (word count in range)
     """
@@ -242,7 +243,9 @@ class AdaptiveAutofill:
                 # Can't adapt, return partial result
                 logger.info("Cannot adapt further, returning partial result")
                 result.adaptations_applied = self.adaptation_count
-                result.message = f"Partial fill; no further adaptation possible " f"({self.adaptation_count} adaptation(s) applied)"
+                result.message = (
+                    f"Partial fill; no further adaptation possible " f"({self.adaptation_count} adaptation(s) applied)"
+                )
                 return result
 
         # Budget exhausted (or loop fell through)

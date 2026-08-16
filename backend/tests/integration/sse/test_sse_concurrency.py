@@ -414,7 +414,8 @@ class TestSSELongRunningOperations:
         """
         Verify SSE stream doesn't timeout during long autofill (20s+).
 
-        Some servers timeout idle connections after 30-60s. SSE should either:
+        Idle SSE connections can be dropped by intermediary servers (proxies, load
+        balancers) if the stream produces no output for too long. SSE should either:
         - Send heartbeat/keepalive messages
         - Complete before timeout
         - Handle reconnection gracefully

@@ -17,17 +17,18 @@ class TriePatternMatcher:
     """
     Fast pattern matching using trie data structure.
 
-    Provides same API as PatternMatcher but uses WordTrie instead of regex
-    for significantly faster performance on large word lists.
+    Provides same API as PatternMatcher but uses WordTrie instead of regex,
+    avoiding a full scan of the word list on each query (see Complexity below).
 
-    Performance: trie lookup is O(pattern length) per query and does not scan the
-    word list, where the regex matcher is O(list size). The trie is therefore faster
-    on any non-trivial list, and the gap widens as the list grows.
+    Performance: trie lookup does not scan the word list, where the regex matcher is O(list size). A pattern with no wildcards
+    resolves in O(pattern length): each character follows a single child edge. Each '?' wildcard branches over that node's
+    children instead of following one edge, so runtime for wildcard patterns scales with the number and branching of
+    wildcards (pruned by score thresholds), not pattern length alone. Either way the trie avoids the full-list scan the
+    regex matcher performs.
 
-    No timing figures are quoted here on purpose: earlier versions of this docstring
-    cited measurements against a "454k word list" that this repo does not contain
-    (data/wordlists/comprehensive.txt is ~44k). To get real numbers for your list,
-    run cli/tests/performance/benchmark_algorithms.py.
+    No timing figures are quoted here on purpose: earlier versions of this docstring cited measurements against a
+    "454k word list" that this repo does not contain (run `wc -l data/wordlists/comprehensive.txt` to check the actual
+    count). To get real timing numbers for your list, run cli/tests/performance/benchmark_algorithms.py.
 
     Supports wildcards:
     - '?' matches any single letter
