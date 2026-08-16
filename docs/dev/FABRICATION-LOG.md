@@ -160,6 +160,7 @@ like any other:
 ## 8. Changelog
 
 - 1.1.0 (2026-08-16) — full sweep of `cli/` + `backend/` Python comments and docstrings;
-  22 false claims corrected, 85 unreproducible figures rewritten, 47 left alone; three defects
-  recorded as `[BUG]`.
+  22 false claims corrected, 85 unreproducible figures rewritten, 47 left alone. Two defects
+  recorded as open `[BUG]` (`pause_controller` rate limit, `state_evaluator` score ranges). A
+  third, the `--theme-entries` canary, was fixed the same day and is recorded as `[SPEC]`.
 - 1.0.0 (2026-08-15) — created during the docs-overhaul audit; 4 sites fixed, backlog recorded.
