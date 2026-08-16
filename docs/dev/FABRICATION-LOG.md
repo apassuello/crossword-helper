@@ -1,6 +1,6 @@
 # Fabrication Log
 
-**Version 1.1.0** · docs-overhaul audit 2026-08-15 · source sweep 2026-08-16
+**Version 1.2.0** · docs-overhaul audit 2026-08-15 · source sweep 2026-08-16
 
 ---
 
@@ -75,26 +75,40 @@ claims to verify, not as ground truth.
 - 37 files were modified. The change is comment- and docstring-only; verified mechanically by
   parsing each file before and after, stripping docstring nodes, and comparing the ASTs.
 
-**[SPEC] Findings that are code defects, not prose defects.** Both were verified first-hand,
-not taken from the audit's report. Neither was fixed by this sweep — the sweep changed comments
-only — and both are recorded here as open:
+**[SPEC] Findings that looked like code defects, not prose defects.** Both were verified
+first-hand, not taken from the audit's report. The sweep itself changed comments only; both were
+resolved afterwards, one as a code fix and one as a documentation correction:
 
-- **[BUG] `cli/src/fill/pause_controller.py`** — the documented 100 ms rate limit on pause checks
-  is never applied. `should_pause()` calls `self.pause_file.exists()` unconditionally at the top;
-  the interval block below it runs only in the not-paused branch and returns `False` either way,
-  so it gates nothing. `_check_interval` is dead. The solver calls this in its inner loop, so it
-  makes one filesystem `stat()` per iteration rather than at most ten per second.
-- **[BUG] `cli/src/fill/beam_search/evaluation/state_evaluator.py`** — the documented score ranges
-  are wrong in both directions. `word_score` is documented `1-100`; computed scores are clamped to
+- **[FIXED] `cli/src/fill/pause_controller.py`** — the documented 100 ms rate limit on pause checks
+  was never applied. `should_pause()` called `self.pause_file.exists()` unconditionally at the top;
+  the interval block below it ran only in the not-paused branch and returned `False` either way,
+  so it gated nothing. The solver calls this in its inner loop, so it made one filesystem `stat()`
+  per iteration rather than at most ten per second. Now rate limited with a cached result, and the
+  local mutators invalidate the cache so a self-requested pause is still seen immediately. A pause
+  requested by another process is observed within the interval. `test_pause_controller_rate_limiting`
+  counted 101 stats before the fix and 1 after; it previously asserted only
+  `isinstance(result, bool)`, which is why the dead code survived.
+- **[SPEC] `cli/src/fill/beam_search/evaluation/state_evaluator.py`** — the documented score ranges
+  were wrong in both directions; the *documentation* was the defect and has been corrected, and no
+  behavior was changed. `word_score` was documented `1-100`; computed scores are clamped to
   `[1, 150]` (`word_list.py`) and file-supplied scores are used unclamped, so values above 100 and
   equal to 0 both occur. Reproduce the upper end with:
 
       python3 -c "import sys; sys.path.insert(0,'cli/src'); from fill.word_list import WordList; print(WordList()._score_word('RELATIONSHIPS'))"
 
-  which prints `121`. `compute_score` is documented `0.0-100.0` and applies no clamp, so it
-  inherits the overflow. Separately, `risk_penalty` is documented as a multiplier in `[0.70, 1.0]`
+  which prints `121`. `compute_score` was documented `0.0-100.0` and applies no clamp, so it
+  inherits the overflow. Separately, `risk_penalty` was documented as a multiplier in `[0.70, 1.0]`
   but is applied once per risky slot without reset, so it compounds — two severe-risk slots give
   0.49.
+
+  Neither was changed in code, deliberately. The compounding penalty is the evident intent: more
+  risky slots should mean a worse multiplier. And `compute_score`'s result is only ever used to
+  rank beam states against each other (`beam/manager.py` assigns it to `state.score`); nothing
+  compares it to 100 or renders it as a percentage, so the overflow shifts relative ordering
+  rather than producing a wrong answer. Clamping `word_score` to restore an exact 70/30 blend
+  would retune the solver, which needs a fill-quality benchmark to evaluate — there is no test
+  that would catch a regression in fill quality. **[?]** Whether the nominal 70/30 weighting is
+  the intended one is an open tuning question, not a defect.
 
 **[SPEC] `backend/tests/integration/test_theme_priority.py`** — `TestThemeEntriesCLICanary`
 carried a `KNOWN BROKEN` note claiming `--theme-entries` does not preserve theme words. The flag
@@ -159,8 +173,11 @@ like any other:
 
 ## 8. Changelog
 
+- 1.2.0 (2026-08-16) — all three defects found by the 1.1.0 sweep closed. `pause_controller`'s
+  dead rate limit fixed in code with a test that counts filesystem calls; the `--theme-entries`
+  canary fixture fixed; `state_evaluator`'s score ranges resolved as a documentation defect with
+  no behavior change, leaving the 70/30 weighting open as a tuning question. No open `[BUG]`
+  remains in this file.
 - 1.1.0 (2026-08-16) — full sweep of `cli/` + `backend/` Python comments and docstrings;
-  22 false claims corrected, 85 unreproducible figures rewritten, 47 left alone. Two defects
-  recorded as open `[BUG]` (`pause_controller` rate limit, `state_evaluator` score ranges). A
-  third, the `--theme-entries` canary, was fixed the same day and is recorded as `[SPEC]`.
+  22 false claims corrected, 85 unreproducible figures rewritten, 47 left alone.
 - 1.0.0 (2026-08-15) — created during the docs-overhaul audit; 4 sites fixed, backlog recorded.

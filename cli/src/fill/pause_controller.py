@@ -41,33 +41,38 @@ class PauseController:
         self.pause_file = self.pause_dir / f"crossword_pause_{task_id}.flag"
         self.running_file = self.pause_dir / f"crossword_running_{task_id}.pid"
         self._last_check_time = 0.0
-        self._check_interval = 0.1  # NOTE: not currently enforced -- should_pause() calls
-        # pause_file.exists() unconditionally on every call; this interval has no effect.
+        self._check_interval = 0.1
+        self._last_result = False
+
+    def _invalidate_check_cache(self) -> None:
+        """Force the next should_pause() to hit the filesystem.
+
+        Called by the local mutators. A pause requested by *another* process is
+        picked up within _check_interval instead; this only shortcuts the case
+        where the same object just changed the flag itself.
+        """
+        self._last_check_time = 0.0
 
     def should_pause(self) -> bool:
         """
         Check if pause has been requested.
 
-        NOTE: rate-limiting fields (_last_check_time, _check_interval) are tracked but
-        not enforced -- pause_file.exists() is called unconditionally on every call.
+        Called from solver inner loops, so the filesystem check is rate limited
+        to once per _check_interval (0.1s) and the result is cached in between.
+        A pause requested by another process is therefore observed within
+        _check_interval, not instantly. Callers needing the current on-disk
+        state with no caching should use is_paused().
 
         Returns:
             True if pause requested, False otherwise
         """
-        # Check for pause flag file
-        paused = self.pause_file.exists()
+        now = time.monotonic()
+        if self._last_check_time and now - self._last_check_time < self._check_interval:
+            return self._last_result
 
-        # If paused, always return True immediately
-        if paused:
-            return True
-
-        # If not paused, apply rate limiting to avoid excessive checks
-        current_time = time.time()
-        if current_time - self._last_check_time < self._check_interval:
-            return False
-
-        self._last_check_time = current_time
-        return False  # No pause flag exists
+        self._last_check_time = now
+        self._last_result = self.pause_file.exists()
+        return self._last_result
 
     def request_pause(self) -> None:
         """
@@ -77,6 +82,7 @@ class PauseController:
         Creates a flag file that CLI will detect.
         """
         self.pause_file.touch()
+        self._invalidate_check_cache()
 
     def clear_pause(self) -> None:
         """
@@ -90,6 +96,7 @@ class PauseController:
             except FileNotFoundError:
                 # Already deleted, that's fine
                 pass
+        self._invalidate_check_cache()
 
     def cleanup(self) -> None:
         """
