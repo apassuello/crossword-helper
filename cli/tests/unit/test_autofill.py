@@ -560,3 +560,58 @@ class TestAutofillIntegration:
         assert grid.get_cell(0, 0) == "C"
         assert grid.get_cell(0, 1) == "A"
         assert grid.get_cell(0, 2) == "T"
+
+
+class TestResumeUnwinding:
+    """
+    Cover the dead-end recovery path (issue #9).
+
+    `_unwind_dead_ends` and `_strip_words_around_constrained_slots` had no
+    caller and no test after the bench<->main merge dropped main's resume loop.
+    `_resume_fill` now falls back to `_resume_by_unwinding`, so they are live
+    again — these are their first direct tests.
+    """
+
+    @pytest.fixture
+    def tiny_word_list(self):
+        """Only 3-letter words, so any longer slot is unfillable by construction."""
+        return WordList(["CAT", "COT", "CUT", "DOG", "DOT"])
+
+    def test_unwind_strips_a_word_that_makes_a_crossing_slot_unfillable(self, tiny_word_list):
+        # A bare cross: a 3-long across slot over a 4-long down slot, everything
+        # else black. `_unwind_dead_ends` only strips slots that are COMPLETELY
+        # filled, so the offending word has to be a whole slot, not three
+        # letters inside a longer one.
+        grid = Grid(11)
+        cross = {(0, 0), (0, 1), (0, 2), (1, 0), (2, 0), (3, 0)}
+        for r in range(11):
+            for c in range(11):
+                if (r, c) not in cross:
+                    # enforce_symmetry defaults True: blacking (10,10) would also
+                    # black (0,0) and quietly destroy the slot under test.
+                    grid.set_black_square(r, c, enforce_symmetry=False)
+
+        # CAT across leaves the down slot needing "C???" — the word list has no
+        # 4-letter words at all, so that domain is empty and the position is dead.
+        grid.place_word("CAT", 0, 0, "across")
+        autofill = Autofill(grid, tiny_word_list, timeout=5)
+
+        removed = autofill._unwind_dead_ends()
+
+        assert removed >= 1, "a dead-end position should have had at least one word stripped"
+        assert "?" in grid.get_pattern_for_slot(
+            {"row": 0, "col": 0, "length": 3, "direction": "across"}
+        ), "the offending word should be gone from the grid"
+
+    def test_unwind_is_a_no_op_on_a_grid_with_no_dead_end(self, tiny_word_list):
+        # Control: without this, the test above would pass even if
+        # _unwind_dead_ends stripped indiscriminately.
+        grid = Grid(11)
+        for r in range(11):
+            for c in range(11):
+                if not (r == 0 and c < 3):
+                    grid.set_black_square(r, c, enforce_symmetry=False)
+        # Only one 3-long across slot remains, and it is empty and fillable.
+        autofill = Autofill(grid, tiny_word_list, timeout=5)
+
+        assert autofill._unwind_dead_ends() == 0

@@ -715,20 +715,10 @@ class TestResumeCLIInvocationReal:
             # The resume really ran with the given wordlist (the old broken
             # resume path ran with an EMPTY wordlist and finished in 0.00s)
             assert resume_result["wordlists"] == [str(wordlist)]
-            # Known limitation, issue #9: _resume_fill does exact-position
-            # continuation only. A partial assignment that was already
-            # contradictory when the pause landed stays doomed, so the resumed
-            # run returns without doing work. Pre-existing on
-            # feature/m1-constructors-bench, not merge-caused. The assertion
-            # below is correct and must not be weakened; xfailing just this one
-            # keeps every contract assertion above it live, and it self-clears
-            # once _unwind_dead_ends is wired into _resume_fill.
-            if resume_result["time_elapsed"] <= 0.5:
-                pytest.xfail(
-                    "issue #9: exact-position resume makes no progress on an "
-                    "already-doomed branch (time_elapsed="
-                    f"{resume_result['time_elapsed']})"
-                )
+            # A doomed restored branch used to return here in ~0.02s having
+            # done nothing (issue #9); _resume_fill now falls back to
+            # _resume_by_unwinding, so the resumed run does real search either
+            # way. This assertion is what caught that and must not be weakened.
             assert resume_result["time_elapsed"] > 0.5
             # Note: slots_filled may be above OR below the paused count —
             # resumed CSP search legitimately backtracks — so only sanity

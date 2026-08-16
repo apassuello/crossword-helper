@@ -200,18 +200,17 @@ from its own directory; otherwise the value is a bare task id looked up in
 `<id>`, `<id>.json` and `<id>.json.gz` are all accepted. `-w` wins for
 wordlists, falling back to the paths recorded in the saved state.
 
-**[NOTE] Known limitation — exact-position resume does not make progress**
-when the saved partial assignment was already a dead end: the run returns
-immediately with `success: false` and no additional slots filled. `_resume_fill`
-continues from the saved position and does not unwind a contradictory
-assignment, so a branch that was doomed when the pause landed stays doomed.
-Measured on `feature/m1-constructors-bench` alone before the merge — same
-result — so it predates the merge. Tracked as
-[issue #9](https://github.com/apassuello/crossword-helper/issues/9); the fix is
-to wire `_unwind_dead_ends` into `_resume_fill`. Pinned by
+**[SPEC] Resume continues from the saved position, and falls back when that
+position is a dead end.** `fill --resume` first continues the CSP search from
+`current_slot_index` into the saved slot order — exact-position continuation.
+If the saved partial assignment was already contradictory when the pause
+landed, that search fails without filling a single additional slot; the resume
+then strips the dead-end assignments and re-searches the restored grid, which
+gives up the saved position in exchange for making progress. A pause or a
+timeout is not a dead end and does not trigger the fallback. Pinned by
 `backend/tests/integration/test_cli_integration.py::TestResumeCLIInvocationReal::test_pause_then_fill_with_resume`
-(`time_elapsed > 0.5`), whose guard is `xfail`ed on that assertion alone until
-#9 closes.
+(`time_elapsed > 0.5`), the guard that caught the no-progress case
+([issue #9](https://github.com/apassuello/crossword-helper/issues/9)).
 
 **[SPEC] Verified JSON result fields** (stdout, `--json-output`):
 `success`, `grid`, `slots_filled`, `total_slots`, `fill_percentage`,

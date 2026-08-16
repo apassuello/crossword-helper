@@ -233,11 +233,13 @@ class Autofill:
         search from the saved position — `current_slot_index` into the restored
         MCV-sorted slot order — with the filled cells as constraints.
 
-        Note: this is exact-position continuation. It does not unwind a
-        contradictory partial assignment; the recursion stack above the saved
-        frame is not serialized, so a branch that was already doomed when the
-        pause landed stays doomed. See `_unwind_dead_ends` below, which
-        implements that recovery but is not currently wired into this path.
+        Exact-position continuation is tried first and cannot, on its own,
+        unwind a contradictory partial assignment: the recursion stack above the
+        saved frame is not serialized, so a branch that was already doomed when
+        the pause landed stays doomed. When that happens — the search fails
+        without filling a single additional slot — this falls back to
+        `_resume_by_unwinding`, which strips the dead-end assignments and
+        re-searches, trading the saved position for the ability to progress.
 
         Args:
             resume_state: Saved CSP state
@@ -267,7 +269,10 @@ class Autofill:
         # into this same sorted order either way.
         slots_list = [self.slot_list[entry] if isinstance(entry, int) else entry for entry in resume_state.slots_sorted]
 
+        empty_before = len(self.grid.get_empty_slots())
+
         was_paused = False
+        timed_out = False
         try:
             if use_mac:
                 success = self._backtrack_with_mac(slots_list, resume_state.current_slot_index, task_id)
@@ -275,9 +280,21 @@ class Autofill:
                 success = self._backtrack(slots_list, resume_state.current_slot_index)
         except TimeoutError:
             success = False
+            timed_out = True
         except PausedException:
             success = False
             was_paused = True
+
+        # Issue #9. Exact-position continuation cannot unwind an assignment that
+        # was already contradictory when the pause landed, so a doomed branch
+        # returns almost instantly having filled nothing. Detect precisely that
+        # — failed, and not one additional slot filled — and fall back to the
+        # unwind-and-re-search path below. A pause and a timeout are both
+        # legitimate non-completions rather than dead ends, so neither triggers
+        # the fallback: pausing again would discard the user's stop, and there is
+        # no budget left to re-search after a timeout.
+        if not success and not was_paused and not timed_out and len(self.grid.get_empty_slots()) >= empty_before:
+            success, was_paused = self._resume_by_unwinding(task_id, use_mac)
 
         time_elapsed = time.time() - self.start_time
 
@@ -296,6 +313,64 @@ class Autofill:
             paused=was_paused,
             state_path=str(self.paused_state_path) if was_paused and getattr(self, "paused_state_path", None) else None,
         )
+
+    def _resume_by_unwinding(self, task_id: Optional[str], use_mac: bool) -> Tuple[bool, bool]:
+        """
+        Recover a resume whose restored position was already a dead end.
+
+        Strips the assignments that left some remaining slot with zero
+        candidates, then re-searches the restored grid: rebuild the CSP over the
+        current empty slots, re-sort them by constraint, and backtrack from the
+        start. On an UNSAT position it strips the words crossing the most
+        constrained slots and retries. Each round removes at least one restored
+        word, so the loop terminates — degenerating to a fresh fill once
+        everything strippable is gone.
+
+        This deliberately abandons `current_slot_index`. The unwind changes which
+        slots are empty, so the saved index no longer denotes the same place in
+        the search. Position is worth less than progress here, because the only
+        caller reaches this path after the saved position produced none.
+
+        Args:
+            task_id: Task ID for continuing pause/resume
+            use_mac: Whether to use MAC algorithm
+
+        Returns:
+            (success, was_paused)
+        """
+        self._unwind_dead_ends()
+
+        while True:
+            slots = self.grid.get_empty_slots()
+            if not slots:
+                return True, False
+
+            self._initialize_csp(slots)
+            if self._ac3():
+                slots = self._sort_slots_by_constraint(slots)
+                self.slots_sorted = slots
+
+                try:
+                    if use_mac:
+                        success = self._backtrack_with_mac(slots, 0, task_id)
+                    else:
+                        success = self._backtrack(slots, 0)
+                except TimeoutError:
+                    return False, False
+                except PausedException:
+                    return False, True
+
+                if success:
+                    return True, False
+
+            # Out of time — report the partial result honestly rather than
+            # starting another strip-and-retry round we cannot finish.
+            if time.time() - self.start_time > self.timeout:
+                return False, False
+
+            # UNSAT position: strip filled words crossing the tightest slots.
+            if not self._strip_words_around_constrained_slots():
+                return False, False  # Nothing strippable left
 
     def _unwind_dead_ends(self, max_rounds: int = 10) -> int:
         """
@@ -320,16 +395,21 @@ class Autofill:
                 break
 
             # Build the CSP over the current empty slots and run arc
-            # consistency: if it passes, the position is searchable
+            # consistency to prune the domains.
             self._initialize_csp(empty_slots)
-            if self._ac3():
-                break
+            self._ac3()
 
-            # AC-3 wiped out at least one domain — those slots are dead
+            # An empty domain is the dead-end signal, whatever AC-3 returned.
+            # Do NOT early-exit on `_ac3()` being True: it reports whether a
+            # domain *became* empty during revision, so a slot whose domain was
+            # already empty at initialization leaves nothing to revise and comes
+            # back "consistent". A position where every domain is empty is the
+            # most dead a position can be, and that is exactly the case the old
+            # early-exit skipped.
             dead_slots = [slot for idx, slot in enumerate(empty_slots) if len(self.domains.get(idx, set())) == 0]
 
             if not dead_slots:
-                break
+                break  # Every remaining slot has candidates — searchable
 
             # Strip filled words crossing each dead slot
             stripped_this_round = False
