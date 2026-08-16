@@ -10,7 +10,6 @@ without being added to the spec, CI fails.
 
 import re
 
-import pytest
 import yaml
 
 from backend.app import create_app
@@ -41,12 +40,7 @@ def _spec_paths():
 
 
 def test_openapi_documents_every_live_route():
-    """Every live /api route must appear in openapi.yaml.
-
-    NOTE: expected to fail until openapi.yaml is completed - it is missing 10
-    endpoints as of the 2026-08 audit. Remove the xfail marker in the same
-    commit that fixes the spec.
-    """
+    """Every live /api route must appear in openapi.yaml."""
     missing = sorted(_live_api_paths() - _spec_paths())
     assert not missing, "Routes live in Flask but absent from openapi.yaml:\n  " + "\n  ".join(missing)
 
@@ -55,12 +49,3 @@ def test_openapi_documents_no_dead_routes():
     """Every documented path must correspond to a real route."""
     dead = sorted(_spec_paths() - _live_api_paths())
     assert not dead, "Paths in openapi.yaml with no matching Flask route:\n  " + "\n  ".join(dead)
-
-
-# Applied after definition so the failure message above stays readable.
-# strict=True is deliberate: once the spec is fixed this XPASSes, which FAILS,
-# forcing removal of the marker rather than letting the guard quietly lapse.
-test_openapi_documents_every_live_route = pytest.mark.xfail(
-    reason="openapi.yaml is missing endpoints; see docs/dev/FABRICATION-LOG.md",
-    strict=True,
-)(test_openapi_documents_every_live_route)
