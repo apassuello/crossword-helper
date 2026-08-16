@@ -655,12 +655,13 @@ exiting `0` on an unsuccessful fill is the intended contract — see **Exit
 codes** above — and a sub-10-second `--timeout` now produces a normal CLI error
 instead of a traceback.
 
-**[BUG] `backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary`
-does not pass.** The defect is in the test fixture, not in `--theme-entries`:
-it asks the flag to place the 3-letter entry `CAT` at `(0,0,across)` of a 5x5
-grid with no black squares, which is a 5-letter slot. The CLI rejects it
-correctly. The test is `slow`-marked, so `pytest` deselects it by default and
-CI has never run it.
+**[SPEC] `--theme-entries` preserves theme words.** A `slow`-marked canary
+(`backend/tests/integration/test_theme_priority.py::TestThemeEntriesCLICanary`)
+long asserted the opposite; its fixture asked the flag to place a 3-letter
+entry into a 5-letter slot, so the CLI rejected the entry and the run ended
+before locking. Fixed and confirmed to discriminate — with the flag the fill
+preserves the entry, without it the solver overwrites the cells. Note that
+each entry's length must match its slot exactly, or `fill` errors and exits `1`.
 
 **[?]** Whether `pause`/`list-states`/`resume` behave correctly for tasks
 started via the *backend* (as opposed to a bare `crossword fill --task-id`
