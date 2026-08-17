@@ -167,9 +167,12 @@ class HybridAutofill:
                 f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)",
             )
 
-        # Use beam result grid as starting point
+        # Use beam result grid as starting point. Clone: IterativeRepair mutates
+        # its grid in place (restart paths + final best-grid writeback), and
+        # beam_result.grid must stay intact in case the caller's best-of compare
+        # below picks the beam result over the repair result.
         repair = IterativeRepair(
-            beam_result.grid,  # Start from beam output
+            beam_result.grid.clone(),  # Start from beam output
             self.word_list,
             self.pattern_matcher,
             min_score=self.min_score,

@@ -9,6 +9,7 @@ import pytest
 from src.core.grid import Grid
 from src.fill.beam_search_autofill import BeamSearchAutofill
 from src.fill.hybrid_autofill import HybridAutofill
+from src.fill.iterative_repair import IterativeRepair
 from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.word_list import WordList
 
@@ -209,6 +210,81 @@ class TestHybridIntegration:
 
         # Check for duplicates
         assert len(words_in_grid) == len(set(words_in_grid)), f"Found duplicate words: {words_in_grid}"
+
+    def test_repair_receives_cloned_grid_not_beam_grid(self, small_grid, word_list, pattern_matcher_trie, monkeypatch):
+        """Phase 2 (IterativeRepair) must be handed an independently-owned clone of the
+        phase-1 beam grid, not the beam grid object itself.
+
+        `small_grid` (11x11, one black square) against the tiny fixture word list can't be
+        completed by beam search alone, so phase 2 is guaranteed to run.
+
+        Intercepts the boundary two ways, since `beam_result` is never exposed by
+        `HybridAutofill.fill()`:
+        - wraps `BeamSearchAutofill.fill` to capture the `FillResult.grid` phase 1 produced
+          (and a snapshot of its cells taken right after phase 1 finishes)
+        - wraps `IterativeRepair.__init__` to capture the grid object phase 2 receives
+
+        If phase 2 is holding the same object beam search returned, mutating it in place
+        (as `IterativeRepair.fill` does) changes `beam_grid.cells` out from under phase 1's
+        result -- exactly the aliasing bug in #13.
+        """
+        captured = {}
+
+        original_beam_fill = BeamSearchAutofill.fill
+
+        def capturing_beam_fill(self, *args, **kwargs):
+            result = original_beam_fill(self, *args, **kwargs)
+            captured["beam_grid"] = result.grid
+            captured["beam_cells_snapshot"] = result.grid.cells.copy()
+            return result
+
+        monkeypatch.setattr(BeamSearchAutofill, "fill", capturing_beam_fill)
+
+        original_repair_init = IterativeRepair.__init__
+
+        def capturing_repair_init(self, grid_arg, *args, **kwargs):
+            captured["repair_grid"] = grid_arg
+            original_repair_init(self, grid_arg, *args, **kwargs)
+
+        monkeypatch.setattr(IterativeRepair, "__init__", capturing_repair_init)
+
+        hybrid = HybridAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_trie,
+            beam_width=2,
+            max_repair_iterations=50,
+        )
+        hybrid.fill(timeout=30)
+
+        assert "beam_grid" in captured, "beam search never ran -- test setup invalid"
+        assert "repair_grid" in captured, "phase 2 (repair) never ran -- test setup invalid, beam must have succeeded outright"
+
+        assert captured["repair_grid"] is not captured["beam_grid"], (
+            "IterativeRepair received the SAME grid object BeamSearchAutofill returned; "
+            "phase 2 must receive an independently-owned clone (see Grid.clone())"
+        )
+        assert (captured["beam_grid"].cells == captured["beam_cells_snapshot"]).all(), (
+            "beam_result.grid was mutated by phase 2 -- the grid handed to IterativeRepair "
+            "aliases the beam-phase grid instead of being an independent clone"
+        )
+
+    def test_fill_result_slots_filled_matches_grid_state(self, small_grid, word_list, pattern_matcher_trie):
+        """Self-consistency guard: `slots_filled` must agree with what the returned grid
+        actually contains, i.e. it can't be a stale count from a phase whose grid was later
+        mutated by the other phase (the aliasing bug this task fixes).
+        """
+        hybrid = HybridAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_trie,
+            beam_width=2,
+            max_repair_iterations=50,
+        )
+
+        result = hybrid.fill(timeout=30)
+
+        assert result.slots_filled == len(result.grid.get_word_slots()) - len(result.grid.get_empty_slots())
 
     def test_hybrid_vs_beam_alone(self, word_list, pattern_matcher_trie):
         """Test that hybrid performs at least as well as beam alone."""
