@@ -106,26 +106,15 @@ class GridValidator:
     @staticmethod
     def validate_structural(grid: Grid) -> Tuple[bool, List[str]]:
         """Connectivity + short-word(<3) only. Excludes symmetry + black% (owned elsewhere).
-        Uses _scan_short_words (fresh run-length walk). _check_minimum_word_length is the
-        other implementation of the same rule, reached from the full NYT check above; the
-        two emit different message formats."""
+        Short-word detection routes through _check_minimum_word_length -- the single
+        implementation of the min-word-length rule (see #10). There is no separate
+        run-length walker; both call paths share the same messages and the same
+        underlying Grid.enumerate_white_runs() walk."""
         errors = []
         if not GridValidator._check_connectivity(grid):
             errors.append("Grid has isolated white square regions")
-        errors.extend(GridValidator._scan_short_words(grid))
+        errors.extend(GridValidator._check_minimum_word_length(grid))
         return (len(errors) == 0, errors)
-
-    @staticmethod
-    def _scan_short_words(grid: Grid) -> List[str]:
-        """White runs of length 1-2 (across + down). Consumes Grid.enumerate_white_runs()
-        (SHARED with get_word_slots — no independent walker), filters 1<=length<=2.
-        Returns human strings, e.g. '2-letter across word at (r,c)'."""
-        return [
-            f"{n}-letter {d} word at ({r},{c})"
-            for (cells, n, d) in grid.enumerate_white_runs()
-            if 1 <= n <= 2
-            for (r, c) in [cells[0]]
-        ]
 
     @staticmethod
     def _check_minimum_word_length(grid: Grid) -> List[str]:

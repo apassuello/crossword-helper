@@ -2,6 +2,7 @@
 Unit tests for GridValidator class.
 """
 
+import pytest
 from src.core.grid import Grid
 from src.core.validator import GridValidator
 
@@ -299,7 +300,8 @@ class TestGridStats:
 
 
 class TestValidateStructural:
-    """Test validate_structural: connectivity + independent short-word scan (D1:C)."""
+    """Test validate_structural: connectivity + short-word(<3) via _check_minimum_word_length
+    (the single implementation of the min-word-length rule; see D1:C / #10)."""
 
     def test_isolated_region_reported(self):
         grid = Grid(11)
@@ -312,12 +314,24 @@ class TestValidateStructural:
         ok, errors = GridValidator.validate_structural(Grid(11))
         assert ok is True and errors == []
 
-    def test_short_word_reported(self):  # now REAL (not xfail) — _scan_short_words bypasses the filter
+    def test_short_word_reported(self):  # loose match: satisfied by either message format
         grid = Grid(11)
         grid.set_black_square(0, 2, enforce_symmetry=False)
         grid.set_black_square(0, 3, enforce_symmetry=False)  # 2-letter across run at (0,0)-(0,1)
         ok, errors = GridValidator.validate_structural(grid)
         assert ok is False and any("2" in e and "across" in e.lower() for e in errors)
+
+    def test_short_word_uses_check_minimum_word_length_format(self):
+        """validate_structural must route through _check_minimum_word_length, not a
+        separate run-length walker — its error strings match that function's exact
+        format ("Across word at (0, 0) is only 2 letters (minimum is 3)"), not the
+        deleted _scan_short_words format ("2-letter across word at (0,0)")."""
+        grid = Grid(11)
+        grid.set_black_square(0, 2, enforce_symmetry=False)
+        grid.set_black_square(0, 3, enforce_symmetry=False)  # 2-letter across run at (0,0)-(0,1)
+        ok, errors = GridValidator.validate_structural(grid)
+        assert ok is False
+        assert "Across word at (0, 0) is only 2 letters (minimum is 3)" in errors
 
 
 class TestGetWordSlotsUnchangedByRunEnumeratorRefactor:
@@ -404,3 +418,92 @@ class TestGetWordSlotsUnchangedByRunEnumeratorRefactor:
         for col in range(11):
             grid.set_black_square(5, col, enforce_symmetry=False)
         assert grid.get_word_slots() == self._expected_slots(grid)
+
+
+def _all_black(size: int) -> Grid:
+    """A grid with every cell black — zero white squares."""
+    grid = Grid(size, validate_size=False)
+    for row in range(size):
+        for col in range(size):
+            grid.set_black_square(row, col, enforce_symmetry=False)
+    return grid
+
+
+def _single_white_cell(size: int, row: int, col: int) -> Grid:
+    """Every cell black except (row, col) — a length-1 run in both directions."""
+    grid = Grid(size, validate_size=False)
+    for r in range(size):
+        for c in range(size):
+            if (r, c) != (row, col):
+                grid.set_black_square(r, c, enforce_symmetry=False)
+    return grid
+
+
+def _black_row(size: int, row: int) -> Grid:
+    """An otherwise-empty grid with one full black row."""
+    grid = Grid(size)
+    for col in range(size):
+        grid.set_black_square(row, col, enforce_symmetry=False)
+    return grid
+
+
+def _black_col(size: int, col: int) -> Grid:
+    """An otherwise-empty grid with one full black column."""
+    grid = Grid(size)
+    for row in range(size):
+        grid.set_black_square(row, col, enforce_symmetry=False)
+    return grid
+
+
+def _short_words_from_runs(grid: Grid) -> list:
+    """Short (length 1-2) words as found by Grid.enumerate_white_runs() — the walker
+    _scan_short_words used before its deletion."""
+    return sorted(
+        (direction, r, c, n) for (cells, n, direction) in grid.enumerate_white_runs() if 1 <= n <= 2 for (r, c) in [cells[0]]
+    )
+
+
+def _short_words_from_slots(grid: Grid) -> list:
+    """Short (length 1-2) words as found by Grid.get_word_slots(min_length=1) — the
+    walker _check_minimum_word_length uses (the surviving implementation)."""
+    return sorted(
+        (slot["direction"], slot["row"], slot["col"], slot["length"])
+        for slot in grid.get_word_slots(min_length=1)
+        if slot["length"] < 3
+    )
+
+
+class TestShortWordWalkerEquivalence:
+    """Equivalence gate for #10: enumerate_white_runs() and get_word_slots(min_length=1)
+    must identify the exact same set of short (<3 letter) words on every grid, including
+    degenerate ones. This is what licenses deleting _scan_short_words in favour of routing
+    validate_structural through _check_minimum_word_length alone — it stays in the suite
+    permanently to catch any future divergence between the two call paths.
+
+    Grids use validate_size=False for non-standard sizes, matching how grid_routes.py:231
+    builds structural-check grids in production (Grid.from_dict(..., strict_size=False))."""
+
+    @pytest.mark.parametrize(
+        "grid",
+        [
+            pytest.param(_all_black(5), id="all_black"),
+            pytest.param(_all_black(11), id="zero_white_squares_standard_size"),
+            pytest.param(Grid(11), id="all_white"),
+            pytest.param(_single_white_cell(5, 0, 0), id="single_cell_top_left_corner"),
+            pytest.param(_single_white_cell(5, 0, 4), id="single_cell_top_right_corner"),
+            pytest.param(_single_white_cell(5, 4, 0), id="single_cell_bottom_left_corner"),
+            pytest.param(_single_white_cell(5, 4, 4), id="single_cell_bottom_right_corner"),
+            pytest.param(_single_white_cell(5, 0, 2), id="single_cell_top_edge"),
+            pytest.param(_single_white_cell(5, 4, 2), id="single_cell_bottom_edge"),
+            pytest.param(_single_white_cell(5, 2, 0), id="single_cell_left_edge"),
+            pytest.param(_single_white_cell(5, 2, 4), id="single_cell_right_edge"),
+            pytest.param(_black_row(11, 0), id="full_black_row_top"),
+            pytest.param(_black_row(11, 5), id="full_black_row_middle"),
+            pytest.param(_black_row(11, 10), id="full_black_row_bottom"),
+            pytest.param(_black_col(11, 0), id="full_black_col_left"),
+            pytest.param(_black_col(11, 5), id="full_black_col_middle"),
+            pytest.param(_black_col(11, 10), id="full_black_col_right"),
+        ],
+    )
+    def test_walkers_agree_on_short_words(self, grid):
+        assert _short_words_from_runs(grid) == _short_words_from_slots(grid)
