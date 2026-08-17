@@ -2,6 +2,7 @@
 Integration tests for hybrid autofill (beam search + iterative repair).
 """
 
+import random
 import time
 
 import pytest
@@ -10,6 +11,10 @@ from src.fill.beam_search_autofill import BeamSearchAutofill
 from src.fill.hybrid_autofill import HybridAutofill
 from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.word_list import WordList
+
+# Fixed seed for the hybrid-vs-beam comparison below. Any value works; it is
+# pinned only so both solvers start from the same RNG position.
+_COMPARISON_SEED = 20260817
 
 
 class TestHybridIntegration:
@@ -219,15 +224,34 @@ class TestHybridIntegration:
                 else:
                     grid.set_black_square(row, col, enforce_symmetry=False)
 
-        # Run beam search alone
-        beam = BeamSearchAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
-        beam_result = beam.fill(timeout=20)
+        # Both solvers draw from the module-level RNG unseeded
+        # (`iterative_repair.py` and `beam_search/selection/value_ordering.py`
+        # both call random.shuffle), so running them back to back samples two
+        # INDEPENDENT searches. Hybrid ≥ an independent beam run is not a
+        # property the code guarantees, and asserting it is a coin flip.
+        #
+        # Seeding both identically makes hybrid's own phase-1 beam reproduce the
+        # standalone beam run, so what this asserts is hybrid's actual contract:
+        # it returns the better of its beam and repair phases
+        # (`hybrid_autofill.py:200-215`), never worse than the beam it ran.
+        #
+        # Restore the RNG afterwards — a leaked seed would silently make every
+        # later stochastic test in this process deterministic.
+        rng_state = random.getstate()
+        try:
+            # Run beam search alone
+            random.seed(_COMPARISON_SEED)
+            beam = BeamSearchAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
+            beam_result = beam.fill(timeout=20)
 
-        # Run hybrid (beam + repair)
-        hybrid = HybridAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
-        hybrid_result = hybrid.fill(timeout=30)
+            # Run hybrid (beam + repair) from the same RNG position
+            random.seed(_COMPARISON_SEED)
+            hybrid = HybridAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
+            hybrid_result = hybrid.fill(timeout=30)
+        finally:
+            random.setstate(rng_state)
 
-        # Hybrid should be at least as good as beam alone
+        # Hybrid should be at least as good as the beam phase it ran
         assert (
             hybrid_result.slots_filled >= beam_result.slots_filled
         ), f"Hybrid ({hybrid_result.slots_filled}) should be ≥ beam ({beam_result.slots_filled})"
