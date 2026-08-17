@@ -44,6 +44,16 @@ because neither was ever modified on this branch; merging `main` staged them and
 violation surfaced at once. It then recurred — removing those two exclusions appeared to pass only
 because neither file was staged.
 
+**CI closes that blind spot at the tree level; the hook still does not.**
+`./scripts/check-guards.sh --full-tree` enumerates every tracked file under `src/` and reads the
+working tree, so an untouched violator fails the `guards` job even though no commit ever staged it.
+The no-argument invocation the hook runs is unchanged and remains staged-scoped, so the rule below
+still applies locally. Full-tree mode refuses two ways of passing without looking: an unrecognised
+flag exits non-zero rather than falling through to staged mode (which, with nothing staged, would
+exit 0 forever), and an enumeration that returns no files under `src/` is an error, not a pass. The
+script also resolves paths from the repository root, because git pathspecs are relative to the
+working directory — run from `backend/`, the scan used to find nothing and report success.
+
 **Prove a guard change against a known violator, never by a clean run.** And note what that takes:
 `git add` on an **unmodified** file stages nothing, because `git diff --cached --diff-filter=ACM`
 reports no entry for a blob identical to `HEAD`. So deliberately `git add`-ing a known-bad file does
@@ -201,6 +211,8 @@ thing under test.
 
 ## 6. Changelog
 
+- 1.2.0 (2026-08-17) — §2 records that CI now runs the guard over the whole tree, and what
+  full-tree mode refuses to treat as a pass.
 - 1.1.0 (2026-08-17) — distilled the bench↔main merge session. §2 gains the staged-file guard rule,
   §3 four test rules plus an extension to the `xfail` block, §5 the large-merge resolution block.
 - 1.0.0 (2026-08-15) — written during the docs overhaul. Replaces an 18-line stub that had been

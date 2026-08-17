@@ -112,6 +112,20 @@ jobs:
       run: |
         isort --check-only backend/ cli/ || true
 
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # The pre-commit hook only ever sees STAGED files, so an endpoint-confinement
+    # violation in a file nobody touched passes vacuously (CONTRIBUTING.md §2).
+    # --full-tree scans every tracked file under src/ instead, which is the only
+    # fix for that blind spot as a class. Guard 1 (scrub patterns) is a diff
+    # property and has no full-tree equivalent, so this covers Guard 2 only.
+    - name: Check API-URL confinement across the whole tree
+      run: ./scripts/check-guards.sh --full-tree
+
   docs:
     runs-on: ubuntu-latest
     steps:
