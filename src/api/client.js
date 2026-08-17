@@ -97,9 +97,9 @@ const put = (path, body) => request('PUT', path, body);
 const del = (path) => request('DELETE', path);
 
 // The Interfaces block is the single binding reference for exported names.
-// Two contracts-table rows are intentionally NOT surfaced here (no consumer in
-// M1; names would be invented): patternWithProgress (/api/pattern/with-progress)
-// and constraintsImpact (/api/constraints/impact). Add when a task needs them.
+// One contracts-table row is intentionally NOT surfaced here (no consumer in
+// M1; the name would be invented): constraintsImpact (/api/constraints/impact).
+// Add when a task needs it.
 export const api = {
   /** GET /api/health — returns the body even on 503 (rule 6: degraded is data). */
   async health() {
@@ -128,6 +128,20 @@ export const api = {
   // ---- pattern search ----
   searchPattern({ pattern, wordlists, maxResults = 40, algorithm = 'trie' }) {
     return post('/api/pattern', {
+      pattern,
+      wordlists: wordlists || ['comprehensive'],
+      max_results: maxResults,
+      algorithm,
+    });
+  },
+
+  /**
+   * Asynchronous pattern search: returns { task_id, progress_url } and streams
+   * results over SSE. NOT interchangeable with searchPattern above, which posts
+   * to the synchronous /api/pattern and returns results directly.
+   */
+  startPatternSearch({ pattern, wordlists, maxResults = 50, algorithm = 'regex' }) {
+    return post('/api/pattern/with-progress', {
       pattern,
       wordlists: wordlists || ['comprehensive'],
       max_results: maxResults,

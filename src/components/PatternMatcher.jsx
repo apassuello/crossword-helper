@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api/client';
 import './PatternMatcher.scss';
 import ProgressIndicator from './ProgressIndicator';
 import { useSSEProgress } from '../hooks/useSSEProgress';
@@ -20,8 +20,8 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
   useEffect(() => {
     const loadWordlists = async () => {
       try {
-        const response = await axios.get('/api/wordlists');
-        setAvailableWordlists(response.data.wordlists || []);
+        const response = await api.getWordlists();
+        setAvailableWordlists(response.wordlists || []);
       } catch (error) {
         console.error('Failed to load wordlists:', error);
         // Fall back to the default list so the panel stays usable
@@ -52,20 +52,19 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
 
     try {
       // Start search with progress tracking
-      const initResponse = await axios.post('/api/pattern/with-progress', {
+      const { task_id } = await api.startPatternSearch({
         pattern: pattern.toUpperCase(),
-        max_results: 50,
+        maxResults: 50,
         wordlists: selectedWordlists,
-        algorithm: algorithm
+        algorithm,
       });
-
-      const { task_id } = initResponse.data;
 
       // Connect to SSE for progress updates
       searchProgress.connect(task_id);
 
     } catch (err) {
-      const errorMsg = err.response?.data?.error || 'Search failed';
+      // ApiError carries the normalized message (src/api/client.js:normalizeError).
+      const errorMsg = err.message || 'Search failed';
       setError(errorMsg);
       setResults([]);
       setLoading(false);

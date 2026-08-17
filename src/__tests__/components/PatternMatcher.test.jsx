@@ -146,18 +146,9 @@ describe('PatternMatcher Component', () => {
 
     it('handles search errors gracefully', async () => {
       const user = userEvent.setup();
-      const axios = await import('axios');
 
-      // Mock axios.post to reject for the search endpoint
-      const originalPost = axios.default.post;
-      axios.default.post = vi.fn((url, ...args) => {
-        if (url.includes('/pattern/with-progress')) {
-          return Promise.reject({
-            response: { data: { error: 'Search failed' }, status: 500 },
-          });
-        }
-        return originalPost(url, ...args);
-      });
+      // Mock the SSE-init endpoint to fail for this test
+      mockApiError('post', '/pattern/with-progress', 500, 'Search failed');
 
       render(<PatternMatcher {...defaultProps} />);
 
@@ -170,9 +161,6 @@ describe('PatternMatcher Component', () => {
       await waitFor(() => {
         expect(screen.getByText(/search failed/i)).toBeInTheDocument();
       });
-
-      // Restore
-      axios.default.post = originalPost;
     });
   });
 
@@ -314,8 +302,10 @@ describe('PatternMatcher Component', () => {
 
     it('renders results from the final SSE event without a follow-up POST to /api/pattern (regression)', async () => {
       const user = userEvent.setup();
-      const axios = await import('axios');
-      const postSpy = vi.spyOn(axios.default, 'post');
+      // The component's transport is now global fetch (via src/api/client.js).
+      // Spy on it (pass-through — MSW patches fetch itself, so the spy just
+      // records calls and lets the real, MSW-intercepted implementation run).
+      const fetchSpy = vi.spyOn(global, 'fetch');
 
       const { rerender } = render(<PatternMatcher {...defaultProps} />);
 
@@ -351,14 +341,18 @@ describe('PatternMatcher Component', () => {
       expect(screen.getByRole('button', { name: /^search$/i })).not.toBeDisabled();
 
       // No redundant follow-up POST to /api/pattern was fired
-      const patternPosts = postSpy.mock.calls.filter(call => call[0] === '/api/pattern');
+      const patternPosts = fetchSpy.mock.calls.filter(
+        call => call[0] === '/api/pattern' && call[1]?.method === 'POST'
+      );
       expect(patternPosts).toHaveLength(0);
 
       // Exactly one search request went out (the with-progress init)
-      const initPosts = postSpy.mock.calls.filter(call => call[0] === '/api/pattern/with-progress');
+      const initPosts = fetchSpy.mock.calls.filter(
+        call => call[0] === '/api/pattern/with-progress' && call[1]?.method === 'POST'
+      );
       expect(initPosts).toHaveLength(1);
 
-      postSpy.mockRestore();
+      fetchSpy.mockRestore();
     });
 
     it('re-enables search button when SSE completes with no results', async () => {
