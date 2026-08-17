@@ -349,11 +349,10 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(donePanel).not.toHaveClass('xw-af-failed');
   });
 
-  it('does not import ProgressIndicator or BlackSquareSuggestions (grep-level check)', () => {
+  it('does not import ProgressIndicator (grep-level check)', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(path.join(here, '../AutofillPanel.jsx'), 'utf-8');
     const importLines = source.split('\n').filter((line) => /^\s*import\b/.test(line));
     expect(importLines.join('\n')).not.toMatch(/ProgressIndicator/);
-    expect(importLines.join('\n')).not.toMatch(/BlackSquareSuggestions/);
   });
 });

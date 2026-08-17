@@ -232,23 +232,6 @@ export const api = {
     return post('/api/normalize', { text });
   },
 
-  // ---- black-square helpers ----
-  suggestBlackSquare({ grid, problematicSlot, gridSize, maxSuggestions = 3 }) {
-    return post(
-      '/api/grid/suggest-black-square',
-      clean({
-        grid,
-        problematic_slot: problematicSlot,
-        grid_size: gridSize,
-        max_suggestions: maxSuggestions,
-      })
-    );
-  },
-
-  applyBlackSquares({ grid, primary, symmetric }) {
-    return post('/api/grid/apply-black-squares', { grid, primary, symmetric });
-  },
-
   // ---- wordlists ----
   getWordlists() {
     return get('/api/wordlists');

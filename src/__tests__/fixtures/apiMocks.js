@@ -204,32 +204,6 @@ export const handlers = [
     });
   }),
 
-  // Black square suggestions
-  http.post(`${API_BASE}/grid/suggest-black-square`, async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({
-      suggestions: [
-        {
-          row: 5,
-          col: 5,
-          score: 85,
-          reasoning: 'Improves word distribution',
-          symmetric_position: { row: 9, col: 9 },
-        },
-      ],
-    });
-  }),
-
-  // Apply black squares
-  http.post(`${API_BASE}/grid/apply-black-squares`, async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({
-      success: true,
-      grid: body.grid, // Return modified grid
-      applied: 2, // Primary + symmetric
-    });
-  }),
-
   // Validate grid
   http.post(`${API_BASE}/grid/validate`, async ({ request }) => {
     const body = await request.json();

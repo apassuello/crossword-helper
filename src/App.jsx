@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-// react-hot-toast's <Toaster> is intentionally KEPT: ThemeWordsPanel and
-// BlackSquareSuggestions still call toast.* directly. App's own toasts were
+// react-hot-toast's <Toaster> is intentionally KEPT: ThemeWordsPanel
+// still calls toast.* directly. App's own toasts were
 // migrated to the bench ToastProvider (pushToast); the default `toast` import is gone.
 import { Toaster } from 'react-hot-toast';
 import { api } from './api/client';
