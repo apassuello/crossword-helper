@@ -42,9 +42,14 @@ npm run dev                 # Vite dev server -> :3000 (proxies /api to :5000)
 edited. The API-confinement rule had never fired on `PatternMatcher.jsx` or `useSSEProgress.js`
 because neither was ever modified on this branch; merging `main` staged them and a long-standing
 violation surfaced at once. It then recurred — removing those two exclusions appeared to pass only
-because neither file was staged, and the guard had to be proved live by deliberately staging an
-unported file. **Prove a guard change by staging a known violator, never by a clean run.** The same
-blind spot currently hides the three files in issue #14.
+because neither file was staged.
+
+**Prove a guard change against a known violator, never by a clean run.** And note what that takes:
+`git add` on an **unmodified** file stages nothing, because `git diff --cached --diff-filter=ACM`
+reports no entry for a blob identical to `HEAD`. So deliberately `git add`-ing a known-bad file does
+**not** arm the guard and proves nothing — a green result there is the vacuous pass again, one level
+down. The file has to be genuinely modified before staging. Verified on issue #14's three files:
+staged unmodified, `check-guards.sh` exits 0; append one newline to the same file and it exits 1.
 
 ---
 
