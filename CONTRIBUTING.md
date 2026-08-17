@@ -37,6 +37,15 @@ npm run dev                 # Vite dev server -> :3000 (proxies /api to :5000)
   then routed in `backend/api/`, then wired in `src/`.
 - Do not implement crossword logic in `backend/` or `src/`. Two implementations will diverge.
 
+**[SPEC] A staged-file-scoped guard has never seen your untouched files.**
+`scripts/check-guards.sh` inspects staged files, so it passes vacuously on everything nobody has
+edited. The API-confinement rule had never fired on `PatternMatcher.jsx` or `useSSEProgress.js`
+because neither was ever modified on this branch; merging `main` staged them and a long-standing
+violation surfaced at once. It then recurred — removing those two exclusions appeared to pass only
+because neither file was staged, and the guard had to be proved live by deliberately staging an
+unported file. **Prove a guard change by staging a known violator, never by a clean run.** The same
+blind spot currently hides the three files in issue #14.
+
 ---
 
 ## 3. Tests
@@ -70,6 +79,40 @@ the flag worked and the test's own fixture was wrong. If you slow-mark a test, y
 incomplete contract, mark it `xfail(strict=True)` rather than skipping or deleting it. Once the
 contract is fixed the test XPASSes, which *fails* the suite under `strict`, forcing someone to
 remove the marker. A plain `xfail` lapses silently and the test never comes back.
+For a known failure inside a **multi-assertion** test, prefer a conditional imperative
+`pytest.xfail()` at the failing assertion over the decorator: it guards that one assertion, leaves
+the rest of the test live, and self-clears when the contract is fixed. The decorator surrenders the
+whole test.
+
+**[SPEC] A green suite can hide a test that never executes.** `test_pause_edit_resume_workflow`
+was stale four independent ways — request body shape, response key, status code (**no branch ever
+returned 202**) and an async subscribe against a synchronous route — and had never actually run on
+any branch, because every assertion sat nested under `if response.status_code == 200:`. It was then
+patched assertion-by-assertion across four serial runs before anyone read the block against the
+whole contract. Two rules follow: on a contract-mismatch failure read the **entire** block against
+the **entire** contract before changing a line; and treat assertions nested under a status check as
+unguarded until you have seen them fail.
+
+**[SPEC] Comparing two unseeded stochastic solvers with `>=` is a coin flip, not a contract.**
+`test_hybrid_vs_beam_alone` compared two independent unseeded runs — the repair and value-ordering
+paths draw randomness at `iterative_repair.py:398/647/906` and `value_ordering.py:233/448` — and
+failed intermittently under repetition. Seed both runs from one value so the shared phase
+reproduces, then assert the property the code actually guarantees: hybrid returns the best of its
+own beam and repair passes (`hybrid_autofill.py:200-215`). Fixed in `c285a9b`.
+
+**[SPEC] `Grid.set_black_square` enforces 180° symmetry by default.** A fixture blacking `(10,10)`
+silently blacks `(0,0)` as well, so the slot layout under test is not the one you wrote. Pass
+`enforce_symmetry=False` when constructing a specific layout. This cost two wrong test
+constructions before it was spotted.
+
+**[BUG] CI wall-time is not a property of your code**
+- Symptom: a test's duration jumps enormously between CI jobs and the change looks like the cause.
+- Cause: fixed startup work (interpreter, wordlist load, trie build, state inflate) varies by
+  runner and interpreter. The same commit, same runner class, same subprocess measured **8.1s on
+  Python 3.11 and ~92s on Python 3.12** (run `32003100530`).
+- Fix: read the whole matrix before concluding a change made something slow.
+- This is the mirror of the coverage bug above: that one says do not blame the runners, this one
+  says do not blame the code.
 
 **[SPEC] Assert the effect, not the existence.** A test that confirms a mechanism is *present*
 without measuring what it *does* is worse than no test: it reports green while the mechanism is
@@ -130,9 +173,30 @@ thing under test.
   Check with `git merge-base --is-ancestor <sha> main`. Squashing is fine for branches nothing
   external points at.
 
+**[SPEC] Resolving a large merge — four rules earned on the bench↔main sync.**
+
+- **Conflict markers show where git could not decide, not where the contract broke.** The two worst
+  defects of that merge were in files that auto-merged with **no conflict**: `validator.py` (each
+  branch's call site needed a different `grid.py`, and neither side satisfied both) and
+  `state_manager.py` (one branch's `slots_sorted: List[Dict]` annotation sitting over the other's
+  serializer writing `List[int]`, which broke exact-position resume silently). After any large
+  merge, diff every **auto-merged** file in the affected subsystem against **both** parent versions
+  and look for one side's contract paired with the other's implementation.
+- **A deleted delegation drops everything the delegate did — enumerate it, do not infer it.** The
+  resolution plan named three obligations for removing `_execute_resume`; it actually dropped six.
+  The three unlisted ones each surfaced later as a separate test failure, one at a time.
+- **A green suite is not evidence a merged feature works.** The solver suite passed in full over a
+  resume path that was broken, because no test round-trips `capture_csp_state` → `_resume_fill`.
+  Prove a merged contract by executing both call sites directly; reserve the suite for regressions.
+- **A branch's regression tests are the merge's acceptance criteria.** Where each fix carries a
+  named guard test, take the conflicted file wholesale from one side and let the resulting failures
+  dictate the re-apply worklist. That turns conflict resolution from judgement into a checklist.
+
 ---
 
 ## 6. Changelog
 
+- 1.1.0 (2026-08-17) — distilled the bench↔main merge session. §2 gains the staged-file guard rule,
+  §3 four test rules plus an extension to the `xfail` block, §5 the large-merge resolution block.
 - 1.0.0 (2026-08-15) — written during the docs overhaul. Replaces an 18-line stub that had been
   archived unwritten ("Content will be populated shortly").

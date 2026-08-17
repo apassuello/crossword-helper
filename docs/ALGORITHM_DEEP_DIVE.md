@@ -274,6 +274,15 @@ Standard crossword entry normalization:
 - **Wipeout:** If any domain becomes empty → return False → triggers backtrack
 - **No conflict learning:** Doesn't record WHY a domain emptied (no nogood recording)
 
+**[BUG] `_ac3()` returning `True` does not mean "no empty domain".** It reports whether a domain
+*became* empty **during revision**. A domain that was **already empty at initialization** leaves
+nothing to revise, so the queue drains without a wipeout and `_ac3()` reports consistent. Measured
+on a 22-slot position with every domain empty: `_ac3()` → `True`. `_unwind_dead_ends`
+(`cli/src/fill/autofill.py:295`) gates on that return and therefore early-exits, stripping nothing
+at exactly the position where the grid is most dead. When testing arc consistency for
+*satisfiability* rather than for *propagation*, check the domains directly instead of trusting the
+return value. Not yet filed as an issue; present on `main` independently of pause/resume.
+
 ### Letter Frequency Table
 - Structure: `{word_length: {position: {letter: frequency_count}}}`
 - Built once from entire word list at initialization
