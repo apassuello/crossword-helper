@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api/client';
 import './WordListPanel.scss';
 
 const WordListPanel = () => {
@@ -29,10 +29,10 @@ const WordListPanel = () => {
   const loadWordlists = async () => {
     try {
       setError(null);
-      const response = await axios.get('/api/wordlists');
-      setWordlists(response.data.wordlists);
-      setCategories(response.data.categories);
-      setTags(response.data.tags);
+      const response = await api.getWordlists();
+      setWordlists(response.wordlists);
+      setCategories(response.categories);
+      setTags(response.tags);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load wordlists:', error);
@@ -45,11 +45,9 @@ const WordListPanel = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`/api/wordlists/${key}`, {
-        params: { stats: showStats }
-      });
-      setWordlistContent(response.data);
-      setWordlistStats(response.data.stats);
+      const response = await api.getWordlist(key, { stats: showStats });
+      setWordlistContent(response);
+      setWordlistStats(response.stats);
       setSelectedWordlist(key);
       setLoading(false);
     } catch (error) {
@@ -79,7 +77,7 @@ const WordListPanel = () => {
     try {
       setError(null);
       setOperationStatus('Adding words...');
-      await axios.put(`/api/wordlists/${selectedWordlist}`, {
+      await api.updateWordlist(selectedWordlist, {
         add_words: wordsToAdd
       });
       await loadWordlist(selectedWordlist);
@@ -89,7 +87,7 @@ const WordListPanel = () => {
       setTimeout(() => setOperationStatus(null), 3000);
     } catch (error) {
       console.error('Failed to add words:', error);
-      setError(error.response?.data?.error || 'Failed to add words. Please try again.');
+      setError(error.message || 'Failed to add words. Please try again.');
       setOperationStatus(null);
     }
   };
@@ -100,7 +98,7 @@ const WordListPanel = () => {
     try {
       setError(null);
       setOperationStatus('Deleting wordlist...');
-      await axios.delete(`/api/wordlists/${key}`);
+      await api.deleteWordlist(key);
       await loadWordlists();
       if (selectedWordlist === key) {
         setSelectedWordlist(null);
@@ -110,7 +108,7 @@ const WordListPanel = () => {
       setTimeout(() => setOperationStatus(null), 3000);
     } catch (error) {
       console.error('Failed to delete wordlist:', error);
-      setError(error.response?.data?.error || 'Failed to delete wordlist. Please try again.');
+      setError(error.message || 'Failed to delete wordlist. Please try again.');
       setOperationStatus(null);
     }
   };
@@ -154,7 +152,7 @@ const WordListPanel = () => {
       const content = await uploadFile.text();
 
       // Send to backend
-      const response = await axios.post('/api/wordlists/import', {
+      const response = await api.importWordlist({
         name: uploadName.trim(),
         content: content,
         category: 'custom',
@@ -174,12 +172,12 @@ const WordListPanel = () => {
       setLoading(false);
 
       // Auto-select the new wordlist
-      const newKey = response.data.name;
+      const newKey = response.name;
       await loadWordlist(newKey);
 
     } catch (error) {
       console.error('Failed to upload wordlist:', error);
-      setUploadError(error.response?.data?.error || 'Failed to upload wordlist');
+      setUploadError(error.message || 'Failed to upload wordlist');
       setLoading(false);
     }
   };

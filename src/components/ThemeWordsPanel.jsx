@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import axios from 'axios';
+import { api } from '../api/client';
 import toast from 'react-hot-toast';
 import './ThemeWordsPanel.scss';
 
@@ -48,12 +48,10 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     try {
       // Upload to backend for parsing and validation
-      const response = await axios.post('/api/theme/upload', {
+      const data = await api.themeUpload({
         content: content,
-        grid_size: gridSize
+        gridSize: gridSize
       });
-
-      const data = response.data;
 
       // Check validation
       if (!data.validation.valid) {
@@ -111,14 +109,12 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
     };
 
     try {
-      const response = await axios.post('/api/theme/suggest-placements', {
-        theme_words: words || themeWords,
-        grid_size: gridSize,
-        existing_grid: convertGrid(grid),
-        max_suggestions: 3
+      const data = await api.themeSuggestPlacements({
+        themeWords: words || themeWords,
+        gridSize: gridSize,
+        existingGrid: convertGrid(grid),
+        maxSuggestions: 3
       });
-
-      const data = response.data;
 
       // Ensure suggestions are in correct format
       if (data.suggestions && Array.isArray(data.suggestions)) {
@@ -131,7 +127,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     } catch (error) {
       console.error('Error analyzing placements:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to analyze placements';
+      const errorMsg = error.message || 'Failed to analyze placements';
       toast.error(errorMsg);
     } finally {
       setLoading(false);
@@ -143,7 +139,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     try {
       // Apply placement to grid
-      const response = await axios.post('/api/theme/apply-placement', {
+      const data = await api.themeApplyPlacement({
         grid: grid,
         placement: {
           word: suggestion.word,
@@ -152,8 +148,6 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
           direction: suggestion.direction
         }
       });
-
-      const data = response.data;
 
       // Update parent grid
       if (onApplyPlacement) {
@@ -200,7 +194,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
       try {
         // Apply this placement (word comes from wordData, not suggestion)
-        const response = await axios.post('/api/theme/apply-placement', {
+        const response = await api.themeApplyPlacement({
           grid: currentGrid,
           placement: {
             word: wordData.word,  // Use the actual word
@@ -210,9 +204,9 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
           }
         });
 
-        if (response.data && response.data.grid) {
+        if (response && response.grid) {
           successCount++;
-          currentGrid = response.data.grid; // Update grid for next placement
+          currentGrid = response.grid; // Update grid for next placement
 
           // Update parent grid
           if (onApplyPlacement) {

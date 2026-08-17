@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api/client';
 import toast from 'react-hot-toast';
 import './BlackSquareSuggestions.scss';
 
@@ -24,23 +24,22 @@ function BlackSquareSuggestions({
     setLoading(true);
 
     try {
-      const response = await axios.post('/api/grid/suggest-black-square', {
-        grid: grid,
-        grid_size: gridSize,
-        problematic_slot: problematicSlot,
-        max_suggestions: 3
+      const response = await api.suggestBlackSquare({
+        grid,
+        gridSize,
+        problematicSlot,
+        maxSuggestions: 3
       });
 
-      const data = response.data;
-      setSuggestions(data.suggestions || []);
+      setSuggestions(response.suggestions || []);
 
-      if (data.suggestions.length === 0) {
+      if (response.suggestions.length === 0) {
         toast('No viable black square positions found', { icon: '⚠️' });
       }
 
     } catch (error) {
       console.error('Error fetching black square suggestions:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to get suggestions';
+      const errorMsg = error.message || 'Failed to get suggestions';
       toast.error(errorMsg);
       setSuggestions([]);
     } finally {
@@ -50,17 +49,15 @@ function BlackSquareSuggestions({
 
   const handleApplySuggestion = async (suggestion) => {
     try {
-      const response = await axios.post('/api/grid/apply-black-squares', {
-        grid: grid,
+      const response = await api.applyBlackSquares({
+        grid,
         primary: { row: suggestion.row, col: suggestion.col },
         symmetric: suggestion.symmetric_position
       });
 
-      const data = response.data;
-
       // Notify parent component
       if (onApplySuggestion) {
-        onApplySuggestion(data.grid, suggestion);
+        onApplySuggestion(response.grid, suggestion);
       }
 
       toast.success('Applied black square pair!');
@@ -68,7 +65,7 @@ function BlackSquareSuggestions({
 
     } catch (error) {
       console.error('Error applying black squares:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to apply black squares';
+      const errorMsg = error.message || 'Failed to apply black squares';
       toast.error(errorMsg);
     }
   };
