@@ -37,6 +37,15 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
       return;
     }
 
+    // Reset the progress hook BEFORE flipping `loading`. Without this there is
+    // a render in which loading === true while status is still 'complete' and
+    // data still holds the previous search's payload — connect() below is what
+    // resets them, and it only runs after the POST resolves. The completion
+    // effect keys on exactly that pair, so it would publish the stale results
+    // and clear `loading`, after which the real completion is rejected by its
+    // own `loading` guard. See issue #11.
+    searchProgress.reset();
+
     setLoading(true);
     setError(null);
     setResults([]);  // Clear previous results

@@ -20,6 +20,10 @@ let mockSSEStatus = 'idle';
 let mockSSEData = null;
 let mockSSEMessage = '';
 let mockSSEConnect = vi.fn();
+// Inert here on purpose: these tests drive status/data through the module-level
+// vars above, so a no-op reset preserves their existing semantics. The real
+// reset's effect is covered against the real hook in PatternMatcher.sse.test.jsx.
+let mockSSEReset = vi.fn();
 
 vi.mock('../../hooks/useSSEProgress', () => ({
   useSSEProgress: () => ({
@@ -29,6 +33,7 @@ vi.mock('../../hooks/useSSEProgress', () => ({
     data: mockSSEData,
     connect: mockSSEConnect,
     disconnect: vi.fn(),
+    reset: mockSSEReset,
   }),
 }));
 
@@ -49,6 +54,7 @@ describe('PatternMatcher Component', () => {
     mockSSEData = null;
     mockSSEMessage = '';
     mockSSEConnect = vi.fn();
+    mockSSEReset = vi.fn();
   });
 
   describe('Rendering', () => {
