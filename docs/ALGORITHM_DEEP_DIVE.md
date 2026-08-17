@@ -277,11 +277,16 @@ Standard crossword entry normalization:
 **[BUG] `_ac3()` returning `True` does not mean "no empty domain".** It reports whether a domain
 *became* empty **during revision**. A domain that was **already empty at initialization** leaves
 nothing to revise, so the queue drains without a wipeout and `_ac3()` reports consistent. Measured
-on a 22-slot position with every domain empty: `_ac3()` → `True`. `_unwind_dead_ends`
-(`cli/src/fill/autofill.py:295`) gates on that return and therefore early-exits, stripping nothing
-at exactly the position where the grid is most dead. When testing arc consistency for
-*satisfiability* rather than for *propagation*, check the domains directly instead of trusting the
-return value. Not yet filed as an issue; present on `main` independently of pause/resume.
+on a 22-slot position with every domain empty: `_ac3()` → `True`.
+
+Any recovery path that gates on that return will therefore do nothing at exactly the position where
+the grid is most dead. `_unwind_dead_ends` (`cli/src/fill/autofill.py:375`) is written against this:
+it runs `_ac3()` purely for its pruning side effect and then inspects the domains directly, with the
+reasoning recorded in the code. Its earlier form broke `if self._ac3(): break` before looking, and
+that form is still what ships on `main`.
+
+**When testing arc consistency for *satisfiability* rather than for *propagation*, check the
+domains directly and treat the return value as a propagation signal only.**
 
 ### Letter Frequency Table
 - Structure: `{word_length: {position: {letter: frequency_count}}}`
