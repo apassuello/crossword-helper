@@ -13,12 +13,25 @@ from typing import Any, Dict, List, Optional, Tuple
 # resume argv and its tests import one canonical source.
 from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
 
-# The CLI's --timeout bounds SOLVER time only. Wall time additionally includes
-# interpreter startup, loading the default wordlist (word count: `wc -l
-# data/wordlists/comprehensive.txt`), building the trie, and (for resume)
-# inflating the gzipped state — a fixed cost that grows under system load.
-# Subprocess ceilings must cover that, or a healthy fill gets killed under load.
-CLI_STARTUP_BUDGET_SECONDS = 90
+# The CLI's --timeout bounds SOLVER time only; wall time additionally
+# includes interpreter startup, loading the default wordlist, building the
+# trie, and (for resume) inflating the gzipped state.
+#
+# The subprocess ceiling applied at the _run_command() call sites in
+# fill() and fill_with_resume() is an ADDEND, not a multiplier:
+#     ceiling = timeout_seconds + CLI_STARTUP_BUDGET_SECONDS
+# A run that goes to exhaustion has wall = startup + timeout_seconds.
+# timeout_seconds cancels out of "does wall stay under ceiling" — the run
+# survives only if startup < CLI_STARTUP_BUDGET_SECONDS. The available
+# margin IS the startup budget.
+#
+# Measured in CI run 32003100530 on the Python 3.12 runner (same runner,
+# same commit): test_resume_without_edits (--timeout 3, ceiling 93s) took
+# 93.4s and got a 504; test_resume_with_edits (--timeout 300, ceiling 390s)
+# took 92.3s and passed. Both subprocesses took ~92s wall time; only the
+# ceiling differed. The identical subprocess took 8.1s on the Python 3.11
+# runner in the same run — startup is runner-dependent and can approach 90s.
+CLI_STARTUP_BUDGET_SECONDS = 180
 
 
 class CLIAdapter:
