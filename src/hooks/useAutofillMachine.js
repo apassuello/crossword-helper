@@ -306,7 +306,10 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
           },
           (error) => {
             if (!mountedRef.current) return;
-            transition({ state: 'failed', errorCard: { message: error.message } });
+            transition({
+              state: 'failed',
+              errorCard: { message: error.message || `Fill failed to start (${error.code})` },
+            });
           }
         );
     },

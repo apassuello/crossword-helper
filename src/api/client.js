@@ -9,7 +9,7 @@
 
 export class ApiError extends Error {
   constructor({ status, code, message, details }) {
-    super(message || code || 'Request failed');
+    super(message || '');
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
@@ -42,7 +42,10 @@ async function parseBody(response) {
  * Rule 3: flat-string (`{error:"msg"}`) and envelope (`{error:{code,message}}`)
  *         bodies both yield a coherent ApiError.
  * Rule 4: non-envelope code synthesis — 409 -> "UNSOLVABLE_EDITS", else "HTTP_<status>".
- * Rule 5: `details` from top-level `data.details` OR nested `err.details`.
+ * Rule 5: `details` precedence chain — top-level `data.details`, else nested
+ *         `err.details`, else `data.conflicts` (the apply-placement 400 shape,
+ *         which has no `details` key of its own). Whichever is present first
+ *         wins; the others are never consulted.
  */
 function normalizeError(status, data) {
   const body = data || {};
@@ -58,6 +61,8 @@ function normalizeError(status, data) {
   } else if (typeof err === 'string') {
     message = err;
   }
+
+  if (details === undefined) details = body.conflicts; // conflicts channel (rule 5)
 
   if (!code) {
     code = status === 409 ? 'UNSOLVABLE_EDITS' : `HTTP_${status}`; // rule 4

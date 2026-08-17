@@ -158,7 +158,15 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
     } catch (error) {
       console.error('Error applying placement:', error);
-      toast.error('Failed to apply placement');
+      // apply-placement's 400 body carries the conflict reasons in `details`
+      // (client.js rule 5); `details` is polymorphic across endpoints, so
+      // guard the shape before reading it as a conflicts array.
+      if (Array.isArray(error.details) && error.details.length > 0) {
+        const [first, ...rest] = error.details;
+        toast.error(rest.length > 0 ? `${first} (+${rest.length} more)` : first);
+      } else {
+        toast.error(error.message || 'Failed to apply placement');
+      }
     }
   };
 

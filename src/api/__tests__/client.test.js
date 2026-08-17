@@ -152,4 +152,43 @@ describe('api client', () => {
     conn.close();
     expect(() => conn.close()).not.toThrow();
   });
+
+  it('RED-3: empty-body 500 yields an empty message, code unchanged (rule 1/4)', async () => {
+    fetchMock.mockResolvedValue(res(undefined, 500));
+
+    let caught;
+    try {
+      await api.numberGrid({ grid: [] });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught.message).toBe('');
+    expect(caught.code).toBe('HTTP_500');
+  });
+
+  it('RED-4: flat-string 400 + conflicts array surfaces as caught.details (rule 5 extended)', async () => {
+    fetchMock.mockResolvedValue(
+      res(
+        {
+          error: 'Placement conflicts detected',
+          conflicts: ['Boundary black square at (7, 4) requires a symmetric black square'],
+          applied: false,
+        },
+        400
+      )
+    );
+
+    let caught;
+    try {
+      await api.themeApplyPlacement({ grid: [], placement: {} });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught.message).toBe('Placement conflicts detected');
+    expect(caught.details).toEqual([
+      'Boundary black square at (7, 4) requires a symmetric black square',
+    ]);
+  });
 });

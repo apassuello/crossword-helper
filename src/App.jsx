@@ -294,7 +294,7 @@ function App() {
       }
     } catch (error) {
       console.error('Verify words failed:', error);
-      pushToast({ kind: 'error', message: 'Failed to verify words: ' + error.message });
+      pushToast({ kind: 'error', message: 'Failed to verify words: ' + (error.message || error.code) });
     }
   }, [grid, gridSize, pushToast]);
 
@@ -337,7 +337,7 @@ function App() {
       pushToast({ kind: 'info', message });
     } catch (error) {
       console.error('Clean grid failed:', error);
-      pushToast({ kind: 'error', message: 'Failed to clean grid: ' + error.message });
+      pushToast({ kind: 'error', message: 'Failed to clean grid: ' + (error.message || error.code) });
     }
   }, [grid, gridSize, pushToast]);
 
