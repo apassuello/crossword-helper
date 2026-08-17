@@ -94,12 +94,15 @@ class TestThemePlacer:
         """Test placement suggestions with existing grid content."""
         placer = ThemePlacer(15)
 
-        # Create a grid with some letters already placed
+        # Create a grid with a single existing letter, positioned so it
+        # intersects APPLE's 2nd letter ('P') at the grid's standard
+        # horizontally-centered slot (row 6, col 5): every suggestion is now
+        # gated through the applier's own validator (issue #15), so the
+        # fixture must give the suggester a genuinely valid, well-scoring
+        # intersection rather than relying on a placement that only *looks*
+        # symmetric.
         existing_grid = [["." for _ in range(15)] for _ in range(15)]
-        # Place "CAT" horizontally at row 7, col 6
-        existing_grid[7][6] = "C"
-        existing_grid[7][7] = "A"
-        existing_grid[7][8] = "T"
+        existing_grid[6][6] = "P"
 
         results = placer.suggest_placements(["APPLE"], existing_grid=existing_grid)
 
@@ -107,8 +110,8 @@ class TestThemePlacer:
         suggestions = results[0]["suggestions"]
         assert len(suggestions) > 0
 
-        # Check if intersection is detected when APPLE is placed vertically through 'A'
-        # (This would be at col 7, intersecting with the 'A' in CAT)
+        # Check if intersection is detected when APPLE is placed across at
+        # (6, 5), intersecting the existing 'P' at (6, 6)
         found_intersection = False
         for sugg in suggestions:
             if "Intersects" in sugg["reasoning"]:
