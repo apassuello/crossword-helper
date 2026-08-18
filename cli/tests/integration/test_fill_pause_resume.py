@@ -710,3 +710,39 @@ def test_no_orphaned_beam_state_in_default_dir(tmp_path, algorithm):
         assert env["metadata"]["algorithm"] == algorithm
     finally:
         orphan.unlink(missing_ok=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("algorithm", ["repair", "beam", "hybrid", "trie"])
+def test_pause_flag_cleared_only_after_state_is_durable(tmp_path, algorithm):
+    """
+    #21.2 — the pause-flag lifecycle contract, stated once and pinned for every engine.
+
+    Contract: whoever durably writes the paused state clears the flag immediately
+    after the write. CSP (regex/trie) does it engine-side in Autofill._handle_pause;
+    repair/beam/hybrid are written by the CLI's degenerate save, so the CLI clears
+    there. The `finally` block keeps clearing on any NON-paused exit.
+
+    The ordering is load-bearing: `finally` runs BEFORE the degenerate save, so a
+    clear placed there would consume the pause request before the state is on disk,
+    and a save that then failed would leave the user with a pause that did nothing
+    and nothing to resume from — the vanish mode #26 documents.
+
+    Before this, only CSP cleared. Beam appeared to, via its native state writer,
+    but that writer is deliberately inert (#26 finding 2), so its clear was
+    unreachable in practice.
+    """
+    task_id = f"flag{algorithm}{uuid.uuid4().hex[:8]}"
+    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id, wait_for_search=(algorithm == "trie"))
+
+    assert proc.returncode == 0
+    assert json.loads(stdout)["paused"] is True
+
+    state_file = state_dir / f"{task_id}.json.gz"
+    assert state_file.exists(), "precondition: the paused state must be durable"
+
+    flag = tmp_path / "flags" / f"crossword_pause_{task_id}.flag"
+    assert not flag.exists(), (
+        f"{algorithm} consumed the pause but left its flag behind; the next run "
+        f"reusing this task id relies on the start-of-run stale sweep to survive"
+    )

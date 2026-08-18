@@ -1125,8 +1125,10 @@ def fill(
         # The `finally` below still runs, so pause markers are cleaned up.
         _fail_fill(str(e), json_output)
     finally:
-        # Clean up pause/running marker files. On a real pause the state was
-        # already saved and the flag consumed; anything left here is stale.
+        # Clean up pause/running marker files. On a real pause the flag is cleared
+        # by whoever durably wrote the state (CSP in _handle_pause, the others in
+        # the DD6 block below), so this only has to cover NON-paused exits —
+        # anything left here is stale. See #21.2.
         if pause_controller:
             pause_controller.clear_running()
             if result is None or not result.paused:
@@ -1187,6 +1189,18 @@ def fill(
                 compress=True,
             )
             paused_state_path = str(state_path)
+
+            # Pause-flag lifecycle (#21.2): whoever durably writes the paused state
+            # clears the flag immediately afterwards. CSP does it engine-side in
+            # Autofill._handle_pause; repair/beam/hybrid are written here, so the
+            # clear belongs here too — after save_csp_state returns, never in the
+            # `finally` above, which runs BEFORE this block. Clearing there would
+            # consume the pause request while the state was still unwritten, and a
+            # save that then raised would leave the user a pause that did nothing
+            # and nothing to resume from.
+            if pause_controller:
+                pause_controller.clear_pause()
+
             if progress:
                 pct = int((slots_filled / total_slots) * 100) if total_slots > 0 else 0
                 progress.update(
