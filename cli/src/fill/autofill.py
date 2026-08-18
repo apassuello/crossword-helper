@@ -184,8 +184,11 @@ class Autofill:
             # Initialize constraint graph and domains
             self._initialize_csp(slots)
 
-            # Apply initial arc consistency
-            if not self._ac3():
+            # Apply initial arc consistency. Its return value is not a
+            # solvability check (#17) -- call it for the pruning side effect,
+            # then inspect the domains directly.
+            self._ac3()
+            if self.has_empty_domain():
                 # Grid is unsolvable
                 return FillResult(
                     success=False,
@@ -374,7 +377,10 @@ class Autofill:
                 return True, False
 
             self._initialize_csp(slots)
-            if self._ac3():
+            # Return value is not a solvability check (#17) -- call for the
+            # pruning side effect, then check the domains directly.
+            self._ac3()
+            if not self.has_empty_domain():
                 slots = self._sort_slots_by_constraint(slots)
                 self.slots_sorted = slots
 
@@ -888,6 +894,25 @@ class Autofill:
 
         return None
 
+    def has_empty_domain(self) -> bool:
+        """
+        Check whether any slot's domain is empty.
+
+        This is the solvability check `_ac3()`'s return value is not (#17):
+        `_ac3()` reports False only when `_revise()` empties a domain *during*
+        revision, so a slot whose domain is already empty at initialization
+        -- with no crossing neighbor to drive the cascade -- drains the arc
+        queue untouched and `_ac3()` reports "consistent" anyway. Call
+        `_ac3()` for its pruning side effect, then call this to learn whether
+        the position is actually dead. No-arg is sound here: `_initialize_csp`
+        rebuilds `self.domains = {}` on every call, so there is no stale-key
+        risk from a previous CSP.
+
+        Returns:
+            True if any domain in `self.domains` is empty
+        """
+        return any(len(domain) == 0 for domain in self.domains.values())
+
     def _ac3(self) -> bool:
         """
         AC-3 arc consistency algorithm.
@@ -896,7 +921,11 @@ class Autofill:
         that cannot satisfy constraints.
 
         Returns:
-            True if consistent, False if any domain becomes empty
+            True if no domain became empty *during* revision. A domain that
+            was already empty at initialization -- with no crossing neighbor
+            to drive the cascade -- is never revised, so this can return True
+            even when a domain is empty. It is a propagation routine, not a
+            solvability check; use `has_empty_domain()` for that (#17).
         """
         # Initialize queue with all arcs
         queue = deque()
