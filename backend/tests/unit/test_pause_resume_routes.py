@@ -1,6 +1,7 @@
 """Unit tests for pause/resume API routes."""
 
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -415,6 +416,79 @@ class TestResumeAutofill:
         call_kwargs = mock_state_manager.save_csp_state.call_args
         saved_meta = call_kwargs.kwargs.get("metadata") or call_kwargs[1].get("metadata")
         assert saved_meta["resume_options"] == {}
+
+
+class TestResumeOptionShapes:
+    """
+    Issue #24: /api/fill/resume was the only route in the API surface reading
+    its options from a nested `options` object. Every other fill route reads
+    `timeout` at the top level (backend/api/routes.py:239, :558, :615), so a
+    caller who followed that pattern got the 300s default silently -- no error,
+    no warning, no 400. Two tests in this repo, both written by people working
+    directly on this seam, already made exactly that mistake.
+
+    Top level is now canonical and wins; nested stays accepted. These assert the
+    value that actually reaches the CLI adapter, not merely that the request
+    returned 200 -- the old behaviour returned 200 too.
+    """
+
+    def _post(self, client, mock_state_manager, body):
+        mock_state_manager.load_csp_state.return_value = (_make_saved_state(), _make_metadata())
+        return client.post("/api/fill/resume", json={"task_id": "task_opt", **body})
+
+    def test_top_level_timeout_reaches_the_adapter(self, client, mock_state_manager, mock_adapter):
+        # The regression itself: before #24 this silently became 300.
+        resp = self._post(client, mock_state_manager, {"timeout": 30})
+
+        assert resp.status_code == 200
+        assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
+
+    def test_nested_options_still_work(self, client, mock_state_manager, mock_adapter):
+        # Compatibility: backend/tests/integration/workflows/
+        # test_pause_resume_workflow.py sends this shape.
+        resp = self._post(client, mock_state_manager, {"options": {"timeout": 30}})
+
+        assert resp.status_code == 200
+        assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
+
+    def test_top_level_wins_when_both_are_given(self, client, mock_state_manager, mock_adapter):
+        resp = self._post(client, mock_state_manager, {"timeout": 30, "options": {"timeout": 300}})
+
+        assert resp.status_code == 200
+        assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
+
+    def test_algorithm_and_min_score_are_accepted_top_level_too(self, client, mock_state_manager, mock_adapter):
+        # Scoping the fix to `timeout` alone would leave two more silent-default
+        # traps of the identical class inside the same route.
+        resp = self._post(client, mock_state_manager, {"algorithm": "beam", "min_score": 55})
+
+        assert resp.status_code == 200
+        kwargs = mock_adapter.fill_with_resume.call_args.kwargs
+        assert kwargs["algorithm"] == "beam"
+        assert kwargs["min_score"] == 55
+
+    def test_wordlists_are_accepted_top_level_too(self, client, mock_state_manager, mock_adapter, mocker):
+        resolve = mocker.patch(
+            "backend.api.pause_resume_routes.resolve_wordlist_paths_strict",
+            return_value=(["/tmp/wl.txt"], []),
+        )
+
+        resp = self._post(client, mock_state_manager, {"wordlists": ["comprehensive"]})
+
+        assert resp.status_code == 200
+        resolve.assert_called_once_with(["comprehensive"])
+
+    def test_unknown_top_level_key_is_logged_and_ignored_not_rejected(self, client, mock_state_manager, mock_adapter, caplog):
+        # Deliberately not a 400: the defect is a silently-ignored parameter,
+        # which accept-both already closes. Rejecting would be a behaviour
+        # change on a route whose callers are not enumerated.
+        with caplog.at_level(logging.WARNING, logger="backend.api.pause_resume_routes"):
+            resp = self._post(client, mock_state_manager, {"timeuot": 30})
+
+        assert resp.status_code == 200
+        assert "timeuot" in caplog.text
+        # The typo must not be smuggled into the options dict.
+        assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 300
 
 
 # ---------------------------------------------------------------------------

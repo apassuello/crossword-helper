@@ -2003,6 +2003,15 @@ components:
 
     ResumeRequest:
       type: object
+      description: |
+        Fill options may be supplied at the TOP LEVEL (canonical) or nested
+        under `options` (accepted for compatibility). A key present in both
+        places takes its top-level value. Unrecognised top-level keys are
+        logged and ignored, not rejected.
+
+        Top level is canonical because every other fill route reads `timeout`
+        there; this route reading it only from `options` meant a caller
+        following the usual pattern silently got the 300s default (issue #24).
       required:
         - task_id
       properties:
@@ -2010,9 +2019,21 @@ components:
           type: string
         edited_grid:
           $ref: '#/components/schemas/Grid'
+        min_score:
+          type: integer
+        timeout:
+          type: integer
+        wordlists:
+          type: array
+          items:
+            type: string
+        algorithm:
+          type: string
         options:
           type: object
-          description: Same as AutofillRequest options
+          description: |
+            Legacy nested form of the same four options. Still accepted; the
+            top-level keys above win on conflict.
           properties:
             min_score:
               type: integer
