@@ -30,7 +30,7 @@ import pytest
 from cli.src.core.grid import Grid
 from cli.src.fill.autofill import Autofill
 from cli.src.fill.pattern_matcher import PatternMatcher
-from cli.src.fill.pause_controller import PauseController
+from cli.src.fill.pause_controller import PauseController, PausedException
 from cli.src.fill.state_manager import CSPState, StateManager
 from cli.src.fill.word_list import WordList
 
@@ -547,3 +547,91 @@ class TestPauseDuringCspSetup:
         # Resuming a pre-search state is starting over on the same grid.
         assert resumed.success == fresh.success
         assert resumed.slots_filled == fresh.slots_filled
+
+
+class TestResumeFallbackGating:
+    """
+    Regression guard for the four-part gate on the issue-#9 unwinding fallback
+    in `Autofill._resume_fill`. Exact-position resume falls back to
+    `_resume_by_unwinding` only when it genuinely dead-ended: it failed, was
+    not paused, did not time out, and filled not one additional slot.
+
+    Excluding pause and timeout is the correctness-critical half. Unwinding a
+    paused run would discard the position the user stopped at, and after a
+    timeout there is no budget left to re-search. Nothing at the unit level
+    asserted that before this class -- the only coverage was one
+    real-subprocess integration test, so simplifying the condition would leave
+    the fast suite green (issue #23).
+    """
+
+    def _resume_with(self, temp_dir, small_words, backtrack):
+        """
+        Drive `_resume_fill` over a captured state with the exact-position
+        search replaced by `backtrack` and the fallback replaced by a recorder.
+
+        Returns (result, unwind_calls).
+        """
+        source, state_manager, _ = _make_autofill_with_csp(temp_dir, small_words)
+        csp_state = StateManager.capture_csp_state(source, 0, set())
+
+        # Precondition, not decoration: `_resume_fill` returns early via
+        # `self.fill(...)` when slots_sorted is empty, and that return sits
+        # directly ABOVE the gate under test. An empty search order would make
+        # every assertion in this class vacuous while still passing.
+        assert csp_state.slots_sorted, "precondition: the captured state carries a search order"
+
+        fresh = Autofill(
+            Grid(11),
+            WordList(small_words),
+            None,
+            60,
+            0,
+            "trie",
+            None,
+            state_manager=state_manager,
+        )
+
+        unwind_calls = []
+
+        def _record_unwind(task_id, use_mac):
+            unwind_calls.append((task_id, use_mac))
+            return False, False
+
+        fresh._backtrack_with_mac = backtrack
+        fresh._resume_by_unwinding = _record_unwind
+
+        result = fresh._resume_fill(csp_state, task_id=None, use_mac=True)
+        return result, unwind_calls
+
+    def test_pause_does_not_trigger_the_unwind_fallback(self, temp_dir, small_words):
+        def _paused(slots, index, task_id):
+            raise PausedException("Autofill paused by user")
+
+        result, unwind_calls = self._resume_with(temp_dir, small_words, _paused)
+
+        assert unwind_calls == [], "a paused resume must not unwind -- it would discard the user's stop"
+        assert not result.success
+
+    def test_timeout_does_not_trigger_the_unwind_fallback(self, temp_dir, small_words):
+        def _timed_out(slots, index, task_id):
+            raise TimeoutError("solver budget exhausted")
+
+        result, unwind_calls = self._resume_with(temp_dir, small_words, _timed_out)
+
+        assert unwind_calls == [], "a timed-out resume must not unwind -- there is no budget left to re-search"
+        assert not result.success
+
+    def test_a_plain_dead_end_does_trigger_the_unwind_fallback(self, temp_dir, small_words):
+        """
+        Control. The two tests above assert an absence, which an unreached gate
+        would satisfy just as well. This one differs from them ONLY in how the
+        exact-position search ends, so it fails if the gate stops being
+        evaluated at all.
+        """
+
+        def _dead_end(slots, index, task_id):
+            return False
+
+        _, unwind_calls = self._resume_with(temp_dir, small_words, _dead_end)
+
+        assert len(unwind_calls) == 1, "a failed resume that filled nothing must fall back to unwinding"
