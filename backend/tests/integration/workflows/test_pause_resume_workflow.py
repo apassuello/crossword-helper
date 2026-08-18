@@ -20,6 +20,21 @@ def create_empty_grid(size=11):
     return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
 
 
+def _await_state(client, task_id, deadline_s=10):
+    """Poll GET /api/fill/state/<task_id> every 0.5s until the first 200.
+
+    Returns the response, or the last non-200 response on timeout. Mirrors the
+    helper in backend/tests/integration/test_pause_resume_e2e.py -- the deadline
+    IS the guarantee being gated, so it stays at 10s.
+    """
+    deadline = time.monotonic() + deadline_s
+    while True:
+        response = client.get(f"/api/fill/state/{task_id}")
+        if response.status_code == 200 or time.monotonic() >= deadline:
+            return response
+        time.sleep(0.5)
+
+
 class TestPauseResumeWorkflow:
     """Test pause/resume workflow with edits."""
 
@@ -60,12 +75,19 @@ class TestPauseResumeWorkflow:
         response = client.post(f"/api/fill/pause/{task_id}")
         assert response.status_code == 200
 
-        # Wait for pause to complete
-        time.sleep(2)
-
-        # Step 3: Get saved state
-        response = client.get(f"/api/fill/state/{task_id}")
-        assert response.status_code == 200, "pause did not save state"
+        # Step 3: Get saved state.
+        #
+        # Polled, not a fixed sleep. This was `time.sleep(2)` followed by a single
+        # GET -- a 5s budget in total, against a measured local cost of 5.04s for
+        # the CLI to load its wordlist, build the CSP and reach a point where the
+        # pause flag is observable. It therefore raced on the fastest hardware
+        # available here and failed outright on a CI runner. The 10s deadline is
+        # unchanged from the one the e2e gates, so this polls for the same
+        # guarantee rather than a weaker one; the 3s pre-pause sleep above stays,
+        # since removing it would gate "pause before start" instead of "pause a
+        # running solver".
+        response = _await_state(client, task_id, 10)
+        assert response.status_code == 200, "pause did not save state within the 10s deadline"
 
         # This block used to post a `state_path`/`new_grid`/`size` body against a
         # `task_id`/`edited_grid` API — a shape neither branch ever accepted. It
