@@ -30,6 +30,8 @@ import pytest
 
 from cli.src.core.grid import Grid
 from cli.src.fill.autofill import Autofill
+from cli.src.fill.beam_search_autofill import BeamSearchAutofill
+from cli.src.fill.hybrid_autofill import HybridAutofill
 from cli.src.fill.pattern_matcher import PatternMatcher
 from cli.src.fill.pause_controller import PauseController, PausedException
 from cli.src.fill.state_manager import CSPState, StateManager
@@ -687,3 +689,45 @@ class TestResumeByUnwindingSkipsDoomedSearch:
 
         assert success is False
         assert was_paused is False
+
+
+class TestBeamNativeStateWriterStaysDisabled:
+    """
+    #26 finding 2: BeamSearchAutofill must not forward task_id to the orchestrator.
+
+    The orchestrator has its own beam-state writer (_save_beam_search_state). It
+    builds `StateManager()` with no storage_dir, so it ignores --state-dir, and the
+    CLI's canonical degenerate save then writes the *same* filename afterwards. With
+    --state-dir set the beam file is orphaned in /tmp/crossword_states; without it,
+    the degenerate save overwrites the beam file outright. Either way nothing ever
+    reads it.
+
+    `beam_search_autofill.py` documented "task_id is intentionally NOT forwarded"
+    from the start (950fa79); 2ef7d47 added the parameter and forwarded it without
+    updating the doc. The early return on `if not self.task_id` is what keeps the
+    orchestrator's writer inert, so task_id must arrive as None.
+
+    Hybrid is covered by the same guard: HybridAutofill builds its phase-1 solver
+    through BeamSearchAutofill (hybrid_autofill.py:138), not the orchestrator.
+    """
+
+    def test_wrapper_does_not_forward_task_id_to_orchestrator(self):
+        grid = Grid(11)
+        word_list = WordList(["ABCDE", "FGHIJ"])
+        beam = BeamSearchAutofill(grid, word_list, PatternMatcher(word_list), task_id="tForward")
+
+        assert beam.task_id is None, (
+            "task_id reached the orchestrator, re-enabling its native beam-state "
+            "writer; the CLI owns the single canonical save"
+        )
+
+    def test_hybrid_phase_one_solver_also_gets_no_task_id(self):
+        grid = Grid(11)
+        word_list = WordList(["ABCDE", "FGHIJ"])
+        hybrid = HybridAutofill(grid, word_list, PatternMatcher(word_list), task_id="tHybrid")
+
+        # The wrapper is what drops it, so constructing phase 1 the way
+        # HybridAutofill does must produce the same inert writer.
+        phase_one = BeamSearchAutofill(hybrid.grid, hybrid.word_list, PatternMatcher(word_list), task_id=hybrid.task_id)
+        assert hybrid.task_id == "tHybrid", "hybrid keeps its own task_id for the CLI-side save"
+        assert phase_one.task_id is None

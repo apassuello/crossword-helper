@@ -63,9 +63,9 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             theme_words: Set of words from theme wordlist to prioritize (optional)
             partial_fill_mode: Enable partial fill mode - stops when stuck instead of aggressive backtracking
             pause_controller: Optional PauseController — forwarded to the orchestrator's
-                pause polling. task_id is intentionally NOT forwarded, so the orchestrator's
-                native beam-state writer no-ops while it still returns a paused partial;
-                the CLI owns the single canonical degenerate save.
+                pause polling.
+            task_id: Accepted for call-site compatibility and deliberately NOT forwarded.
+                See the `task_id=None` note at the super().__init__() call below.
 
         Raises:
             ValueError: If parameters out of valid ranges
@@ -84,7 +84,19 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
             theme_words=theme_words,
             partial_fill_mode=partial_fill_mode,
             pause_controller=pause_controller,
-            task_id=task_id,
+            # task_id is deliberately dropped (passed as None, not omitted, so the
+            # intent is visible here and not mistaken for an oversight).
+            #
+            # The orchestrator's own _save_beam_search_state() early-returns on a
+            # falsy task_id. Letting it run instead writes a real BeamSearchState
+            # via a bare StateManager() — which ignores --state-dir — while the CLI
+            # writes its canonical degenerate save to the SAME `<task_id>.json.gz`
+            # name straight afterwards. Measured on a paused beam and hybrid run:
+            # with --state-dir the beam file is orphaned in /tmp/crossword_states;
+            # without it, the degenerate save overwrites the beam file. Nothing
+            # reads either one. #26 finding 2; the no-forward design dates to
+            # 950fa79 and was reversed unnoticed by 2ef7d47.
+            task_id=None,
         )
 
     # The fill() method and all other methods are inherited from BeamSearchOrchestrator
