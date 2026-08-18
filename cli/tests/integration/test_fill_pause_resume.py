@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 WORDLIST = REPO_ROOT / "data" / "wordlists" / "comprehensive.txt"
 
 
@@ -101,6 +101,24 @@ def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120):
 
     stdout, _ = proc.communicate(timeout=60)
     return proc, stdout, state_dir
+
+
+def _wait_for_running_marker(flags_dir: Path, task_id: str, timeout: float = 10.0) -> None:
+    """
+    Block until `fill`'s early pause/resume registration has written its running
+    marker (crossword_running_<task_id>.pid). `mark_running()` runs immediately
+    after `clear_pause()` on the SAME PauseController (cli.py), so marker-exists
+    implies clear_pause() already ran against `flags_dir` — a pause flag touched
+    right after this returns lands strictly after that clear and cannot be wiped
+    as a stale flag.
+    """
+    marker = flags_dir / f"crossword_running_{task_id}.pid"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if marker.exists():
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"running marker never appeared in {flags_dir} for task {task_id}")
 
 
 def _run_fill(args, timeout=180):
@@ -233,19 +251,32 @@ def test_beam_pause_routes_through_degenerate_writer(tmp_path):
 @pytest.mark.slow
 def test_repair_pause_before_restart_exits_cleanly(tmp_path):
     """
-    None-guard (Task 13 hardening): if the pause flag already exists before restart 0,
-    IterativeRepair.fill() breaks at hook #1 with best_result never populated and
-    returns None. The CLI paused branch must treat a None result under an active task
-    as a paused-with-no-progress outcome (using the original grid), NOT crash on
-    None.paused. Deterministic: the flag is written BEFORE the subprocess starts.
+    None-guard (Task 13 hardening): if the pause flag already exists at restart 0's
+    hook #1 check, IterativeRepair.fill() breaks with best_result never populated
+    and returns None. The CLI paused branch must treat a None result under an
+    active task as a paused-with-no-progress outcome (using the original grid),
+    NOT crash on None.paused.
+
+    Synchronization: the flag is touched right after `fill`'s running marker
+    appears (crossword_running_tNone.pid) — NOT before the subprocess starts.
+    `mark_running()` runs immediately after `clear_pause()` on the same
+    PauseController (cli.py), so marker-exists implies clear_pause() already ran
+    against --pause-flag-dir and cannot wipe a flag touched afterward. Touching
+    the flag before Popen used to "work" only as a symptom of the bug this file's
+    Fix-1 companion guards against: clear_pause() used to run against the wrong
+    (default /tmp) directory while the solver's separately-constructed controller
+    pointed at --pause-flag-dir and was never cleared, so a pre-existing flag
+    there survived by accident. Now that clear_pause() correctly targets
+    --pause-flag-dir, a flag set before the process starts is legitimately
+    treated as stale and cleared — so the pre-existing-flag trick no longer
+    reaches hook #1 with a set flag, and the marker-wait handles that instead.
     """
     grid_file = _write_pause_grid(tmp_path / "grid.json", "repair", 15)
     state_dir = tmp_path / "state"
     flags_dir = tmp_path / "flags"
     flags_dir.mkdir(parents=True, exist_ok=True)
-    (flags_dir / "crossword_pause_tNone.flag").touch()  # pre-existing → pause at restart 0
 
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
@@ -267,13 +298,17 @@ def test_repair_pause_before_restart_exits_cleanly(tmp_path):
             str(flags_dir),
         ],
         cwd=str(REPO_ROOT),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=90,
     )
+    _wait_for_running_marker(flags_dir, "tNone")
+    (flags_dir / "crossword_pause_tNone.flag").touch()  # after clear_pause() → pause at restart 0
 
-    assert proc.returncode == 0, f"CLI crashed on None result:\n{proc.stderr[-800:]}"
-    out = json.loads(proc.stdout)
+    stdout, stderr = proc.communicate(timeout=90)
+
+    assert proc.returncode == 0, f"CLI crashed on None result:\n{stderr[-800:]}"
+    out = json.loads(stdout)
     assert out["paused"] is True and out["task_id"] == "tNone"
     assert out["slots_filled"] == 0
     assert (state_dir / "tNone.json.gz").exists()
@@ -282,6 +317,98 @@ def test_repair_pause_before_restart_exits_cleanly(tmp_path):
 # ---------------------------------------------------------------------------
 # Task 14 — `fill --resume`
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_resume_repair_degenerate_reseed_without_wordlists(tmp_path):
+    """
+    Guard for the DD6 degenerate-save metadata: pausing under -a repair (Click's
+    default algorithm for `fill`) must record `wordlists` in the saved state's
+    metadata so `fill --resume` with no -w can find them, the same way a CSP
+    (regex/trie) pause already does via Autofill._handle_pause.
+
+    Before the fix, the degenerate metadata dict recorded only algorithm/
+    slots_filled/total_slots/grid_size — no wordlists — so this resume failed at
+    the CLI's wordlist-fallback check ("No wordlists available: none passed with
+    -w and none recorded in the saved state") even though the paused run's own
+    -w was right there in its argv.
+
+    Uses the same marker-wait synchronization as
+    test_repair_pause_before_restart_exits_cleanly (pause hook #1, zero progress)
+    on a small blank grid: the point of this test is the wordlists round-trip
+    through metadata, not fill quality on a deliberately-hard grid, so both
+    phases stay fast and success is not gated on solving a fully-open 15x15.
+    The flag is touched only after fill's running marker appears — i.e. after
+    its clear_pause() already ran against --pause-flag-dir — so it cannot be
+    wiped as stale; see that test's docstring for why touching it before Popen
+    would no longer be deterministic.
+    """
+    grid_file = _write_blank_grid(tmp_path / "grid.json", 5)
+    state_dir = tmp_path / "state"
+    flags_dir = tmp_path / "flags"
+    flags_dir.mkdir(parents=True, exist_ok=True)
+
+    pause_proc_h = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "cli.src.cli",
+            "fill",
+            str(grid_file),
+            "-w",
+            str(WORDLIST),
+            "--algorithm",
+            "repair",
+            "-t",
+            "30",
+            "--allow-nonstandard",
+            "--json-output",
+            "--task-id",
+            "tWL",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flags_dir),
+        ],
+        cwd=str(REPO_ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    _wait_for_running_marker(flags_dir, "tWL")
+    (flags_dir / "crossword_pause_tWL.flag").touch()  # after clear_pause() → pause at restart 0
+    pause_stdout, pause_stderr = pause_proc_h.communicate(timeout=60)
+
+    assert pause_proc_h.returncode == 0, pause_stderr[-800:]
+    paused_out = json.loads(pause_stdout)
+    assert paused_out["paused"] is True
+
+    state_file = state_dir / "tWL.json.gz"
+    assert state_file.exists()
+    with gzip.open(state_file, "rt", encoding="utf-8") as f:
+        env = json.load(f)
+    assert env["metadata"]["algorithm"] == "repair"
+    assert env["metadata"].get("wordlists"), "degenerate save must record wordlists for a -w-less resume"
+
+    resume_proc = _run_fill(
+        [
+            "--resume",
+            str(state_file),
+            "--task-id",
+            "resume-tWL",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flags_dir),
+            "-t",
+            "60",
+            "--json-output",
+        ],
+        timeout=90,
+    )
+    assert resume_proc.returncode == 0, resume_proc.stderr[-800:]
+    result = json.loads(resume_proc.stdout.strip())
+    assert result.get("success") is True, result
 
 
 @pytest.mark.slow

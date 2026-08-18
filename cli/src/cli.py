@@ -696,20 +696,30 @@ def fill(
     # running-marker (pid file) is written so `pause` can verify the task.
     # Registered BEFORE wordlist loading, so a pause request issued while the
     # wordlist is still loading still finds the task already registered.
+    #
+    # This is the ONLY construction of the bookkeeping `pause_controller` — it is
+    # never rebuilt later. Building it here with the real --pause-flag-dir (not the
+    # bare-default constructor) means clear_pause()/mark_running() above, and
+    # clear_running()/clear_pause() in the `finally` below, all operate on the same
+    # directory the backend's `pause`/`/api/fill/pause` actually watches. A second,
+    # `pause_dir`-less construction used to shadow this one further down, so those
+    # calls silently operated on /tmp instead of --pause-flag-dir.
     pause_controller = None
     if task_id:
         from .fill.pause_controller import PauseController
 
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
         pause_controller.clear_pause()  # A stale flag must not insta-pause us
         pause_controller.mark_running()
 
-        if algorithm == "repair":
-            warnings.append(
-                f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run"
-            )
-        elif algorithm == "hybrid":
-            warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
+        # The two paths that genuinely disable pause for this run — both silent
+        # otherwise, which is worse than the false warnings this replaces: repair
+        # (IterativeRepair) and hybrid (HybridAutofill) both honor pause_controller
+        # (see iterative_repair.py / hybrid_autofill.py), so neither belongs here.
+        if adaptive:
+            warnings.append("Pause is not supported in --adaptive mode; " "--task-id will not enable pausing this run")
+        elif attempts > 1:
+            warnings.append("Pause is not supported with --attempts > 1; " "--task-id will not enable pausing this run")
 
     # Load word lists
     if not json_output:
@@ -871,16 +881,25 @@ def fill(
             except Exception:
                 pass  # Skip unreadable files
 
-    # Set up pause/resume wiring (DD1). Only active when --task-id is present and
-    # NOT --adaptive: adaptive pause is out of scope (AdaptiveAutofill.fill has no
-    # task_id param), so its pause path stays a crash-safe no-op. When inactive both
-    # stay None and every pause hook below is a no-op (byte-identical to prior behavior).
-    pause_controller = state_manager = None
+    # Set up pause/resume wiring (DD1). `pause_controller` itself was already built
+    # above, before wordlist loading — NOT rebuilt here, so the finally block's
+    # clear_running()/clear_pause() always target the same PauseController that
+    # wrote the running marker, in every mode including --adaptive.
+    #
+    # `solver_pause_controller` is what actually gets threaded into the autofill
+    # constructors below, and IS gated on NOT --adaptive: adaptive pause is out of
+    # scope (AdaptiveAutofill.fill has no task_id param), so wiring pause into the
+    # base autofill it wraps would be a half-built path. Gating only the solver copy
+    # — not the bookkeeping `pause_controller` — is what lets the running-marker
+    # cleanup in `finally` still run under --adaptive (previously it could not: the
+    # single shared variable was reset to None for adaptive, so `if pause_controller`
+    # was False and the marker leaked on every adaptive run).
+    state_manager = None
+    solver_pause_controller = None
     if task_id and not adaptive:
-        from .fill.pause_controller import PauseController
         from .fill.state_manager import StateManager
 
-        pause_controller = PauseController(task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
+        solver_pause_controller = pause_controller
         state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
 
     # DD3 content dispatch: a real CSPState (non-empty domains) resumes at its exact
@@ -902,7 +921,7 @@ def fill(
             min_score,
             algorithm,
             progress,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
             state_manager=state_manager,
         )
     elif algorithm == "beam":
@@ -916,7 +935,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             partial_fill_mode=partial_fill,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
             task_id=task_id,
         )
     elif algorithm == "repair":
@@ -929,7 +948,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
         )
     elif algorithm == "hybrid":
         autofill = HybridAutofill(
@@ -942,7 +961,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
             task_id=task_id,
         )
     else:
@@ -956,7 +975,7 @@ def fill(
         # DD3: inject pause wiring only for single-attempt runs. fill_with_restarts
         # (attempts>1) calls self.fill() with no task_id, which would reach _handle_pause
         # with task_id=None → ValueError; the attempts==1 gate keeps the controller off it.
-        _pc = pause_controller if attempts == 1 else None
+        _pc = solver_pause_controller if attempts == 1 else None
         _sm = state_manager if attempts == 1 else None
         autofill = Autofill(
             grid,
@@ -1149,6 +1168,13 @@ def fill(
                     "slots_filled": slots_filled,
                     "total_slots": total_slots,
                     "grid_size": [grid.size, grid.size],
+                    # Parity with the CSP path's own _handle_pause (autofill.py) so a
+                    # `fill --resume` with no -w on a repair/beam/hybrid pause finds
+                    # its wordlists the same way a CSP pause does (cli.py:674 falls
+                    # back to metadata["wordlists"]); min_score/timeout for full parity.
+                    "wordlists": [str(w) for w in wordlists],
+                    "min_score": min_score,
+                    "timeout": timeout,
                 },
                 compress=True,
             )
