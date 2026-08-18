@@ -113,7 +113,7 @@ unguarded until you have seen them fail.
 paths draw randomness at `iterative_repair.py:398/647/906` and `value_ordering.py:233/448` — and
 failed intermittently under repetition. Seed both runs from one value so the shared phase
 reproduces, then assert the property the code actually guarantees: hybrid returns the best of its
-own beam and repair passes (`hybrid_autofill.py:200-215`). Fixed in `c285a9b`.
+own beam and repair passes (`hybrid_autofill.py:200-215`). Fixed in `06f8036`.
 
 **[SPEC] `Grid.set_black_square` enforces 180° symmetry by default.** A fixture blacking `(10,10)`
 silently blacks `(0,0)` as well, so the slot layout under test is not the one you wrote. Pass

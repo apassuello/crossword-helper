@@ -4,7 +4,7 @@
 > **STATUS: FINAL — reviewed 2026-07-13 (correctness 10/10 confirmed; quality ready-after-fixes) + owner decisions + quality punch-list + advisor integration-hardening all applied. Ready to implement.** Expands Task 8 of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:446-457`.
 > **Convention:** signatures/contracts/short snippets only — implementer agents write full bodies. Test steps may show concrete assertions.
 
-**Branch:** `feature/m1-constructors-bench` · **HEAD:** `ee2d19b` · **Repo:** `/Users/apa/projects/crossword-helper`
+**Branch:** `feature/m1-constructors-bench` · **HEAD:** `116bda5` · **Repo:** `/Users/apa/projects/crossword-helper`
 
 ## Decisions applied (owner, 2026-07-13)
 - **Short-word check:** deliver it via a NEW independent run-length scan `_scan_short_words` inside `validate_structural` — bypasses the dead `_check_minimum_word_length`/`get_word_slots` path (do NOT touch `get_word_slots`). C delivers connectivity + short-word.
@@ -268,4 +268,4 @@ Coverage vs Task 8 (`2026-07-12-...:446-457`): files, interfaces (numberGrid/val
 **Advisor integration-hardening (post-decision):** (1) `valid`-flip verified consumer-free — safe (DD3); (2) `_scan_short_words` no longer a parallel run-walker — shares `Grid.enumerate_white_runs()` with `get_word_slots` to prevent edge-drift (DD2); (3) violations flagged as advisory+live, Task D smoke confirms not-"broken" (Global Constraint 7); (4) adaptive-fire documented as a DEFERRED two-writer race, safe only because Task 11 SSE is unbuilt (Task C DD1 + Follow-ups); (5) Task A guard widened to `except Exception` since the outer error net is broken (DD1).
 
 ## FILE:LINE VERIFICATION (architect + correctness reviewer)
-All prompt-supplied citations re-verified vs HEAD `ee2d19b`, no drift. Independently confirmed new citations: `validate_all` 4-check scope (`validator.py:20-49`), `get_word_slots` filter (`grid.py:213,242`), numbering key-format (`ExportPanel.jsx:80`,`App.jsx:575-576`,`cli.py:969`), `handle_error` mismatch (`errors.py:10`), `Grid.from_dict` (`grid.py:279`), test APIs (`Grid(11)`,`set_black_square:49`,`allSlots:82-103`), import-clobber (`App.jsx:97-99,555-595`), absence of `test_grid_routes.py`/`App*.test.jsx`.
+All prompt-supplied citations re-verified vs HEAD `116bda5`, no drift. Independently confirmed new citations: `validate_all` 4-check scope (`validator.py:20-49`), `get_word_slots` filter (`grid.py:213,242`), numbering key-format (`ExportPanel.jsx:80`,`App.jsx:575-576`,`cli.py:969`), `handle_error` mismatch (`errors.py:10`), `Grid.from_dict` (`grid.py:279`), test APIs (`Grid(11)`,`set_black_square:49`,`allSlots:82-103`), import-clobber (`App.jsx:97-99,555-595`), absence of `test_grid_routes.py`/`App*.test.jsx`.

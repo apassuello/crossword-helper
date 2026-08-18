@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL — use **superpowers:subagent-driven-development** (recommended) or **superpowers:executing-plans** to implement task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **STATUS: READY — verified 2026-07-14 against HEAD `9e124b2`.** Every load-bearing citation re-verified against the real code (files drifted since the parent plan: `cli.py` grew from `105-614` → 1640 lines). Authoring → per-section adversarial hardening → cross-section consistency pass → advisor integration all applied. Expands **Phase 3** (Tasks 13–19) of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:530-665`.
+> **STATUS: READY — verified 2026-07-14 against HEAD `9828241`.** Every load-bearing citation re-verified against the real code (files drifted since the parent plan: `cli.py` grew from `105-614` → 1640 lines). Authoring → per-section adversarial hardening → cross-section consistency pass → advisor integration all applied. Expands **Phase 3** (Tasks 13–19) of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:530-665`.
 >
 > **Convention (Arthur's):** this plan carries **decisions, contracts, signatures, and TDD assertion checklists — the executing agent writes all full code bodies.** Short snippets appear only where a literal is load-bearing. Concrete test assertions are given. If a step seems underspecified, the binding references are, in order: the task's Interfaces block, the parent plan's **Cross-task literals** (`:81-92`) and **Authoritative endpoint contracts** (`:35-73`), and the real source files cited by `file:line`.
 
-**Branch:** `feature/m1-constructors-bench` · **HEAD:** `9e124b2` · **Repo:** `/Users/apa/projects/crossword-helper`
+**Branch:** `feature/m1-constructors-bench` · **HEAD:** `9828241` · **Repo:** `/Users/apa/projects/crossword-helper`
 
 ---
 
@@ -98,7 +98,7 @@ The 7 sections were drafted and hardened **in isolation**; a dedicated cross-sec
 
 > Expands Task 13 of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:538-562`. Phase-3 preamble (`:530-536`), **Cross-task literals** (`:81-92`), **Authoritative endpoint contracts** (`:35-73`), **Global Constraints** (`:18-31`), **Client-side computation policy** (`:96-112`), **State-machine amendments** (`:115-123`) are BINDING — referenced, never restated.
 > **Convention:** signatures / contracts / short load-bearing snippets only — the implementer writes full bodies. Test steps carry concrete assertions.
-> **Branch:** `feature/m1-constructors-bench` · verified vs HEAD `9e124b2`.
+> **Branch:** `feature/m1-constructors-bench` · verified vs HEAD `9828241`.
 > **Scope decision (flagged):** parent's title/commit names all web algorithms (`:538`, `:562`) yet its Files list (`:541`) omits the beam/hybrid wrappers while its interface (`:549`) mandates beam graceful-stop. Resolution: csp + repair are the fully-tested core; beam + hybrid are reached with the smallest honest edit (forward `pause_controller` through the wrappers; the CLI owns one degenerate save so `orchestrator.py`'s native beam writer stays unused — the parent's "native beam save stays unused"). Deviation from the Files list is flagged in Scope & deviations.
 
 ### Files
@@ -275,7 +275,7 @@ Rationale — envelope tag: `save_csp_state` hardcodes top-level `algorithm="csp
 
 ### Files
 
-> **Line numbers below are HEAD-relative (9e124b2).** Task 13's option/param/wiring insertions in `cli.py` shift every `cli.py:` seam downward before Task 14 executes — **locate each seam by the shown code, not the absolute line.** The `autofill.py`, `state_manager.py`, `cli_adapter.py`, and test-file citations are not shifted by Task 13 and are exact at HEAD.
+> **Line numbers below are HEAD-relative (9828241).** Task 13's option/param/wiring insertions in `cli.py` shift every `cli.py:` seam downward before Task 14 executes — **locate each seam by the shown code, not the absolute line.** The `autofill.py`, `state_manager.py`, `cli_adapter.py`, and test-file citations are not shifted by Task 13 and are exact at HEAD.
 
 - Modify: `cli/src/cli.py` — `fill` command: `grid_file` argument (`:105`), new `--resume` option (add beside `:104-185`), grid-load block (`:210-218`), engine dispatch (`:350-396`), fill-call dispatch (`:462-506`). No change to the output block (`:533-651`) — resume rejoins it.
 - Modify: `backend/core/cli_adapter.py:403-476` (`fill_with_resume` argv) + new module-level `STATE_DIR`/`PAUSE_FLAG_DIR` constants.
@@ -586,7 +586,7 @@ Interaction to rely on (do not re-engineer): DD4 emits a **mid-stream** stderr `
 
 > **⚠️ Before executing — apply header Cross-section reconciliation notes 2 & 3** (per-task dispatch may not include the header; these OVERRIDE the body below): **(2)** the `useAutofillMachine` return surface is FLAT — expose/read `machine.taskId`/`.progress`/`.conflict`, never `machine.context.*` (and carry the `state`-vs-`status` PROVISIONAL caveat); **(3)** `conflict` is the object `{ slots, details } | null` (Task 18's shape) — store `conflict = { slots: [], details: err.details }`, and **Step-1 test 6 must assert `conflict.details === '…'`, NOT `conflict === '<string>'`.**
 
-*Expands Task 16 of `2026-07-12-m1-constructors-bench.md:600-611`. Binding references (do not restate): State-machine amendments §115-123 (amendments 1/2/3), Authoritative endpoint contracts rows `/api/fill/{pause,resume,with-progress,state}` + `GET /api/progress` (§41-73), Client-side computation policy §96-112. `useAutofillMachine.js` and `src/components/bench/AutofillPanel.jsx` are **created by Task 11** — every citation into their internals is marked `(PROVISIONAL — re-verify against Task 11 output at execution)`. Everything in `src/api/client.js`, `src/api/gridCodec.js`, the backend contracts, and the `MockEventSource` harness is verifiable at HEAD `9e124b2` and cited solidly.*
+*Expands Task 16 of `2026-07-12-m1-constructors-bench.md:600-611`. Binding references (do not restate): State-machine amendments §115-123 (amendments 1/2/3), Authoritative endpoint contracts rows `/api/fill/{pause,resume,with-progress,state}` + `GET /api/progress` (§41-73), Client-side computation policy §96-112. `useAutofillMachine.js` and `src/components/bench/AutofillPanel.jsx` are **created by Task 11** — every citation into their internals is marked `(PROVISIONAL — re-verify against Task 11 output at execution)`. Everything in `src/api/client.js`, `src/api/gridCodec.js`, the backend contracts, and the `MockEventSource` harness is verifiable at HEAD `9828241` and cited solidly.*
 
 ### Files
 - Modify: `src/hooks/useAutofillMachine.js` (PROVISIONAL — Task 11 file) — add the `pausing` sub-state + resume plumbing (DD1-DD3).
@@ -714,7 +714,7 @@ Conventions (mirror `useSaveMachine.test.jsx`): `vi.useFakeTimers()`; `renderHoo
 > **⚠️ Before executing — apply header Cross-section reconciliation notes 2 & 8** (per-task dispatch may not include the header; these OVERRIDE the body below): **(2)** read Task 16's FLAT machine surface — `result.current.taskId`/`.progress`/`.stateInfo`, never `.context.*`; **(8)** populating `stateInfo` with the `{slots_filled, total_slots, grid_size, algorithm}` subset is OK ONLY because the shared paused UI never reads `stateInfo.grid_preview`/`iteration_count` — if that changes, fetch the full `getFillState` body.
 
 > **Expands Task 17 of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:615-627`.**
-> **Branch:** `feature/m1-constructors-bench` · **HEAD:** `9e124b2` · **Convention:** signatures/contracts/short snippets only — implementer writes full bodies; concrete test assertions are specified.
+> **Branch:** `feature/m1-constructors-bench` · **HEAD:** `9828241` · **Convention:** signatures/contracts/short snippets only — implementer writes full bodies; concrete test assertions are specified.
 > **PROVISIONAL surfaces (Task 11 not landed).** `src/hooks/useAutofillMachine.js` does not exist yet (`ls` confirms absent; `useAutofillMachine` appears in **zero** source files). `EventSource` today lives only in `src/api/client.js` (`openProgress`), `src/hooks/useSSEProgress.js` (PatternMatcher-only), and the test doubles `src/__tests__/setupTests.js` + `src/api/__tests__/client.test.js` — **none is the autofill machine.** Every reference below to the machine's **state names** (`idle`/`running`/`paused`), **events** (`RESTORE`), and **context shape** is `(PROVISIONAL — re-verify against Task 11 output at execution)`. `src/App.jsx` autofill-lifecycle spans (`:269-451` = `handleAutofill` 269 → `handleResetAutofill` 451) will have drifted after Task 11 replaces them — re-anchor by grep, not by the line numbers here. Everything backend-contract / `client.js` / `gridCodec` / `Toast` cited below is verifiable NOW and cited solidly.
 
 ### Files
@@ -724,7 +724,7 @@ Conventions (mirror `useSaveMachine.test.jsx`): `vi.useFakeTimers()`; `renderHoo
 
 ### Interfaces
 
-**Consumes (all verified at HEAD `9e124b2`):**
+**Consumes (all verified at HEAD `9828241`):**
 - `api.listFillStates(maxAgeDays)` → `client.js:191-194` → `{states:[…], count}`. Each state is a `get_state_info` dict (`state_manager.py:268-277`, produced per-state by `list_states` at `state_manager.py:321,330`): `{task_id, timestamp, algorithm, version, slots_filled, total_slots, grid_size, iteration_count}` — **no `grid_preview`** (that field is added only by `getFillState`). `algorithm` here is the envelope state-format tag (see DD4), and it **is** present on every list row.
 - `api.getFillState(taskId)` → `client.js:187-189` → `{task_id, timestamp, algorithm, slots_filled, total_slots, grid_size, iteration_count, grid_preview}`; `grid_preview` = `saved_state.grid_dict["grid"]` = **`string[][]` of single-char CLI cells** (`pause_resume_routes.py:310`; each cell is one of `'#'`/`'.'`/`'A'`–`'Z'` — `grid.py get_cell:106-129`, assembled row-of-cells by `to_dict:257-276`); 404 `{error:"State not found for task_id: …"}` when the file is gone (`:312-313`).
 - `api.editSummary({taskId, editedGrid})` → `client.js:204-206` → `{filled_count, emptied_count, modified_count, new_words[], removed_words[]}` (contracts table, plan:55); 400/404. `editedGrid` MUST be CLI strings.
@@ -819,7 +819,7 @@ Task 16 defines the `paused` entry as `paused{taskId, progress, stateInfo}` (pla
 
 > **⚠️ Before executing — apply header Cross-section reconciliation notes 2, 3, 4** (per-task dispatch may not include the header; these OVERRIDE the body below): **(2)** Task 16's machine surface is FLAT — no `context.*` (read `machine.conflict` directly); **(3)** `conflict` is the object `{ slots, details }` (this section's shape wins; Task 16 stores it and Step-1 test 6 asserts `conflict.details`); **(4)** expose cancel/discard as action methods (`cancel()` extended in place + new `discard()`), not dispatched `RESUME_CONFLICT/DISCARD/CANCEL` events — that phrasing is pseudocode.
 
-> Expands Task 18 of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:631-641`. **Branch:** `feature/m1-constructors-bench` · **HEAD:** `9e124b2`.
+> Expands Task 18 of `docs/superpowers/plans/2026-07-12-m1-constructors-bench.md:631-641`. **Branch:** `feature/m1-constructors-bench` · **HEAD:** `9828241`.
 > **Convention:** signatures/contracts/short snippets only — the implementer writes full bodies. Test steps carry concrete assertions.
 > **Binding refs (do not restate):** Authoritative endpoint contracts (`…bench.md:35-73`, esp. cancel `:49`, resume-409 `:50`); State-machine amendments (`…bench.md:115-123`, esp. §1 confirmed-stop window, §3 resume-via-`submitting`); Client-side computation policy (`…bench.md:96-112` — slot-extent geometry is *granted*, fill/validity is *denied*); Error surfaces (Global Constraints §"Error surfacing — four surfaces only", `…bench.md:24` — "No `alert()`, no modals-for-errors, no console-only errors"; a `window.confirm` is a modal-for-errors and is therefore banned).
 
@@ -1064,7 +1064,7 @@ Because the test polls `GET /api/fill/state` rather than draining SSE, it valida
 
 Built and hardened via a multi-agent workflow, mirroring the U5/Task-8 process:
 
-1. **Recon (6 parallel agents):** re-verified every load-bearing citation against HEAD `9e124b2` (files drifted — `cli.py` 105-614 → 1640 lines) and surfaced **34 hazards** (bugs, dead code, format-collisions, silent-failure traps, races) across the CSP pause path, the repair/beam/hybrid graceful-stop path, state serialization + IPC, the `fill` command, the backend routes/adapter, and the frontend contracts. Findings drove the DD decisions (e.g. the silent `FillResult.paused` gap, the split-dir severance, the envelope `algorithm`-tag collision, the beam-wrapper pause-drop).
+1. **Recon (6 parallel agents):** re-verified every load-bearing citation against HEAD `9828241` (files drifted — `cli.py` 105-614 → 1640 lines) and surfaced **34 hazards** (bugs, dead code, format-collisions, silent-failure traps, races) across the CSP pause path, the repair/beam/hybrid graceful-stop path, state serialization + IPC, the `fill` command, the backend routes/adapter, and the frontend contracts. Findings drove the DD decisions (e.g. the silent `FillResult.paused` gap, the split-dir severance, the envelope `algorithm`-tag collision, the beam-wrapper pause-drop).
 2. **Draft (7 architects):** one per task (13–19), each expanding the parent stub into an execution-ready section on the shared verified-facts sheet.
 3. **Adversarial verify (7 reviewers):** each section independently re-checked against primary source, fabrications killed, Arthur's no-full-code convention enforced. **All 7 returned HARDENED** (real defects fixed — e.g. Task 15's DD4b SSE-hang BLOCKER, Task 19's `create_test_grid` NameError, Task 13's 5 correctness defects).
 4. **Cross-section consistency pass (1 agent, the view no per-section reviewer had):** found the T14 lock-channel error, the T16↔T17↔T18 flat-vs-context surface seam, and the `conflict` string-vs-object collision → the reconciliation notes above; **11 cross-section contracts verified CONSISTENT** (paused stdout keys, `state_paths` constants, `fill --resume` argv, paused-SSE termination, envelope `algorithm=="csp"`, resume payload encoding, and more).
