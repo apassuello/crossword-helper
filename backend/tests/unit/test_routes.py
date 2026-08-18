@@ -695,3 +695,27 @@ class TestFillWithProgressTaskIdWiring:
         error = resp.get_json()["error"]
         assert error["code"] == "UNKNOWN_WORDLIST"
         assert "no_such_list" in error["message"]
+
+
+class TestResumeTaskIdValidation:
+    """
+    #21.3 — POST /api/fill/with-progress reads resume_task_id from the JSON body and builds
+    STATE_DIR / f"{resume_task_id}.json.gz" from it. Unlike the URL-segment ids
+    (/fill/pause/<task_id> etc.), which Flask's default converter keeps free of
+    "/", a body value can carry traversal. Rejected before the path is built.
+    """
+
+    @pytest.mark.parametrize("bad_id", ["../../../etc/passwd", "..", "sub/dir", "has space", "x" * 65])
+    def test_malformed_resume_task_id_rejected(self, client, bad_id):
+        c, _ = client
+        resp = _post_json(c, "/api/fill/with-progress", _fill_request(resume_task_id=bad_id))
+
+        assert resp.status_code == 400
+        assert b"resume_task_id" in resp.data
+
+    def test_wellformed_resume_task_id_reaches_the_state_lookup(self, client):
+        """A conforming id must pass validation and fail on absence instead — 404, not 400."""
+        c, _ = client
+        resp = _post_json(c, "/api/fill/with-progress", _fill_request(resume_task_id="resume_9f2c1a0b"))
+
+        assert resp.status_code == 404

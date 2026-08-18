@@ -738,3 +738,43 @@ class TestEditSummary:
         )
 
         assert resp.status_code == 400
+
+
+class TestTaskIdValidation:
+    """
+    #21.3 — a task id taken from the JSON request body reaches a filesystem path.
+
+    Flask's default URL converter cannot match "/", so ids arriving as a URL
+    segment (/fill/pause/<task_id>, /fill/cancel/<task_id>, /fill/state/<task_id>)
+    cannot express traversal. The body-sourced ones can: POST /api/fill/resume
+    reads data["task_id"], and POST /api/fill reads data["resume_task_id"].
+
+    Exploitability is limited — the target must already exist and parse as a valid
+    state envelope, and writes always use a server-minted uuid — so this rejects
+    the malformed id rather than claiming to close an exploit.
+    """
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "../../../etc/passwd",
+            "..",
+            "sub/dir",
+            "has space",
+            "trailing.dot",
+            "",
+            "x" * 65,
+        ],
+    )
+    def test_resume_rejects_malformed_task_id(self, client, bad_id):
+        resp = client.post("/api/fill/resume", json={"task_id": bad_id})
+
+        assert resp.status_code == 400, f"{bad_id!r} was not rejected"
+        assert b"task_id" in resp.data
+
+    @pytest.mark.parametrize("good_id", ["task_abc123", "resume_9f2c1a0b", "A-b_9", "x" * 64])
+    def test_resume_accepts_wellformed_task_id(self, client, good_id):
+        """A conforming id must get past validation — 404 (no such state), never 400."""
+        resp = client.post("/api/fill/resume", json={"task_id": good_id})
+
+        assert resp.status_code != 400, f"{good_id!r} was wrongly rejected"

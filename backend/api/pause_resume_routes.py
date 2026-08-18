@@ -25,6 +25,7 @@ from backend.core.cli_adapter import get_adapter
 from backend.core.edit_merger import EditMerger
 from backend.core.state_paths import PAUSE_FLAG_DIR
 from backend.core.state_paths import STATE_DIR as STATE_STORAGE_DIR
+from backend.core.state_paths import is_valid_task_id
 from backend.core.wordlist_resolver import (
     get_default_wordlist_paths,
     resolve_wordlist_paths_strict,
@@ -294,6 +295,12 @@ def resume_autofill():
             return jsonify({"error": "Missing required field: task_id"}), 400
 
         task_id = data["task_id"]
+        # #21.3: body-sourced, and reaches StateManager's path building below.
+        if not is_valid_task_id(task_id):
+            return (
+                jsonify({"error": "Field 'task_id' must match ^[A-Za-z0-9_-]{1,64}$"}),
+                400,
+            )
         edited_grid = data.get("edited_grid")
         options = _resolve_resume_options(data)
 
