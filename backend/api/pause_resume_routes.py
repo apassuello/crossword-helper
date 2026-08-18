@@ -154,9 +154,6 @@ def cancel_autofill(task_id: str):
 
         from .progress_routes import cleanup_process, is_process_running
 
-        # Create pause controller for this task
-        pause_controller = PauseController(task_id=task_id, pause_dir=PAUSE_FLAG_DIR)
-
         if not is_process_running(task_id):
             return handle_error(
                 "TASK_NOT_FOUND",
