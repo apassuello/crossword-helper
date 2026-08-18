@@ -3,14 +3,43 @@ Unit tests for beam search autofill module.
 """
 
 import time
-from unittest.mock import patch
+from unittest.mock import DEFAULT, patch
 
 import pytest
 from src.core.grid import Grid
 from src.fill.beam_search_autofill import BeamSearchAutofill, BeamState
 from src.fill.pattern_matcher import PatternMatcher
+from src.fill.state_manager import StateManager
 from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.word_list import WordList
+
+
+class _AlwaysPauseController:
+    """Pause controller stub whose should_pause() is True from the very first
+    call, so any latency a test measures comes from the orchestrator's own
+    iteration gate, not from a real pause request taking time to land."""
+
+    def should_pause(self) -> bool:
+        return True
+
+    def clear_pause(self) -> None:
+        pass
+
+
+def _patch_slow_expand_beam(target, sleep_interval: float):
+    """patch.object() context that makes one beam_manager.expand_beam() call
+    cost `sleep_interval` wall-clock seconds, then delegates to the real
+    implementation via wraps= so actual solver behaviour is preserved. This
+    is what makes "one iteration is expensive" deterministic instead of
+    depending on timing noise from the real search.
+    """
+    real_expand_beam = target.beam_manager.expand_beam
+
+    def _sleep_then_delegate(*args, **kwargs):
+        time.sleep(sleep_interval)
+        return DEFAULT  # fall through to the wrapped (real) implementation
+
+    return patch.object(target.beam_manager, "expand_beam", wraps=real_expand_beam, side_effect=_sleep_then_delegate)
 
 
 class TestBeamState:
@@ -315,6 +344,97 @@ class TestBeamSearchAutofill:
         # Should not exceed timeout by more than 5 seconds (fixed ceiling, not % —
         # % margins are fragile on loaded CI runners where a single iteration can take 1-2s)
         assert elapsed <= timeout + 5
+
+    def test_fill_pause_checked_every_iteration_not_every_ten(self, small_grid, word_list, pattern_matcher_regex):
+        """Issue #26: fill()'s pause check must not be gated behind `iterations % 10`.
+
+        A beam iteration's cost is unbounded — it scores candidates across the whole
+        beam for one slot — so gating the pause check let an expensive iteration blow
+        straight through a pause request (measured: `iterations` reaching 1 after 20s
+        on a blank 15x15, pause never observed). Here one iteration is made
+        artificially expensive and deterministic (a fixed sleep before delegating to
+        the real expand_beam), so a `% 10` gate is directly observable as elapsed
+        wall-clock time. Pre-fix this measured ~16s at sleep_interval=0.4s -- far
+        more than a "skip 9, catch on the 10th" estimate would predict, because
+        `_try_backtracking` also calls `expand_beam` internally on top of the outer
+        loop's own calls, so the gate's effective delay compounds past the modulo
+        alone. The assertion below only needs "much less than the ~16s pre-fix
+        figure", not an exact multiple.
+        """
+        # small_grid has 28 empty slots (see TestBeamBacktrackingOrder/other tests
+        # using the same fixture) — comfortably >=10, so the `% 10` gate gets a
+        # chance to fire at all before the search would otherwise terminate.
+        assert len(small_grid.get_empty_slots()) >= 10
+
+        autofill = BeamSearchAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_regex,
+            beam_width=2,
+            pause_controller=_AlwaysPauseController(),
+        )
+
+        sleep_interval = 0.4
+        with _patch_slow_expand_beam(autofill, sleep_interval):
+            start = time.time()
+            result = autofill.fill(timeout=30)
+            elapsed = time.time() - start
+
+        assert result.paused is True, "should_pause() was True from the start; fill() must report paused"
+        # Fixed ceiling, not a multiple of sleep_interval -- see
+        # test_fill_respects_timeout above for the same reasoning applied to a
+        # different bound: a % margin this tight (pre-fix was ~16s, post-fix is
+        # ~0.05s) is fragile on a loaded runner where scheduling jitter alone can
+        # push a near-instant path past a sub-second relative bound. 3s stays two
+        # orders of magnitude below the pre-fix figure while giving real headroom.
+        assert elapsed < 3.0, (
+            f"pause should be observed within about one slow iteration, got {elapsed:.2f}s — "
+            "the iteration-count gate is letting expensive iterations run past the pause request"
+        )
+
+    def test_resume_fill_pause_checked_every_iteration_not_every_ten(self, small_grid, word_list, pattern_matcher_regex):
+        """Same defect, inside _resume_fill (orchestrator.py, the loop at ~903-909).
+
+        Identical gate, identical mechanism, separate code path — a fix touching
+        only fill() leaves this loop silently broken. The resume_state is built the
+        same way _save_state_and_pause captures one (StateManager.capture_beam_search_state),
+        describing a search that has just started (no slots filled yet).
+        """
+        assert len(small_grid.get_empty_slots()) >= 10
+
+        autofill = BeamSearchAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_regex,
+            beam_width=2,
+            pause_controller=_AlwaysPauseController(),
+        )
+
+        all_slots = autofill.grid.get_empty_slots()
+        initial_state = BeamState(
+            grid=autofill.grid.clone(),
+            slots_filled=0,
+            total_slots=len(all_slots),
+            score=0.0,
+            used_words=set(),
+            slot_assignments={},
+        )
+        beam = [initial_state.clone() for _ in range(autofill.beam_width)]
+        resume_state = StateManager.capture_beam_search_state(autofill, beam, set(), 0)
+
+        sleep_interval = 0.4
+        with _patch_slow_expand_beam(autofill, sleep_interval):
+            start = time.time()
+            result = autofill.fill(timeout=30, resume_state=resume_state)
+            elapsed = time.time() - start
+
+        assert result.paused is True, "should_pause() was True from the start; _resume_fill() must report paused"
+        # Fixed ceiling -- see test_fill_pause_checked_every_iteration_not_every_ten
+        # above for why this is not a multiple of sleep_interval.
+        assert elapsed < 3.0, (
+            f"resume path should observe pause within about one slow iteration, got {elapsed:.2f}s — "
+            "the resume loop's iteration-count gate is letting expensive iterations run past the pause request"
+        )
 
     def test_fill_no_duplicate_words(self, small_grid, word_list, pattern_matcher_trie):
         """Test that fill doesn't use duplicate words."""

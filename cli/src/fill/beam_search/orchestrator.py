@@ -308,8 +308,14 @@ class BeamSearchOrchestrator:
             self.iterations += 1
             slot_idx += 1
 
-            # Check for pause request (every 10 iterations for performance)
-            if self.pause_controller and self.iterations % 10 == 0:
+            # Check for pause request every iteration. should_pause() already
+            # rate-limits its own filesystem stat to once per 0.1s and caches
+            # between calls, so this costs a time.monotonic() comparison — the
+            # gate used to skip the check outright on 9 of every 10 iterations,
+            # and a beam iteration's cost is unbounded (it scores candidates
+            # across the whole beam for one slot), so that let an expensive
+            # iteration blow straight through a pause request (#26).
+            if self.pause_controller:
                 if self.pause_controller.should_pause():
                     logger.info(f"Pause requested at iteration {self.iterations}")
                     # Save state before pausing
@@ -904,8 +910,14 @@ class BeamSearchOrchestrator:
             self.iterations += 1
             slot_idx += 1
 
-            # Check for pause request (every 10 iterations for performance)
-            if self.pause_controller and self.iterations % 10 == 0:
+            # Check for pause request every iteration. should_pause() already
+            # rate-limits its own filesystem stat to once per 0.1s and caches
+            # between calls, so this costs a time.monotonic() comparison — the
+            # gate used to skip the check outright on 9 of every 10 iterations,
+            # and a beam iteration's cost is unbounded (it scores candidates
+            # across the whole beam for one slot), so that let an expensive
+            # iteration blow straight through a pause request (#26).
+            if self.pause_controller:
                 if self.pause_controller.should_pause():
                     logger.info(f"Pause requested at iteration {self.iterations}")
                     # Save state before pausing
