@@ -109,6 +109,8 @@ def _execute_resume(
     min_score: int,
     wordlists: tuple,
     task_id_override: Optional[str] = None,
+    state_dir: Optional[str] = None,
+    pause_flag_dir: Optional[str] = None,
 ):
     """
     Shared implementation for `resume` and `fill --resume`.
@@ -116,8 +118,14 @@ def _execute_resume(
     State resolution precedence:
     1. If state_file is an existing file, THAT file is loaded (it must be a
        valid state file — its content is never silently ignored).
-    2. Otherwise state_file is treated as a task id and looked up in the
-       state directory (/tmp/crossword_states by default).
+    2. Otherwise state_file is treated as a task id and looked up in
+       --state-dir, or /tmp/crossword_states when that is not given.
+
+    state_dir and pause_flag_dir must be threaded through rather than left to
+    the library defaults: `fill` accepts both flags, so a fill run against a
+    non-default directory saves state and pause markers where a defaulted
+    `resume` cannot see them, and the failure surfaces as "task not found"
+    rather than as a misconfigured path (#25).
 
     Wordlists come from -w if given, else from the wordlist paths recorded in
     the saved state; a clear error is raised if neither is available.
@@ -137,7 +145,7 @@ def _execute_resume(
     progress = ProgressReporter(enabled=json_output)
     progress.start(f"Resuming from {state_file}")
 
-    state_manager = StateManager()
+    state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
 
     # --- 1. Resolve and load the state -------------------------------------
     state_path = Path(state_file)
@@ -213,7 +221,7 @@ def _execute_resume(
 
     pause_controller = None
     if task_id:
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
         pause_controller.clear_pause()
         pause_controller.mark_running()
 
@@ -1983,7 +1991,13 @@ def build_cache(wordlist: str, output: Optional[str]):
     default=False,
     help="Output JSON format (for API compatibility)",
 )
-def pause(task_id: str, json_output: bool):
+@click.option(
+    "--pause-flag-dir",
+    type=click.Path(),
+    help="Directory to write the pause flag into (PauseController pause_dir). Must "
+    "match the --pause-flag-dir the running fill used.",
+)
+def pause(task_id: str, json_output: bool, pause_flag_dir: Optional[str]):
     """
     Pause a running autofill task.
 
@@ -1993,11 +2007,15 @@ def pause(task_id: str, json_output: bool):
     Examples:
         crossword pause task_abc123
         crossword pause task_abc123 --json-output
+        crossword pause task_abc123 --pause-flag-dir /srv/flags
+
+    Note: `pause` takes no --state-dir. It only writes a pause flag; the
+    running fill is what saves state, into its own --state-dir.
     """
     try:
         from .fill.pause_controller import PauseController
 
-        controller = PauseController(task_id=task_id)
+        controller = PauseController(task_id=task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
 
         # Only pause tasks that are actually running (a fill started with
         # --task-id registers a pid marker). Pausing a nonexistent task used
@@ -2063,6 +2081,17 @@ def pause(task_id: str, json_output: bool):
     multiple=True,
     help="Word list files (defaults to the wordlists recorded in the saved state)",
 )
+@click.option(
+    "--state-dir",
+    type=click.Path(),
+    help="Directory for saved solver state (StateManager storage_dir). Must match the " "--state-dir the paused fill used.",
+)
+@click.option(
+    "--pause-flag-dir",
+    type=click.Path(),
+    help="Directory watched for the pause flag file (PauseController pause_dir). Must "
+    "match the --pause-flag-dir the paused fill used.",
+)
 def resume(
     state_file: str,
     output: Optional[str],
@@ -2071,6 +2100,8 @@ def resume(
     timeout: int,
     min_score: int,
     wordlists: tuple,
+    state_dir: Optional[str],
+    pause_flag_dir: Optional[str],
 ):
     """
     Resume autofill from a saved state file or task id.
@@ -2078,6 +2109,11 @@ def resume(
     STATE_FILE may be either the path to a saved .json.gz/.json state file, or
     a bare task id (as shown by `crossword list-states`), which is looked up
     in the state directory. An explicit existing file path always wins.
+
+    Pass the same --state-dir and --pause-flag-dir the paused fill used. They
+    default to the library defaults (/tmp/crossword_states and /tmp), which is
+    also what `fill` defaults to, so a run that took no directory flags needs
+    none here either.
 
     Wordlists and algorithm default to what the saved state recorded, so a
     plain `crossword resume TASK_ID` continues exactly where the paused fill
@@ -2088,6 +2124,7 @@ def resume(
         crossword resume /tmp/crossword_states/mytask.json.gz
         crossword resume mytask -o completed.json -t 600
         crossword resume mytask -a repair -w data/wordlists/comprehensive.txt
+        crossword resume mytask --state-dir /srv/states --pause-flag-dir /srv/flags
     """
     try:
         _execute_resume(
@@ -2099,6 +2136,8 @@ def resume(
             timeout=timeout,
             min_score=min_score,
             wordlists=wordlists,
+            state_dir=state_dir,
+            pause_flag_dir=pause_flag_dir,
         )
     except SystemExit:
         raise
@@ -2128,7 +2167,12 @@ def resume(
     type=int,
     help="Only show states newer than this many days",
 )
-def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int]):
+@click.option(
+    "--state-dir",
+    type=click.Path(),
+    help="Directory holding saved solver state (StateManager storage_dir). Must match " "the --state-dir the fill used.",
+)
+def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int], state_dir: Optional[str]):
     """
     List all saved autofill states.
 
@@ -2139,11 +2183,15 @@ def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int]):
         crossword list-states --sort-by progress
         crossword list-states --max-age-days 7
         crossword list-states --json-output
+        crossword list-states --state-dir /srv/states
+
+    Note: `list-states` takes no --pause-flag-dir. It reads the state store
+    only and never consults a pause flag.
     """
     try:
         from .fill.state_manager import StateManager
 
-        state_manager = StateManager()
+        state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
         states = state_manager.list_states(max_age_days=max_age_days)
 
         # Sort states

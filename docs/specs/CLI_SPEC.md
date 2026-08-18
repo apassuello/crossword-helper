@@ -449,7 +449,7 @@ not treat any figure above as a fixed spec value.
 
 **[SPEC]**
 ```bash
-crossword pause TASK_ID [--json-output]
+crossword pause TASK_ID [--json-output] [--pause-flag-dir DIR]
 ```
 
 Signals a currently-running `fill --task-id TASK_ID` process to save its
@@ -466,10 +466,22 @@ python -m cli.src.cli pause nonexistent_task --json-output
 ```
 Exit code `1` on this failure (verified live).
 
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `--json-output` | flag | off | — |
+| `--pause-flag-dir` | Path | `/tmp` | Must match the `--pause-flag-dir` the running `fill` used |
+
+`pause` takes **no** `--state-dir`. It only writes a pause flag and reads the
+running marker; the `fill` process is what saves state, into its own
+`--state-dir`.
+
 **[SPEC]** Mechanism: creates a flag file at
-`/tmp/crossword_pause_{task_id}.flag`; the running `fill` process polls for
-this file (via `PauseController`) and, on detecting it, serializes its
-state and exits. See [Pause/Resume Workflow](#pauseresume-workflow).
+`{pause-flag-dir}/crossword_pause_{task_id}.flag` (`/tmp` by default); the
+running `fill` process polls for this file (via `PauseController`) and, on
+detecting it, serializes its state and exits. Before #25 this directory was
+hardcoded, so a `fill` started with a non-default `--pause-flag-dir` could not
+be paused by the CLI at all — it reported the task as not running.
+See [Pause/Resume Workflow](#pauseresume-workflow).
 
 ---
 
@@ -493,11 +505,14 @@ lookup.
 | `--timeout`, `-t` | int | `300` | — |
 | `--min-score` | int | `30` | — |
 | `--wordlists`, `-w` | Path, multiple | wordlists recorded in the saved state | — |
+| `--state-dir` | Path | `/tmp/crossword_states` | Must match the `--state-dir` the paused `fill` used |
+| `--pause-flag-dir` | Path | `/tmp` | Must match the `--pause-flag-dir` the paused `fill` used |
 
 ```bash
 crossword resume mytask
 crossword resume mytask -o completed.json -t 600
 crossword resume mytask -a repair -w data/wordlists/comprehensive.txt
+crossword resume mytask --state-dir /srv/states --pause-flag-dir /srv/flags
 ```
 
 **[SPEC] Verified JSON result fields** (same shape family as `fill`):
@@ -505,7 +520,8 @@ crossword resume mytask -a repair -w data/wordlists/comprehensive.txt
 `time_elapsed`, `all_slots_filled`, `paused`, `algorithm`, `task_id`,
 `wordlists`, `output_file`.
 
-Resuming an unknown state:
+Resuming an unknown state (the directory named is whatever `--state-dir`
+resolved to):
 ```
 Error: 'nonexistent_task' is neither an existing state file nor a known
 task id in /tmp/crossword_states
@@ -520,7 +536,7 @@ Exit code `1` (verified live).
 
 **[SPEC]**
 ```bash
-crossword list-states [--json-output] [--sort-by {timestamp|progress|size}] [--max-age-days N]
+crossword list-states [--json-output] [--sort-by {timestamp|progress|size}] [--max-age-days N] [--state-dir DIR]
 ```
 
 | Option | Type | Default | Notes |
@@ -528,6 +544,10 @@ crossword list-states [--json-output] [--sort-by {timestamp|progress|size}] [--m
 | `--json-output` | flag | off | — |
 | `--sort-by` | Choice `timestamp`\|`progress`\|`size` | `timestamp` | — |
 | `--max-age-days` | int | none (all ages) | — |
+| `--state-dir` | Path | `/tmp/crossword_states` | Must match the `--state-dir` the `fill` used |
+
+`list-states` takes **no** `--pause-flag-dir`: it reads the state store only
+and never consults a pause flag.
 
 **[SPEC] Verified output:**
 ```
