@@ -15,6 +15,7 @@ import json
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -668,3 +669,44 @@ def test_resume_degenerate_reseed_preserves_structure(tmp_path):
     assert "grid" in out and len(out["grid"]) == len(saved)
     for r, c in black:
         assert out["grid"][r][c] == "#"  # black-square structure preserved
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("algorithm", ["beam", "hybrid"])
+def test_no_orphaned_beam_state_in_default_dir(tmp_path, algorithm):
+    """
+    #26 finding 2 — the orchestrator's native beam-state writer must stay inert.
+
+    It builds a bare StateManager(), so it ignores --state-dir and always writes
+    `<task_id>.json.gz` under the default store. The CLI's canonical degenerate
+    save writes the same basename immediately afterwards, so the beam file is
+    either orphaned in the default dir (--state-dir set, as here) or overwritten
+    outright (--state-dir omitted). Nothing reads it either way.
+
+    Pinned end-to-end because the guard lives in a constructor argument
+    (BeamSearchAutofill passes task_id=None to the orchestrator) and a future
+    "fix" that re-forwards it would be invisible to any CLI-level assertion.
+    Hybrid is included because its phase-1 solver is built through the same
+    wrapper (hybrid_autofill.py:138).
+    """
+    task_id = f"orph{algorithm}{uuid.uuid4().hex[:8]}"
+    default_store = StateManager().storage_dir
+    orphan = default_store / f"{task_id}.json.gz"
+
+    try:
+        proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id)
+
+        assert proc.returncode == 0
+        assert json.loads(stdout)["paused"] is True
+
+        assert not orphan.exists(), (
+            f"orchestrator wrote a native beam state to the default store " f"({orphan}); --state-dir was {state_dir}"
+        )
+
+        # The one canonical save is the CLI's, in --state-dir, and it is degenerate.
+        with gzip.open(state_dir / f"{task_id}.json.gz", "rt", encoding="utf-8") as f:
+            env = json.load(f)
+        assert env["algorithm"] == "csp"
+        assert env["metadata"]["algorithm"] == algorithm
+    finally:
+        orphan.unlink(missing_ok=True)
