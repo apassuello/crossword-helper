@@ -12,7 +12,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 
 from backend.api.errors import handle_error
-from backend.api.progress_routes import create_progress_tracker, send_progress
+from backend.api.progress_routes import cleanup_process, create_progress_tracker, send_progress
 from backend.api.validators import (
     normalize_grid_to_cli,
     validate_fill_request,
@@ -257,6 +257,58 @@ def fill_grid():
 # ==================================================
 
 
+def _pump_stderr(process: subprocess.Popen, stderr_lines: list, task_id: str, stderr_stream=None) -> None:
+    """Thread target: read the child's stderr line-by-line and forward parsed
+    progress events, exactly as `run_cli_with_progress` used to do on the
+    calling thread. Runs on its own thread so a hung or silent child cannot
+    block `communicate(timeout=...)` in the caller — see issue #22. `readline()`
+    only returns "" at EOF, which fires when the child exits or its stderr is
+    otherwise closed (e.g. by `terminate()`/`kill()` in the caller's
+    `except TimeoutExpired` handler), so this thread always exits once the
+    child is gone.
+
+    `stderr_stream` is the caller's own captured reference to `process.stderr`,
+    taken before the caller nulls out that attribute (so `communicate()` won't
+    also drain it — see the comment at the call site). Read from the passed-in
+    stream rather than `process.stderr` here: this thread is started, then the
+    attribute is nulled, with no synchronization between the two: re-reading
+    `process.stderr` from inside this thread would race the caller for which
+    happens first, and could see None.
+    """
+    stream = stderr_stream if stderr_stream is not None else process.stderr
+    while True:
+        line = stream.readline()
+        if not line:
+            break
+
+        stderr_lines.append(line.rstrip())
+        logger.info(f"[CLI STDERR] {line.rstrip()}")
+
+        # Parse progress JSON from stderr
+        try:
+            progress_data = json.loads(line.strip())
+            if progress_data.get("type") == "progress":
+                # CRITICAL: Never forward 'complete'/'error'/'paused' from
+                # stderr. The CLI sends these progress events to stderr
+                # BEFORE writing the actual result (with grid data) to
+                # stdout. If we forward a terminal status here, the SSE
+                # generator breaks before the real result arrives,
+                # causing "No solution found".
+                stderr_status = progress_data.get("status", "running")
+                if stderr_status in ("complete", "error", "paused"):
+                    stderr_status = "running"
+
+                send_progress(
+                    task_id,
+                    progress_data.get("progress", 0),
+                    progress_data.get("message", "Processing..."),
+                    stderr_status,
+                    progress_data.get("data"),
+                )
+        except json.JSONDecodeError:
+            pass
+
+
 def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
     """
     Run CLI command and send progress updates via SSE.
@@ -297,42 +349,35 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
         logger.info(f"[CLI DEBUG] PID={process.pid}, cmd={' '.join(cmd)}")
         send_progress(task_id, 10, "CLI process running...", "running")
 
-        # Read stderr in real-time for progress updates
+        # Read stderr in real-time for progress updates, off the calling
+        # thread — see #22 and `_pump_stderr`'s docstring. `communicate`
+        # below is what actually enforces `timeout`.
+        #
+        # Capture the stream and hand it to the thread explicitly, then null
+        # out `process.stderr` before calling `communicate()`: left with a
+        # stderr pipe of its own, `communicate()` drains it internally in
+        # parallel with this thread's reads on the very same pipe, and the
+        # two silently race for each line — verified empirically (a
+        # standalone probe, 5 runs): 2-4 of 20 progress lines per run landed
+        # in communicate()'s own buffer instead of reaching send_progress.
+        # Nulling the attribute (rather than leaving communicate() to find
+        # it) means there is exactly one reader on the pipe; `communicate()`
+        # skips a stream it sees as None entirely. stdout is untouched and
+        # still drained by `communicate()` as before.
         stderr_lines = []
-        while True:
-            line = process.stderr.readline()
-            if not line:
-                break
-
-            stderr_lines.append(line.rstrip())
-            logger.info(f"[CLI STDERR] {line.rstrip()}")
-
-            # Parse progress JSON from stderr
-            try:
-                progress_data = json.loads(line.strip())
-                if progress_data.get("type") == "progress":
-                    # CRITICAL: Never forward 'complete'/'error'/'paused' from
-                    # stderr. The CLI sends these progress events to stderr
-                    # BEFORE writing the actual result (with grid data) to
-                    # stdout. If we forward a terminal status here, the SSE
-                    # generator breaks before the real result arrives,
-                    # causing "No solution found".
-                    stderr_status = progress_data.get("status", "running")
-                    if stderr_status in ("complete", "error", "paused"):
-                        stderr_status = "running"
-
-                    send_progress(
-                        task_id,
-                        progress_data.get("progress", 0),
-                        progress_data.get("message", "Processing..."),
-                        stderr_status,
-                        progress_data.get("data"),
-                    )
-            except json.JSONDecodeError:
-                pass
+        stderr_stream = process.stderr
+        stderr_thread = threading.Thread(
+            target=_pump_stderr,
+            args=(process, stderr_lines, task_id, stderr_stream),
+            daemon=True,
+        )
+        stderr_thread.start()
+        process.stderr = None
 
         # Wait for completion
         stdout, stderr = process.communicate(timeout=timeout)
+        stderr_thread.join(timeout=5)
+        stderr = ""  # fully consumed by _pump_stderr into stderr_lines above
 
         logger.info(f"[CLI DEBUG] Process exited with code {process.returncode}")
         logger.info(f"[CLI DEBUG] stdout length: {len(stdout)} chars")
@@ -401,6 +446,12 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             process.wait(timeout=5)
         except (subprocess.TimeoutExpired, OSError):
             process.kill()
+        # Termination above closes the child's end of the stderr pipe, so
+        # the reader thread has already seen (or is about to see) EOF —
+        # bound the join rather than skip it, so a timed-out run doesn't
+        # return with it still unjoined.
+        if "stderr_thread" in locals():
+            stderr_thread.join(timeout=5)
         send_progress(task_id, 0, "Operation timed out", "error")
     except Exception as e:
         import traceback
@@ -415,6 +466,19 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
                     Path(temp_file).unlink(missing_ok=True)
                 except Exception:
                     pass
+        # #21 sub-item 1: register_process() above has no matching removal
+        # on this path — only the cancel route's cleanup_process() ever
+        # popped the registry, so a completed or paused fill left a dead
+        # Popen in running_processes forever. cleanup_process is idempotent
+        # (pop(task_id, None), then a poll-and-terminate that no-ops on an
+        # already-dead process), so this is safe unconditionally — no need
+        # to special-case paused/cancelled/errored. Best-effort like the
+        # temp-file cleanup above: a cleanup step in `finally` must never be
+        # able to mask whatever result was already sent above.
+        try:
+            cleanup_process(task_id)
+        except Exception:
+            logger.debug(f"[CLI DEBUG] cleanup_process raised for task {task_id}", exc_info=True)
 
 
 @api.route("/pattern/with-progress", methods=["POST"])
