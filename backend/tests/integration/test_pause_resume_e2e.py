@@ -81,11 +81,16 @@ def test_pause_edit_resume_roundtrip(client):
         assert state["total_slots"] > 0
         assert state["algorithm"] == "csp"  # envelope state-format tag
 
-        # 4. Resume-prepare: merges the (unmodified) edit and mints resume_<hex>. Does NOT
-        #    start a fill. Passing grid_preview verbatim introduces no new empty domains.
+        # 4. Resume: merges the (unmodified) edit, mints resume_<hex>, and runs the
+        #    resumed fill synchronously (backend/api/pause_resume_routes.py:331-339).
+        #    The blank 15x15 is an unsatisfiable position, so exact-position resume
+        #    falls back to unwind-and-re-search (#9) and spends the whole timeout
+        #    budget before reporting failure. timeout=3 keeps that path exercised
+        #    without burning the 300s default. Passing grid_preview verbatim
+        #    introduces no new empty domains.
         r = client.post(
             "/api/fill/resume",
-            json={"task_id": task_id, "edited_grid": state["grid_preview"]},
+            json={"task_id": task_id, "edited_grid": state["grid_preview"], "options": {"timeout": 3}},
         )
         assert r.status_code == 200
         new_task_id = r.get_json()["new_task_id"]

@@ -65,58 +65,65 @@ class TestPauseResumeWorkflow:
 
         # Step 3: Get saved state
         response = client.get(f"/api/fill/state/{task_id}")
+        assert response.status_code == 200, "pause did not save state"
 
-        if response.status_code == 200:
-            # This block used to post a `state_path`/`new_grid`/`size` body against a
-            # `task_id`/`edited_grid` API — a shape neither branch ever accepted. It
-            # never ran while the state GET returned non-200, so it passed vacuously;
-            # it became reachable once pause actually saved state. Corrected against
-            # the real contract, not the merge's.
-            # Step 4: User edits (simulate by creating modified grid)
-            edited_grid = create_empty_grid(11)
-            edited_grid[0][0] = {"letter": "C", "isBlack": False}
-            edited_grid[0][1] = {"letter": "A", "isBlack": False}
-            edited_grid[0][2] = {"letter": "T", "isBlack": False}
+        # This block used to post a `state_path`/`new_grid`/`size` body against a
+        # `task_id`/`edited_grid` API — a shape neither branch ever accepted. It
+        # never ran while the state GET returned non-200, so it passed vacuously;
+        # it became reachable once pause actually saved state. Corrected against
+        # the real contract, not the merge's.
+        # Step 4: User edits (simulate by creating modified grid)
+        edited_grid = create_empty_grid(11)
+        edited_grid[0][0] = {"letter": "C", "isBlack": False}
+        edited_grid[0][1] = {"letter": "A", "isBlack": False}
+        edited_grid[0][2] = {"letter": "T", "isBlack": False}
 
-            # Get edit summary
-            response = client.post(
-                "/api/fill/edit-summary",
-                data=json.dumps({"task_id": task_id, "edited_grid": edited_grid}),
-                content_type="application/json",
-            )
+        # Get edit summary
+        response = client.post(
+            "/api/fill/edit-summary",
+            data=json.dumps({"task_id": task_id, "edited_grid": edited_grid}),
+            content_type="application/json",
+        )
 
-            assert response.status_code == 200
-            summary = response.json
-            assert "filled_count" in summary
+        assert response.status_code == 200
+        summary = response.json
+        assert "filled_count" in summary
 
-            # Step 5: Resume with edits
-            response = client.post(
-                "/api/fill/resume",
-                data=json.dumps(
-                    {
-                        "task_id": task_id,
-                        "edited_grid": edited_grid,
-                        "timeout": 30,
-                    }
-                ),
-                content_type="application/json",
-            )
+        # Step 5: Resume with edits.
+        #
+        # `timeout` must live under `options` — the route reads
+        # `options = data.get("options") or {}` (backend/api/pause_resume_routes.py)
+        # and a top-level `timeout` key is silently ignored, falling back to the
+        # 300s default. This 11x11 blank grid is unsatisfiable, so the resumed
+        # fill fell back to unwind-and-re-search (#9) and burned the full 300s
+        # for no reason, same defect as test_pause_resume_e2e.py step 4.
+        response = client.post(
+            "/api/fill/resume",
+            data=json.dumps(
+                {
+                    "task_id": task_id,
+                    "edited_grid": edited_grid,
+                    "options": {"timeout": 3},
+                }
+            ),
+            content_type="application/json",
+        )
 
-            # 200, not 202: resume is synchronous and reports the completed run.
-            # No branch (bench, main, or base) ever returned 202 here — this block was
-            # never reachable, so its assertions were never checked against the route.
-            assert response.status_code == 200
-            assert response.json["success"] is True
-            assert response.json["new_task_id"]
-            assert response.json["original_task_id"] == task_id
+        # 200, not 202: resume is synchronous and reports the completed run.
+        # No branch (bench, main, or base) ever returned 202 here — this block was
+        # never reachable, so its assertions were never checked against the route.
+        assert response.status_code == 200
+        assert response.json["success"] is True
+        assert response.json["new_task_id"]
+        assert response.json["original_task_id"] == task_id
 
-            # The original block subscribed to /api/progress/<new_task_id> here,
-            # expecting an async task to observe. Resume is synchronous — it returns
-            # the finished run — so no progress channel is ever registered under that
-            # id and the subscribe 404s by design. Assert on the completed result
-            # instead, which is what this workflow actually produces.
-            assert "result" in response.json
-            assert response.json["total_slots"] >= response.json["slots_filled"] >= 0
+        # The original block subscribed to /api/progress/<new_task_id> here,
+        # expecting an async task to observe. Resume is synchronous — it returns
+        # the finished run — so no progress channel is ever registered under that
+        # id and the subscribe 404s by design. Assert on the completed result
+        # instead, which is what this workflow actually produces.
+        assert "result" in response.json
+        assert response.json["total_slots"] >= response.json["slots_filled"] >= 0
 
     def test_cancel_autofill_workflow(self, client):
         """
