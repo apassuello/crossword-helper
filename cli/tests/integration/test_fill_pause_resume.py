@@ -198,8 +198,15 @@ def test_fill_accepts_pause_options(tmp_path):
         str(WORDLIST),
         "--algorithm",
         "trie",
+        # 120s of SOLVER budget, not 15. `-t` is wall-clock inside the solver, so
+        # the coverage tax lands on it too: this fill needs 0.96s of solver time
+        # uninstrumented and 4.35s under coverage locally, and a CI runner is
+        # several times slower again -- at 15s the solve did not finish there and
+        # the command returned success=False. Sized for margin, not for the wire:
+        # nothing here waits out the budget, a solvable 5x5 returns as soon as it
+        # is solved.
         "-t",
-        "15",
+        "120",
         "--allow-nonstandard",
         "--json-output",
         "--task-id",
