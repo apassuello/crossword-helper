@@ -2,6 +2,7 @@
 Unit tests for autofill module.
 """
 
+import itertools
 import time
 
 import pytest
@@ -400,6 +401,46 @@ class TestAutofill:
         assert "11x11" in repr_str or "11" in repr_str
 
 
+class TestAc3EmptyDomainContract:
+    """
+    #17: `_ac3()` returning True does not mean "no empty domain".
+
+    `_ac3()` only reports False when `_revise()` empties a domain *during*
+    revision. A slot whose domain is already empty at initialization has
+    nothing to revise -- if it has no crossing neighbor to drive the cascade,
+    the arc queue never touches it and `_ac3()` drains "consistent". The
+    `:188` guard in `fill()` used to read that True as a solvability check.
+    """
+
+    def test_fill_reports_failure_on_isolated_slot_with_no_candidates(self):
+        """
+        Isolated-slot bug window: one across slot, no crossing down slot at
+        all (every column under it has a single white cell, black above and
+        below), so `_ac3`'s arc queue is empty for it and it can never be
+        revised. The word list has no 3-letter word, so its domain is empty
+        from `_initialize_csp` onward -- dead before any revision runs.
+
+        A fixture where the dead slot crosses a live neighbor would already
+        pass before the fix (the cascade catches that case); this one does
+        not cross anything, which is the real bug window per the issue.
+        """
+        grid = Grid(11)
+        for row in range(11):
+            for col in range(11):
+                if not (row == 5 and col < 3):
+                    # enforce_symmetry defaults True and would black (5,10)
+                    # and mirror it, destroying the isolated layout.
+                    grid.set_black_square(row, col, enforce_symmetry=False)
+
+        word_list = WordList(["ABCD", "WXYZ"])  # no 3-letter word exists
+        autofill = Autofill(grid, word_list, None, 60, 0, "trie", None)
+
+        result = autofill.fill()
+
+        assert result.success is False
+        assert result.iterations == 0, "must never enter backtracking over a dead domain"
+
+
 class TestOnBacktrackCallback:
     """Test that on_backtrack callback is invoked during CSP backtracking."""
 
@@ -530,18 +571,35 @@ class TestAutofillIntegration:
                     words.append(c1 + c2 + c3)
         return WordList(words)
 
-    def test_small_grid_complete_fill(self, large_word_list):
-        """Test filling a small grid completely."""
-        grid = Grid(11)
-        # Create a simple pattern
-        grid.set_black_square(5, 5)
-        grid.set_black_square(5, 6)
-        grid.set_black_square(6, 5)
+    def test_small_grid_complete_fill(self):
+        """Test filling a small grid completely.
 
-        autofill = Autofill(grid, large_word_list, timeout=10)
+        `large_word_list` is all 3-letter (26 x 5 vowels x 4 NRST-endings),
+        but the original fixture's 3 black squares left several 8-11 length
+        slots -- unfillable by any 3-letter word regardless of the #17 fix,
+        so `result.iterations > 0` alone never actually proved a fill was
+        attempted, only that domains happened to look non-empty long enough
+        for the pre-fix `_ac3()` misreading to let backtracking start (#17:
+        `_ac3()`'s return value is not a solvability check).
+
+        Black out rows/cols 3 and 7 (180deg-symmetric: {3, 7} maps to itself
+        under row -> 10 - row) so every slot is exactly 3 long, and use a
+        word list dense enough (every letter of a 5-letter alphabet in every
+        position) that arc consistency cannot legitimately empty a domain
+        through cross-constraints either. That makes this grid actually
+        solvable, so the test can assert the complete fill it is named for.
+        """
+        grid = Grid(11)
+        for row in range(11):
+            for col in range(11):
+                if row in (3, 7) or col in (3, 7):
+                    grid.set_black_square(row, col, enforce_symmetry=False)
+
+        words = ["".join(letters) for letters in itertools.product("ABCDE", repeat=3)]
+        autofill = Autofill(grid, WordList(words), timeout=10)
         result = autofill.fill()
 
-        # Should attempt to fill
+        assert result.success is True
         assert result.iterations > 0
         assert result.time_elapsed >= 0
 

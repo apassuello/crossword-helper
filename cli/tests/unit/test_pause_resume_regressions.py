@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -635,3 +636,54 @@ class TestResumeFallbackGating:
         _, unwind_calls = self._resume_with(temp_dir, small_words, _dead_end)
 
         assert len(unwind_calls) == 1, "a failed resume that filled nothing must fall back to unwinding"
+
+
+class TestResumeByUnwindingSkipsDoomedSearch:
+    """
+    #17 regression at the `:377` site inside `_resume_by_unwinding`.
+
+    `if self._ac3():` was read there as "this position is solvable, go
+    search it". `_ac3()` only reports False when a domain becomes empty
+    *during* revision -- a slot whose domain is already empty at
+    initialization, with no crossing neighbor to drive the cascade, drains
+    the arc queue untouched and reports "consistent" anyway. The old code
+    then entered `_backtrack_with_mac` / `_backtrack` over a position with a
+    guaranteed-empty domain instead of falling through to the existing
+    time-check and `_strip_words_around_constrained_slots()` retry.
+    """
+
+    def test_dead_isolated_slot_never_reaches_backtrack(self, small_words):
+        """
+        One isolated 3-long across slot and nothing else on the grid, so
+        `_unwind_dead_ends()` (called first, inside `_resume_by_unwinding`)
+        has no filled crossing word to strip -- the domain is dead both
+        before and after it runs. The word list has no 3-letter word, so the
+        slot's domain is empty from `_initialize_csp` onward: dead before any
+        revision, not emptied by one.
+
+        Assert `_backtrack_with_mac` / `_backtrack` are never called, and
+        that the call still resolves (falls through to the strip-and-retry
+        loop, which has nothing to strip and reports failure honestly).
+        """
+        grid = Grid(11)
+        for row in range(11):
+            for col in range(11):
+                if not (row == 5 and col < 3):
+                    grid.set_black_square(row, col, enforce_symmetry=False)
+
+        word_list = WordList(["ABCD", "WXYZ"])  # no 3-letter word exists
+        autofill = Autofill(grid, word_list, None, 60, 0, "trie", None)
+        autofill.start_time = time.time()
+        autofill.iterations = 0
+        autofill.used_words = set()
+
+        def _doomed(*args, **kwargs):
+            raise AssertionError("backtrack must not be attempted over a dead domain")
+
+        autofill._backtrack_with_mac = _doomed
+        autofill._backtrack = _doomed
+
+        success, was_paused = autofill._resume_by_unwinding(task_id=None, use_mac=True)
+
+        assert success is False
+        assert was_paused is False
