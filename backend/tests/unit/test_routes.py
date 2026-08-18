@@ -652,7 +652,7 @@ class TestPatternWithProgress:
         assert resp.status_code == 500
 
 
-class TestFillWithProgress:
+class TestFillWithProgressTaskIdWiring:
     """Tests for /api/fill/with-progress (async fill with SSE)."""
 
     def _start_fill(self, client, mocker, payload_overrides=None):
