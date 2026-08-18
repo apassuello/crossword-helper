@@ -21,5 +21,9 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("CROSSWORD_STATE_DIR", "/tmp/crossword_states"))
 PAUSE_FLAG_DIR = Path(os.environ.get("CROSSWORD_PAUSE_FLAG_DIR", "/tmp"))
 
-STATE_DIR.mkdir(parents=True, exist_ok=True)
-PAUSE_FLAG_DIR.mkdir(parents=True, exist_ok=True)
+
+def ensure_dirs() -> None:
+    """Create STATE_DIR and PAUSE_FLAG_DIR. Called once from the Flask app factory
+    at startup, not at import time and not per request."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    PAUSE_FLAG_DIR.mkdir(parents=True, exist_ok=True)

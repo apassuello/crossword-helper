@@ -17,6 +17,7 @@ from backend.api.progress_routes import progress_api
 from backend.api.routes import api
 from backend.api.theme_routes import theme_api
 from backend.api.wordlist_routes import wordlist_api
+from backend.core.state_paths import ensure_dirs
 
 
 def create_app(testing=False):
@@ -29,6 +30,11 @@ def create_app(testing=False):
     Returns:
         Configured Flask application instance
     """
+    # Create the solver-state and pause-flag directories at startup, not at
+    # import time (issue #21 sub-item 4) — an unwritable CROSSWORD_STATE_DIR
+    # should fail here, not merely on import.
+    ensure_dirs()
+
     # Determine base directory (project root)
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
