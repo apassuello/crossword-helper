@@ -40,6 +40,7 @@ class PauseController:
 
         self.pause_file = self.pause_dir / f"crossword_pause_{task_id}.flag"
         self.running_file = self.pause_dir / f"crossword_running_{task_id}.pid"
+        self.searching_file = self.pause_dir / f"crossword_searching_{task_id}.flag"
         self._last_check_time = 0.0
         self._check_interval = 0.1
         self._last_result = False
@@ -118,14 +119,37 @@ class PauseController:
         except OSError:
             pass  # Non-fatal: pause will just report "not running"
 
-    def clear_running(self) -> None:
-        """Remove the running marker (call on process exit, pause, or completion)."""
+    def mark_searching(self) -> None:
+        """
+        Record that an initial fill finished CSP setup and entered its search loop.
+
+        A pause observed during setup is saved without a search order or domains,
+        so a caller that needs a pause to produce a real CSPState must wait for
+        this rather than guess at a duration -- the pause/resume seam tests are
+        its only reader today. Written after mark_running(), so its presence
+        implies the running marker's guarantees as well.
+
+        Not written by the resume paths: they restore a state that is already
+        past setup, and no caller distinguishes phases there.
+        """
         try:
-            self.running_file.unlink()
-        except FileNotFoundError:
-            pass
+            self.searching_file.write_text(str(os.getpid()))
         except OSError:
-            pass
+            pass  # Non-fatal: callers fall back to treating the phase as unknown
+
+    def clear_running(self) -> None:
+        """Remove the running markers (call on process exit, pause, or completion).
+
+        Clears the searching marker too: both describe the same live process, and
+        a stale searching marker would claim a search loop that is no longer there.
+        """
+        for marker in (self.running_file, self.searching_file):
+            try:
+                marker.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
 
     def is_task_running(self) -> bool:
         """

@@ -53,10 +53,16 @@ def _write_pause_grid(path: Path, algorithm: str, size: int) -> Path:
     return path
 
 
-def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120):
+def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120, wait_for_search=False):
     """
-    Spawn `fill` on a size×size grid tuned for `algorithm`, let it run 3s, touch
-    the pause flag, and collect the paused stdout.
+    Spawn `fill` on a size×size grid tuned for `algorithm`, let it run, touch the
+    pause flag, and collect the paused stdout.
+
+    `wait_for_search` selects when the flag is touched. False (default) sleeps a
+    fixed 3s, which is what the repair and beam hooks need. True waits for the
+    searching marker, so the pause provably lands after CSP setup and is saved as
+    a real CSPState -- required by any test asserting populated domains, since
+    setup outlasts a 3s sleep on a blank 15×15.
 
     Returns (proc, stdout, state_dir).
     """
@@ -93,8 +99,11 @@ def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120):
         text=True,
     )
 
-    # Let the engine get well into filling, then request pause.
-    time.sleep(3)
+    # Get the engine past the point this test needs, then request pause.
+    if wait_for_search:
+        _wait_for_search_marker(flags_dir, task_id)
+    else:
+        time.sleep(3)
     flags_dir.mkdir(parents=True, exist_ok=True)
     flag_file = flags_dir / f"crossword_pause_{task_id}.flag"
     flag_file.touch()
@@ -121,6 +130,31 @@ def _wait_for_running_marker(flags_dir: Path, task_id: str, timeout: float = 10.
     raise AssertionError(f"running marker never appeared in {flags_dir} for task {task_id}")
 
 
+def _wait_for_search_marker(flags_dir: Path, task_id: str, timeout: float = 60.0) -> None:
+    """
+    Block until `fill` has finished CSP setup and entered the search loop
+    (crossword_searching_<task_id>.flag).
+
+    A fixed sleep races setup: `_initialize_csp` -> `_ac3` -> `_sort_slots_by_constraint`
+    runs for seconds on a blank grid and the window grows with grid and wordlist size.
+    A pause landing inside it is handled by `_handle_setup_pause`, which drops the
+    half-built domains -- so a test that needs a populated CSPState must wait for
+    setup to finish rather than guess a duration.
+
+    `mark_searching()` runs on the same PauseController as the earlier
+    `clear_pause()`/`mark_running()` pair (cli.py), so marker-exists also implies a
+    pause flag touched afterwards lands strictly after that clear and cannot be
+    wiped as stale -- the same ordering guarantee `_wait_for_running_marker` relies on.
+    """
+    marker = flags_dir / f"crossword_searching_{task_id}.flag"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if marker.exists():
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"search marker never appeared in {flags_dir} for task {task_id}")
+
+
 def _run_fill(args, timeout=180):
     """Spawn `fill` with the given extra args (NO grid_file positional on resume);
     return the finished CompletedProcess."""
@@ -133,13 +167,13 @@ def _run_fill(args, timeout=180):
     )
 
 
-def _pause_a_fill(tmp_path, algorithm, task_id):
+def _pause_a_fill(tmp_path, algorithm, task_id, wait_for_search=False):
     """
     Run a fill, pause it mid-run (Task-13 flow), and return
     (grid_file, state_dir, flag_dir, state_file). state_file is the on-disk
     <state_dir>/<task_id>.json.gz written at pause.
     """
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id)
+    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id, wait_for_search=wait_for_search)
     assert proc.returncode == 0, stdout
     assert json.loads(stdout)["paused"] is True
     grid_file = tmp_path / "grid.json"
@@ -192,7 +226,7 @@ def test_fill_accepts_pause_options(tmp_path):
 @pytest.mark.slow
 def test_csp_pause_saves_real_csp_state(tmp_path):
     """Test B — trie/CSP pause persists its real CSPState (populated domains)."""
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, "trie", "tB")
+    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, "trie", "tB", wait_for_search=True)
 
     assert proc.returncode == 0
     out = json.loads(stdout)
@@ -423,7 +457,7 @@ def test_resume_trie_exact_position_runs(tmp_path):
     which is not fully solvable (empirically success=False, ~4/30). Like Task 19,
     this gates the resume MECHANISM, not fill quality.
     """
-    gf, state_dir, flag_dir, state_file = _pause_a_fill(tmp_path, "trie", "orig-1")
+    gf, state_dir, flag_dir, state_file = _pause_a_fill(tmp_path, "trie", "orig-1", wait_for_search=True)
     assert state_file.exists()
     # Sanity: the saved state is a real (non-degenerate) CSPState → exact-position path.
     with gzip.open(state_file, "rt", encoding="utf-8") as f:

@@ -205,6 +205,13 @@ class Autofill:
         finally:
             self._setup_pause_armed = False
 
+        # Setup is complete and the domains are populated, so a pause from here on
+        # is saved as a real CSPState rather than routed through
+        # _handle_setup_pause. Announce the transition; the unsolvable-grid return
+        # above deliberately precedes it, since no search runs in that case.
+        if self.pause_controller:
+            self.pause_controller.mark_searching()
+
         # Try to fill using backtracking (with or without MAC)
         was_paused = False
         try:
