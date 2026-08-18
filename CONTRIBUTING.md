@@ -83,12 +83,30 @@ Markers registered in `pytest.ini`: `slow`, `integration`, `unit`.
 - Fix: scrub `COV_CORE_*` from the child environment (monkeypatch) before spawning.
 - Do not diagnose this as "slow CI runners" — that misdiagnosis cost three CI attempts.
 
-**[SPEC] A `slow`-marked test runs nowhere automatically.** `pytest.ini` sets
-`addopts = -m "not slow"`, and CI invokes plain `pytest` (`.github/workflows/test.yml`), so no
-gate anywhere executes `pytest -m slow`. Marking a test `slow` opts it out of all automated
-verification — it can assert something false indefinitely and nothing will notice. One did:
+**[SPEC] A `slow`-marked test runs automatically only if a job names its file.** `pytest.ini`
+sets `addopts = -m "not slow"`, so every ordinary invocation deselects slow tests. One job
+overrides this: `pause-resume-seam` in `.github/workflows/test.yml` runs `pytest -m slow` against
+four explicitly listed seam files. **A slow test in any other file still runs nowhere** — it can
+assert something false indefinitely and nothing will notice. One did:
 `test_theme_priority.py::TestThemeEntriesCLICanary` claimed `--theme-entries` was broken, when
-the flag worked and the test's own fixture was wrong. If you slow-mark a test, you own running it.
+the flag worked and the test's own fixture was wrong. If you slow-mark a test, either add its file
+to that job or you own running it.
+
+**[SPEC] Path arguments override `testpaths`, silently.** CI does not invoke bare `pytest`; it
+passes explicit directories (`pytest backend/tests/unit cli/tests/unit …`). Those arguments replace
+`testpaths` from `pytest.ini` entirely, so a test file that sits outside the enumerated directories
+is **never collected by CI** while a bare local `pytest` runs it happily. The real-subprocess pause
+gate sat directly in `cli/tests/`, in neither `unit/` nor `integration/`, and was invisible to every
+CI run until `15d0db5` — which is the arrangement the architecture rule in §2 warns produced a green
+suite alongside broken pause/resume. A local pass is not evidence about CI. Prove collection:
+
+```bash
+pytest <the paths CI uses> --collect-only -q | grep -c <your_test_file>
+```
+
+Moving a test between directories also moves it relative to `Path(__file__).parents[N]`. Two
+subprocess tests here resolve `REPO_ROOT` that way and pass it as `cwd`; the index has to move
+with the file.
 
 **[SPEC] `xfail(strict=True)` as a self-removing scaffold.** When a test must wait on an
 incomplete contract, mark it `xfail(strict=True)` rather than skipping or deleting it. Once the
@@ -107,6 +125,12 @@ patched assertion-by-assertion across four serial runs before anyone read the bl
 whole contract. Two rules follow: on a contract-mismatch failure read the **entire** block against
 the **entire** contract before changing a line; and treat assertions nested under a status check as
 unguarded until you have seen them fail.
+
+That rule's own example outlived it. The block was corrected, but the `if response.status_code
+== 200:` wrapper around it was left in place, so the test could still pass while asserting nothing —
+it was only closed in `b679212`. Before changing it, the vacuity was demonstrated: pointing the
+state fetch at a bogus task id left the test **passing**; after the fix the same manipulation fails
+with `assert 404 == 200`. Fixing the body of a vacuous test does not make it non-vacuous.
 
 **[SPEC] Comparing two unseeded stochastic solvers with `>=` is a coin flip, not a contract.**
 `test_hybrid_vs_beam_alone` compared two independent unseeded runs — the repair and value-ordering
@@ -137,6 +161,47 @@ fields were unused until `876a54c`. The replacement in `cli/tests/unit/test_stat
 counts the filesystem calls the rate limit exists to remove — run it to see the figures. Where a
 mechanism claims to reduce, cache, batch or throttle something, the test must count that thing.
 
+**[SPEC] Ask what makes a test red *today*, before writing it.** Three acceptance tests on this
+branch could never have failed. "No module imports `BlackSquareSuggestions`" — nothing importing it
+was precisely why it was dead code. An equivalence gate asking whether `enumerate_white_runs()` and
+`get_word_slots(min_length=1)` agree — `get_word_slots()` calls `enumerate_white_runs()` internally,
+so they were structurally guaranteed to agree. And a non-aliasing assertion against an object with
+no public handle. Check the call graph before designing an equivalence gate, and rewrite the
+assertion rather than discovering the problem when the implementer flounders.
+
+**[SPEC] Prove a RED against pre-fix source, and record the *received* value.** A pasted failure
+does not distinguish "the assertion fired and got the wrong value" from "the setup never reached the
+assertion" — and the second is worthless. Check the source files out at BASE while keeping the new
+tests, and re-run:
+
+```bash
+git checkout <base-sha> -- <the source files under test>   # keep the new tests
+pytest <the new tests>                                     # expect RED
+git checkout HEAD -- <the source files under test>         # restore, then re-run green
+```
+
+Evidence must carry the received value (`expected 'HTTP_500' to be ''`, `Number of calls: 1`), not
+just "it failed".
+
+**[SPEC] Sweep the channel a change *widens*, not only the one it narrows.** A fix that empties
+`ApiError.message` was swept thoroughly for `.message` consumers — but it also broadened `.details`,
+where a pre-existing consumer could silently start receiving a value it used to get `undefined` for.
+That direction was unchecked until review asked. Two grep rules follow: a pattern that names its
+variables (`\b(err|error|e)\.message\b`) misses `result.message` and is defeated entirely by
+`err?.message`, so confirm with a bare `\.message\b` sweep plus an explicit optional-chaining
+sweep; and sweep both channels, not just the obvious one.
+
+**[SPEC] Every static gate passes on unreachable code.** `BlackSquareSuggestions` cleared the
+scrub sweep, the API-URL guard, vitest and the build while being tree-shaken out of the bundle
+entirely (#16). A stylesheet orphaned by the same deletion is still passing every gate today (#23).
+Static gates prove a file is *conformant*; they never prove it is *reached*.
+
+**[SPEC] `$?` after a pipe is the pipe's exit status.** Verifying a gate through a pager —
+`./scripts/check-guards.sh --full-tree | tail -6; echo "exit=$?"` — reports `tail`'s status, which
+is always 0. A gate script "verified" that way has not been consulted at all. Capture the status on
+the bare command (`cmd > out 2>&1; rc=$?`), and confirm the guard can still fail: append a violating
+line to a tracked file in scope, see it exit 1, restore.
+
 **[SPEC] jsdom does not evaluate stylesheet rules.** `toHaveStyle` reads the inline value on the
 JSX element, so a design-token assertion passes even after the underlying CSS rule is reverted —
 the test is green and the colour is wrong. Token correctness of *CSS rules* can only be checked in
@@ -163,6 +228,15 @@ thing under test.
 - Timing or size figures in **code comments** need the command that reproduces them, or state
   complexity instead. See `docs/dev/FABRICATION-LOG.md` for why this rule exists.
 - Dated historical records are archival. Do not "correct" them — archive them.
+- **A commit sha cited in a doc is a pointer, and history rewrites break it.** Stripping trailers
+  from this branch rewrote every sha on it, orphaning citations in three plan docs and in this file.
+  Distinguish this from the rule above: a *dated claim* is archival and must not be corrected, but a
+  *dangling pointer* names nothing and should be repointed. Repoint only unambiguous rewrite twins —
+  same subject, same diff modulo the trailer, and the target verified with `git merge-base
+  --is-ancestor <sha> HEAD`. Leave alone: shas whose only on-branch container is a squash superset
+  rather than a 1:1 twin, shas cited *because* they are orphaned (see §5's merge-commit rule), and
+  everything under `docs/archive/`, which `docs-check.sh` excludes as historical record. Report the
+  ambiguous ones rather than guessing.
 - **Archiving a doc needs `git add -f`.** `.gitignore` carries a bare `archive/` pattern, so
   `docs/archive/` content is tracked only by grandfathering. A new file moved there is ignored,
   and the move lands as a plain deletion — the archive silently becomes a delete.
