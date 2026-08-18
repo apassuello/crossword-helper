@@ -236,7 +236,11 @@ class Grid:
         Get all across and down word slots.
 
         Args:
-            min_length: Minimum run length to include (default: 3).
+            min_length: Minimum run length to include (default: 3). The default
+                hides 1-2 cell runs because autofill must not treat them as
+                fillable slots; validation passes min_length=1 precisely to see
+                them, since a run shorter than 3 is the error it reports
+                (cli/src/core/validator.py).
 
         Returns:
             List of word slot dictionaries with keys:
