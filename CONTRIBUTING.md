@@ -76,12 +76,33 @@ npm run build                            # must stay clean
 
 Markers registered in `pytest.ini`: `slow`, `integration`, `unit`.
 
-**[BUG] Tests that spawn CLI subprocesses run ~4x slower under coverage**
-- Symptom: subprocess-spawning tests time out only in the `--cov` CI job, not locally.
+**Read the `[BUG]` blocks below before diagnosing a test that fails only in CI.** Each was written
+from an incident, and each has since recurred because someone reasoned from first principles
+instead of reading them. The coverage block immediately below is the clearest case: it names the
+misdiagnosis ("slow CI runners") that it cost three attempts to reach, and that same misdiagnosis
+was made again afterwards, for two more.
+
+**[BUG] Tests that spawn CLI subprocesses run far slower under coverage — and the tax is not
+uniform across the phases a test budgets separately**
+- Symptom: subprocess-spawning tests fail only in the `--cov` CI job, not locally. Only `test
+  (3.12)` is given `--cov` (`.github/workflows/test.yml`), so a failure on exactly one matrix
+  entry while the other three pass is this until proven otherwise.
 - Cause: `pytest-cov` installs a `.pth` that runs `pytest_cov.embed.init()` in *every* Python
   subprocess when `COV_CORE_SOURCE` is set.
-- Fix: scrub `COV_CORE_*` from the child environment (monkeypatch) before spawning.
-- Do not diagnose this as "slow CI runners" — that misdiagnosis cost three CI attempts.
+- **The tax differs by phase, which is what makes it bite twice.** Measured on the 5x5 fill in
+  `cli/tests/integration/test_fill_pause_resume.py`: solver time `0.96s -> 4.35s` (~4.5x), wall
+  `1.92s -> 34.16s` (~17x) — startup (wordlist load, trie build, CSP setup) carries most of it.
+  A test bounds *wall* through `communicate(timeout=)` while `-t` bounds *solver*, so the two
+  budgets fail independently: fixing the one the traceback names surfaces the other on the next
+  CI run. Sweep every budget in the invocation at once.
+- Fix: already applied globally — the session fixture in the root `conftest.py` clears
+  `COV_CORE_*` before anything spawns, so new tests need nothing. It is done through the
+  environment rather than `env=` per call site because product code spawns the CLI too
+  (`backend/core/cli_adapter.py`, `backend/api/routes.py`). Cost, accepted deliberately: lines
+  executed only inside a spawned CLI stop counting (integration step 38.43% -> 34.40%, a strict
+  upper bound on the loss to the combined total), and the step runs 746s -> 74s.
+- Do not diagnose this as "slow CI runners". That misdiagnosis cost three CI attempts, then two
+  more after this block was written to prevent it.
 
 **[SPEC] A `slow`-marked test runs automatically only if a job names its file.** `pytest.ini`
 sets `addopts = -m "not slow"`, so every ordinary invocation deselects slow tests. One job
@@ -149,6 +170,10 @@ constructions before it was spotted.
 - Cause: fixed startup work (interpreter, wordlist load, trie build, state inflate) varies by
   runner and interpreter. The same commit, same runner class, same subprocess measured **8.1s on
   Python 3.11 and ~92s on Python 3.12** (run `32003100530`).
+- **Check `--cov` before blaming the interpreter.** 3.12 is the only job given coverage, so a
+  3.11-vs-3.12 gap of this shape is more likely the block above than an interpreter difference —
+  an ~17x wall tax on a spawned child reproduces this ratio on one machine with one interpreter,
+  varying only `--cov`. Reasoned, not measured: run `32003100530` was not re-examined.
 - Fix: read the whole matrix before concluding a change made something slow.
 - This is the mirror of the coverage bug above: that one says do not blame the runners, this one
   says do not blame the code.
@@ -168,6 +193,15 @@ was precisely why it was dead code. An equivalence gate asking whether `enumerat
 so they were structurally guaranteed to agree. And a non-aliasing assertion against an object with
 no public handle. Check the call graph before designing an equivalence gate, and rewrite the
 assertion rather than discovering the problem when the implementer flounders.
+
+**[SPEC] A test that reaches its assertion only because of the bug must be re-synchronised, and
+its diff read specifically for weakening.** When a fix changes behaviour a test's *setup* depended
+on, the test can start failing for reasons that have nothing to do with what it asserts — and the
+tempting repair is the one that quietly stops gating.
+`test_repair_pause_before_restart_exits_cleanly` pre-touched the pause flag before `Popen`, which
+only worked while `clear_pause()` targeted the wrong directory; once that was fixed the setup was
+racing the process it meant to precede. Re-synchronise against the new behaviour (wait for the
+marker the process actually writes), then read the resulting diff asking what it no longer proves.
 
 **[SPEC] Prove a RED against pre-fix source, and record the *received* value.** A pasted failure
 does not distinguish "the assertion fired and got the wrong value" from "the setup never reached the

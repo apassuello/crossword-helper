@@ -63,6 +63,13 @@ Why: a green suite once coexisted with pause/resume broken end to end.
 ❌ Quoting counts, timings or "FIXED" in docs or docstrings → ✅ name the command that proves it
 Why: source docstrings claimed a "454k word" list; the file has ~44k. See `docs/dev/FABRICATION-LOG.md`.
 
+❌ Gating a liveness check on an iteration counter → ✅ gate it on elapsed time
+Why: `iterations % N == 0` bounds latency only if an iteration is cheap. Pause was polled that way
+on both solver paths; a beam iteration on a blank 15x15 outlasts the whole run, so `iterations`
+reached 1 in 20s and the pause flag was never read (#26). `autofill.py` already learned this for
+timeouts — "checking only every 100 iterations let slow-running grids overrun the timeout budget,
+since iteration count alone does not track wall-clock time".
+
 ---
 
 ## Extensibility
