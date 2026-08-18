@@ -217,7 +217,20 @@ def test_fill_accepts_pause_options(tmp_path):
         stderr=subprocess.PIPE,
         text=True,
     )
-    stdout, _ = proc.communicate(timeout=45)
+    # 300s, not 45s. This is the only test in this file without @pytest.mark.slow,
+    # so it is the only one the coverage-instrumented `test (3.12)` matrix job runs
+    # -- and pytest-cov instruments the spawned CLI subprocess too. Measured
+    # locally: 1.95s without --cov, 34.37s with it, already 76% of the old 45s
+    # budget on fast hardware, which is why 3.12 failed while 3.9/3.10/3.11 passed
+    # the identical test.
+    #
+    # Unlike the pause deadlines in the seam tests, this timeout gates nothing: the
+    # test asserts that the three options parse and a trivial fill succeeds, and the
+    # budget is only a guard against hanging forever. Raising it therefore weakens
+    # no guarantee. The marker stays off deliberately -- this is the argv-acceptance
+    # contract test the seam rule in .claude/CLAUDE.md requires, so it has to keep
+    # running in the default suite a developer gets from plain `pytest`.
+    stdout, _ = proc.communicate(timeout=300)
 
     assert proc.returncode == 0
     assert json.loads(stdout)["success"] is True
