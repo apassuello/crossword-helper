@@ -21,7 +21,7 @@ from backend.api.validators import (
     validate_pattern_request,
 )
 from backend.core.cli_adapter import get_adapter
-from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
+from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR, is_valid_task_id
 from backend.core.wordlist_resolver import (
     resolve_wordlist_paths,
     resolve_wordlist_paths_strict,
@@ -561,6 +561,13 @@ def fill_with_progress():
         resume_task_id = data.get("resume_task_id")
         resume_state_path = None
         if resume_task_id:
+            # #21.3: body-sourced, and interpolated into a path on the next line.
+            if not is_valid_task_id(resume_task_id):
+                return handle_error(
+                    "INVALID_TASK_ID",
+                    "Field 'resume_task_id' must match ^[A-Za-z0-9_-]{1,64}$",
+                    400,
+                )
             resume_state_path = STATE_DIR / f"{resume_task_id}.json.gz"
             if not resume_state_path.exists():
                 return handle_error("TASK_NOT_FOUND", f"No saved state for task {resume_task_id}", 404)

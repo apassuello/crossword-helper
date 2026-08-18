@@ -16,6 +16,7 @@ Both are env-overridable so tests can point them at a tmp dir.
 """
 
 import os
+import re
 from pathlib import Path
 
 STATE_DIR = Path(os.environ.get("CROSSWORD_STATE_DIR", "/tmp/crossword_states"))
@@ -27,3 +28,15 @@ def ensure_dirs() -> None:
     at startup, not at import time and not per request."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     PAUSE_FLAG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# A task id is interpolated straight into a state-file or pause-flag name, so it
+# must not be able to express a path. Ids arriving as a URL segment are already
+# safe (Flask's default converter cannot match "/"); ids read from a JSON request
+# body are not, and those are the callers of this check. See #21.3.
+TASK_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def is_valid_task_id(task_id) -> bool:
+    """True if task_id is safe to interpolate into a state/flag filename."""
+    return isinstance(task_id, str) and bool(TASK_ID_RE.match(task_id))
