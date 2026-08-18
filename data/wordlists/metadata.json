@@ -164,24 +164,6 @@
       "filepath": "data/wordlists/custom/personal.txt",
       "word_count": 24
     },
-    "custom/gift_for_sarah": {
-      "name": "Gift for Sarah",
-      "category": "custom",
-      "description": "Special themed words for Sarah's puzzle",
-      "difficulty": "easy",
-      "tags": [
-        "custom",
-        "gift",
-        "special",
-        "sarah"
-      ],
-      "created": "2024-12-21",
-      "last_modified": "2024-12-21",
-      "auto_generated": false,
-      "key": "custom/gift_for_sarah",
-      "filepath": "data/wordlists/custom/gift_for_sarah.txt",
-      "word_count": null
-    },
     "external/normalized/peter_broda": {
       "name": "Peter Broda Wordlist",
       "category": "external",

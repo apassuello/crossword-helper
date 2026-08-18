@@ -546,17 +546,28 @@ def validate(grid_file: str, allow_nonstandard: bool):
 )
 @click.option(
     "--task-id",
+    type=str,
     default=None,
-    help="Task identifier for pause/resume: `crossword pause TASK_ID` will "
-    "make this fill save its state and exit at the next checkpoint",
+    help="Task ID enabling pause polling + state saving (None → pause path inert)",
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(),
+    help="Directory for saved solver state (StateManager storage_dir)",
+)
+@click.option(
+    "--pause-flag-dir",
+    type=click.Path(),
+    help="Directory watched for the pause flag file (PauseController pause_dir)",
 )
 @click.option(
     "--resume",
     "resume_state_file",
     type=click.Path(),
     default=None,
-    help="Resume from a saved state file (or task id) instead of starting "
-    "from GRID_FILE. Equivalent to the `resume` command.",
+    help="Resume a paused fill from a saved state file (<task_id>.json.gz) or a "
+    "bare task id in the state directory; supplies the grid, so GRID_FILE "
+    "becomes optional",
 )
 def fill(
     grid_file: Optional[str],
@@ -576,6 +587,8 @@ def fill(
     partial_fill: bool,
     cleanup: bool,
     task_id: Optional[str],
+    state_dir: Optional[str],
+    pause_flag_dir: Optional[str],
     resume_state_file: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
@@ -584,60 +597,129 @@ def fill(
 
     progress = ProgressReporter(enabled=json_output)
 
-    # --resume: delegate to the shared resume implementation (same code path
-    # as the `resume` command; used by the backend's fill_with_resume)
-    if resume_state_file:
-        _execute_resume(
-            state_file=resume_state_file,
-            output=output,
-            json_output=json_output,
-            algorithm=algorithm,
-            algorithm_explicit=True,  # fill always has a concrete -a value
-            timeout=timeout,
-            min_score=min_score,
-            wordlists=wordlists,
-            task_id_override=task_id,
-        )
-        return
-
-    if not grid_file:
+    # Input source (DD1): a grid file OR a resume state file. --resume wins when both
+    # are given (its saved grid is authoritative).
+    if not resume_state_file and not grid_file:
         _fail_fill("GRID_FILE is required (or use --resume STATE_FILE)", json_output)
-    if not wordlists:
+    # On the resume path this is deferred: the state's recorded wordlists are the
+    # documented fallback (see the --wordlists help), so the check moves below the load.
+    if not wordlists and not resume_state_file:
         _fail_fill("At least one wordlist is required (-w/--wordlists)", json_output)
 
     # Collected non-fatal warnings — echoed in human mode, and included as a
     # "warnings" array in --json-output so API callers see them too
     warnings: list = []
 
-    # Load grid
-    if not json_output:
-        click.echo(f"Loading grid from {grid_file}...")
-    progress.update(5, f"Loading grid from {grid_file}")
+    # Load grid. On resume (DD2) the grid + solver state come from the saved CSPState,
+    # loaded from the resume file's own directory (so a state-dir divergence between
+    # backend and CLI defaults cannot mislocate it). resume_csp_state is the content
+    # discriminator for DD3: non-empty domains → exact-position CSP resume; empty
+    # domains → degenerate re-seed of the requested engine.
+    # DD4: the degenerate re-seed reconstructs the grid from grid_dict and runs the
+    # requested engine. It does NOT re-derive theme/user locks — Grid.to_dict does not
+    # persist locked_cells and Task 13's degenerate save records no theme_entries
+    # channel (reconciliation note 1), so M1 preserves grid structure + black squares
+    # only; repair may legitimately strip non-locked pre-filled cells. (Follow-up: if
+    # lock leakage matters, fix it in Task 13's save contract, not here.) metadata is
+    # therefore intentionally unused on load.
+    resume_csp_state = None
+    if resume_state_file:
+        from .fill.state_manager import StateManager
 
-    with open(grid_file, "r") as f:
-        data = json.load(f)
+        if not json_output:
+            click.echo(f"Resuming from saved state {resume_state_file}...")
+        progress.update(5, f"Resuming from saved state {resume_state_file}")
 
-    grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+        # State resolution mirrors `_execute_resume` (the `resume` command), so
+        # `fill --resume` accepts the same argument forms — CLI_SPEC.md:184 documents
+        # --resume as "Path (or bare task id)":
+        #   1. an existing file path is loaded from its own directory, so a state-dir
+        #      divergence between backend and CLI defaults cannot mislocate it;
+        #   2. otherwise the value is a bare task id, looked up in --state-dir (or
+        #      StateManager's default). Passing --state-dir is the only difference from
+        #      _execute_resume, which always uses the default; without it the two agree.
+        # '<id>', '<id>.json' and '<id>.json.gz' are all accepted.
+        resume_path = Path(resume_state_file)
+        if resume_path.is_file():
+            sm_load = StateManager(storage_dir=resume_path.parent)
+        else:
+            sm_load = StateManager(storage_dir=Path(state_dir) if state_dir else None)
+        resume_key = resume_path.name
+        for suffix in (".gz", ".json"):
+            if resume_key.endswith(suffix):
+                resume_key = resume_key[: -len(suffix)]
+
+        try:
+            resume_csp_state, resume_metadata = sm_load.load_csp_state(resume_key)
+        except FileNotFoundError:
+            _fail_fill(
+                f"'{resume_state_file}' is neither an existing state file nor a known " f"task id in {sm_load.storage_dir}",
+                json_output,
+                hint="Use `crossword list-states` to see saved task ids, or pass " "the path to a .json.gz state file.",
+            )
+        except ValueError as e:
+            _fail_fill(str(e), json_output)
+
+        # Adopt the resumed task's id when --task-id was not given, mirroring
+        # _execute_resume's `task_id_override or saved_task_id`. Without this a
+        # resumed run silently loses pause capability (the DD6 branch is gated on
+        # task_id). resume_key is the stored id: save_csp_state names files
+        # `<task_id>.json.gz`, and it is the key the load above resolved by.
+        if not task_id:
+            task_id = resume_key
+
+        # Wordlist fallback, same contract as _execute_resume and as the --wordlists
+        # help text: -w wins, else the paths recorded in the saved state.
+        if not wordlists:
+            recorded = list(resume_metadata.get("wordlists", []) or [])
+            if not recorded:
+                _fail_fill(
+                    "No wordlists available: none passed with -w and none recorded in " "the saved state",
+                    json_output,
+                    hint="Re-run with -w data/wordlists/comprehensive.txt (or your " "original wordlists).",
+                )
+            wordlists = tuple(recorded)
+
+        grid = Grid.from_dict(resume_csp_state.grid_dict, strict_size=False)
+    else:
+        if not json_output:
+            click.echo(f"Loading grid from {grid_file}...")
+        progress.update(5, f"Loading grid from {grid_file}")
+
+        with open(grid_file, "r") as f:
+            data = json.load(f)
+
+        grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
 
     # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
     # Any stale pause flag for this task id is cleared before starting, and a
     # running-marker (pid file) is written so `pause` can verify the task.
     # Registered BEFORE wordlist loading, so a pause request issued while the
     # wordlist is still loading still finds the task already registered.
+    #
+    # This is the ONLY construction of the bookkeeping `pause_controller` — it is
+    # never rebuilt later. Building it here with the real --pause-flag-dir (not the
+    # bare-default constructor) means clear_pause()/mark_running() above, and
+    # clear_running()/clear_pause() in the `finally` below, all operate on the same
+    # directory the backend's `pause`/`/api/fill/pause` actually watches. A second,
+    # `pause_dir`-less construction used to shadow this one further down, so those
+    # calls silently operated on /tmp instead of --pause-flag-dir.
     pause_controller = None
     if task_id:
         from .fill.pause_controller import PauseController
 
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=Path(pause_flag_dir) if pause_flag_dir else None)
         pause_controller.clear_pause()  # A stale flag must not insta-pause us
         pause_controller.mark_running()
 
-        if algorithm == "repair":
-            warnings.append(
-                f"Pause is not supported for the {algorithm} algorithm; " "--task-id will not enable pausing this run"
-            )
-        elif algorithm == "hybrid":
-            warnings.append("Pause for the hybrid algorithm is only honored during its " "beam search phase")
+        # The two paths that genuinely disable pause for this run — both silent
+        # otherwise, which is worse than the false warnings this replaces: repair
+        # (IterativeRepair) and hybrid (HybridAutofill) both honor pause_controller
+        # (see iterative_repair.py / hybrid_autofill.py), so neither belongs here.
+        if adaptive:
+            warnings.append("Pause is not supported in --adaptive mode; " "--task-id will not enable pausing this run")
+        elif attempts > 1:
+            warnings.append("Pause is not supported with --attempts > 1; " "--task-id will not enable pausing this run")
 
     # Load word lists
     if not json_output:
@@ -799,8 +881,50 @@ def fill(
             except Exception:
                 pass  # Skip unreadable files
 
+    # Set up pause/resume wiring (DD1). `pause_controller` itself was already built
+    # above, before wordlist loading — NOT rebuilt here, so the finally block's
+    # clear_running()/clear_pause() always target the same PauseController that
+    # wrote the running marker, in every mode including --adaptive.
+    #
+    # `solver_pause_controller` is what actually gets threaded into the autofill
+    # constructors below, and IS gated on NOT --adaptive: adaptive pause is out of
+    # scope (AdaptiveAutofill.fill has no task_id param), so wiring pause into the
+    # base autofill it wraps would be a half-built path. Gating only the solver copy
+    # — not the bookkeeping `pause_controller` — is what lets the running-marker
+    # cleanup in `finally` still run under --adaptive (previously it could not: the
+    # single shared variable was reset to None for adaptive, so `if pause_controller`
+    # was False and the marker leaked on every adaptive run).
+    state_manager = None
+    solver_pause_controller = None
+    if task_id and not adaptive:
+        from .fill.state_manager import StateManager
+
+        solver_pause_controller = pause_controller
+        state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
+
+    # DD3 content dispatch: a real CSPState (non-empty domains) resumes at its exact
+    # position under classic Autofill regardless of --algorithm (the CSPState machinery
+    # is CSP-only). A degenerate state (empty domains) falls through to the normal
+    # --algorithm dispatch and re-seeds that engine from the reconstructed grid.
+    resume_exact = resume_csp_state is not None and bool(resume_csp_state.domains)
+
     # Create appropriate autofill instance based on algorithm
-    if algorithm == "beam":
+    if resume_exact:
+        # Force classic Autofill; the pause wiring survives restore_to_autofill so the
+        # resumed CSP fill re-pauses correctly. The grid handed here is immaterial —
+        # _resume_fill overwrites self.grid from the saved state.
+        autofill = Autofill(
+            grid,
+            word_list,
+            None,
+            timeout,
+            min_score,
+            algorithm,
+            progress,
+            pause_controller=solver_pause_controller,
+            state_manager=state_manager,
+        )
+    elif algorithm == "beam":
         autofill = BeamSearchAutofill(
             grid,
             word_list,
@@ -811,7 +935,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             partial_fill_mode=partial_fill,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
             task_id=task_id,
         )
     elif algorithm == "repair":
@@ -824,6 +948,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
+            pause_controller=solver_pause_controller,
         )
     elif algorithm == "hybrid":
         autofill = HybridAutofill(
@@ -836,7 +961,7 @@ def fill(
             theme_entries=theme_entries_dict,
             theme_words=theme_words,
             all_valid_words=all_valid_words,
-            pause_controller=pause_controller,
+            pause_controller=solver_pause_controller,
             task_id=task_id,
         )
     else:
@@ -847,6 +972,11 @@ def fill(
                 f"Theme entries are not supported for the {algorithm} algorithm "
                 "and were IGNORED. Use beam, repair, or hybrid."
             )
+        # DD3: inject pause wiring only for single-attempt runs. fill_with_restarts
+        # (attempts>1) calls self.fill() with no task_id, which would reach _handle_pause
+        # with task_id=None → ValueError; the attempts==1 gate keeps the controller off it.
+        _pc = solver_pause_controller if attempts == 1 else None
+        _sm = state_manager if attempts == 1 else None
         autofill = Autofill(
             grid,
             word_list,
@@ -855,7 +985,8 @@ def fill(
             min_score,
             algorithm,
             progress,
-            pause_controller=pause_controller,
+            pause_controller=_pc,
+            state_manager=_sm,
         )
 
     # Record the wordlist paths on the solver so a paused state stores them
@@ -920,6 +1051,10 @@ def fill(
                         "problematic_slots_count": 0,
                         "all_slots_filled": True,
                         "paused": False,
+                        # Same fields the normal completion payload reports, so this
+                        # early return does not present a different contract.
+                        "task_id": task_id,
+                        "wordlists": [str(w) for w in wordlists],
                         "message": "Grid was already completely filled",
                     }
                 )
@@ -942,6 +1077,12 @@ def fill(
     # classic uses fill() or fill_with_restarts(). The -t value is ALWAYS
     # forwarded (adaptive runs of classic algorithms used to ignore it).
     def _run_fill():
+        if resume_exact:
+            # Exact-position resume: _resume_fill restores domains + current_slot_index
+            # and continues _backtrack_with_mac from there (use_mac default True — the
+            # pause check lives only in _backtrack_with_mac). Timeout is governed by the
+            # ctor, so no timeout= here.
+            return autofill.fill(resume_state=resume_csp_state, task_id=task_id)
         if adaptive or algorithm in ["beam", "repair", "hybrid"]:
             if attempts > 1 and not json_output:
                 mode = "adaptive mode" if adaptive else f"{algorithm} algorithm"
@@ -982,6 +1123,92 @@ def fill(
             pause_controller.clear_running()
             if result is None or not result.paused:
                 pause_controller.clear_pause()
+
+    # DD6: paused outcome — save state (graceful-stop engines only), emit the paused
+    # stdout protocol, and return BEFORE cleanup/completion so no spurious "complete"
+    # status is sent. CSP (regex/trie) already persisted its real CSPState in
+    # _handle_pause; repair/beam/hybrid save a degenerate CSPState CLI-side here.
+    #
+    # None-guard: IterativeRepair.fill() returns None when the pause flag exists before
+    # restart 0 (hook #1 breaks with best_result never populated). Under an active task
+    # that unambiguously means "paused before any work happened" — treat it as a paused
+    # outcome with zero progress off the original grid, so nothing below dereferences None.
+    if task_id and (result is None or result.paused):
+        paused_grid = result.grid if result is not None else grid
+        slots_filled = result.slots_filled if result is not None else 0
+        total_slots = result.total_slots if result is not None else len(empty_slots)
+        # A paused fill must report where its state landed: the backend's
+        # fill_with_resume feeds this field straight back in as --resume. CSP
+        # (regex/trie) already saved in _handle_pause and carries the path on the
+        # result; the degenerate save below produces it locally for the others.
+        paused_state_path = getattr(result, "state_path", None) if result is not None else None
+        if algorithm not in ("regex", "trie"):
+            from datetime import datetime
+
+            from .fill.state_manager import CSPState
+
+            degenerate = CSPState(
+                grid_dict=paused_grid.to_dict(),
+                domains={},
+                constraints={},
+                used_words=[],
+                slot_id_map={},
+                slot_list=[],
+                slots_sorted=[],
+                current_slot_index=0,
+                iteration_count=0,
+                locked_slots=[],
+                timestamp=datetime.now().isoformat(),
+            )
+            state_path = state_manager.save_csp_state(
+                task_id=task_id,
+                csp_state=degenerate,
+                metadata={
+                    "algorithm": algorithm,
+                    "slots_filled": slots_filled,
+                    "total_slots": total_slots,
+                    "grid_size": [grid.size, grid.size],
+                    # Parity with the CSP path's own _handle_pause (autofill.py) so a
+                    # `fill --resume` with no -w on a repair/beam/hybrid pause finds
+                    # its wordlists the same way a CSP pause does (cli.py:674 falls
+                    # back to metadata["wordlists"]); min_score/timeout for full parity.
+                    "wordlists": [str(w) for w in wordlists],
+                    "min_score": min_score,
+                    "timeout": timeout,
+                },
+                compress=True,
+            )
+            paused_state_path = str(state_path)
+            if progress:
+                pct = int((slots_filled / total_slots) * 100) if total_slots > 0 else 0
+                progress.update(
+                    pct,
+                    f"Paused: {slots_filled}/{total_slots} slots filled",
+                    "paused",
+                    {"state_path": str(state_path), "grid": paused_grid.to_dict()["grid"]},
+                )
+
+        # Write the partial grid to -o before returning. Main wrote the output file
+        # ahead of reporting a pause; bench's DD6 block returns before the write
+        # further down, so a paused run silently lost its partial grid.
+        paused_output_file = output if json_output else (output or grid_file)
+        if paused_output_file:
+            with open(paused_output_file, "w") as f:
+                json.dump(paused_grid.to_dict(), f, indent=2)
+
+        if json_output:
+            paused_payload = {
+                "paused": True,
+                "task_id": task_id,
+                "slots_filled": slots_filled,
+                "total_slots": total_slots,
+            }
+            if paused_state_path:
+                paused_payload["state_path"] = str(paused_state_path)
+            click.echo(json.dumps(paused_payload))
+        else:
+            click.echo(click.style("⏸ Paused — solver state saved", fg="cyan"))
+        return
 
     # Cleanup pass: remove invalid words, keep letters shared with valid crossings
     if cleanup and algorithm in ["repair", "hybrid"]:
@@ -1074,12 +1301,16 @@ def fill(
             # every slot has letters but some entries are not dictionary words
             "all_slots_filled": all_slots_filled,
             "paused": result.paused,
+            # Echoed unconditionally because `fill --resume` now serves the backend's
+            # fill_with_resume, which used to reach _execute_resume — and that always
+            # reported both. Dropping them would narrow the seam contract.
+            "task_id": task_id,
+            "wordlists": [str(w) for w in wordlists],
         }
         if warnings:
             output_data["warnings"] = warnings
         if result.paused and result.state_path:
             output_data["state_path"] = result.state_path
-            output_data["task_id"] = task_id
         if output_file:
             output_data["output_file"] = str(output_file)
         if getattr(result, "adaptations_applied", 0):

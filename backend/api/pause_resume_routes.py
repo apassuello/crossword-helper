@@ -23,6 +23,8 @@ from backend.api.errors import handle_error
 from backend.api.validators import normalize_grid_to_cli
 from backend.core.cli_adapter import get_adapter
 from backend.core.edit_merger import EditMerger
+from backend.core.state_paths import PAUSE_FLAG_DIR
+from backend.core.state_paths import STATE_DIR as STATE_STORAGE_DIR
 from backend.core.wordlist_resolver import (
     get_default_wordlist_paths,
     resolve_wordlist_paths_strict,
@@ -35,9 +37,11 @@ pause_resume_api = Blueprint("pause_resume", __name__)
 # Initialize edit merger
 edit_merger = EditMerger()
 
-# State storage directory — MUST match the CLI StateManager default
-# (cli/src/fill/state_manager.py), which is where paused fills save state.
-STATE_STORAGE_DIR = Path("/tmp/crossword_states")
+# State + pause-flag dirs are single-sourced from backend.core.state_paths (DD1):
+# STATE_STORAGE_DIR (alias of STATE_DIR) is read in one place, _get_state_manager()
+# below, which every route calls instead of constructing a StateManager itself;
+# PAUSE_FLAG_DIR is threaded into the PauseController constructions so the flag the
+# backend writes lands where the spawned CLI reads it.
 
 
 def _get_state_manager():
@@ -86,7 +90,7 @@ def pause_autofill(task_id: str):
         from .progress_routes import is_process_running
 
         # Create pause controller for this task
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=PAUSE_FLAG_DIR)
 
         # Only accept pause requests for tasks that are actually running:
         # either a subprocess this backend launched, or a CLI fill that
@@ -162,7 +166,7 @@ def cancel_autofill(task_id: str):
 
         # Clean up any pause/running marker files so a stale flag can't
         # instantly pause a future run reusing this task id.
-        pause_controller = PauseController(task_id=task_id)
+        pause_controller = PauseController(task_id=task_id, pause_dir=PAUSE_FLAG_DIR)
         pause_controller.clear_pause()
         pause_controller.clear_running()
 

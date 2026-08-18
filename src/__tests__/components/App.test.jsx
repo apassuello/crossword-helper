@@ -10,6 +10,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
+import { ToastProvider } from '../../components/bench/Toast';
+
+// Bench's App consumes the ToastProvider context (useToasts), so it must be
+// rendered inside the provider exactly as main.jsx mounts it. Main's version of
+// App did not use toasts and rendered bare; the assertions below are unchanged.
+const renderApp = () => render(<App />, { wrapper: ToastProvider });
+
+// Bench's CrosswordGrid renders an SVG, not a div grid: one transparent hit rect
+// per cell, black squares as a rect filled with var(--ink) (grid lines use
+// `stroke`, not `fill`, so they do not match), and letters as text.xw-cell-letter.
+// Main's assertions are unchanged — only the selectors are re-expressed.
+const cells = (container) => container.querySelectorAll('rect[fill="transparent"]');
+const blackCells = (container) => container.querySelectorAll('rect[fill="var(--ink)"]');
+const letters = (container) =>
+  Array.from(container.querySelectorAll('.xw-cell-letter')).map((el) => el.textContent);
 
 // Mock react-hot-toast to avoid timers/portals in jsdom
 vi.mock('react-hot-toast', () => ({
@@ -49,11 +64,11 @@ describe('App grid import', () => {
 
   it('keeps letters and black squares when importing a smaller (5x5) grid into a 15x15 session (regression)', async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     // Default 15x15 grid renders 225 cells
     await waitFor(() => {
-      expect(container.querySelectorAll('.grid-cell')).toHaveLength(225);
+      expect(cells(container)).toHaveLength(225);
     });
 
     const gridJson = {
@@ -71,29 +86,23 @@ describe('App grid import', () => {
 
     // ImportPanel defers the actual import by 300ms, then App switches to edit view
     await waitFor(() => {
-      expect(container.querySelectorAll('.grid-cell')).toHaveLength(25);
+      expect(cells(container)).toHaveLength(25);
     }, { timeout: 3000 });
 
     // Letters survived (previously wiped by grid re-initialization on size change)
-    const letters = Array.from(container.querySelectorAll('.cell-letter')).map(
-      (el) => el.textContent
-    );
-    expect(letters).toHaveLength(4);
-    expect(letters).toEqual(expect.arrayContaining(['C', 'A', 'T', 'Z']));
+    expect(letters(container)).toHaveLength(4);
+    expect(letters(container)).toEqual(expect.arrayContaining(['C', 'A', 'T', 'Z']));
 
     // Black squares survived too (rendered with the dark fill)
-    const blackCells = Array.from(container.querySelectorAll('.grid-cell')).filter(
-      (el) => el.getAttribute('fill') === '#333'
-    );
-    expect(blackCells).toHaveLength(4);
+    expect(blackCells(container)).toHaveLength(4);
   });
 
   it('same-size (15x15) import still works and keeps its letters', async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await waitFor(() => {
-      expect(container.querySelectorAll('.grid-cell')).toHaveLength(225);
+      expect(cells(container)).toHaveLength(225);
     });
 
     // Build a 15x15 grid with a few letters and a black square
@@ -105,16 +114,10 @@ describe('App grid import', () => {
     await importGridViaPaste(user, container, { size: 15, grid });
 
     await waitFor(() => {
-      const letters = Array.from(container.querySelectorAll('.cell-letter')).map(
-        (el) => el.textContent
-      );
-      expect(letters).toEqual(expect.arrayContaining(['H', 'I']));
+      expect(letters(container)).toEqual(expect.arrayContaining(['H', 'I']));
     }, { timeout: 3000 });
 
-    expect(container.querySelectorAll('.grid-cell')).toHaveLength(225);
-    const blackCells = Array.from(container.querySelectorAll('.grid-cell')).filter(
-      (el) => el.getAttribute('fill') === '#333'
-    );
-    expect(blackCells).toHaveLength(1);
+    expect(cells(container)).toHaveLength(225);
+    expect(blackCells(container)).toHaveLength(1);
   });
 });

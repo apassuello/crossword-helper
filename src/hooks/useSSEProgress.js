@@ -1,26 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { api } from '../api/client';
 
 /**
  * Hook for tracking real-time progress via Server-Sent Events (SSE).
  *
  * Connects to SSE endpoint and receives progress updates from backend operations.
+ *
+ * The stream itself is opened by `api.openProgress`, which owns the EventSource
+ * and its JSON parsing — this hook holds no endpoint knowledge (issue #12).
  */
 export function useSSEProgress() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('idle'); // idle, running, complete, error
   const [message, setMessage] = useState('');
   const [data, setData] = useState(null); // payload of the latest event carrying data (e.g. final results)
-  const eventSourceRef = useRef(null);
+  const streamRef = useRef(null);
 
   const connect = useCallback((taskId) => {
     // Close existing connection if any
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    if (streamRef.current) {
+      streamRef.current.close();
     }
-
-    // Create SSE connection
-    const eventSource = new EventSource(`/api/progress/${taskId}`);
-    eventSourceRef.current = eventSource;
 
     // Reset state
     setProgress(0);
@@ -28,11 +28,8 @@ export function useSSEProgress() {
     setMessage('Starting...');
     setData(null);
 
-    // Handle progress events
-    eventSource.onmessage = (event) => {
-      try {
-        const eventData = JSON.parse(event.data);
-
+    const stream = api.openProgress(taskId, {
+      onEvent: (eventData) => {
         setProgress(eventData.progress || 0);
         setMessage(eventData.message || 'Processing...');
         // Capture the data payload BEFORE the status flips to complete/error,
@@ -44,32 +41,30 @@ export function useSSEProgress() {
 
         // Close connection when complete or error
         if (eventData.status === 'complete' || eventData.status === 'error') {
-          eventSource.close();
-          eventSourceRef.current = null;
+          stream.close();
+          streamRef.current = null;
         }
-      } catch (error) {
-        console.error('Failed to parse SSE event:', error);
-      }
-    };
+      },
+      onError: (error) => {
+        console.error('SSE error:', error);
+        setStatus('error');
+        setMessage('Connection error');
+        stream.close();
+        streamRef.current = null;
+      },
+    });
 
-    // Handle errors
-    eventSource.onerror = (error) => {
-      console.error('SSE error:', error);
-      setStatus('error');
-      setMessage('Connection error');
-      eventSource.close();
-      eventSourceRef.current = null;
-    };
+    streamRef.current = stream;
 
     return () => {
-      eventSource.close();
+      stream.close();
     };
   }, []);
 
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.close();
+      streamRef.current = null;
     }
   }, []);
 
@@ -84,8 +79,8 @@ export function useSSEProgress() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (streamRef.current) {
+        streamRef.current.close();
       }
     };
   }, []);

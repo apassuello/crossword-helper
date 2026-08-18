@@ -62,6 +62,10 @@ class BeamSearchAutofill(BeamSearchOrchestrator):
                           These are NON-NEGOTIABLE and will be placed first
             theme_words: Set of words from theme wordlist to prioritize (optional)
             partial_fill_mode: Enable partial fill mode - stops when stuck instead of aggressive backtracking
+            pause_controller: Optional PauseController — forwarded to the orchestrator's
+                pause polling. task_id is intentionally NOT forwarded, so the orchestrator's
+                native beam-state writer no-ops while it still returns a paused partial;
+                the CLI owns the single canonical degenerate save.
 
         Raises:
             ValueError: If parameters out of valid ranges

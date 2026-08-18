@@ -7,6 +7,8 @@ with symmetry, balance, and intersection considerations.
 
 from typing import Dict, List, Optional
 
+from backend.core.placement_validation import validate_placement
+
 
 class ThemePlacementSuggestion:
     """A single placement suggestion for a theme word."""
@@ -91,6 +93,13 @@ class ThemePlacer:
         for idx, (word, word_len) in enumerate(words_sorted):
             # Generate all possible placements
             placements = self._generate_placements(word)
+
+            # Gate every candidate through the applier's own validator (the
+            # same conflict check apply-placement runs) so no suggestion
+            # reaches the API response that apply-placement would reject
+            # (issue #15). If nothing survives, this word gets no
+            # suggestions below — no fallback placement is fabricated.
+            placements = [p for p in placements if not validate_placement(self.grid, p)]
 
             # Filter out placements that overlap with already placed words (except valid intersections)
             valid_placements = []
@@ -293,8 +302,6 @@ class ThemePlacer:
         # ===============================
         if self._is_centered(row, col, word_len, direction):
             score += 20
-        elif self._is_symmetric(row, col, word_len, direction):
-            score += 10
 
         # ===============================
         # FACTOR 2: Intersections (0-20 points)
@@ -360,18 +367,6 @@ class ThemePlacer:
             expected_col = self.grid_size // 2
             return row == expected_row and abs(col - expected_col) <= 1
 
-    def _is_symmetric(self, row: int, col: int, word_len: int, direction: str) -> bool:
-        """Check if placement maintains rotational symmetry."""
-        # Rotational symmetry: (r, c) ↔ (grid_size-1-r, grid_size-1-c)
-        center = self.grid_size // 2
-
-        if direction == "across":
-            # Check if row is symmetric
-            return abs(row - center) == abs((self.grid_size - 1 - row) - center)
-        else:  # down
-            # Check if col is symmetric
-            return abs(col - center) == abs((self.grid_size - 1 - col) - center)
-
     def _count_intersections(self, placement: Dict, word: str) -> int:
         """Count how many letters intersect with placed words."""
         count = 0
@@ -418,8 +413,6 @@ class ThemePlacer:
         # Check what contributed to score
         if self._is_centered(row, col, word_len, direction):
             reasons.append("Centered placement (symmetric)")
-        elif self._is_symmetric(row, col, word_len, direction):
-            reasons.append("Symmetric positioning")
 
         intersections = self._count_intersections(placement, word)
         if intersections > 0:

@@ -108,6 +108,8 @@ class Autofill:
         self.last_progress_report = 0  # Track last reported progress percentage
         self.slots_sorted: List[Dict] = []
         self.locked_slots: Set[int] = set()
+        # Armed by fill() around initial CSP setup only -- see _check_pause_during_setup
+        self._setup_pause_armed = False
 
         # Letter frequency table for fast LCV heuristic
         # Structure: {word_length: {position: {letter: frequency}}}
@@ -173,28 +175,45 @@ class Autofill:
                 iterations=0,
             )
 
-        # Initialize constraint graph and domains
-        self._initialize_csp(slots)
+        # Setup runs for seconds on a large grid before the first backtracking
+        # iteration, so it is armed for pause checks -- see
+        # _check_pause_during_setup. Only this initial-fill path is armed; the
+        # unwind and resume paths call the same routines and must not raise.
+        self._setup_pause_armed = True
+        try:
+            # Initialize constraint graph and domains
+            self._initialize_csp(slots)
 
-        # Apply initial arc consistency
-        if not self._ac3():
-            # Grid is unsolvable
-            return FillResult(
-                success=False,
-                grid=self.grid,
-                time_elapsed=time.time() - self.start_time,
-                slots_filled=0,
-                total_slots=total_slots,
-                problematic_slots=slots,
-                iterations=0,
-            )
+            # Apply initial arc consistency
+            if not self._ac3():
+                # Grid is unsolvable
+                return FillResult(
+                    success=False,
+                    grid=self.grid,
+                    time_elapsed=time.time() - self.start_time,
+                    slots_filled=0,
+                    total_slots=total_slots,
+                    problematic_slots=slots,
+                    iterations=0,
+                )
 
-        # Sort slots by constraint (MCV heuristic)
-        slots = self._sort_slots_by_constraint(slots)
-        self.slots_sorted = slots  # Store for potential pause/resume
+            # Sort slots by constraint (MCV heuristic)
+            slots = self._sort_slots_by_constraint(slots)
+            self.slots_sorted = slots  # Store for potential pause/resume
+        except PausedException:
+            return self._handle_setup_pause(task_id, total_slots)
+        finally:
+            self._setup_pause_armed = False
+
+        # Setup is complete and the domains are populated, so a pause from here on
+        # is saved as a real CSPState rather than routed through
+        # _handle_setup_pause. Announce the transition; the unsolvable-grid return
+        # above deliberately precedes it, since no search runs in that case.
+        if self.pause_controller:
+            self.pause_controller.mark_searching()
 
         # Try to fill using backtracking (with or without MAC)
-        paused = False
+        was_paused = False
         try:
             if use_mac:
                 success = self._backtrack_with_mac(slots, 0, task_id)
@@ -203,9 +222,9 @@ class Autofill:
         except TimeoutError:
             success = False
         except PausedException:
-            # Paused - state already saved in _handle_pause
+            # Paused - state already saved in _backtrack_with_mac / _handle_pause
             success = False
-            paused = True
+            was_paused = True
 
         time_elapsed = time.time() - self.start_time
 
@@ -221,20 +240,25 @@ class Autofill:
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
-            paused=paused,
-            state_path=str(self.paused_state_path) if paused and getattr(self, "paused_state_path", None) else None,
+            paused=was_paused,
+            state_path=str(self.paused_state_path) if was_paused and getattr(self, "paused_state_path", None) else None,
         )
 
     def _resume_fill(self, resume_state: CSPState, task_id: Optional[str], use_mac: bool = True) -> FillResult:
         """
         Resume fill from saved state.
 
-        Restores the saved grid and word assignments, unwinds any assignments
-        that make remaining slots unfillable (a pause can land mid-branch on a
-        contradictory partial assignment — the recursion stack above the saved
-        frame is not serialized, so a pure "continue at index N" search could
-        never backtrack out of a doomed branch), then continues the search
-        over the remaining empty slots with the filled cells as constraints.
+        Restores the saved grid and word assignments, then continues the CSP
+        search from the saved position — `current_slot_index` into the restored
+        MCV-sorted slot order — with the filled cells as constraints.
+
+        Exact-position continuation is tried first and cannot, on its own,
+        unwind a contradictory partial assignment: the recursion stack above the
+        saved frame is not serialized, so a branch that was already doomed when
+        the pause landed stays doomed. When that happens — the search fails
+        without filling a single additional slot — this falls back to
+        `_resume_by_unwinding`, which strips the dead-end assignments and
+        re-searches, trading the saved position for the ability to progress.
 
         Args:
             resume_state: Saved CSP state
@@ -256,53 +280,49 @@ class Autofill:
         # Convert locked slots list to set
         self.locked_slots = set(resume_state.locked_slots)
 
-        # Unwind assignments that left some remaining slot with zero
-        # candidates, then rebuild the CSP over the current empty slots
-        self._unwind_dead_ends()
+        # Continue backtracking from the saved position. capture_csp_state serializes
+        # slots_sorted as slot IDs, while _backtrack_with_mac consumes slot DICTS, so map
+        # IDs back through slot_list — repopulated by restore_to_autofill just above.
+        # Entries that are already dicts pass through unchanged, so state files written
+        # before the ID serialization landed still resume. current_slot_index indexes
+        # into this same sorted order either way.
+        slots_list = [self.slot_list[entry] if isinstance(entry, int) else entry for entry in resume_state.slots_sorted]
 
-        # Search loop: if the restored partial assignment turns out to be
-        # unsatisfiable (the search exhausts without a timeout), strip the
-        # words crossing the most constrained slots and try again. Each round
-        # removes at least one restored word, so this terminates; once all
-        # restored words are stripped it degenerates to a fresh fill.
-        paused = False
-        success = False
-        while True:
-            slots = self.grid.get_empty_slots()
-            if not slots:
-                success = True
-                break
+        if not slots_list:
+            # A state saved during CSP setup (paused before the MCV sort) records
+            # no search order, and its domains/constraints may be half-built. Ignore
+            # every serialized CSP structure and re-derive from the restored grid:
+            # backtracking over an empty slot list hits the base case in
+            # _backtrack_with_mac and reports success over an unfilled grid. Any
+            # truncated state file reaches this too.
+            return self.fill(timeout=self.timeout, use_mac=use_mac, task_id=task_id)
 
-            self._initialize_csp(slots)
-            consistent = self._ac3()
+        empty_before = len(self.grid.get_empty_slots())
 
-            if consistent:
-                slots = self._sort_slots_by_constraint(slots)
-                self.slots_sorted = slots
+        was_paused = False
+        timed_out = False
+        try:
+            if use_mac:
+                success = self._backtrack_with_mac(slots_list, resume_state.current_slot_index, task_id)
+            else:
+                success = self._backtrack(slots_list, resume_state.current_slot_index)
+        except TimeoutError:
+            success = False
+            timed_out = True
+        except PausedException:
+            success = False
+            was_paused = True
 
-                try:
-                    if use_mac:
-                        success = self._backtrack_with_mac(slots, 0, task_id)
-                    else:
-                        success = self._backtrack(slots, 0)
-                except TimeoutError:
-                    success = False
-                    break
-                except PausedException:
-                    success = False
-                    paused = True
-                    break
-
-                if success:
-                    break
-
-            # Out of time — report the partial result honestly
-            if time.time() - self.start_time > self.timeout:
-                break
-
-            # UNSAT position: strip filled words crossing the tightest slots
-            if not self._strip_words_around_constrained_slots():
-                break  # Nothing strippable left — give up
+        # Issue #9. Exact-position continuation cannot unwind an assignment that
+        # was already contradictory when the pause landed, so a doomed branch
+        # returns almost instantly having filled nothing. Detect precisely that
+        # — failed, and not one additional slot filled — and fall back to the
+        # unwind-and-re-search path below. A pause and a timeout are both
+        # legitimate non-completions rather than dead ends, so neither triggers
+        # the fallback: pausing again would discard the user's stop, and there is
+        # no budget left to re-search after a timeout.
+        if not success and not was_paused and not timed_out and len(self.grid.get_empty_slots()) >= empty_before:
+            success, was_paused = self._resume_by_unwinding(task_id, use_mac)
 
         time_elapsed = time.time() - self.start_time
 
@@ -318,9 +338,67 @@ class Autofill:
             total_slots=total_slots,
             problematic_slots=remaining_slots if not success else [],
             iterations=self.iterations,
-            paused=paused,
-            state_path=str(self.paused_state_path) if paused and getattr(self, "paused_state_path", None) else None,
+            paused=was_paused,
+            state_path=str(self.paused_state_path) if was_paused and getattr(self, "paused_state_path", None) else None,
         )
+
+    def _resume_by_unwinding(self, task_id: Optional[str], use_mac: bool) -> Tuple[bool, bool]:
+        """
+        Recover a resume whose restored position was already a dead end.
+
+        Strips the assignments that left some remaining slot with zero
+        candidates, then re-searches the restored grid: rebuild the CSP over the
+        current empty slots, re-sort them by constraint, and backtrack from the
+        start. On an UNSAT position it strips the words crossing the most
+        constrained slots and retries. Each round removes at least one restored
+        word, so the loop terminates — degenerating to a fresh fill once
+        everything strippable is gone.
+
+        This deliberately abandons `current_slot_index`. The unwind changes which
+        slots are empty, so the saved index no longer denotes the same place in
+        the search. Position is worth less than progress here, because the only
+        caller reaches this path after the saved position produced none.
+
+        Args:
+            task_id: Task ID for continuing pause/resume
+            use_mac: Whether to use MAC algorithm
+
+        Returns:
+            (success, was_paused)
+        """
+        self._unwind_dead_ends()
+
+        while True:
+            slots = self.grid.get_empty_slots()
+            if not slots:
+                return True, False
+
+            self._initialize_csp(slots)
+            if self._ac3():
+                slots = self._sort_slots_by_constraint(slots)
+                self.slots_sorted = slots
+
+                try:
+                    if use_mac:
+                        success = self._backtrack_with_mac(slots, 0, task_id)
+                    else:
+                        success = self._backtrack(slots, 0)
+                except TimeoutError:
+                    return False, False
+                except PausedException:
+                    return False, True
+
+                if success:
+                    return True, False
+
+            # Out of time — report the partial result honestly rather than
+            # starting another strip-and-retry round we cannot finish.
+            if time.time() - self.start_time > self.timeout:
+                return False, False
+
+            # UNSAT position: strip filled words crossing the tightest slots.
+            if not self._strip_words_around_constrained_slots():
+                return False, False  # Nothing strippable left
 
     def _unwind_dead_ends(self, max_rounds: int = 10) -> int:
         """
@@ -345,16 +423,21 @@ class Autofill:
                 break
 
             # Build the CSP over the current empty slots and run arc
-            # consistency: if it passes, the position is searchable
+            # consistency to prune the domains.
             self._initialize_csp(empty_slots)
-            if self._ac3():
-                break
+            self._ac3()
 
-            # AC-3 wiped out at least one domain — those slots are dead
+            # An empty domain is the dead-end signal, whatever AC-3 returned.
+            # Do NOT early-exit on `_ac3()` being True: it reports whether a
+            # domain *became* empty during revision, so a slot whose domain was
+            # already empty at initialization leaves nothing to revise and comes
+            # back "consistent". A position where every domain is empty is the
+            # most dead a position can be, and that is exactly the case the old
+            # early-exit skipped.
             dead_slots = [slot for idx, slot in enumerate(empty_slots) if len(self.domains.get(idx, set())) == 0]
 
             if not dead_slots:
-                break
+                break  # Every remaining slot has candidates — searchable
 
             # Strip filled words crossing each dead slot
             stripped_this_round = False
@@ -531,6 +614,7 @@ class Autofill:
 
         # Build constraint graph
         for i, slot1 in enumerate(slots):
+            self._check_pause_during_setup()
             self.constraints[i] = []
 
             for j, slot2 in enumerate(slots):
@@ -545,6 +629,7 @@ class Autofill:
 
         # Initialize domains
         for idx, slot in enumerate(slots):
+            self._check_pause_during_setup()
             pattern = self.grid.get_pattern_for_slot(slot)
             candidates = self.pattern_matcher.find(
                 pattern,
@@ -819,8 +904,14 @@ class Autofill:
             for other_id, pos1, pos2 in self.constraints[slot_id]:
                 queue.append((slot_id, other_id, pos1, pos2))
 
-        # Process arcs
+        # Process arcs. The pause check is amortised over every 128 arcs: an
+        # individual arc is cheap, and should_pause() rate-limits the filesystem
+        # stat to once per 0.1s anyway.
+        arcs_processed = 0
         while queue:
+            arcs_processed += 1
+            if arcs_processed % 128 == 0:
+                self._check_pause_during_setup()
             slot_id, other_id, pos1, pos2 = queue.popleft()
 
             if self._revise(slot_id, other_id, pos1, pos2):
@@ -1311,6 +1402,64 @@ class Autofill:
 
         return False
 
+    def _handle_setup_pause(self, task_id: Optional[str], total_slots: int) -> "FillResult":
+        """Save a pre-search paused state and report it as paused.
+
+        No slot has been assigned yet, so the honest record is "no search
+        progress": the half-built domains and constraints are dropped rather
+        than persisted, and slots_sorted stays empty. `_resume_fill` detects the
+        empty search order and rebuilds the CSP from the restored grid.
+
+        Args:
+            task_id: Task ID for state file naming
+            total_slots: Slot count the run started with
+
+        Returns:
+            A paused FillResult carrying the saved state path.
+        """
+        self.domains = {}
+        self.constraints = {}
+        self.slots_sorted = []
+        self._handle_pause(0, task_id, total_slots)
+
+        return FillResult(
+            success=False,
+            grid=self.grid,
+            time_elapsed=time.time() - self.start_time,
+            slots_filled=0,
+            total_slots=total_slots,
+            problematic_slots=self.grid.get_empty_slots(),
+            iterations=0,
+            paused=True,
+            state_path=str(self.paused_state_path) if self.paused_state_path else None,
+        )
+
+    def _check_pause_during_setup(self) -> None:
+        """Poll the pause flag during initial CSP setup.
+
+        `_initialize_csp` -> `_ac3` -> `_sort_slots_by_constraint` used to run with
+        no pause check, so a pause requested during setup was not observed until
+        backtracking began. On a blank grid that window is seconds wide, and it is
+        unbounded -- it grows with grid and wordlist size -- so a pause request
+        stayed invisible for the whole of it. The measured timings for the
+        seam-gate config are in the commit that added this check.
+
+        Deliberately no-ops unless `fill()` armed it for the initial setup phase.
+        `_ac3` and `_initialize_csp` are also called by `_resume_by_unwinding` and
+        `_unwind_dead_ends`, both reached from `_resume_fill` *outside* its
+        `except PausedException` -- raising there would escape `fill()` as a crash
+        rather than a paused result. It would also defeat the #9 gate, which is
+        deliberately conditioned on not having paused, since unwinding a paused
+        run discards the user's position.
+
+        Raises:
+            PausedException: If pause was requested and the check is armed.
+        """
+        if not self._setup_pause_armed:
+            return
+        if self.pause_controller and self.pause_controller.should_pause():
+            raise PausedException("Autofill paused during CSP setup")
+
     def _handle_pause(self, current_index: int, task_id: Optional[str], total_slots: int) -> None:
         """
         Handle pause request by saving current state.
@@ -1326,9 +1475,10 @@ class Autofill:
         if not task_id:
             raise ValueError("task_id required for pause/resume")
 
-        # Capture current state (positional args: signature is
-        # capture_csp_state(autofill_instance, current_slot_index, locked_slots))
-        csp_state = self.state_manager.capture_csp_state(self, current_index, self.locked_slots)
+        # Capture current state (staticmethod param is current_slot_index)
+        csp_state = self.state_manager.capture_csp_state(
+            self, current_slot_index=current_index, locked_slots=self.locked_slots
+        )
 
         # Calculate current stats
         remaining_slots = self.grid.get_empty_slots()
@@ -1354,6 +1504,9 @@ class Autofill:
         # cannot accidentally pause a future run with the same task id.
         if self.pause_controller:
             self.pause_controller.clear_pause()
+
+        # Persist for the FillResult (the local state_path is lost once this returns).
+        self._pause_state_path = str(state_path)
 
         # Report pause via progress reporter
         if self.progress_reporter:

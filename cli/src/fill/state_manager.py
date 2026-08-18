@@ -7,12 +7,20 @@ enabling pause/resume workflow for long-running autofill operations.
 
 import gzip
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..core.grid import Grid
+
+# Suffix used by _atomic_write's temporary files. list_states must skip these:
+# pathlib.glob("*.json*") matches dot-prefixed names, so an orphan left by a hard
+# kill (SIGKILL bypasses the cleanup handler) would otherwise be enumerated as a
+# state and skipped only by list_states' catch-all.
+_TMP_SUFFIX = ".tmp"
 
 
 @dataclass
@@ -34,7 +42,7 @@ class CSPState:
 
     # Slot information
     slot_list: List[Dict]  # All slots
-    slots_sorted: List[int]  # MCV-sorted slot IDs
+    slots_sorted: List[int]  # MCV-sorted slot IDs, indexing into slot_list (see capture_csp_state)
 
     # Backtracking position
     current_slot_index: int  # Resume from this position
@@ -128,6 +136,33 @@ class StateManager:
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _atomic_write(file_path: Path, json_data: str, compress: bool) -> None:
+        """
+        Write json_data to file_path atomically.
+
+        Writes to a temporary file in the same directory, then os.replace()s it
+        onto the destination. os.replace() is atomic on POSIX, so a concurrent
+        reader (e.g. the resume-poll endpoint) can never observe a partially
+        written (torn) state file — it sees either the previous complete file
+        or the new complete file, never a mix. The temp file is removed if the
+        write fails partway.
+        """
+        fd, tmp_name = tempfile.mkstemp(dir=str(file_path.parent), prefix=f".{file_path.name}.", suffix=_TMP_SUFFIX)
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            if compress:
+                with gzip.open(tmp_path, "wt", encoding="utf-8") as f:
+                    f.write(json_data)
+            else:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(json_data)
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
+
     def save_csp_state(
         self,
         task_id: str,
@@ -163,12 +198,9 @@ class StateManager:
         # Determine file path
         if compress:
             file_path = self.storage_dir / f"{task_id}.json.gz"
-            with gzip.open(file_path, "wt", encoding="utf-8") as f:
-                f.write(json_data)
         else:
             file_path = self.storage_dir / f"{task_id}.json"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(json_data)
+        self._atomic_write(file_path, json_data, compress)
 
         return file_path
 
@@ -228,7 +260,10 @@ class StateManager:
             else:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError, EOFError) as e:
+            # EOFError is gzip's truncation error and is NOT an OSError subclass,
+            # so it needs to be caught explicitly — a reader landing mid-write
+            # (before the atomic rename lands) would otherwise leak it raw.
             raise ValueError(f"Not a valid autofill state file: {file_path} ({e})")
 
         if not isinstance(data, dict) or "state_data" not in data or "algorithm" not in data:
@@ -312,16 +347,17 @@ class StateManager:
         Raises:
             FileNotFoundError: If state file doesn't exist
         """
-        # Try compressed first
+        # Try compressed first. Delegate to read_state_data instead of opening
+        # the file directly: it bypassed read_state_data's guard entirely, so a
+        # truncated file raised a raw EOFError/json.JSONDecodeError here even
+        # after read_state_data was hardened against exactly that.
         file_path_gz = self.storage_dir / f"{task_id}.json.gz"
         file_path_json = self.storage_dir / f"{task_id}.json"
 
         if file_path_gz.exists():
-            with gzip.open(file_path_gz, "rt", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self.read_state_data(file_path_gz)
         elif file_path_json.exists():
-            with open(file_path_json, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self.read_state_data(file_path_json)
         else:
             raise FileNotFoundError(f"State file not found for task_id: {task_id}")
 
@@ -376,6 +412,8 @@ class StateManager:
 
         # Find all state files
         for file_path in self.storage_dir.glob("*.json*"):
+            if file_path.name.endswith(_TMP_SUFFIX):
+                continue  # in-flight or orphaned _atomic_write temp file, not a state
             try:
                 # Extract task_id from filename
                 task_id = file_path.stem.replace(".json", "")
@@ -562,12 +600,9 @@ class StateManager:
         # Determine file path
         if compress:
             file_path = self.storage_dir / f"{task_id}.json.gz"
-            with gzip.open(file_path, "wt", encoding="utf-8") as f:
-                f.write(json_data)
         else:
             file_path = self.storage_dir / f"{task_id}.json"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(json_data)
+        self._atomic_write(file_path, json_data, compress)
 
         return file_path
 

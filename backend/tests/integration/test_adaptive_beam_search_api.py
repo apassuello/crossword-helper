@@ -27,8 +27,8 @@ def create_21x21_grid_with_theme_words():
         grid.append(row)
 
     # Place a few theme words (simplified version)
-    # MAMIEDENISE at row 0, col 5, across
-    theme_word = "MAMIEDENISE"
+    # CELEBRATION at row 0, col 5, across
+    theme_word = "CELEBRATION"
     for i, letter in enumerate(theme_word):
         grid[0][5 + i] = {"letter": letter, "isBlack": False, "isThemeLocked": True}
 

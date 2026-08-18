@@ -186,6 +186,69 @@ class TestStateManager:
         with pytest.raises(FileNotFoundError):
             state_manager.load_csp_state("nonexistent_task")
 
+    def _write_truncated_gz(self, state_manager, task_id, simple_csp_state):
+        """Save a valid state then truncate the file mid-stream to simulate a torn read."""
+        file_path = state_manager.save_csp_state(
+            task_id=task_id, csp_state=simple_csp_state, metadata={"slots_filled": 1, "total_slots": 2}, compress=True
+        )
+        full_size = file_path.stat().st_size
+        with open(file_path, "r+b") as f:
+            f.truncate(full_size // 2)
+        return file_path
+
+    def test_read_state_data_on_truncated_gzip_raises_clean_value_error(self, state_manager, simple_csp_state):
+        """A truncated .json.gz must surface the module's ValueError shape, not a raw EOFError."""
+        task_id = "truncated_read_state_data"
+        file_path = self._write_truncated_gz(state_manager, task_id, simple_csp_state)
+
+        with pytest.raises(ValueError, match="Not a valid autofill state file"):
+            state_manager.read_state_data(file_path)
+
+    def test_get_state_info_on_truncated_gzip_raises_clean_value_error(self, state_manager, simple_csp_state):
+        """get_state_info bypasses read_state_data internally; it must get the same guard."""
+        task_id = "truncated_get_state_info"
+        self._write_truncated_gz(state_manager, task_id, simple_csp_state)
+
+        with pytest.raises(ValueError, match="Not a valid autofill state file"):
+            state_manager.get_state_info(task_id)
+
+    def test_load_csp_state_on_truncated_gzip_raises_clean_value_error(self, state_manager, simple_csp_state):
+        """load_csp_state must not leak the raw EOFError from a torn read either."""
+        task_id = "truncated_load_csp_state"
+        self._write_truncated_gz(state_manager, task_id, simple_csp_state)
+
+        with pytest.raises(ValueError, match="Not a valid autofill state file"):
+            state_manager.load_csp_state(task_id)
+
+    def test_save_csp_state_leaves_no_temp_file_behind(self, state_manager, simple_csp_state, temp_dir):
+        """Atomic write (temp file + os.replace) must not leave a .tmp artifact after a successful save."""
+        task_id = "atomic_write_cleanup"
+        file_path = state_manager.save_csp_state(task_id=task_id, csp_state=simple_csp_state, metadata={}, compress=True)
+
+        assert file_path.exists()
+        leftovers = [p for p in temp_dir.iterdir() if p != file_path]
+        assert leftovers == [], f"unexpected files left in storage dir: {leftovers}"
+
+    def test_save_csp_state_cleans_up_temp_file_on_failed_replace(
+        self, state_manager, simple_csp_state, temp_dir, monkeypatch
+    ):
+        """If os.replace() fails partway, the temp file must be removed, not orphaned."""
+        import cli.src.fill.state_manager as state_manager_module
+
+        def _boom(*args, **kwargs):
+            raise OSError("simulated disk failure")
+
+        monkeypatch.setattr(state_manager_module.os, "replace", _boom)
+
+        task_id = "atomic_write_failure"
+        with pytest.raises(OSError, match="simulated disk failure"):
+            state_manager.save_csp_state(task_id=task_id, csp_state=simple_csp_state, metadata={}, compress=True)
+
+        dest = temp_dir / f"{task_id}.json.gz"
+        assert not dest.exists()
+        leftovers = list(temp_dir.iterdir())
+        assert leftovers == [], f"temp file was not cleaned up after failed replace: {leftovers}"
+
     def test_get_state_info(self, state_manager, simple_csp_state):
         """Test getting state info without full load."""
         task_id = "test_task_005"

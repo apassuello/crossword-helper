@@ -58,6 +58,8 @@ class HybridAutofill:
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
             all_valid_words: Set of ALL valid words across all wordlists (for validation only)
+            pause_controller: Optional PauseController — forwarded to both phases so a
+                pause in either beam (Phase 1) or repair (Phase 2) stops the hybrid run
         """
         self.grid = grid
         self.word_list = word_list
@@ -139,9 +141,13 @@ class HybridAutofill:
 
         beam_result = beam_search.fill(timeout=beam_timeout)
 
-        # Early exit if beam search succeeded (or was paused with state saved)
-        if beam_result.success or beam_result.paused:
-            if self.progress_reporter and beam_result.success:
+        # Phase-1 pause: stop here, don't proceed to repair.
+        if beam_result.paused:
+            return beam_result
+
+        # Early exit if beam search succeeded
+        if beam_result.success:
+            if self.progress_reporter:
                 self.progress_reporter.update(
                     100,
                     f"Beam search complete: {beam_result.slots_filled}/{beam_result.total_slots}",
@@ -161,9 +167,12 @@ class HybridAutofill:
                 f"Phase 2: Repair ({beam_result.slots_filled}/{beam_result.total_slots} filled)",
             )
 
-        # Use beam result grid as starting point
+        # Use beam result grid as starting point. Clone: IterativeRepair mutates
+        # its grid in place (restart paths + final best-grid writeback), and
+        # beam_result.grid must stay intact in case the caller's best-of compare
+        # below picks the beam result over the repair result.
         repair = IterativeRepair(
-            beam_result.grid,  # Start from beam output
+            beam_result.grid.clone(),  # Start from beam output
             self.word_list,
             self.pattern_matcher,
             min_score=self.min_score,
@@ -172,9 +181,15 @@ class HybridAutofill:
             theme_entries=self.theme_entries,
             theme_words=self.theme_words,
             all_valid_words=self.all_valid_words,
+            pause_controller=self.pause_controller,
         )
 
         repair_result = repair.fill(timeout=repair_timeout)
+
+        # Phase-2 pause: return it directly so the slot-count best-of compare below
+        # doesn't mask the paused flag.
+        if repair_result.paused:
+            return repair_result
 
         # Return best result
         if repair_result.success:

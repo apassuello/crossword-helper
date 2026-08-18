@@ -2,14 +2,20 @@
 Integration tests for hybrid autofill (beam search + iterative repair).
 """
 
+import random
 import time
 
 import pytest
 from src.core.grid import Grid
 from src.fill.beam_search_autofill import BeamSearchAutofill
 from src.fill.hybrid_autofill import HybridAutofill
+from src.fill.iterative_repair import IterativeRepair
 from src.fill.trie_pattern_matcher import TriePatternMatcher
 from src.fill.word_list import WordList
+
+# Fixed seed for the hybrid-vs-beam comparison below. Any value works; it is
+# pinned only so both solvers start from the same RNG position.
+_COMPARISON_SEED = 20260817
 
 
 class TestHybridIntegration:
@@ -205,6 +211,81 @@ class TestHybridIntegration:
         # Check for duplicates
         assert len(words_in_grid) == len(set(words_in_grid)), f"Found duplicate words: {words_in_grid}"
 
+    def test_repair_receives_cloned_grid_not_beam_grid(self, small_grid, word_list, pattern_matcher_trie, monkeypatch):
+        """Phase 2 (IterativeRepair) must be handed an independently-owned clone of the
+        phase-1 beam grid, not the beam grid object itself.
+
+        `small_grid` (11x11, one black square) against the tiny fixture word list can't be
+        completed by beam search alone, so phase 2 is guaranteed to run.
+
+        Intercepts the boundary two ways, since `beam_result` is never exposed by
+        `HybridAutofill.fill()`:
+        - wraps `BeamSearchAutofill.fill` to capture the `FillResult.grid` phase 1 produced
+          (and a snapshot of its cells taken right after phase 1 finishes)
+        - wraps `IterativeRepair.__init__` to capture the grid object phase 2 receives
+
+        If phase 2 is holding the same object beam search returned, mutating it in place
+        (as `IterativeRepair.fill` does) changes `beam_grid.cells` out from under phase 1's
+        result -- exactly the aliasing bug in #13.
+        """
+        captured = {}
+
+        original_beam_fill = BeamSearchAutofill.fill
+
+        def capturing_beam_fill(self, *args, **kwargs):
+            result = original_beam_fill(self, *args, **kwargs)
+            captured["beam_grid"] = result.grid
+            captured["beam_cells_snapshot"] = result.grid.cells.copy()
+            return result
+
+        monkeypatch.setattr(BeamSearchAutofill, "fill", capturing_beam_fill)
+
+        original_repair_init = IterativeRepair.__init__
+
+        def capturing_repair_init(self, grid_arg, *args, **kwargs):
+            captured["repair_grid"] = grid_arg
+            original_repair_init(self, grid_arg, *args, **kwargs)
+
+        monkeypatch.setattr(IterativeRepair, "__init__", capturing_repair_init)
+
+        hybrid = HybridAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_trie,
+            beam_width=2,
+            max_repair_iterations=50,
+        )
+        hybrid.fill(timeout=30)
+
+        assert "beam_grid" in captured, "beam search never ran -- test setup invalid"
+        assert "repair_grid" in captured, "phase 2 (repair) never ran -- test setup invalid, beam must have succeeded outright"
+
+        assert captured["repair_grid"] is not captured["beam_grid"], (
+            "IterativeRepair received the SAME grid object BeamSearchAutofill returned; "
+            "phase 2 must receive an independently-owned clone (see Grid.clone())"
+        )
+        assert (captured["beam_grid"].cells == captured["beam_cells_snapshot"]).all(), (
+            "beam_result.grid was mutated by phase 2 -- the grid handed to IterativeRepair "
+            "aliases the beam-phase grid instead of being an independent clone"
+        )
+
+    def test_fill_result_slots_filled_matches_grid_state(self, small_grid, word_list, pattern_matcher_trie):
+        """Self-consistency guard: `slots_filled` must agree with what the returned grid
+        actually contains, i.e. it can't be a stale count from a phase whose grid was later
+        mutated by the other phase (the aliasing bug this task fixes).
+        """
+        hybrid = HybridAutofill(
+            small_grid,
+            word_list,
+            pattern_matcher_trie,
+            beam_width=2,
+            max_repair_iterations=50,
+        )
+
+        result = hybrid.fill(timeout=30)
+
+        assert result.slots_filled == len(result.grid.get_word_slots()) - len(result.grid.get_empty_slots())
+
     def test_hybrid_vs_beam_alone(self, word_list, pattern_matcher_trie):
         """Test that hybrid performs at least as well as beam alone."""
         # Create simple grid
@@ -219,15 +300,34 @@ class TestHybridIntegration:
                 else:
                     grid.set_black_square(row, col, enforce_symmetry=False)
 
-        # Run beam search alone
-        beam = BeamSearchAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
-        beam_result = beam.fill(timeout=20)
+        # Both solvers draw from the module-level RNG unseeded
+        # (`iterative_repair.py` and `beam_search/selection/value_ordering.py`
+        # both call random.shuffle), so running them back to back samples two
+        # INDEPENDENT searches. Hybrid ≥ an independent beam run is not a
+        # property the code guarantees, and asserting it is a coin flip.
+        #
+        # Seeding both identically makes hybrid's own phase-1 beam reproduce the
+        # standalone beam run, so what this asserts is hybrid's actual contract:
+        # it returns the better of its beam and repair phases
+        # (`hybrid_autofill.py:200-215`), never worse than the beam it ran.
+        #
+        # Restore the RNG afterwards — a leaked seed would silently make every
+        # later stochastic test in this process deterministic.
+        rng_state = random.getstate()
+        try:
+            # Run beam search alone
+            random.seed(_COMPARISON_SEED)
+            beam = BeamSearchAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
+            beam_result = beam.fill(timeout=20)
 
-        # Run hybrid (beam + repair)
-        hybrid = HybridAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
-        hybrid_result = hybrid.fill(timeout=30)
+            # Run hybrid (beam + repair) from the same RNG position
+            random.seed(_COMPARISON_SEED)
+            hybrid = HybridAutofill(grid.clone(), word_list, pattern_matcher_trie, beam_width=3)
+            hybrid_result = hybrid.fill(timeout=30)
+        finally:
+            random.setstate(rng_state)
 
-        # Hybrid should be at least as good as beam alone
+        # Hybrid should be at least as good as the beam phase it ran
         assert (
             hybrid_result.slots_filled >= beam_result.slots_filled
         ), f"Hybrid ({hybrid_result.slots_filled}) should be ≥ beam ({beam_result.slots_filled})"

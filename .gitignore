@@ -62,6 +62,10 @@ frontend/dist/
 .vite/
 *.local
 
+# React source `src/lib/` — the Python `lib/` rule above (unanchored) would
+# otherwise ignore this JS source directory. Re-include it.
+!src/lib/
+
 # Test output files
 test_filled*.json
 
@@ -110,9 +114,17 @@ data/research/
 coverage.xml
 .coverage.*
 
-# Personal wordlists (kept local only)
-data/wordlists/custom/gift_for_sarah.txt
-data/wordlists/custom/personal.txt
+# Personal wordlists (kept local only) — ignore all custom lists except the
+# tracked demo file, so personal filenames never appear in this tracked file.
+data/wordlists/custom/*
+!data/wordlists/custom/demo_words.txt
 
 # Session handoff logs (local only)
 .handoff/
+
+# Local scrub patterns for pre-commit guard (never committed; gitignored per Global Constraints)
+.scrub-patterns
+
+# Design bundle snapshot (D2:A) — port source for Tasks 9-12/20-21; local-only,
+# contains personal fill examples so MUST stay out of this public repo.
+.design-bundle/

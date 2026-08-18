@@ -394,6 +394,12 @@ class TestFillWithResume:
         assert "regex" in args
         assert "--wordlists" in args
         assert "w1.txt" in args
+        # DD5: every resume argv single-sources both dirs from the adapter's own
+        # constants (import them so test and code share one source of truth).
+        from backend.core.cli_adapter import PAUSE_FLAG_DIR, STATE_DIR
+
+        assert "--state-dir" in args and str(STATE_DIR) in args
+        assert "--pause-flag-dir" in args and str(PAUSE_FLAG_DIR) in args
 
     @patch("subprocess.run")
     def test_resume_timeout_buffer(self, mock_run, adapter, tmp_path):

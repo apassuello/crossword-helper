@@ -77,6 +77,79 @@ class TestPauseResumeAPI:
 
         return task_id, tmp_path, csp_state, metadata
 
+    @pytest.fixture
+    def solvable_state(self, tmp_path):
+        """
+        Create a saved state whose resumed position actually solves.
+
+        Unlike `sample_state` (a hand-rolled position with only 2 of the
+        grid's slots represented in domains/slot_list -- a dead end that
+        makes resume fall back to unwind-and-re-search, #9), this captures a
+        real CSP checkpoint: a tiny plus-shaped grid (one 5-letter across
+        slot and one 5-letter down slot crossing at their middle cell,
+        everything else black) run through the actual Autofill setup
+        (_initialize_csp + AC-3 + MCV sort) and captured at
+        current_slot_index=0 -- the same state fill() itself would
+        checkpoint from at the very start of a search. Exact-position resume
+        then just continues that tiny, already-consistent search instead of
+        exhausting the timeout budget.
+        """
+        from backend.core.wordlist_resolver import get_default_wordlist_paths
+        from cli.src.fill.autofill import Autofill
+        from cli.src.fill.trie_pattern_matcher import TriePatternMatcher
+        from cli.src.fill.word_list import WordList
+
+        # Same wordlist the resumed CLI subprocess resolves to by default
+        # (the test doesn't pass an `options.wordlists`), loaded the same
+        # way cli.py's `_load_wordlist_words` does.
+        wordlist_path = get_default_wordlist_paths()[0]
+        words = []
+        with open(wordlist_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                words.append(line.split(";")[0].strip().upper())
+        word_list = WordList(words)
+
+        # Plus-shaped grid: a 5-letter across slot and a 5-letter down slot
+        # crossing at their middle cell, everything else black.
+        # enforce_symmetry=False because the default 180-degree symmetry
+        # would mirror these black squares and destroy the shape.
+        # min_score=50 (below, and in the resume request) needs slot
+        # length >= 5 -- this wordlist's 3-letter words top out around
+        # score 36 and would never pass the filter.
+        grid = Grid(11)
+        for row in range(11):
+            for col in range(11):
+                white = (row == 5 and 3 <= col <= 7) or (col == 5 and 3 <= row <= 7)
+                if not white:
+                    grid.set_black_square(row, col, enforce_symmetry=False)
+
+        pattern_matcher = TriePatternMatcher(word_list)
+        autofill = Autofill(grid, word_list, pattern_matcher, timeout=30, min_score=50, algorithm="trie")
+
+        slots = grid.get_empty_slots()
+        autofill._initialize_csp(slots)
+        assert autofill._ac3(), "fixture grid must be AC-3 consistent before capture"
+        autofill.slots_sorted = autofill._sort_slots_by_constraint(slots)
+
+        csp_state = StateManager.capture_csp_state(autofill, current_slot_index=0, locked_slots=set())
+
+        state_manager = StateManager(storage_dir=tmp_path)
+        task_id = "test_task_solvable"
+        metadata = {
+            "min_score": 50,
+            "timeout": 300,
+            "grid_size": [11, 11],
+            "total_slots": len(slots),
+            "slots_filled": 0,
+        }
+
+        state_manager.save_csp_state(task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True)
+
+        return task_id, tmp_path, csp_state, metadata
+
     def test_pause_request(self, client):
         """Test requesting pause for a running task."""
         from cli.src.fill.pause_controller import PauseController
@@ -230,18 +303,27 @@ class TestPauseResumeAPI:
         assert data["success"] is True
         assert data["deleted_count"] >= 1
 
-    def test_resume_without_edits(self, client, sample_state, monkeypatch):
+    def test_resume_without_edits(self, client, solvable_state, monkeypatch):
         """Test resuming from saved state without user edits."""
-        task_id, tmp_path, csp_state, metadata = sample_state
+        task_id, tmp_path, csp_state, metadata = solvable_state
 
         import backend.api.pause_resume_routes as pr_routes
 
         monkeypatch.setattr(pr_routes, "STATE_STORAGE_DIR", tmp_path)
 
-        # Resume without edits
+        # Resume without edits.
+        #
+        # `solvable_state`'s saved position (unlike `sample_state`'s) actually
+        # solves via exact-position resume, so this test's runtime is fixed
+        # CLI startup plus a near-instant 2-slot search, not a budget-exhausting
+        # search. timeout=30 is what a real solve would get -- it's not the
+        # thing keeping this test fast. The dead-end fallback this used to
+        # exercise (unwind-and-re-search, #9) is covered directly by
+        # cli/tests/unit/test_autofill.py::TestResumeUnwinding, so this
+        # integration test doesn't need to reach it -- its job is the HTTP seam.
         response = client.post(
             "/api/fill/resume",
-            data=json.dumps({"task_id": task_id, "options": {"min_score": 50, "timeout": 300}}),
+            data=json.dumps({"task_id": task_id, "options": {"min_score": 50, "timeout": 30}}),
             content_type="application/json",
         )
 
@@ -252,6 +334,12 @@ class TestPauseResumeAPI:
         assert "new_task_id" in data
         assert data["original_task_id"] == task_id
         assert data["new_task_id"].startswith("resume_")
+
+        # The fixture's whole point is a position that resolves rather than
+        # exhausts the timeout budget -- assert that actually happened,
+        # not just that the HTTP call returned.
+        assert data["result"]["success"] is True
+        assert data["slots_filled"] == data["total_slots"] == 2
 
     def test_resume_with_edits(self, client, sample_state, monkeypatch):
         """Test resuming with user edits."""

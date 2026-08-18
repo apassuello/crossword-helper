@@ -1,31 +1,127 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
-import axios from 'axios';
-import GridEditor from './components/GridEditor';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+// react-hot-toast's <Toaster> is intentionally KEPT: ThemeWordsPanel
+// still calls toast.* directly. App's own toasts were
+// migrated to the bench ToastProvider (pushToast); the default `toast` import is gone.
+import { Toaster } from 'react-hot-toast';
+import { api } from './api/client';
+import { useHealth } from './hooks/useHealth';
+import { usePersistentState } from './hooks/usePersistentState';
+import { useSaveMachine } from './hooks/useSaveMachine';
+import { useAutofillMachine } from './hooks/useAutofillMachine';
+import { useToasts } from './components/bench/Toast';
+import { allSlots } from './hooks/useGridGeometry';
+import { useNumbering } from './hooks/useNumbering';
+import { TopBar } from './components/bench/TopBar';
+import { ToolRail } from './components/bench/ToolRail';
+import CrosswordGrid from './components/bench/CrosswordGrid';
 import PatternMatcher from './components/PatternMatcher';
-import ToolPanel from './components/ToolPanel';
-import AutofillPanel from './components/AutofillPanel';
+import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
 import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
 import ThemeWordsPanel from './components/ThemeWordsPanel';
 import './styles/App.scss';
 
+// Signature of user-authored grid content, for the save machine's dirty
+// tracking. Deliberately array-shaped and limited to durable authored fields:
+// it EXCLUDES `number` (derived by auto-renumbering, would spuriously mark
+// dirty), the transient isError/isHighlighted flags, and `symmetryEnabled` —
+// symmetry is a VIEW construction aid (grouped with Heatmap), persisted on its
+// own key via usePersistentState, so toggling it stays silent as it did before
+// the save machine (it still rides along in the saved `doc`). Called in every
+// place that establishes or compares dirtiness so the strings are byte-identical.
+function contentSigOf(size, grid) {
+  return JSON.stringify({
+    size,
+    cells: grid ? grid.map((row) => row.map((c) => [c.letter, c.isBlack, c.isThemeLocked])) : null,
+  });
+}
+
 function App() {
   const [gridSize, setGridSize] = useState(15);
   const [grid, setGrid] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [numbering, setNumbering] = useState({});
-  const [validationErrors, setValidationErrors] = useState([]);
-  const [autofillProgress, setAutofillProgress] = useState(null);
-  const [currentTool, setCurrentTool] = useState('edit'); // edit, pattern, autofill, import, export, wordlists
-  const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [showThemePanel, setShowThemePanel] = useState(false);
-  const [symmetryEnabled, setSymmetryEnabled] = useState(true); // Toggle for black square symmetry
-  const eventSourceRef = React.useRef(null);
+  // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
+  // lazy-inits from storage, so a stored `false` survives reload (previously a
+  // mount-race reset it to true on every load).
+  const [symmetryEnabled, setSymmetryEnabled] = usePersistentState('crossword_symmetry_enabled', true);
+  const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
+  // Save machine (Task 7). `gridId` is the doc's stable identity: it changes
+  // only when a whole new grid is created (init/resize/import), never on an
+  // edit, so the machine's F10 reset fires for "new grid" but not for typing.
+  // `savedSig` is the content signature considered clean (set on fresh grids and
+  // after a successful save); dirtiness is `contentSig !== savedSig`.
+  const [gridId, setGridId] = useState(1);
+  const [savedSig, setSavedSig] = useState(null);
+  // UI dark mode (Task 6), persisted as 'dark'/'light'. usePersistentState owns
+  // the lazy-init + persistence (see its mount-race note); the effect below only
+  // applies the theme to the document.
+  const [dark, setDark] = usePersistentState('xw_theme', false, {
+    parse: (v) => v === 'dark',
+    serialize: (v) => (v ? 'dark' : 'light'),
+  });
+
+  const health = useHealth();
+  const { pushToast } = useToasts();
+
+  // Autofill lifecycle (Task 11, F3). Owns start/SSE-progress/done/failed/
+  // cancelled/paused; App only threads grid/gridSize in and applies the
+  // machine's grid updates back via onGridUpdate. Must precede `useNumbering`
+  // below, which gates on `autofill.state`.
+  const autofill = useAutofillMachine({
+    grid,
+    gridSize,
+    onGridUpdate: (updater) => setGrid(updater),
+  });
+
+  // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
+  // client-only word-start numbering pass and the validation stub: fires on
+  // STRUCTURAL edits only (size / black-square layout — never letter edits),
+  // renumbers server-wins after an optimistic local paint, and surfaces advisory
+  // `violations`. `unverified` is true while an optimistic pass awaits reconcile.
+  // Must precede `doc` below (which reads `numbering`).
+  // `enabled` mutes numbering while an autofill run is submitting/running (Task
+  // 11C): adaptive-mode autofill adds black squares mid-fill via onGridUpdate,
+  // and each addition is a structural edit that would otherwise churn numbering/
+  // violations against a grid that's deliberately incomplete mid-run. Flipping
+  // back to enabled on completion re-fires against the grid as it stands then
+  // (useNumbering's own [sig, enabled] dep array handles the catch-up).
+  const { numbering, violations, unverified } = useNumbering({
+    grid,
+    gridSize,
+    setGrid,
+    pushToast,
+    enabled: !['submitting', 'running'].includes(autofill.state),
+  });
+
+  // Save machine wiring (Task 7). `doc` is the full serializable grid document
+  // (saved verbatim); `isDirty` is derived by comparing the current content
+  // signature to the last-clean one.
+  const contentSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
+  const isDirty = grid != null && contentSig !== savedSig;
+  const doc = useMemo(
+    () => ({ id: gridId, size: gridSize, grid, numbering, symmetryEnabled }),
+    [gridId, gridSize, grid, numbering, symmetryEnabled]
+  );
+  const { savedLabel, save: saveDoc, status: saveStatus } = useSaveMachine({ doc, isDirty });
+
+  // When a save lands, snapshot the current content as clean. Keyed on
+  // saveStatus ONLY (adding contentSig here would re-mark clean on every edit
+  // while 'saved' and dirtiness would never re-trigger) — sig read from a ref.
+  const contentSigRef = useRef(contentSig);
+  contentSigRef.current = contentSig;
+  useEffect(() => {
+    if (saveStatus === 'saved') setSavedSig(contentSigRef.current);
+  }, [saveStatus]);
+
   // Set when a grid import changes the grid size, so the size-change effect
-  // below does not wipe the freshly imported grid with an empty one.
-  const skipNextInitRef = React.useRef(false);
+  // below does not wipe the freshly imported grid with an empty one. Bench's
+  // rewrite of App.jsx dropped main's declaration while both use sites
+  // auto-merged in; keeping the guard is a merge acceptance criterion
+  // (App.test.jsx:50, :91).
+  const skipNextInitRef = useRef(false);
 
   // Initialize empty grid
   useEffect(() => {
@@ -36,23 +132,12 @@ function App() {
     initializeGrid(gridSize);
   }, [gridSize]);
 
-  // Persist symmetry state to localStorage
+  // Apply the UI theme to the document whenever it changes (Task 6). Persistence
+  // is owned by usePersistentState above; TopBar is a controlled toggle and
+  // never touches document/storage.
   useEffect(() => {
-    localStorage.setItem('crossword_symmetry_enabled', JSON.stringify(symmetryEnabled));
-  }, [symmetryEnabled]);
-
-  // Load symmetry state from localStorage on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('crossword_symmetry_enabled');
-      if (saved !== null && saved !== undefined) {
-        setSymmetryEnabled(JSON.parse(saved));
-      }
-    } catch (err) {
-      // Ignore corrupt/unavailable localStorage — keep the default setting
-      console.warn('Could not restore symmetry setting:', err);
-    }
-  }, []);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  }, [dark]);
 
   const initializeGrid = (size) => {
     const newGrid = Array(size).fill(null).map(() =>
@@ -66,50 +151,11 @@ function App() {
       }))
     );
     setGrid(newGrid);
-    updateNumbering(newGrid);
-  };
-
-  const updateNumbering = useCallback((gridData) => {
-    // Calculate numbering based on grid state
-    const numbers = {};
-    let currentNumber = 1;
-
-    for (let row = 0; row < gridData.length; row++) {
-      for (let col = 0; col < gridData[row].length; col++) {
-        const cell = gridData[row][col];
-        if (cell.isBlack) continue;
-
-        const needsNumber =
-          (isStartOfAcrossWord(gridData, row, col) ||
-           isStartOfDownWord(gridData, row, col));
-
-        if (needsNumber) {
-          numbers[`${row},${col}`] = currentNumber;
-          gridData[row][col].number = currentNumber;
-          currentNumber++;
-        } else {
-          gridData[row][col].number = null;
-        }
-      }
-    }
-
-    setNumbering(numbers);
-  }, []);
-
-  const isStartOfAcrossWord = (gridData, row, col) => {
-    if (col === 0 || gridData[row][col - 1].isBlack) {
-      // Check if there's at least one more non-black cell to the right
-      return col < gridData[row].length - 1 && !gridData[row][col + 1].isBlack;
-    }
-    return false;
-  };
-
-  const isStartOfDownWord = (gridData, row, col) => {
-    if (row === 0 || gridData[row - 1][col].isBlack) {
-      // Check if there's at least one more non-black cell below
-      return row < gridData.length - 1 && !gridData[row + 1][col].isBlack;
-    }
-    return false;
+    // Numbering is now hook-driven (useNumbering): setting the grid changes the
+    // structural signature, which fires the optimistic renumber + server reconcile.
+    // A fresh grid is a new document (F10) and is born clean.
+    setGridId((n) => n + 1);
+    setSavedSig(contentSigOf(size, newGrid));
   };
 
   const toggleBlackSquare = useCallback((row, col) => {
@@ -129,8 +175,8 @@ function App() {
     }
 
     setGrid(newGrid);
-    updateNumbering(newGrid);
-    validateGrid(newGrid);
+    // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
+    // black-square layout change. No manual renumber/validate here.
   }, [grid, gridSize, symmetryEnabled]);
 
   const toggleThemeLock = useCallback((row, col) => {
@@ -155,18 +201,27 @@ function App() {
     const newGrid = [...grid.map(row => [...row])];
     newGrid[row][col].letter = letter.toUpperCase();
     setGrid(newGrid);
-    validateGrid(newGrid);
+    // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
   }, [grid]);
 
-  const validateGrid = useCallback((gridData) => {
-    const errors = [];
+  // Controlled-grid focus/direction handlers (CrosswordGrid, Task 5).
+  // selectedCell {row,col,direction} maps to focus {row,col} + selectedDir=direction.
+  // Arrow keys and Tab-with-switch each dispatch BOTH onMoveFocus and onRotateDir in one
+  // event, and both mutate selectedCell — use functional updates so neither clobbers the
+  // other under React batching.
+  const handleGridFocus = useCallback((row, col) => {
+    setSelectedCell(prev => ({ row, col, direction: prev?.direction || 'across' }));
+  }, []);
 
-    // Check for disconnected regions
-    // Check for words shorter than 3 letters
-    // Check for unchecked squares
-    // etc.
+  const handleGridMoveFocus = useCallback((row, col) => {
+    setSelectedCell(prev => ({ row, col, direction: prev?.direction || 'across' }));
+  }, []);
 
-    setValidationErrors(errors);
+  const handleGridRotateDir = useCallback(() => {
+    setSelectedCell(prev => {
+      const base = prev || { row: 0, col: 0, direction: 'across' };
+      return { ...base, direction: base.direction === 'across' ? 'down' : 'across' };
+    });
   }, []);
 
   const handlePatternSelect = useCallback((word) => {
@@ -189,253 +244,21 @@ function App() {
     }
 
     setGrid(newGrid);
-    validateGrid(newGrid);
+    // Letter fill — no renumber/validate (structural signature unchanged).
   }, [selectedCell, grid, gridSize]);
-
-  const handleSaveGrid = useCallback(() => {
-    try {
-      const gridData = {
-        size: gridSize,
-        grid: grid.map(row => row.map(cell => ({
-          letter: cell.letter || '',
-          isBlack: cell.isBlack || false,
-          isThemeLocked: cell.isThemeLocked || false,
-          number: cell.number || null
-        }))),
-        numbering: numbering,
-        symmetryEnabled: symmetryEnabled,
-        timestamp: new Date().toISOString()
-      };
-
-      localStorage.setItem('crossword_saved_grid', JSON.stringify(gridData));
-      toast.success('Grid saved successfully to browser storage!');
-    } catch (err) {
-      console.error('Failed to save grid:', err);
-      toast.error('Failed to save grid: ' + err.message);
-    }
-  }, [grid, gridSize, numbering, symmetryEnabled]);
-
-  const handleAutofill = useCallback(async (options = {}) => {
-    setAutofillProgress({ status: 'running', progress: 0, message: 'Starting autofill...' });
-
-    try {
-      // Start autofill with progress tracking
-      const initResponse = await axios.post('/api/fill/with-progress', {
-        size: gridSize,
-        grid: grid.map(row => row.map(cell =>
-          cell.isBlack ? '#' : (cell.letter || '.')
-        )),
-        wordlists: options.wordlists || ['comprehensive'],
-        themeList: options.themeList || null,
-        timeout: options.timeout || 300,
-        min_score: options.minScore ?? 50,
-        algorithm: options.algorithm || 'repair',
-        theme_entries: options.theme_entries || {},
-        adaptive_mode: options.adaptiveMode || false,
-        max_adaptations: options.maxAdaptations || 3,
-        partial_fill: options.partialFill || false,
-        cleanup: options.cleanup || false
-      });
-
-      const { task_id } = initResponse.data;
-      setCurrentTaskId(task_id);
-
-      // Connect to SSE for progress updates
-      const eventSource = new EventSource(`/api/progress/${task_id}`);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setAutofillProgress({
-            status: data.status || 'running',
-            progress: data.progress || 0,
-            message: data.message || 'Processing...'
-          });
-
-          // Apply incremental grid updates if present
-          if (data.data && data.data.grid && data.status === 'running') {
-            // Create deep copy with new objects (not shallow copy)
-            setGrid(prevGrid => prevGrid.map((row, r) =>
-              row.map((cell, c) => {
-                // Never overwrite theme-locked cells
-                if (cell.isThemeLocked) return cell;
-                const cliCell = data.data.grid[r][c];
-                if (cliCell === '#') {
-                  return { ...cell, isBlack: true };
-                } else if (cliCell === '.' || cliCell === '') {
-                  return { ...cell, letter: '' };
-                } else {
-                  return { ...cell, letter: cliCell };
-                }
-              })
-            ));
-          }
-
-          // When complete, update grid with results from event data
-          if (data.status === 'complete') {
-            eventSource.close();
-            eventSourceRef.current = null;
-            setCurrentTaskId(null);
-
-            // Check if result grid is included in the event
-            if (data.data && data.data.grid) {
-              // Update grid with filled results (full or partial) - create deep copy with new objects
-              setGrid(prevGrid => prevGrid.map((row, r) =>
-                row.map((cell, c) => {
-                  // Never overwrite theme-locked cells
-                  if (cell.isThemeLocked) return cell;
-                  const cliCell = data.data.grid[r][c];
-                  if (cliCell === '#') {
-                    return { ...cell, isBlack: true };
-                  } else if (cliCell === '.' || cliCell === '') {
-                    return { ...cell, letter: '' };
-                  } else {
-                    return { ...cell, letter: cliCell };
-                  }
-                })
-              ));
-
-              // Show appropriate message based on success
-              if (data.data.success) {
-                setAutofillProgress({
-                  status: 'complete',
-                  progress: 100,
-                  message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`
-                });
-              } else {
-                const fillPct = data.data.fill_percentage || 0;
-                const allSlotsFilled =
-                  fillPct >= 100 ||
-                  (data.data.total_slots > 0 && data.data.slots_filled === data.data.total_slots);
-
-                if (allSlotsFilled) {
-                  // Every slot is filled — don't present this as "Partial" with a
-                  // suggestion to lower the min score. Some entries may still be
-                  // flagged as problematic by the CLI.
-                  const problematicCount = data.data.problematic_slots_count || 0;
-                  const message = problematicCount > 0
-                    ? `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — ${problematicCount} entries may be invalid (use Verify Words to check)`
-                    : `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — some entries may need review (use Verify Words to check)`;
-                  setAutofillProgress({
-                    status: 'complete',
-                    progress: 100,
-                    message: message
-                  });
-                } else {
-                  // Partial fill with suggestions
-                  let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
-
-                  // Add first suggestion if available
-                  if (data.data.suggestions && data.data.suggestions.length > 0) {
-                    message += ` - ${data.data.suggestions[0].message}`;
-                  }
-
-                  setAutofillProgress({
-                    status: fillPct > 0 ? 'warning' : 'error',
-                    progress: fillPct,
-                    message: message
-                  });
-                }
-              }
-            } else {
-              setAutofillProgress({ status: 'error', progress: 0, message: 'No solution found' });
-            }
-          } else if (data.status === 'paused') {
-            // Autofill was paused - close connection and show paused state
-            eventSource.close();
-            eventSourceRef.current = null;
-            setAutofillProgress({
-              status: 'paused',
-              progress: data.progress || 0,
-              message: data.message || 'Autofill paused - state saved'
-            });
-            // currentTaskId is kept for future pause operations
-            toast.success('Autofill paused successfully! You can resume later.');
-          } else if (data.status === 'error') {
-            eventSource.close();
-            eventSourceRef.current = null;
-            setCurrentTaskId(null);
-            setAutofillProgress({ status: 'error', progress: 0, message: data.message || 'Autofill failed' });
-          }
-        } catch (error) {
-          console.error('Failed to parse SSE event:', error);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        eventSource.close();
-        eventSourceRef.current = null;
-        setCurrentTaskId(null);
-        setAutofillProgress({ status: 'error', progress: 0, message: 'Connection error' });
-      };
-
-    } catch (error) {
-      setAutofillProgress({ status: 'error', progress: 0, message: error.message });
-    }
-  }, [grid, gridSize]);
-
-  const handleCancelAutofill = useCallback(() => {
-    // Capture task ID before clearing state
-    const taskId = currentTaskId;
-
-    // Close SSE connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Update progress to cancelled state
-    setAutofillProgress({
-      status: 'error',
-      progress: autofillProgress?.progress || 0,
-      message: 'Cancelled by user'
-    });
-
-    // Clear task ID
-    setCurrentTaskId(null);
-
-    // Call backend to cancel the task
-    if (taskId) {
-      axios.post(`/api/fill/cancel/${taskId}`).catch(err => {
-        console.warn('Failed to cancel autofill task:', err);
-      });
-    }
-  }, [currentTaskId, autofillProgress]);
-
-  const handleResetAutofill = useCallback(() => {
-    // Close SSE connection if active
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Clear all autofill state
-    setAutofillProgress(null);
-    setCurrentTaskId(null);
-
-    // Clear localStorage autofill state
-    localStorage.removeItem('current_autofill_task');
-    localStorage.removeItem('paused_autofill_task');
-
-    toast.success('Autofill state reset - ready to start fresh!');
-  }, []);
 
   const handleVerifyWords = useCallback(async () => {
     if (!grid) return;
 
     try {
-      const response = await axios.post('/api/grid/verify-words', {
-        size: gridSize,
+      const { invalid_words, invalid_count, total_checked, wordlist_size } = await api.verifyWords({
         grid: grid.map(row => row.map(cell => ({
           letter: cell.letter || '',
           isBlack: cell.isBlack || false
         }))),
+        size: gridSize,
         wordlists: ['comprehensive']
       });
-
-      const { invalid_words, invalid_count, total_checked, wordlist_size } = response.data;
 
       // Build set of cells that belong to invalid words
       const errorCells = new Set();
@@ -453,7 +276,7 @@ function App() {
       setGrid(newGrid);
 
       if (invalid_count === 0) {
-        toast.success(`All ${total_checked} words valid!`);
+        pushToast({ kind: 'info', message: `All ${total_checked} words valid!` });
       } else {
         const invalid = invalid_words.filter(w => w.status === 'invalid');
         const unfillable = invalid_words.filter(w => w.status === 'unfillable');
@@ -464,33 +287,31 @@ function App() {
         if (unfillable.length > 0) {
           parts.push(`${unfillable.length} unfillable: ${unfillable.map(w => w.word.replace(/\?/g, '_')).join(', ')}`);
         }
-        toast.error(
-          `${invalid_count} of ${total_checked} words flagged — ${parts.join('; ')}`,
-          { duration: 8000 }
-        );
+        pushToast({
+          kind: 'error',
+          message: `${invalid_count} of ${total_checked} words flagged — ${parts.join('; ')}`,
+        });
       }
     } catch (error) {
       console.error('Verify words failed:', error);
-      toast.error('Failed to verify words: ' + (error.response?.data?.message || error.message));
+      pushToast({ kind: 'error', message: 'Failed to verify words: ' + (error.message || error.code) });
     }
-  }, [grid, gridSize]);
+  }, [grid, gridSize, pushToast]);
 
   const handleCleanGrid = useCallback(async () => {
     if (!grid) return;
 
     try {
-      const response = await axios.post('/api/grid/clean', {
-        size: gridSize,
+      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = await api.cleanGrid({
         grid: grid.map(row => row.map(cell => ({
           letter: cell.letter || '',
           isBlack: cell.isBlack || false
-        })))
+        }))),
+        size: gridSize
       });
 
-      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = response.data;
-
       if (removed_count === 0) {
-        toast.success('Grid is clean — all words are valid!');
+        pushToast({ kind: 'info', message: 'Grid is clean — all words are valid!' });
         return;
       }
 
@@ -513,23 +334,23 @@ function App() {
         })
       );
       setGrid(newGrid);
-      toast.success(message, { duration: 5000 });
+      pushToast({ kind: 'info', message });
     } catch (error) {
       console.error('Clean grid failed:', error);
-      toast.error('Failed to clean grid: ' + (error.response?.data?.message || error.message));
+      pushToast({ kind: 'error', message: 'Failed to clean grid: ' + (error.message || error.code) });
     }
-  }, [grid, gridSize]);
+  }, [grid, gridSize, pushToast]);
 
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
-    // Update grid with the applied theme word
+    // Update grid with the applied theme word. Renumbering (if the placement
+    // changed the structural layout) is handled by useNumbering.
     setGrid(updatedGrid);
-    updateNumbering(updatedGrid);
 
-    toast.success(`Applied "${placement.word}" to grid!`);
-  }, [updateNumbering]);
+    pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
+  }, [pushToast]);
 
   const handleGridImport = useCallback((importedData) => {
-    const { grid: importedGrid, size, numbering: importedNumbering, symmetryEnabled: importedSymmetry } = importedData;
+    const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different (skip the re-init effect so the
     // imported grid isn't overwritten by a fresh empty grid)
@@ -538,7 +359,10 @@ function App() {
       setGridSize(size);
     }
 
-    // Update grid state
+    // Update grid state. Numbering + validation are now hook-driven: setting the
+    // imported grid changes the structural signature, so useNumbering renumbers
+    // (server-authoritative) and revalidates. The imported `numbering` field is
+    // intentionally no longer applied — the server is the source of truth.
     setGrid(importedGrid);
 
     // Update symmetry setting if provided
@@ -546,186 +370,161 @@ function App() {
       setSymmetryEnabled(importedSymmetry);
     }
 
-    // Update numbering (or recalculate if not provided)
-    if (importedNumbering && Object.keys(importedNumbering).length > 0) {
-      setNumbering(importedNumbering);
-      // Apply numbering to grid cells
-      Object.entries(importedNumbering).forEach(([coords, number]) => {
-        const [row, col] = coords.split(',').map(Number);
-        if (importedGrid[row] && importedGrid[row][col]) {
-          importedGrid[row][col].number = number;
-        }
-      });
-    } else {
-      // Recalculate numbering if not provided
-      updateNumbering(importedGrid);
-    }
-
-    // Validate the imported grid
-    validateGrid(importedGrid);
+    // A freshly imported grid is a new document (F10) and is born clean.
+    setGridId((n) => n + 1);
+    setSavedSig(contentSigOf(size, importedGrid));
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, updateNumbering, validateGrid]);
+  }, [gridSize]);
+
+  // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
+  // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
+  const selectTool = (id) =>
+    id === 'theme' ? setShowThemePanel(true) : setCurrentTool(id);
+
+  // ToolRail GRID stats (module-level calculateGridStats) + word count (geometry).
+  // Both are null-guarded so an uninitialized grid renders zeros, not a crash.
+  const gridStats = grid ? calculateGridStats(grid) : null;
+  let wordCount = 0;
+  if (grid) {
+    const slots = allSlots(grid);
+    wordCount = slots.across.length + slots.down.length;
+  }
+  const railStats = gridStats
+    ? {
+        total: gridStats.totalCells,
+        black: gridStats.blackSquares,
+        blackPct: gridStats.blackSquarePercent,
+        fillPct: gridStats.fillPercent,
+        words: wordCount,
+      }
+    : { total: 0, black: 0, blackPct: 0, fillPct: 0, words: 0 };
 
   return (
-    <div className="app">
+    <div className="xw-app">
+      {/* react-hot-toast surface — KEPT: Autofill/Theme/BlackSquare panels still call
+          toast.* directly. App's own toasts use the bench ToastProvider (pushToast). */}
       <Toaster
         position="top-right"
         toastOptions={{
           success: {
             duration: 3000,
-            style: {
-              background: '#4caf50',
-              color: '#fff',
-            },
+            style: { background: '#4caf50', color: '#fff' },
           },
           error: {
             duration: 4000,
-            style: {
-              background: '#f44336',
-              color: '#fff',
-            },
+            style: { background: '#f44336', color: '#fff' },
           },
         }}
       />
-      <header className="app-header">
-        <div className="header-brand">
-          <h1>Crossword Helper</h1>
-          <span className="version">v2.0 Advanced</span>
-        </div>
-        <div className="header-tools">
-          <button
-            className={`tool-btn ${currentTool === 'edit' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('edit')}
-          >
-            Grid Editor
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'pattern' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('pattern')}
-          >
-            Pattern Search
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'autofill' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('autofill')}
-          >
-            Autofill
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'import' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('import')}
-          >
-            Import
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'export' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('export')}
-          >
-            Export
-          </button>
-          <button
-            className={`tool-btn ${currentTool === 'wordlists' ? 'active' : ''}`}
-            onClick={() => setCurrentTool('wordlists')}
-          >
-            Word Lists
-          </button>
-          <button
-            className={`tool-btn ${showThemePanel ? 'active' : ''}`}
-            onClick={() => setShowThemePanel(!showThemePanel)}
-          >
-            🎯 Theme Words
-          </button>
-        </div>
-      </header>
 
-      <div className="grid-toolbar">
-        <button className="verify-btn" onClick={handleVerifyWords}>
-          Verify Words
-        </button>
-        <button className="clean-btn" onClick={handleCleanGrid}>
-          Clean Grid
-        </button>
-        <button className="save-btn" onClick={handleSaveGrid}>
-          Save Grid
-        </button>
-      </div>
+      <TopBar
+        status={health}
+        savedLabel={savedLabel}
+        onVerify={handleVerifyWords}
+        onClean={handleCleanGrid}
+        onSave={saveDoc}
+        onToggleTheme={() => setDark((v) => !v)}
+        dark={dark}
+      />
 
-      <div className="app-body">
-        <div className="main-panel">
-          <GridEditor
-            grid={grid}
-            gridSize={gridSize}
-            selectedCell={selectedCell}
-            onSelectCell={setSelectedCell}
-            onToggleBlack={toggleBlackSquare}
-            onSetLetter={setLetter}
-            onToggleThemeLock={toggleThemeLock}
-            validationErrors={validationErrors}
-            numbering={numbering}
-          />
-        </div>
+      <div className="xw-body">
+        <ToolRail
+          tool={showThemePanel ? 'theme' : currentTool}
+          onSelectTool={selectTool}
+          viewToggles={{ symmetry: symmetryEnabled, heatmap: heatmapOn }}
+          onToggleView={(which) =>
+            which === 'symmetry'
+              ? setSymmetryEnabled((v) => !v)
+              : setHeatmapOn((v) => !v)
+          }
+          stats={railStats}
+          violations={violations}
+          unverified={unverified}
+        />
 
-        <div className="side-panel">
-          {currentTool === 'edit' && (
-            <ToolPanel
-              gridSize={gridSize}
-              onSizeChange={setGridSize}
-              onClearGrid={() => {
-                if (window.confirm('Clear the entire grid? This cannot be undone.')) {
-                  initializeGrid(gridSize);
-                }
-              }}
-              onLoadGrid={() => setCurrentTool('import')}
-              onSaveGrid={handleSaveGrid}
-              validationErrors={validationErrors}
-              gridStats={grid ? calculateGridStats(grid) : null}
-              symmetryEnabled={symmetryEnabled}
-              onSymmetryToggle={() => setSymmetryEnabled(!symmetryEnabled)}
+        <main className="xw-canvas">
+          {grid ? (
+            <CrosswordGrid
+              grid={grid}
+              focus={selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null}
+              selectedDir={selectedCell?.direction || 'across'}
+              heatmap={null}
+              onFocus={handleGridFocus}
+              onMoveFocus={handleGridMoveFocus}
+              onRotateDir={handleGridRotateDir}
+              onSetLetter={setLetter}
+              onToggleBlack={toggleBlackSquare}
+              onToggleLock={toggleThemeLock}
             />
+          ) : (
+            <div className="grid-editor-loading">Initializing grid...</div>
+          )}
+        </main>
+
+        <aside className="xw-inspector-shell">
+          {currentTool === 'edit' && (
+            <div className="xw-inspector-empty">
+              <div className="xw-empty-mark">▦</div>
+              <div className="xw-empty-title">Grid editor</div>
+              <div className="xw-empty-sub">
+                Select a cell to search, or pick a tool from the rail.
+              </div>
+            </div>
           )}
 
-          {currentTool === 'pattern' && (
-            <PatternMatcher
-              selectedCell={selectedCell}
-              onSelectWord={handlePatternSelect}
-            />
+          {currentTool === 'search' && (
+            <div className="xw-inspector">
+              <PatternMatcher
+                selectedCell={selectedCell}
+                onSelectWord={handlePatternSelect}
+              />
+            </div>
           )}
 
           {currentTool === 'autofill' && (
-            <AutofillPanel
-              onStartAutofill={handleAutofill}
-              onCancelAutofill={handleCancelAutofill}
-              onResetAutofill={handleResetAutofill}
-              progress={autofillProgress}
-              grid={grid}
-              currentTaskId={currentTaskId}
-            />
+            <div className="xw-inspector">
+              <AutofillPanel machine={autofill} grid={grid} />
+            </div>
+          )}
+
+          {currentTool === 'clues' && (
+            <div className="xw-inspector-empty">
+              <div className="xw-empty-mark">§</div>
+              <div className="xw-empty-title">Clue list</div>
+              <div className="xw-empty-sub">Arrives in a later task.</div>
+            </div>
+          )}
+
+          {currentTool === 'lists' && (
+            <div className="xw-inspector">
+              <WordListPanel />
+            </div>
           )}
 
           {currentTool === 'import' && (
-            <ImportPanel
-              onImport={handleGridImport}
-              currentGridSize={gridSize}
-            />
+            <div className="xw-inspector">
+              <ImportPanel
+                onImport={handleGridImport}
+                currentGridSize={gridSize}
+              />
+            </div>
           )}
 
           {currentTool === 'export' && (
-            <ExportPanel
-              grid={grid}
-              gridSize={gridSize}
-              numbering={numbering}
-            />
+            <div className="xw-inspector">
+              <ExportPanel
+                grid={grid}
+                gridSize={gridSize}
+                numbering={numbering}
+              />
+            </div>
           )}
-
-          {currentTool === 'wordlists' && (
-            <WordListPanel />
-          )}
-        </div>
+        </aside>
       </div>
 
-      {/* Theme Words Panel (overlay) */}
+      {/* Theme Words Panel — overlay (position:fixed), toggled independently of currentTool */}
       {showThemePanel && (
         <ThemeWordsPanel
           grid={grid}

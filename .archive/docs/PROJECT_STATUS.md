@@ -89,7 +89,7 @@ fetch('/api/wordlists').then(r=>r.json())
 
 // All 4 custom wordlists now have names:
 // 1. Demo Words ✅
-// 2. Gift for Sarah ✅
+// 2. Custom List ✅
 // 3. Theme List ✅ (was MISSING)
 // 4. Personal Theme Words ✅
 ```

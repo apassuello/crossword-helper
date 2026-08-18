@@ -110,7 +110,10 @@ class TestPauseResumeEndToEnd:
             assert proc.returncode == 0, stderr
 
             # Honest output + saved gzipped state + cleaned-up marker files
-            assert "PAUSED" in stdout
+            # Bench owns the human-mode copy in the merged tree ("⏸ Paused — solver
+            # state saved"); main's version said "PAUSED". The contract under test is
+            # that human mode announces the pause, not the exact casing.
+            assert "paused" in stdout.lower()
             assert state_file.exists(), "no state file written on pause"
             with open(state_file, "rb") as f:
                 assert f.read(2) == b"\x1f\x8b", "state file is not gzipped"

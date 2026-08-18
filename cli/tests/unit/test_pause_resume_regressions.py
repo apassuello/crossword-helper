@@ -287,6 +287,43 @@ class TestResumeCommand:
         result = json.loads(stdout.splitlines()[-1])
         assert result["success"] is True
 
+    def test_fill_resume_bare_task_id_without_wordlists(self, stored_state, temp_dir):
+        """`fill --resume` accepts a bare task id AND falls back to the state's wordlists.
+
+        Approved decision 3 plus the obligation main's --wordlists help documents
+        ("Required unless --resume is used with a state that recorded its wordlists").
+        Part G dropped `fill`'s delegation to _execute_resume, so `fill --resume` now
+        resolves the argument itself; every other test in this file exercises the
+        `resume` command instead, which still goes through _execute_resume.
+
+        -a is passed explicitly: `fill`'s Click default is `repair`, not the state's
+        recorded algorithm (see CLI_SPEC.md's NOTE).
+        """
+        task_id, _ = stored_state
+        out = temp_dir / "out.json"
+        stdout, stderr, code = run_cli(
+            ["fill", "--resume", task_id, "-a", "trie", "-t", "20", "-o", str(out), "--json-output"]
+        )
+        assert code == 0, stderr
+        result = json.loads(stdout.splitlines()[-1])
+        # Bare id resolved against the state dir (not treated as a cwd-relative path),
+        # and adopted as the run's task id so the resumed run stays pausable
+        assert result["task_id"] == task_id
+        # Wordlists came from the saved state, with no -w on the command line
+        assert result["wordlists"], "wordlists should fall back to the saved state"
+        assert result["wordlists"][0].endswith("words.txt")
+
+    def test_fill_resume_unknown_task_id_errors_cleanly(self, temp_dir):
+        """An unresolvable --resume value must be a clean CLI error, not a traceback."""
+        out = temp_dir / "out.json"
+        stdout, stderr, code = run_cli(
+            ["fill", "--resume", "no_such_task_xyz", "-a", "trie", "-t", "20", "-o", str(out), "--json-output"]
+        )
+        assert code == 1
+        payload = json.loads(stdout.splitlines()[-1])
+        assert payload["success"] is False
+        assert "neither an existing state file nor a known" in payload["error"]
+
     def test_resume_uses_wordlists_from_state(self, stored_state, temp_dir):
         """No -w given: the wordlists recorded in the state must be used."""
         task_id, _ = stored_state
@@ -429,3 +466,84 @@ class TestFillCommandContract:
         assert code == 1
         result = json.loads(stdout.splitlines()[-1])
         assert "wordlist" in result["error"].lower()
+
+
+class TestPauseDuringCspSetup:
+    """Regression: pause was observable only inside `_backtrack_with_mac`.
+
+    `_initialize_csp` -> `_ac3` -> `_sort_slots_by_constraint` ran with no pause
+    check at all, so a pause requested during setup was not seen until setup
+    finished. On a blank grid that window is seconds wide and unbounded -- it
+    grows with grid and wordlist size -- so "state is saved within 10s of a pause
+    request" held only by luck on fast hardware.
+
+    Both tests are structural rather than clock-based: the flag is set before
+    `fill()` is called, so the first setup checkpoint fires deterministically.
+    """
+
+    def _paused_during_setup(self, temp_dir, words, task_id="setup_pause"):
+        """Run a fill with the pause flag already set; return (result, state_manager)."""
+        state_manager = StateManager(storage_dir=temp_dir / "states")
+        pause_controller = PauseController(task_id=task_id, pause_dir=temp_dir)
+        pause_controller.request_pause()
+
+        autofill = Autofill(
+            Grid(11),
+            WordList(words),
+            None,
+            60,
+            0,
+            "trie",
+            None,
+            pause_controller=pause_controller,
+            state_manager=state_manager,
+        )
+        return autofill.fill(task_id=task_id), state_manager
+
+    def test_pause_requested_before_search_is_observed_during_setup(self, temp_dir, small_words):
+        result, _ = self._paused_during_setup(temp_dir, small_words)
+
+        assert result.paused is True, "pause requested before search was not observed during CSP setup"
+        # Structural: the solver must not have entered backtracking at all.
+        # Pre-fix this was 20 -- the first iteration at which _backtrack_with_mac polls.
+        assert result.iterations == 0
+        assert result.state_path is not None
+        assert Path(result.state_path).exists()
+
+    def test_resume_of_setup_paused_state_matches_a_fresh_fill(self, temp_dir, small_words):
+        """A state saved before the MCV sort records no search order.
+
+        `_resume_fill` trusts the serialized CSP rather than rebuilding it, so an
+        empty `slots_sorted` made `_backtrack_with_mac([], 0)` hit its base case
+        and return True -- resume reported success over a grid where nothing was
+        filled. Any truncated or pre-sort state file reaches this.
+
+        The contract asserted here is that resuming such a state is equivalent to
+        starting fresh on the same grid. Comparing against a fresh fill rather
+        than a fixed expectation keeps this independent of whether the position
+        happens to be solvable, and of `_ac3`'s return-value semantics (#17).
+        """
+        _, state_manager = self._paused_during_setup(temp_dir, small_words)
+        csp_state, _ = state_manager.load_csp_state("setup_pause")
+        assert csp_state.slots_sorted == [], "precondition: paused before the MCV sort ran"
+
+        def _make(task_id):
+            return Autofill(
+                Grid(11),
+                WordList(small_words),
+                None,
+                60,
+                0,
+                "trie",
+                None,
+                state_manager=state_manager,
+            )
+
+        fresh = _make("fresh").fill(task_id="fresh")
+        resumed = _make("resumed").fill(resume_state=csp_state, task_id="resumed")
+
+        # The hole: success reported over an unfilled grid.
+        assert not (resumed.success and resumed.grid.get_empty_slots()), "resume reported success on an unfilled grid"
+        # Resuming a pre-search state is starting over on the same grid.
+        assert resumed.success == fresh.success
+        assert resumed.slots_filled == fresh.slots_filled

@@ -228,7 +228,7 @@ class TestFillEndpointIntegration:
         # If the transformation is wrong, this will return 500 with AttributeError
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
         if response.status_code == 200:
@@ -252,7 +252,7 @@ class TestFillEndpointIntegration:
 
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     @pytest.mark.slow
@@ -272,7 +272,7 @@ class TestFillEndpointIntegration:
 
         assert response.status_code in [
             200,
-            507,
+            504,
         ], f"Expected success or timeout, got {response.status_code}: {response.data}"
 
     def test_fill_endpoint_validates_missing_grid(self, client):
@@ -446,12 +446,12 @@ class TestGridFormatBugRegression:
         # Should NOT get 500 error with AttributeError
         assert response.status_code != 500, f"API should not crash with 500 error. Response: {response.data}"
 
-        # Accept 200 (success) or 507 (timeout) or 400 (validation error)
+        # Accept 200 (success) or 504 (timeout) or 400 (validation error)
         # Just verify it doesn't crash
         assert response.status_code in [
             200,
             400,
-            507,
+            504,
         ], f"Unexpected status code: {response.status_code}"
 
 
@@ -715,6 +715,10 @@ class TestResumeCLIInvocationReal:
             # The resume really ran with the given wordlist (the old broken
             # resume path ran with an EMPTY wordlist and finished in 0.00s)
             assert resume_result["wordlists"] == [str(wordlist)]
+            # A doomed restored branch used to return here in ~0.02s having
+            # done nothing (issue #9); _resume_fill now falls back to
+            # _resume_by_unwinding, so the resumed run does real search either
+            # way. This assertion is what caught that and must not be weakened.
             assert resume_result["time_elapsed"] > 0.5
             # Note: slots_filled may be above OR below the paused count —
             # resumed CSP search legitimately backtracks — so only sanity

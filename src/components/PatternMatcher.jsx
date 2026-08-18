@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api/client';
 import './PatternMatcher.scss';
 import ProgressIndicator from './ProgressIndicator';
 import { useSSEProgress } from '../hooks/useSSEProgress';
@@ -20,8 +20,8 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
   useEffect(() => {
     const loadWordlists = async () => {
       try {
-        const response = await axios.get('/api/wordlists');
-        setAvailableWordlists(response.data.wordlists || []);
+        const response = await api.getWordlists();
+        setAvailableWordlists(response.wordlists || []);
       } catch (error) {
         console.error('Failed to load wordlists:', error);
         // Fall back to the default list so the panel stays usable
@@ -37,26 +37,34 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
       return;
     }
 
+    // Reset the progress hook BEFORE flipping `loading`. Without this there is
+    // a render in which loading === true while status is still 'complete' and
+    // data still holds the previous search's payload — connect() below is what
+    // resets them, and it only runs after the POST resolves. The completion
+    // effect keys on exactly that pair, so it would publish the stale results
+    // and clear `loading`, after which the real completion is rejected by its
+    // own `loading` guard. See issue #11.
+    searchProgress.reset();
+
     setLoading(true);
     setError(null);
     setResults([]);  // Clear previous results
 
     try {
       // Start search with progress tracking
-      const initResponse = await axios.post('/api/pattern/with-progress', {
+      const { task_id } = await api.startPatternSearch({
         pattern: pattern.toUpperCase(),
-        max_results: 50,
+        maxResults: 50,
         wordlists: selectedWordlists,
-        algorithm: algorithm
+        algorithm,
       });
-
-      const { task_id } = initResponse.data;
 
       // Connect to SSE for progress updates
       searchProgress.connect(task_id);
 
     } catch (err) {
-      const errorMsg = err.response?.data?.error || 'Search failed';
+      // ApiError carries the normalized message (src/api/client.js:normalizeError).
+      const errorMsg = err.message || 'Search failed';
       setError(errorMsg);
       setResults([]);
       setLoading(false);

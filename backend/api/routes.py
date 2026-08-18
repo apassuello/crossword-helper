@@ -21,6 +21,7 @@ from backend.api.validators import (
     validate_pattern_request,
 )
 from backend.core.cli_adapter import get_adapter
+from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
 from backend.core.wordlist_resolver import (
     resolve_wordlist_paths,
     resolve_wordlist_paths_strict,
@@ -349,9 +350,10 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
                     f"[CLI DEBUG] Parsed result: success={result_data.get('success')}, "
                     f"filled={result_data.get('slots_filled')}/{result_data.get('total_slots')}"
                 )
+                # DD4: a paused stdout (exit 0, Task 13 protocol) is a terminal PAUSED,
+                # not complete — emit `paused` so no spurious `complete` follows and
+                # clients can offer resume.
                 if result_data.get("paused"):
-                    # The fill paused and saved its state — report 'paused',
-                    # not 'complete', so clients can offer resume.
                     slots_filled = result_data.get("slots_filled", 0)
                     total_slots = result_data.get("total_slots", 0)
                     pct = int((slots_filled / total_slots) * 100) if total_slots else 0
@@ -487,6 +489,18 @@ def fill_with_progress():
         # Create progress tracker
         task_id = create_progress_tracker()
 
+        # DD3: two-step resume. The /api/fill/resume route already prepared merged state
+        # under resume_task_id (= "resume_<8hex>") in STATE_DIR; here we only target it.
+        # Resolve + 404 BEFORE any temp file is written — this early return is not covered
+        # by run_cli_with_progress's finally, so it must not orphan a temp file.
+        # Wordlists are already resolved strictly above; do not re-resolve here.
+        resume_task_id = data.get("resume_task_id")
+        resume_state_path = None
+        if resume_task_id:
+            resume_state_path = STATE_DIR / f"{resume_task_id}.json.gz"
+            if not resume_state_path.exists():
+                return handle_error("TASK_NOT_FOUND", f"No saved state for task {resume_task_id}", 404)
+
         # Resolve theme wordlist if specified
         theme_wordlist_path = None
         if "themeList" in data and data["themeList"]:
@@ -574,6 +588,22 @@ def fill_with_progress():
         # Add cleanup flag (remove invalid words, keep valid crossing letters)
         if data.get("cleanup", False):
             cmd_args.append("--cleanup")
+
+        # DD2: every web fill is pausable — thread the SSE task-id + both single-sourced
+        # dirs onto the argv (never the CLI's split defaults). DD3: a resumed fill also
+        # carries --resume <state>; the CLI reads the grid from the state file.
+        cmd_args.extend(
+            [
+                "--task-id",
+                task_id,
+                "--state-dir",
+                str(STATE_DIR),
+                "--pause-flag-dir",
+                str(PAUSE_FLAG_DIR),
+            ]
+        )
+        if resume_state_path is not None:
+            cmd_args.extend(["--resume", str(resume_state_path)])
 
         # Start background task
         temp_files = [grid_file]

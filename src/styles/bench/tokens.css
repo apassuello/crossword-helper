@@ -1,0 +1,24 @@
+/* Constructor's Bench design tokens (ported). Values verbatim from design bundle;
+   --cell-px + --font-* added per Task 4 plan. */
+:root {
+  --paper: #f5f1e8; --paper-2: #ebe4d2; --paper-3: #ded3b9;
+  --ink: #1a1713; --ink-2: #3a342b; --ink-3: #66604f; --ink-4: #8a8472;
+  --ink-08: rgba(26,23,19,0.5);
+  --accent: #b83018; --accent-ink: #781e0d;
+  --accent-15: rgba(184,48,24,0.14); --accent-06: rgba(184,48,24,0.06); --accent-60: rgba(184,48,24,0.60);
+  --danger: #a01d12; --warn: #b88a0a; --good: #3a5f2a;
+  --card: #fbf7ec; --card-edge: rgba(26,23,19,0.12);
+  --cell-px: 38px;
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-ui: "Work Sans Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+[data-theme="dark"] {
+  --paper: #17181c; --paper-2: #1f2127; --paper-3: #2a2d35;
+  --ink: #ece6d4; --ink-2: #cfc7b2; --ink-3: #9a947f; --ink-4: #6e6a5a;
+  --ink-08: rgba(236,230,212,0.10);
+  --accent: #e1523b; --accent-ink: #f06a51;
+  --accent-15: rgba(225,82,59,0.18); --accent-06: rgba(225,82,59,0.08); --accent-60: rgba(225,82,59,0.60);
+  --danger: #f26a4a; --warn: #e9ba4b; --good: #8eb377;
+  --card: #1b1d22; --card-edge: rgba(236,230,212,0.10);
+}

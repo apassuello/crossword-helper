@@ -181,7 +181,9 @@ crossword fill [GRID_FILE] -w/--wordlists PATH [...] [OPTIONS]
 | `--partial-fill` | flag | off | Stop when stuck instead of aggressive backtracking, keeping ≥80% valid words |
 | `--cleanup` | flag | off | After fill, remove invalid words while keeping letters shared with valid crossings |
 | `--task-id` | string | none | Enables `crossword pause TASK_ID` on this run |
-| `--resume` | Path (or bare task id) | none | Delegates to the same code path as the `resume` command |
+| `--state-dir` | Path | `/tmp/crossword_states` (StateManager default) | Directory for saved solver state |
+| `--pause-flag-dir` | Path | `/tmp` (PauseController default) | Directory watched for the pause flag file |
+| `--resume` | Path (or bare task id) | none | Continues a paused fill; see the resolution note below |
 
 **[NOTE]** The Click default for `--algorithm` is `repair`, not `hybrid`. A
 caller that omits `-a` believing it gets the "hybrid" behavior described in
@@ -191,11 +193,44 @@ older documentation is silently running iterative repair instead.
 python -m cli.src.cli fill puzzle.json -w data/wordlists/comprehensive.txt -t 10 --min-score 30
 ```
 
+**[SPEC] `fill --resume` state resolution.** `fill --resume` no longer delegates
+to the `resume` command's implementation — it continues the fill in-process so
+exact-position CSP resume is reachable. It resolves its argument the same way
+`resume` does, so both accept the same *path* forms: an existing file path is
+loaded from its own directory; otherwise the value is a bare task id looked up
+in `--state-dir` (or the StateManager default, which is what `resume` always
+uses). `<id>`, `<id>.json` and `<id>.json.gz` are all accepted. `-w` wins for
+wordlists, falling back to the paths recorded in the saved state. The two
+commands do **not** accept the same *state* forms, though: `fill --resume`
+calls `load_csp_state` directly (`cli.py:653`), which rejects a beam-search
+state with `ValueError: Wrong algorithm: beam (expected 'csp')` — surfaced
+cleanly via `_fail_fill`, not a crash, but `fill --resume` cannot continue a
+beam-search pause at all. `resume` dispatches on the saved algorithm
+(`state_manager.load_state_by_task_id`) and handles `state_type == "beam"`
+with an exact `BeamSearchAutofill` resume (`cli.py:262-274`). Resuming a
+paused beam-search run requires the `resume` command.
+
+**[SPEC] Resume continues from the saved position, and falls back when that
+position is a dead end.** `fill --resume` first continues the CSP search from
+`current_slot_index` into the saved slot order — exact-position continuation.
+If the saved partial assignment was already contradictory when the pause
+landed, that search fails without filling a single additional slot; the resume
+then strips the dead-end assignments and re-searches the restored grid, which
+gives up the saved position in exchange for making progress. A pause or a
+timeout is not a dead end and does not trigger the fallback. Note the cost:
+resuming into a position that is genuinely unsatisfiable now spends the whole
+`--timeout` budget searching before reporting failure, where it previously
+returned in milliseconds without having tried. Pinned by
+`backend/tests/integration/test_cli_integration.py::TestResumeCLIInvocationReal::test_pause_then_fill_with_resume`
+(`time_elapsed > 0.5`), the guard that caught the no-progress case
+([issue #9](https://github.com/apassuello/crossword-helper/issues/9)).
+
 **[SPEC] Verified JSON result fields** (stdout, `--json-output`):
 `success`, `grid`, `slots_filled`, `total_slots`, `fill_percentage`,
 `time_elapsed`, `iterations`, `problematic_slots_count`, `all_slots_filled`,
-`paused`, `output_file`, `suggestions` (present on partial/problematic
-fills). Progress updates are streamed to stderr as
+`paused`, `task_id`, `wordlists`, `output_file`, `suggestions` (present on
+partial/problematic fills), `state_path` (present when `paused` is true and a
+state was written). Progress updates are streamed to stderr as
 `{"progress": N, "message": "...", "status": "running"|"complete"}` lines.
 
 **[SPEC] Exit codes**
@@ -617,11 +652,20 @@ implements and has been removed rather than corrected.
    wordlists/algorithm recorded in the state unless overridden with
    `-w`/`-a`.
 
-**[?]** No environment variable overrides either the pause-flag directory
-(fixed at `/tmp`) or the state directory (fixed at `/tmp/crossword_states`)
-— confirmed by `grep -rn "environ\|getenv" cli/src/` returning no matches.
-If a `--state-dir` or `--pause-flag-dir` CLI flag is expected to exist,
-it does not: neither appears in any of the 14 commands' `--help` output.
+**[SPEC]** `fill` takes `--state-dir` and `--pause-flag-dir` options (verified
+in `python -m cli.src.cli fill --help` and `cli.py:553-562`), which override
+`StateManager`'s default (`/tmp/crossword_states`) and `PauseController`'s
+default (`/tmp`) for that invocation. `grep -rn "environ\|getenv" cli/src/`
+still returns no matches — the CLI itself has no environment-variable
+override, only the flags above. The backend does add one, one layer up: every
+backend-spawned `fill` passes `--state-dir` / `--pause-flag-dir` sourced from
+`backend/core/state_paths.py:21-22`, which reads `CROSSWORD_STATE_DIR` /
+`CROSSWORD_PAUSE_FLAG_DIR` (falling back to the same `/tmp` defaults). Both
+flags are load-bearing on every backend-spawned fill
+(`backend/api/routes.py:598-602`, `backend/core/cli_adapter.py:492-495`) —
+the backend and a CLI invocation without the flags only agree on where state
+lives because the env vars are usually unset, not because the paths are
+hardcoded to match.
 
 ---
 
