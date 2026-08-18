@@ -1432,10 +1432,10 @@ class Autofill:
 
         `_initialize_csp` -> `_ac3` -> `_sort_slots_by_constraint` used to run with
         no pause check, so a pause requested during setup was not observed until
-        backtracking began. Measured on a blank 15x15 / trie / 44k words: the
-        wordlist loaded at 0.33s and the first backtracking iteration ran at 4.41s
-        -- a 4.1s window, unbounded and growing with grid and wordlist size, in
-        which a pause request was invisible.
+        backtracking began. On a blank grid that window is seconds wide, and it is
+        unbounded -- it grows with grid and wordlist size -- so a pause request
+        stayed invisible for the whole of it. The measured timings for the
+        seam-gate config are in the commit that added this check.
 
         Deliberately no-ops unless `fill()` armed it for the initial setup phase.
         `_ac3` and `_initialize_csp` are also called by `_resume_by_unwinding` and

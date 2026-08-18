@@ -473,10 +473,8 @@ class TestPauseDuringCspSetup:
 
     `_initialize_csp` -> `_ac3` -> `_sort_slots_by_constraint` ran with no pause
     check at all, so a pause requested during setup was not seen until setup
-    finished. Measured on a blank 15x15 / trie / 44k words: the wordlist loaded
-    at 0.33s and the first backtracking iteration ran at 4.41s -- a 4.1s window
-    in which a pause request could not be observed. The window is unbounded (it
-    grows with grid and wordlist size), so "state is saved within 10s of a pause
+    finished. On a blank grid that window is seconds wide and unbounded -- it
+    grows with grid and wordlist size -- so "state is saved within 10s of a pause
     request" held only by luck on fast hardware.
 
     Both tests are structural rather than clock-based: the flag is set before
