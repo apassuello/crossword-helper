@@ -158,6 +158,26 @@ Exact paths and request/response shapes: `openapi.yaml`, tag `Pause/Resume`.
 Use `/fill/edit-summary` to preview what a set of user edits will change before committing to
 `/fill/resume`.
 
+**[SPEC]**
+`/fill/resume` accepts its fill options in two shapes. **Top level is canonical** — `timeout`,
+`min_score`, `algorithm` and `wordlists` sit beside `task_id`, the same way every other fill route
+reads them. The nested `options` object is still accepted for compatibility, and a key supplied in
+both places takes its **top-level** value. Unrecognised top-level keys are logged and ignored,
+never rejected.
+
+Decided in issue #24, option 2 ("move to top-level, accepting the nested form for compatibility").
+The asymmetry was worth removing rather than documenting: `options` was the only nested option
+object in the API surface, so a caller writing `{"timeout": 30}` — correct everywhere else — got
+the 300-second default with no error, no warning and no 400. Two tests in this repo made exactly
+that mistake and spent minutes each resuming an unsatisfiable grid to exhaustion before anyone
+measured them.
+
+Rejecting unknown keys with a 400 was considered and declined: accepting both shapes already
+closes the silent-default hole, while a 400 would change behaviour for callers this route has
+never enumerated. The resolver is `_resolve_resume_options` in
+`backend/api/pause_resume_routes.py`; `openapi.yaml`'s `ResumeRequest` schema carries the field
+list.
+
 ---
 
 ## Constraint Analysis

@@ -37,6 +37,58 @@ pause_resume_api = Blueprint("pause_resume", __name__)
 # Initialize edit merger
 edit_merger = EditMerger()
 
+# Option keys POST /api/fill/resume accepts (#24). These used to be readable
+# ONLY from a nested `options` object — unique in the API surface, since every
+# other fill route reads `timeout` at the top level (backend/api/routes.py:239,
+# :558, :615). A caller following that pattern got the 300s default silently:
+# no error, no warning. That cost two tests in this repo roughly ten minutes per
+# slow-gate run, resuming an unsatisfiable grid to exhaustion, before anyone
+# measured the runtime.
+#
+# Top level is now canonical and wins on conflict; the nested form stays
+# accepted so existing callers (and `resume_options` metadata already on disk)
+# keep working.
+RESUME_OPTION_KEYS = ("wordlists", "algorithm", "timeout", "min_score")
+
+# Top-level request keys that are not options.
+_RESUME_RESERVED_KEYS = ("task_id", "edited_grid", "options")
+
+
+def _resolve_resume_options(data):
+    """
+    Merge /api/fill/resume's two accepted option shapes into one dict.
+
+    Top-level keys override the same key nested under `options`, so a caller who
+    supplies both gets the form every other fill route uses.
+
+    Unknown top-level keys are logged, not rejected. The defect being fixed is a
+    silently-ignored parameter, which accepting both shapes already closes; a
+    400 would be a behaviour change on a route whose callers are not enumerated.
+
+    Args:
+        data: the parsed JSON request body.
+
+    Returns:
+        Resolved options dict (empty when the caller supplied none).
+    """
+    nested = data.get("options")
+    resolved = dict(nested) if isinstance(nested, dict) else {}
+
+    for key in RESUME_OPTION_KEYS:
+        if key in data:
+            resolved[key] = data[key]
+
+    unknown = sorted(k for k in data if k not in RESUME_OPTION_KEYS and k not in _RESUME_RESERVED_KEYS)
+    if unknown:
+        logger.warning(
+            "POST /api/fill/resume: ignoring unrecognised top-level key(s): %s. Options are %s.",
+            ", ".join(unknown),
+            ", ".join(RESUME_OPTION_KEYS),
+        )
+
+    return resolved
+
+
 # State + pause-flag dirs are single-sourced from backend.core.state_paths (DD1):
 # STATE_STORAGE_DIR (alias of STATE_DIR) is read in one place, _get_state_manager()
 # below, which every route calls instead of constructing a StateManager itself;
@@ -205,13 +257,19 @@ def resume_autofill():
             "task_id": "task_abc123",
             "edited_grid": [[...], ...],  # Optional: grid with user edits
                                           # (dict cells, ["A"] cells, or strings)
-            "options": {                   # Same as original fill options
-                "min_score": 50,
-                "timeout": 300,
-                "wordlists": ["comprehensive"],
+            "timeout": 300,                # Options may be given at the top
+            "min_score": 50,               # level (canonical -- matches every
+            "wordlists": ["comprehensive"],# other fill route) ...
+            "algorithm": "trie",
+            "options": {                   # ... or nested, which stays accepted
+                "min_score": 50,           # for compatibility. A key given in
+                "timeout": 300,            # both places takes the TOP-LEVEL
+                "wordlists": ["comprehensive"],  # value (#24).
                 "algorithm": "trie"
             }
         }
+
+        Unrecognised top-level keys are logged and ignored, not rejected.
 
     Returns:
         200: Resume completed (fill ran to completion, partial, or re-paused)
@@ -237,7 +295,7 @@ def resume_autofill():
 
         task_id = data["task_id"]
         edited_grid = data.get("edited_grid")
-        options = data.get("options") or {}
+        options = _resolve_resume_options(data)
 
         # Load saved state from the shared CLI state store
         state_manager = _get_state_manager()
