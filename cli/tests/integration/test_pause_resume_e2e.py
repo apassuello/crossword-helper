@@ -159,6 +159,140 @@ class TestPauseResumeEndToEnd:
                 if leftover.exists():
                     leftover.unlink()
 
+    def test_full_cycle_stays_inside_non_default_dirs(self, tmp_path):
+        """
+        The real-subprocess half of the seam rule for #25.
+
+        The test above runs the same cycle on the DEFAULT directories, so it
+        passes whether or not `pause` / `resume` / `list-states` honour
+        --state-dir and --pause-flag-dir -- the library defaults agree with
+        `fill`'s by coincidence. This one points every command at tmp_path and
+        asserts the cycle completes there AND that nothing was written to the
+        default locations, which is the only way the coincidence stops
+        masking the defect.
+        """
+        task_id = f"e2edirs_{uuid.uuid4().hex[:10]}"
+        grid_path = tmp_path / "g15.json"
+        out_path = tmp_path / "paused_grid.json"
+        resumed_path = tmp_path / "resumed_grid.json"
+        state_dir = tmp_path / "states"
+        flags_dir = tmp_path / "flags"
+        _make_grid_15(grid_path)
+
+        state_file = state_dir / f"{task_id}.json.gz"
+        running_marker = flags_dir / f"crossword_running_{task_id}.pid"
+
+        # If any of these appear, a command fell back to the library default.
+        default_leaks = (
+            Path("/tmp/crossword_states") / f"{task_id}.json.gz",
+            Path(f"/tmp/crossword_running_{task_id}.pid"),
+            Path(f"/tmp/crossword_pause_{task_id}.flag"),
+        )
+
+        proc = subprocess.Popen(
+            _cli_cmd(
+                [
+                    "fill",
+                    str(grid_path),
+                    "-w",
+                    COMPREHENSIVE,
+                    # Solver budget. Separate from every communicate(timeout=)
+                    # below: `-t` bounds solver time, the harness budgets bound
+                    # wall time, and they fail independently (CONTRIBUTING §3).
+                    "-t",
+                    "120",
+                    "-a",
+                    "trie",
+                    "--task-id",
+                    task_id,
+                    "--state-dir",
+                    str(state_dir),
+                    "--pause-flag-dir",
+                    str(flags_dir),
+                    "-o",
+                    str(out_path),
+                ]
+            ),
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.time() + 60
+            while time.time() < deadline and not running_marker.exists():
+                time.sleep(0.2)
+            assert running_marker.exists(), "fill never wrote its running marker into --pause-flag-dir"
+
+            time.sleep(3)
+
+            # Pre-fix this reported "not running": `pause` looked in /tmp.
+            pause = subprocess.run(
+                _cli_cmd(["pause", task_id, "--pause-flag-dir", str(flags_dir), "--json-output"]),
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert pause.returncode == 0, pause.stdout + pause.stderr
+            assert json.loads(pause.stdout.splitlines()[-1])["success"] is True
+
+            stdout, stderr = proc.communicate(timeout=120)
+            assert proc.returncode == 0, stderr
+            assert "paused" in stdout.lower()
+
+            assert state_file.exists(), "no state file written into --state-dir"
+            with open(state_file, "rb") as f:
+                assert f.read(2) == b"\x1f\x8b", "state file is not gzipped"
+
+            # Pre-fix this listed /tmp/crossword_states and never saw the task.
+            listed = subprocess.run(
+                _cli_cmd(["list-states", "--state-dir", str(state_dir), "--json-output"]),
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert listed.returncode == 0, listed.stdout + listed.stderr
+            assert task_id in [st["task_id"] for st in json.loads(listed.stdout)["states"]]
+
+            # Pre-fix this failed with "neither an existing state file nor a
+            # known task id in /tmp/crossword_states".
+            resume = subprocess.run(
+                _cli_cmd(
+                    [
+                        "resume",
+                        task_id,
+                        "--state-dir",
+                        str(state_dir),
+                        "--pause-flag-dir",
+                        str(flags_dir),
+                        "-t",
+                        "20",
+                        "-o",
+                        str(resumed_path),
+                        "--json-output",
+                    ]
+                ),
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            assert resume.returncode == 0, resume.stdout + resume.stderr
+            assert json.loads(resume.stdout.splitlines()[-1])["total_slots"] > 0
+            assert resumed_path.exists(), "resume did not save its output grid"
+
+            # The point of the test: the whole cycle stayed where it was told.
+            leaked = [str(pth) for pth in default_leaks if pth.exists()]
+            assert leaked == [], f"wrote to default dirs despite explicit ones: {leaked}"
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            for leftover in default_leaks:
+                if leftover.exists():
+                    leftover.unlink()
+
 
 @pytest.mark.slow
 class TestBeamTimeoutEnforcement:

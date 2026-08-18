@@ -15,9 +15,14 @@ import json
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+from cli.src.core.grid import Grid
+from cli.src.fill.pause_controller import PauseController
+from cli.src.fill.state_manager import CSPState, StateManager
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORDLIST = REPO_ROOT / "data" / "wordlists" / "comprehensive.txt"
@@ -240,6 +245,104 @@ def test_fill_accepts_pause_options(tmp_path):
     stdout, _ = proc.communicate(timeout=300)
 
     assert proc.returncode == 0
+    assert json.loads(stdout)["success"] is True
+
+
+def test_pause_resume_list_states_accept_and_honour_the_dir_options(tmp_path):
+    """
+    Test A2 -- the argv-acceptance half of the seam rule for #25.
+
+    `--state-dir` / `--pause-flag-dir` were declared on `fill` only. `pause`,
+    `resume` and `list-states` built StateManager()/PauseController() bare, so
+    they read /tmp regardless and agreed with `fill` only because the library
+    defaults happen to match. Point `fill` anywhere else and its own companion
+    commands stop seeing it, reporting "not found" as though the task were
+    missing rather than the path misconfigured.
+
+    Each command is asserted to ACT on the directory it is given, not merely to
+    accept the flag without erroring -- a parse-only check would pass against
+    the bare constructions this fixes. No solver runs here: state and markers
+    are planted directly, so this stays in the default (non-slow) suite, which
+    is where the seam rule wants the argv contract test.
+    """
+    state_dir = tmp_path / "states"
+    flags_dir = tmp_path / "flags"
+    task_id = "diropts"
+
+    # A wordlist the resumed fill can load, and a state whose grid is already
+    # complete so the resume returns without searching.
+    wordlist = tmp_path / "wl.txt"
+    wordlist.write_text("A" * 11 + "\n")
+
+    # Fully filled, so the resumed fill has no empty slot and returns at once.
+    grid = Grid(11)
+    for row in range(11):
+        grid.place_word("A" * 11, row, 0, "across")
+    state_manager = StateManager(storage_dir=state_dir)
+    state_manager.save_csp_state(
+        task_id=task_id,
+        csp_state=CSPState(
+            grid_dict=grid.to_dict(),
+            domains={},
+            constraints={},
+            used_words=[],
+            slot_id_map={},
+            slot_list=[],
+            slots_sorted=[],
+            current_slot_index=0,
+            iteration_count=1,
+            locked_slots=[],
+            timestamp=datetime.now().isoformat(),
+        ),
+        metadata={"algorithm": "trie", "wordlists": [str(wordlist)]},
+        compress=True,
+    )
+
+    def _run(args):
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "cli.src.cli"] + args,
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        # 300s like Test A above, and for the same reason: pytest-cov
+        # instruments the spawned CLI, which cost that test a ~17x wall tax.
+        # Nothing here waits out the budget -- it only guards against a hang.
+        return proc, *proc.communicate(timeout=300)
+
+    # --- list-states reads --state-dir, not /tmp/crossword_states ---
+    proc, stdout, stderr = _run(["list-states", "--state-dir", str(state_dir), "--json-output"])
+    assert proc.returncode == 0, stderr
+    listed = json.loads(stdout)
+    assert [s["task_id"] for s in listed["states"]] == [task_id], listed
+
+    # --- pause writes its flag into --pause-flag-dir and finds the marker there ---
+    # A live pid, so is_task_running() sees a running task rather than a stale file.
+    PauseController(task_id=task_id, pause_dir=flags_dir).mark_running()
+
+    proc, stdout, stderr = _run(["pause", task_id, "--pause-flag-dir", str(flags_dir), "--json-output"])
+    assert proc.returncode == 0, stderr
+    assert json.loads(stdout)["success"] is True
+    assert (flags_dir / f"crossword_pause_{task_id}.flag").exists(), "pause flag must land in --pause-flag-dir"
+
+    # --- resume looks the task id up in --state-dir ---
+    proc, stdout, stderr = _run(
+        [
+            "resume",
+            task_id,
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flags_dir),
+            "-o",
+            str(tmp_path / "resumed.json"),
+            "-t",
+            "120",
+            "--json-output",
+        ]
+    )
+    assert proc.returncode == 0, stderr
     assert json.loads(stdout)["success"] is True
 
 
