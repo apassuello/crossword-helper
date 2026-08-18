@@ -138,6 +138,54 @@ jobs:
     - name: Check documentation
       run: ./scripts/docs-check.sh
 
+  pause-resume-seam:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-mock
+
+    # The unit/integration steps in the `test` job pass explicit path args,
+    # which override pytest.ini's `addopts = -v -m "not slow"` -- but that
+    # still deselects `slow`-marked tests, so no job ever ran the real
+    # backend<->CLI subprocess e2e for pause/resume. That is how pause/resume
+    # shipped broken with a fully green suite (.claude/CLAUDE.md, "Seam
+    # tests"). `-m slow` overrides the deselection explicitly.
+    #
+    # One version only (3.12, the version this repo already privileges for
+    # coverage/lint): these tests exercise subprocess argv + file IPC wiring,
+    # which is Python-version-independent, so running the multi-minute gate
+    # four times across the `test` matrix would buy nothing but CI minutes.
+    # Own job rather than a step in `test`, matching the single-concern
+    # `guards`/`docs` jobs above -- a step here would still pay the 4x matrix
+    # cost. Serial (no -n auto): these tests share /tmp state/flag dirs via
+    # file IPC and are not safe to parallelize against each other.
+    - name: Run pause/resume seam gate (slow, real subprocess)
+      run: |
+        pytest -m slow -v \
+          backend/tests/integration/test_pause_resume_e2e.py \
+          cli/tests/integration/test_pause_resume_e2e.py \
+          cli/tests/integration/test_fill_pause_resume.py \
+          backend/tests/integration/workflows/test_pause_resume_workflow.py
+
   # Performance job removed - benchmarks are manual scripts, not automated tests
   # Run manually when needed: python cli/tests/performance/benchmark_algorithms.py
   # See cli/tests/performance/README.md for details
