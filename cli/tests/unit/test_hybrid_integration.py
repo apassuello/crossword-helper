@@ -393,3 +393,81 @@ class TestBeamTimeoutScaling:
     def test_nonstandard_grid_beam_timeout(self):
         """19x19 grid should get beam_cap=102 (linear interpolation)."""
         assert HybridAutofill._compute_beam_cap(19) == 102
+
+
+class TestHybridRepairReturnsNone:
+    """
+    Regression: hybrid must survive `IterativeRepair.fill()` returning None.
+
+    Repair returns None when its restart-loop pause hook fires before restart 0,
+    with `best_result` never populated — the convention `cli/src/cli.py` documents
+    at its own None-guard ("treat it as a paused outcome ... so nothing below
+    dereferences None"). Hybrid sits above the CLI in the call chain and had no
+    such guard, so `repair_result.paused` raised AttributeError and the CLI exited 1.
+
+    Reachable whenever the pause flag is still set when phase 2 starts, i.e. when
+    the beam phase ends on its wall-clock cap before observing the pause. That is
+    machine-speed dependent: it never fired locally and failed both `[hybrid]`
+    parametrisations of the pause-resume seam gate on CI (run 32241543802).
+    """
+
+    @pytest.fixture
+    def grid(self):
+        grid = Grid(11)
+        grid.set_black_square(5, 5)
+        return grid
+
+    @pytest.fixture
+    def hybrid_with_stubbed_phases(self, monkeypatch, grid):
+        """HybridAutofill whose beam phase makes progress and whose repair pauses at once."""
+        from src.fill import hybrid_autofill as hybrid_module
+        from src.fill.autofill import FillResult
+
+        beam_output = FillResult(
+            success=False,
+            grid=grid,
+            time_elapsed=1.0,
+            slots_filled=7,
+            total_slots=20,
+            problematic_slots=[],
+            iterations=3,
+        )
+
+        class _BeamStub:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def fill(self, timeout=None):
+                return beam_output
+
+        class _RepairPausesBeforeFirstRestart:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def fill(self, timeout=None):
+                return None
+
+        monkeypatch.setattr(hybrid_module, "BeamSearchAutofill", _BeamStub)
+        monkeypatch.setattr(hybrid_module, "IterativeRepair", _RepairPausesBeforeFirstRestart)
+        return HybridAutofill(grid, WordList(["CAT"]), None), beam_output
+
+    def test_returns_a_paused_result_instead_of_raising(self, hybrid_with_stubbed_phases):
+        hybrid, _ = hybrid_with_stubbed_phases
+
+        result = hybrid.fill(timeout=30)
+
+        assert result is not None, "hybrid dropped the pause instead of reporting it"
+        assert result.paused is True
+
+    def test_keeps_phase_one_progress(self, hybrid_with_stubbed_phases):
+        """
+        The beam grid must survive the pause. Returning None would reach the CLI's
+        None-guard, which falls back to the pre-fill grid and silently discards
+        every slot phase 1 filled.
+        """
+        hybrid, beam_output = hybrid_with_stubbed_phases
+
+        result = hybrid.fill(timeout=30)
+
+        assert result.slots_filled == beam_output.slots_filled
+        assert result.grid is beam_output.grid
