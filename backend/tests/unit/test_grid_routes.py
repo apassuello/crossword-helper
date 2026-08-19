@@ -3,6 +3,7 @@
 import pytest
 
 from backend.app import create_app
+from backend.tests.response_diag import resp_diag
 
 
 @pytest.fixture
@@ -20,7 +21,7 @@ class TestValidateGridStructuralChecks:
         for col in range(11):
             grid[5][col] = "#"
         resp = client.post("/api/grid/validate", json={"grid": grid, "grid_size": 11})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         data = resp.get_json()
         assert data["valid"] is False and any("isolated" in w.lower() for w in data["warnings"])
 
@@ -37,7 +38,7 @@ class TestValidateGridStructuralChecks:
         handle_error(...default_status=) fallback, and always keep HTTP 200."""
         grid = [[{"isBlack": False, "letter": ""} for _ in range(11)] for _ in range(11)]
         resp = client.post("/api/grid/validate", json={"grid": grid, "grid_size": 11})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         data = resp.get_json()
         assert data["valid"] is True
         assert data["warnings"] == []

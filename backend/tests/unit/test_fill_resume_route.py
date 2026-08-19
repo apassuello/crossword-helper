@@ -16,6 +16,8 @@ import json
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 @pytest.fixture
 def client(mocker):
@@ -62,7 +64,7 @@ def test_fresh_fill_threads_task_id_and_dirs(client, mocker, monkeypatch, tmp_pa
 
     resp = _post_json(c, "/api/fill/with-progress", {"size": 5, "grid": [["."] * 5] * 5})
 
-    assert resp.status_code == 202
+    assert resp.status_code == 202, resp_diag(resp)
     argv = thread.call_args.kwargs["args"][1]
     assert "--task-id" in argv
     assert argv[argv.index("--state-dir") + 1] == str(tmp_path)
@@ -84,7 +86,7 @@ def test_resume_task_id_existing_state_adds_resume(client, mocker, monkeypatch, 
         {"size": 5, "grid": [["."] * 5] * 5, "resume_task_id": "resume_abc12345"},
     )
 
-    assert resp.status_code == 202
+    assert resp.status_code == 202, resp_diag(resp)
     argv = thread.call_args.kwargs["args"][1]
     assert argv[argv.index("--resume") + 1] == str(tmp_path / "resume_abc12345.json.gz")
     assert "--task-id" in argv  # fresh SSE id, distinct from the resume file basename
@@ -103,7 +105,7 @@ def test_resume_task_id_missing_state_returns_404(client, mocker, monkeypatch, t
         {"size": 5, "grid": [["."] * 5] * 5, "resume_task_id": "resume_missing"},
     )
 
-    assert resp.status_code == 404
+    assert resp.status_code == 404, resp_diag(resp)
     assert resp.get_json()["error"]["code"] == "TASK_NOT_FOUND"
     thread.assert_not_called()
 

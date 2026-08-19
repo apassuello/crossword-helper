@@ -15,6 +15,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 @pytest.fixture
 def client(mocker):
@@ -39,7 +41,7 @@ class TestNotFoundEnvelope:
     def test_unknown_route_returns_envelope_404(self, client):
         c, _ = client
         resp = c.get("/api/nonexistent")
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         body = resp.get_json()
         assert body["error"]["code"] == "NOT_FOUND"
         assert isinstance(body["error"]["message"], str)
@@ -51,7 +53,7 @@ class TestMethodNotAllowedEnvelope:
         c, _ = client
         # /api/pattern is POST-only
         resp = c.get("/api/pattern")
-        assert resp.status_code == 405
+        assert resp.status_code == 405, resp_diag(resp)
         body = resp.get_json()
         assert body["error"]["code"] == "METHOD_NOT_ALLOWED"
         assert isinstance(body["error"]["message"], str)
@@ -67,5 +69,5 @@ class TestTimeoutStatus:
             data=json.dumps({"pattern": "A?B"}),
             content_type="application/json",
         )
-        assert resp.status_code == 504
+        assert resp.status_code == 504, resp_diag(resp)
         assert resp.get_json()["error"]["code"] == "TIMEOUT"

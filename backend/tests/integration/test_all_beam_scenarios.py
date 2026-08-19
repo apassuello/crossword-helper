@@ -23,6 +23,8 @@ import tempfile
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 # Realistic 7x7 grid with symmetric black squares
 STANDARD_GRID_7x7 = {
     "size": 7,
@@ -225,7 +227,7 @@ class TestAPIAutofillScenarios:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         data = response.json
         assert "task_id" in data
         assert "progress_url" in data
@@ -251,7 +253,7 @@ class TestAPIAutofillScenarios:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         data = response.json
         assert "task_id" in data
         assert "progress_url" in data
@@ -277,6 +279,6 @@ class TestAPIAutofillScenarios:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         data = response.json
         assert "task_id" in data

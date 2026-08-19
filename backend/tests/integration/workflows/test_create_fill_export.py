@@ -14,6 +14,8 @@ import json
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 def create_empty_grid(size=11):
     """Helper to create empty grid."""
@@ -52,13 +54,13 @@ class TestCreateFillExportWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Step 3: Get completed grid (via SSE stream)
         # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
         sse_response = client.get(f"/api/progress/{task_id}")
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)
 
         # Step 4: Export would happen here (if we had export endpoint)
         # For now, verify we have a valid grid to export
@@ -94,7 +96,7 @@ class TestCreateFillExportWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         suggestions = response.json.get("suggestions", [])
 
         if suggestions:
@@ -116,7 +118,7 @@ class TestCreateFillExportWorkflow:
                 content_type="application/json",
             )
 
-            assert response.status_code == 200
+            assert response.status_code == 200, resp_diag(response)
             modified_grid = response.json["grid"]
 
             # Run autofill on modified grid
@@ -135,7 +137,7 @@ class TestCreateFillExportWorkflow:
                 content_type="application/json",
             )
 
-            assert response.status_code == 202
+            assert response.status_code == 202, resp_diag(response)
 
     def test_workflow_different_grid_sizes(self, client):
         """
@@ -161,5 +163,5 @@ class TestCreateFillExportWorkflow:
                 content_type="application/json",
             )
 
-            assert response.status_code == 202
+            assert response.status_code == 202, resp_diag(response)
             assert "task_id" in response.json

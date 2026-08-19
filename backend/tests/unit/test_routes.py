@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -83,7 +85,7 @@ class TestHealthCheck:
         mock_adapter.health_check.return_value = True
 
         resp = c.get("/api/health")
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         assert body["status"] == "healthy"
         assert body["components"]["cli_adapter"] == "ok"
@@ -94,7 +96,7 @@ class TestHealthCheck:
         mock_adapter.health_check.return_value = False
 
         resp = c.get("/api/health")
-        assert resp.status_code == 503
+        assert resp.status_code == 503, resp_diag(resp)
         body = resp.get_json()
         assert body["status"] == "degraded"
         assert body["components"]["cli_adapter"] == "error"
@@ -111,7 +113,7 @@ class TestPatternSearch:
         mock_adapter.pattern.return_value = {"results": [{"word": "CAT", "score": 90}]}
 
         resp = _post_json(c, "/api/pattern", {"pattern": "C?T"})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         assert body["results"][0]["word"] == "CAT"
         mock_adapter.pattern.assert_called_once()
@@ -119,7 +121,7 @@ class TestPatternSearch:
     def test_missing_pattern_field(self, client):
         c, _ = client
         resp = _post_json(c, "/api/pattern", {"wordlists": ["comprehensive"]})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_empty_body(self, client):
         c, _ = client
@@ -128,12 +130,12 @@ class TestPatternSearch:
             data=json.dumps(None),
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_no_json_content_type(self, client):
         c, _ = client
         resp = c.post("/api/pattern", data="not json", content_type="text/plain")
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         body = resp.get_json()
         assert body["error"]["code"] == "INVALID_CONTENT_TYPE"
 
@@ -142,7 +144,7 @@ class TestPatternSearch:
         mock_adapter.pattern.return_value = {"results": []}
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "max_results": 10})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["max_results"] == 10
 
@@ -151,7 +153,7 @@ class TestPatternSearch:
         mock_adapter.pattern.return_value = {"results": []}
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B", "algorithm": "trie"})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         _, kwargs = mock_adapter.pattern.call_args
         assert kwargs["algorithm"] == "trie"
 
@@ -160,7 +162,7 @@ class TestPatternSearch:
         mock_adapter.pattern.side_effect = ValueError("bad pattern")
 
         resp = _post_json(c, "/api/pattern", {"pattern": "???"})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert "bad pattern" in resp.get_json()["error"]["message"]
 
     def test_adapter_timeout(self, client):
@@ -168,20 +170,20 @@ class TestPatternSearch:
         mock_adapter.pattern.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=30)
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B"})
-        assert resp.status_code == 504
+        assert resp.status_code == 504, resp_diag(resp)
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
         mock_adapter.pattern.side_effect = RuntimeError("boom")
 
         resp = _post_json(c, "/api/pattern", {"pattern": "A?B"})
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
         assert "boom" in resp.get_json()["error"]["message"]
 
     def test_pattern_not_string(self, client):
         c, _ = client
         resp = _post_json(c, "/api/pattern", {"pattern": 123})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
 
 # ===================================================================
@@ -198,23 +200,23 @@ class TestNumberGrid:
         mock_adapter.number.return_value = {"numbering": {"1": [0, 0]}}
 
         resp = _post_json(c, "/api/number", self._valid_body())
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         mock_adapter.number.assert_called_once()
 
     def test_missing_grid(self, client):
         c, _ = client
         resp = _post_json(c, "/api/number", {"size": 5})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_missing_size(self, client):
         c, _ = client
         resp = _post_json(c, "/api/number", {"grid": _make_grid(5)})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_no_json_content_type(self, client):
         c, _ = client
         resp = c.post("/api/number", data="text", content_type="text/plain")
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert resp.get_json()["error"]["code"] == "INVALID_CONTENT_TYPE"
 
     def test_empty_body(self, client):
@@ -224,14 +226,14 @@ class TestNumberGrid:
             data=json.dumps(None),
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_nonstandard_size_passes(self, client):
         c, mock_adapter = client
         mock_adapter.number.return_value = {"numbering": {}}
 
         resp = _post_json(c, "/api/number", self._valid_body(7))
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         _, kwargs = mock_adapter.number.call_args
         # 7 is non-standard so allow_nonstandard should be True
         assert kwargs["allow_nonstandard"] is True
@@ -241,7 +243,7 @@ class TestNumberGrid:
         mock_adapter.number.return_value = {"numbering": {}}
 
         resp = _post_json(c, "/api/number", self._valid_body(15))
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         _, kwargs = mock_adapter.number.call_args
         assert kwargs["allow_nonstandard"] is False
 
@@ -250,14 +252,14 @@ class TestNumberGrid:
         mock_adapter.number.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=30)
 
         resp = _post_json(c, "/api/number", self._valid_body())
-        assert resp.status_code == 504
+        assert resp.status_code == 504, resp_diag(resp)
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
         mock_adapter.number.side_effect = RuntimeError("crash")
 
         resp = _post_json(c, "/api/number", self._valid_body())
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
 
 
 # ===================================================================
@@ -271,7 +273,7 @@ class TestNormalizeEntry:
         mock_adapter.normalize.return_value = {"normalized": "HELLO WORLD"}
 
         resp = _post_json(c, "/api/normalize", {"text": "hello world"})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         # Interior spaces are stripped — crossword entries never contain them
         assert body["normalized"] == "HELLOWORLD"
@@ -280,36 +282,36 @@ class TestNormalizeEntry:
     def test_missing_text(self, client):
         c, _ = client
         resp = _post_json(c, "/api/normalize", {"foo": "bar"})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_empty_text(self, client):
         c, _ = client
         resp = _post_json(c, "/api/normalize", {"text": "   "})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_text_too_long(self, client):
         c, _ = client
         resp = _post_json(c, "/api/normalize", {"text": "A" * 101})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_no_json_content_type(self, client):
         c, _ = client
         resp = c.post("/api/normalize", data="text", content_type="text/plain")
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_adapter_timeout(self, client):
         c, mock_adapter = client
         mock_adapter.normalize.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
 
         resp = _post_json(c, "/api/normalize", {"text": "foo"})
-        assert resp.status_code == 504
+        assert resp.status_code == 504, resp_diag(resp)
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
         mock_adapter.normalize.side_effect = RuntimeError("fail")
 
         resp = _post_json(c, "/api/normalize", {"text": "foo"})
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
 
 
 # ===================================================================
@@ -323,23 +325,23 @@ class TestFillGrid:
         mock_adapter.fill.return_value = {"success": True, "grid": _make_grid(5, "A")}
 
         resp = _post_json(c, "/api/fill", _fill_request())
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         mock_adapter.fill.assert_called_once()
 
     def test_missing_grid(self, client):
         c, _ = client
         resp = _post_json(c, "/api/fill", {"size": 5, "wordlists": ["comprehensive"]})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_missing_size(self, client):
         c, _ = client
         resp = _post_json(c, "/api/fill", {"grid": _make_grid(5), "wordlists": ["comprehensive"]})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_no_json_content_type(self, client):
         c, _ = client
         resp = c.post("/api/fill", data="text", content_type="text/plain")
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_frontend_dict_grid_conversion(self, client):
         """Frontend sends grid cells as dicts; route should convert to CLI format."""
@@ -354,7 +356,7 @@ class TestFillGrid:
             ]
         ] * 3
         resp = _post_json(c, "/api/fill", {"size": 3, "grid": grid})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
 
         call_kwargs = mock_adapter.fill.call_args[1]
         cli_grid = call_kwargs["grid_data"]["grid"]
@@ -368,7 +370,7 @@ class TestFillGrid:
 
         grid = [["A", "#", "."] * 2 for _ in range(6)]
         resp = _post_json(c, "/api/fill", {"size": 6, "grid": grid})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
 
     def test_no_valid_wordlists(self, client, mocker):
         c, _ = client
@@ -379,7 +381,7 @@ class TestFillGrid:
         )
 
         resp = _post_json(c, "/api/fill", _fill_request())
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert "wordlist" in resp.get_json()["error"]["message"].lower()
 
     def test_custom_timeout_and_min_score(self, client):
@@ -387,7 +389,7 @@ class TestFillGrid:
         mock_adapter.fill.return_value = {"success": True}
 
         resp = _post_json(c, "/api/fill", _fill_request(timeout=60, min_score=50))
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         call_kwargs = mock_adapter.fill.call_args[1]
         assert call_kwargs["timeout_seconds"] == 60
         assert call_kwargs["min_score"] == 50
@@ -397,14 +399,14 @@ class TestFillGrid:
         mock_adapter.fill.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=300)
 
         resp = _post_json(c, "/api/fill", _fill_request())
-        assert resp.status_code == 504
+        assert resp.status_code == 504, resp_diag(resp)
 
     def test_adapter_internal_error(self, client):
         c, mock_adapter = client
         mock_adapter.fill.side_effect = RuntimeError("oom")
 
         resp = _post_json(c, "/api/fill", _fill_request())
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
 
 
 # ===================================================================
@@ -421,7 +423,7 @@ class TestFillWithProgress:
         mock_thread = mocker.patch("backend.api.routes.threading.Thread")
 
         resp = _post_json(c, "/api/fill/with-progress", _fill_request())
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
         body = resp.get_json()
         assert body["task_id"] == "task-123"
         assert body["progress_url"] == "/api/progress/task-123"
@@ -431,7 +433,7 @@ class TestFillWithProgress:
     def test_missing_grid_returns_400(self, client):
         c, _ = client
         resp = _post_json(c, "/api/fill/with-progress", {"size": 5, "wordlists": ["comprehensive"]})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_theme_entries_passed_through(self, client, mocker):
         c, mock_adapter = client
@@ -442,7 +444,7 @@ class TestFillWithProgress:
 
         body = _fill_request(theme_entries={"(0,0,across)": "HELLO"})
         resp = _post_json(c, "/api/fill/with-progress", body)
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
 
         # Verify the thread was started (theme entries handled in background)
         mock_thread.return_value.start.assert_called_once()
@@ -456,7 +458,7 @@ class TestFillWithProgress:
 
         body = _fill_request(adaptive_mode=True, max_adaptations=5)
         resp = _post_json(c, "/api/fill/with-progress", body)
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
 
         # Check that --adaptive and --max-adaptations appear in cmd_args
         thread_call_args = mock_thread.call_args
@@ -474,7 +476,7 @@ class TestFillWithProgress:
 
         body = _fill_request(partial_fill=True)
         resp = _post_json(c, "/api/fill/with-progress", body)
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
 
         cmd_args = mock_thread.call_args[1]["args"][1]
         assert "--partial-fill" in cmd_args
@@ -488,7 +490,7 @@ class TestFillWithProgress:
 
         body = _fill_request(cleanup=True)
         resp = _post_json(c, "/api/fill/with-progress", body)
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
 
         cmd_args = mock_thread.call_args[1]["args"][1]
         assert "--cleanup" in cmd_args
@@ -501,7 +503,7 @@ class TestFillWithProgress:
         )
 
         resp = _post_json(c, "/api/fill/with-progress", _fill_request())
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
 
 
 # ===================================================================
@@ -513,7 +515,7 @@ class TestVerifyWords:
     def test_missing_grid_field(self, client):
         c, _ = client
         resp = _post_json(c, "/api/grid/verify-words", {"size": 3})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_empty_body(self, client):
         c, _ = client
@@ -522,7 +524,7 @@ class TestVerifyWords:
             data=json.dumps(None),
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_all_empty_grid(self, client, mocker):
         """Fully empty grid should have zero checked slots."""
@@ -532,7 +534,7 @@ class TestVerifyWords:
 
         grid = _make_grid(5, ".")
         resp = _post_json(c, "/api/grid/verify-words", {"grid": grid, "size": 5})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         assert body["total_checked"] == 0
 
@@ -551,7 +553,7 @@ class TestVerifyWords:
             [".", ".", "."],
         ]
         resp = _post_json(c, "/api/grid/verify-words", {"grid": grid, "size": 3})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         # CAT is valid, should not be in invalid_words
         invalid_words = [w["word"] for w in body["invalid_words"]]
@@ -571,7 +573,7 @@ class TestVerifyWords:
             [".", ".", "."],
         ]
         resp = _post_json(c, "/api/grid/verify-words", {"grid": grid, "size": 3})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         invalid_words = [w["word"] for w in body["invalid_words"]]
         assert "XYZ" in invalid_words
@@ -586,7 +588,7 @@ class TestCleanGrid:
     def test_missing_grid_field(self, client):
         c, _ = client
         resp = _post_json(c, "/api/grid/clean", {"size": 3})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_all_valid_words(self, client, mocker, tmp_path):
         """Grid with all valid words should return unchanged."""
@@ -601,7 +603,7 @@ class TestCleanGrid:
             ["B", ".", "."],
         ]
         resp = _post_json(c, "/api/grid/clean", {"grid": grid, "size": 3})
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
         # COB is valid across, CAT is valid across
         # Only report on fully filled slots
@@ -614,7 +616,7 @@ class TestCleanGrid:
             data=json.dumps(None),
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
 
 # ===================================================================
@@ -631,7 +633,7 @@ class TestPatternWithProgress:
         mock_thread = mocker.patch("backend.api.routes.threading.Thread")
 
         resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "C?T"})
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
         body = resp.get_json()
         assert body["task_id"] == "pat-1"
         assert "/api/progress/pat-1" in body["progress_url"]
@@ -640,7 +642,7 @@ class TestPatternWithProgress:
     def test_missing_pattern_returns_400(self, client):
         c, _ = client
         resp = _post_json(c, "/api/pattern/with-progress", {"wordlists": ["comprehensive"]})
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_internal_error(self, client, mocker):
         c, _ = client
@@ -649,7 +651,7 @@ class TestPatternWithProgress:
             side_effect=RuntimeError("oops"),
         )
         resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "A?B"})
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
 
 
 class TestFillWithProgressTaskIdWiring:
@@ -674,7 +676,7 @@ class TestFillWithProgressTaskIdWiring:
         pause is a silent no-op."""
         resp, mock_thread = self._start_fill(client, mocker)
 
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
         assert resp.get_json()["task_id"] == "fill-task-1"
 
         # run_cli_with_progress(task_id, cmd_args, timeout, temp_files)
@@ -691,7 +693,7 @@ class TestFillWithProgressTaskIdWiring:
         )
         resp = _post_json(c, "/api/fill/with-progress", _fill_request(wordlists=["no_such_list"]))
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         error = resp.get_json()["error"]
         assert error["code"] == "UNKNOWN_WORDLIST"
         assert "no_such_list" in error["message"]
@@ -710,7 +712,7 @@ class TestResumeTaskIdValidation:
         c, _ = client
         resp = _post_json(c, "/api/fill/with-progress", _fill_request(resume_task_id=bad_id))
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert b"resume_task_id" in resp.data
 
     def test_wellformed_resume_task_id_reaches_the_state_lookup(self, client):
@@ -718,4 +720,4 @@ class TestResumeTaskIdValidation:
         c, _ = client
         resp = _post_json(c, "/api/fill/with-progress", _fill_request(resume_task_id="resume_9f2c1a0b"))
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)

@@ -18,6 +18,7 @@ import json
 import pytest
 
 from backend.tests.integration.conftest import create_test_grid
+from backend.tests.response_diag import resp_diag
 
 
 class TestConcurrentSSEStreams:
@@ -50,7 +51,7 @@ class TestConcurrentSSEStreams:
             content_type="application/json",
         )
 
-        assert response1.status_code == 202
+        assert response1.status_code == 202, resp_diag(response1)
         task_id_1 = response1.json["task_id"]
 
         # Start second autofill immediately
@@ -69,7 +70,7 @@ class TestConcurrentSSEStreams:
             content_type="application/json",
         )
 
-        assert response2.status_code == 202
+        assert response2.status_code == 202, resp_diag(response2)
         task_id_2 = response2.json["task_id"]
 
         # Task IDs must be unique
@@ -294,7 +295,7 @@ class TestSSEResourceCleanup:
         sse_response_2 = client.get(f"/api/progress/{task_id}")
 
         # After SSE stream completes and cleanup happens, task is removed
-        assert sse_response_2.status_code == 404
+        assert sse_response_2.status_code == 404, resp_diag(sse_response_2)
 
     def test_multiple_sse_connections_to_same_task(self, client):
         """
@@ -329,8 +330,8 @@ class TestSSEResourceCleanup:
         sse_response_2 = client.get(f"/api/progress/{task_id}")
 
         # Both should succeed
-        assert sse_response_1.status_code == 200
-        assert sse_response_2.status_code == 200
+        assert sse_response_1.status_code == 200, resp_diag(sse_response_1)
+        assert sse_response_2.status_code == 200, resp_diag(sse_response_2)
 
         # Both should receive data (might be different based on timing)
         assert len(sse_response_1.data) > 0 or len(sse_response_2.data) > 0
@@ -373,7 +374,7 @@ class TestSSERaceConditions:
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Should succeed (might receive updates or wait for them)
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)
 
     def test_rapid_task_creation(self, client):
         """
@@ -399,7 +400,7 @@ class TestSSERaceConditions:
                 content_type="application/json",
             )
 
-            assert response.status_code == 202
+            assert response.status_code == 202, resp_diag(response)
             task_ids.append(response.json["task_id"])
 
         # All task IDs should be unique

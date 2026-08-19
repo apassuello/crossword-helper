@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.core.state_paths import PAUSE_FLAG_DIR
+from backend.tests.response_diag import resp_diag
 
 
 @pytest.fixture
@@ -108,7 +109,7 @@ class TestPauseAutofill:
         resp = client.post("/api/fill/pause/task_abc")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
         assert "task_abc" in data["message"]
         assert data["task_id"] == "task_abc"
@@ -137,7 +138,7 @@ class TestPauseAutofill:
         resp = client.post("/api/fill/pause/no_such_task")
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "error" in data
         mock_pc.request_pause.assert_not_called()
 
@@ -151,7 +152,7 @@ class TestPauseAutofill:
         data = resp.get_json()
 
         # Errors must come back as JSON, never an HTML debugger page
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
         assert resp.content_type.startswith("application/json")
         assert data["error"]["code"] == "INTERNAL_ERROR"
 
@@ -177,7 +178,7 @@ class TestCancelAutofill:
         resp = client.post("/api/fill/cancel/task_c1")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
         assert data["task_id"] == "task_c1"
         assert data["state_saved"] is False
@@ -216,7 +217,7 @@ class TestCancelAutofill:
         resp = client.post("/api/fill/cancel/no_such_task")
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "error" in data
         mock_cleanup.assert_not_called()
 
@@ -230,7 +231,7 @@ class TestCancelAutofill:
         data = resp.get_json()
 
         # Errors must come back as JSON, never an HTML debugger page
-        assert resp.status_code == 500
+        assert resp.status_code == 500, resp_diag(resp)
         assert resp.content_type.startswith("application/json")
         assert data["error"]["code"] == "INTERNAL_ERROR"
 
@@ -252,7 +253,7 @@ class TestResumeAutofill:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
         assert data["original_task_id"] == "task_r1"
         assert data["new_task_id"].startswith("resume_")
@@ -275,7 +276,7 @@ class TestResumeAutofill:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         kwargs = mock_adapter.fill_with_resume.call_args.kwargs
         # The state file handed to the CLI lives in the CLI's own store
         assert kwargs["state_file_path"].startswith("/tmp/crossword_states/")
@@ -302,7 +303,7 @@ class TestResumeAutofill:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
         edit_merger.merge_edits.assert_called_once()
 
@@ -335,7 +336,7 @@ class TestResumeAutofill:
             json={"task_id": "task_fmt", "edited_grid": edited},
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         merged_grid_dict = edit_merger.merge_edits.call_args.kwargs["edited_grid_dict"]
         assert merged_grid_dict["grid"][0] == ["A", "Q", "#"]  # dict isBlack honored
         assert merged_grid_dict["grid"][1] == ["C", ".", "#"]  # black inherited
@@ -344,7 +345,7 @@ class TestResumeAutofill:
         resp = client.post("/api/fill/resume", json={"options": {}})
         data = resp.get_json()
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert "task_id" in data["error"]
 
     def test_resume_empty_body_returns_400(self, client, mocker):
@@ -359,7 +360,7 @@ class TestResumeAutofill:
             content_type="application/json",
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
     def test_resume_state_not_found_returns_404(self, client, mock_state_manager):
         mock_state_manager.load_csp_state.side_effect = FileNotFoundError("gone")
@@ -367,7 +368,7 @@ class TestResumeAutofill:
         resp = client.post("/api/fill/resume", json={"task_id": "task_missing"})
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "not found" in data["error"].lower()
 
     def test_resume_unsolvable_edits_returns_409(self, client, mock_state_manager, edit_merger, mocker):
@@ -385,7 +386,7 @@ class TestResumeAutofill:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 409
+        assert resp.status_code == 409, resp_diag(resp)
         assert "unsolvable" in data["error"].lower()
 
     def test_resume_saves_with_correct_metadata(self, client, mock_state_manager, mock_adapter):
@@ -398,7 +399,7 @@ class TestResumeAutofill:
             json={"task_id": "task_r4", "options": {"timeout": 300}},
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         call_kwargs = mock_state_manager.save_csp_state.call_args
         saved_meta = call_kwargs.kwargs.get("metadata") or call_kwargs[1].get("metadata")
         assert saved_meta["resumed_from"] == "task_r4"
@@ -412,7 +413,7 @@ class TestResumeAutofill:
         resp = client.post("/api/fill/resume", json={"task_id": "task_r5"})
         resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         call_kwargs = mock_state_manager.save_csp_state.call_args
         saved_meta = call_kwargs.kwargs.get("metadata") or call_kwargs[1].get("metadata")
         assert saved_meta["resume_options"] == {}
@@ -440,7 +441,7 @@ class TestResumeOptionShapes:
         # The regression itself: before #24 this silently became 300.
         resp = self._post(client, mock_state_manager, {"timeout": 30})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
 
     def test_nested_options_still_work(self, client, mock_state_manager, mock_adapter):
@@ -448,13 +449,13 @@ class TestResumeOptionShapes:
         # test_pause_resume_workflow.py sends this shape.
         resp = self._post(client, mock_state_manager, {"options": {"timeout": 30}})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
 
     def test_top_level_wins_when_both_are_given(self, client, mock_state_manager, mock_adapter):
         resp = self._post(client, mock_state_manager, {"timeout": 30, "options": {"timeout": 300}})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 30
 
     def test_algorithm_and_min_score_are_accepted_top_level_too(self, client, mock_state_manager, mock_adapter):
@@ -462,7 +463,7 @@ class TestResumeOptionShapes:
         # traps of the identical class inside the same route.
         resp = self._post(client, mock_state_manager, {"algorithm": "beam", "min_score": 55})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         kwargs = mock_adapter.fill_with_resume.call_args.kwargs
         assert kwargs["algorithm"] == "beam"
         assert kwargs["min_score"] == 55
@@ -475,7 +476,7 @@ class TestResumeOptionShapes:
 
         resp = self._post(client, mock_state_manager, {"wordlists": ["comprehensive"]})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         resolve.assert_called_once_with(["comprehensive"])
 
     def test_unknown_top_level_key_is_logged_and_ignored_not_rejected(self, client, mock_state_manager, mock_adapter, caplog):
@@ -485,7 +486,7 @@ class TestResumeOptionShapes:
         with caplog.at_level(logging.WARNING, logger="backend.api.pause_resume_routes"):
             resp = self._post(client, mock_state_manager, {"timeuot": 30})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert "timeuot" in caplog.text
         # The typo must not be smuggled into the options dict.
         assert mock_adapter.fill_with_resume.call_args.kwargs["timeout_seconds"] == 300
@@ -508,7 +509,7 @@ class TestGetSavedState:
         resp = client.get("/api/fill/state/task_s1")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["task_id"] == "task_s1"
         assert "grid_preview" in data
 
@@ -518,7 +519,7 @@ class TestGetSavedState:
         resp = client.get("/api/fill/state/task_missing")
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "not found" in data["error"].lower()
 
     def test_state_includes_grid_preview(self, client, mock_state_manager, mock_grid):
@@ -532,7 +533,7 @@ class TestGetSavedState:
         resp = client.get("/api/fill/state/task_gp")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["grid_preview"] == grid_data
 
 
@@ -548,7 +549,7 @@ class TestDeleteSavedState:
         resp = client.delete("/api/fill/state/task_d1")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
 
     def test_delete_missing_returns_404(self, client, mock_state_manager):
@@ -557,7 +558,7 @@ class TestDeleteSavedState:
         resp = client.delete("/api/fill/state/task_gone")
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "not found" in data["error"].lower()
 
     def test_delete_message_includes_task_id(self, client, mock_state_manager):
@@ -585,7 +586,7 @@ class TestListSavedStates:
         resp = client.get("/api/fill/states")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["count"] == 2
         assert len(data["states"]) == 2
 
@@ -595,7 +596,7 @@ class TestListSavedStates:
         resp = client.get("/api/fill/states?max_age_days=3")
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["count"] == 0
         mock_state_manager.list_states.assert_called_once_with(max_age_days=3)
 
@@ -628,7 +629,7 @@ class TestCleanupOldStates:
         resp = client.post("/api/fill/states/cleanup", json={"max_age_days": 14})
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["success"] is True
         assert data["deleted_count"] == 5
         mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=14)
@@ -639,7 +640,7 @@ class TestCleanupOldStates:
         resp = client.post("/api/fill/states/cleanup", json={})
         resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=7)
 
     def test_cleanup_no_body_defaults_to_7(self, client, mock_state_manager):
@@ -648,7 +649,7 @@ class TestCleanupOldStates:
         # Send valid empty JSON object (not empty string)
         resp = client.post("/api/fill/states/cleanup", json={})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         mock_state_manager.cleanup_old_states.assert_called_once_with(max_age_days=7)
 
     def test_cleanup_message_includes_count(self, client, mock_state_manager):
@@ -689,7 +690,7 @@ class TestEditSummary:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp_diag(resp)
         assert data["filled_count"] == 3
         assert data["new_words"] == ["CAT"]
 
@@ -700,7 +701,7 @@ class TestEditSummary:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert "task_id" in data["error"]
 
     def test_missing_edited_grid_returns_400(self, client):
@@ -710,7 +711,7 @@ class TestEditSummary:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
         assert "edited_grid" in data["error"]
 
     def test_state_not_found_returns_404(self, client, mock_state_manager):
@@ -722,7 +723,7 @@ class TestEditSummary:
         )
         data = resp.get_json()
 
-        assert resp.status_code == 404
+        assert resp.status_code == 404, resp_diag(resp)
         assert "not found" in data["error"].lower()
 
     def test_empty_body_returns_400(self, client, mocker):
@@ -737,7 +738,7 @@ class TestEditSummary:
             content_type="application/json",
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 400, resp_diag(resp)
 
 
 class TestTaskIdValidation:
