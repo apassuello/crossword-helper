@@ -188,6 +188,23 @@ class HybridAutofill:
 
         # Phase-2 pause: return it directly so the slot-count best-of compare below
         # doesn't mask the paused flag.
+        #
+        # None is repair's "paused before restart 0" signal -- its restart-loop pause
+        # hook breaks with best_result never populated. cli.py's own None-guard
+        # documents that convention, but it sits BELOW this call: dereferencing
+        # repair_result here raised AttributeError and the CLI exited 1 (CI run
+        # 32241543802). Reachable whenever the beam phase ends on its wall-clock cap
+        # before observing a pause, leaving the flag set when phase 2 starts -- which
+        # is machine-speed dependent, so it never fired locally.
+        #
+        # Report the pause on the beam result rather than passing None down: the CLI's
+        # None fallback resets to the pre-fill grid, discarding every slot phase 1
+        # filled.
+        if repair_result is None:
+            beam_result.paused = True
+            beam_result.time_elapsed = time.time() - overall_start
+            return beam_result
+
         if repair_result.paused:
             return repair_result
 
