@@ -14,6 +14,7 @@ import time
 import pytest
 
 from backend.app import create_app
+from backend.tests.response_diag import resp_diag
 from cli.src.core.grid import Grid
 from cli.src.fill.state_manager import CSPState, StateManager
 
@@ -163,7 +164,7 @@ class TestPauseResumeAPI:
         try:
             response = client.post(f"/api/fill/pause/{task_id}")
 
-            assert response.status_code == 200
+            assert response.status_code == 200, resp_diag(response)
             data = json.loads(response.data)
 
             assert data["success"] is True
@@ -177,7 +178,7 @@ class TestPauseResumeAPI:
         """Pausing a task that is not running returns a JSON 404."""
         response = client.post("/api/fill/pause/definitely_not_running_task")
 
-        assert response.status_code == 404
+        assert response.status_code == 404, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 
@@ -192,7 +193,7 @@ class TestPauseResumeAPI:
 
         response = client.get(f"/api/fill/state/{task_id}")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert data["task_id"] == task_id
@@ -211,7 +212,7 @@ class TestPauseResumeAPI:
 
         response = client.get("/api/fill/state/nonexistent")
 
-        assert response.status_code == 404
+        assert response.status_code == 404, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 
@@ -225,18 +226,18 @@ class TestPauseResumeAPI:
 
         # Verify state exists
         response = client.get(f"/api/fill/state/{task_id}")
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
 
         # Delete state
         response = client.delete(f"/api/fill/state/{task_id}")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert data["success"] is True
 
         # Verify state no longer exists
         response = client.get(f"/api/fill/state/{task_id}")
-        assert response.status_code == 404
+        assert response.status_code == 404, resp_diag(response)
 
     def test_list_saved_states(self, client, sample_state, monkeypatch):
         """Test listing all saved states."""
@@ -248,7 +249,7 @@ class TestPauseResumeAPI:
 
         response = client.get("/api/fill/states")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert "states" in data
@@ -270,7 +271,7 @@ class TestPauseResumeAPI:
         # List states newer than 7 days
         response = client.get("/api/fill/states?max_age_days=7")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert "states" in data
 
@@ -297,7 +298,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert data["success"] is True
@@ -327,7 +328,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert data["success"] is True
@@ -365,7 +366,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert data["success"] is True
@@ -379,7 +380,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 
@@ -395,7 +396,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 404
+        assert response.status_code == 404, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 
@@ -420,7 +421,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
         assert "filled_count" in data
@@ -442,7 +443,7 @@ class TestPauseResumeAPI:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 

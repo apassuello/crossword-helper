@@ -22,6 +22,7 @@ import pytest
 
 from backend.core.state_paths import PAUSE_FLAG_DIR
 from backend.tests.integration.conftest import create_test_grid
+from backend.tests.response_diag import resp_diag
 
 pytestmark = pytest.mark.slow
 
@@ -63,14 +64,14 @@ def test_pause_edit_resume_roundtrip(client):
                 "min_score": 10,
             },
         )
-        assert resp.status_code == 202
+        assert resp.status_code == 202, resp_diag(resp)
         task_id = resp.get_json()["task_id"]
         assert task_id
 
         # 2. Let it get into backtracking, then request pause.
         time.sleep(3)
         p = client.post(f"/api/fill/pause/{task_id}")
-        assert p.status_code == 200
+        assert p.status_code == 200, resp_diag(p)
         assert p.get_json()["success"] is True
 
         # 3. Saved state must appear (where the route reads it) within the 10s F11 deadline.
@@ -92,7 +93,7 @@ def test_pause_edit_resume_roundtrip(client):
             "/api/fill/resume",
             json={"task_id": task_id, "edited_grid": state["grid_preview"], "options": {"timeout": 3}},
         )
-        assert r.status_code == 200
+        assert r.status_code == 200, resp_diag(r)
         new_task_id = r.get_json()["new_task_id"]
         assert new_task_id.startswith("resume_")
 
@@ -109,7 +110,7 @@ def test_pause_edit_resume_roundtrip(client):
                 "resume_task_id": new_task_id,
             },
         )
-        assert resp2.status_code == 202
+        assert resp2.status_code == 202, resp_diag(resp2)
         assert resp2.get_json()["task_id"]
     finally:
         # Teardown: stop the orphaned resume subprocess + remove state/flag files from the
@@ -127,7 +128,7 @@ def test_pause_edit_resume_roundtrip(client):
 def test_pattern_through_flask(client):
     """Real pattern search through Flask -> CLI subprocess, verbatim CLI JSON."""
     resp = client.post("/api/pattern", json={"pattern": "C?T", "wordlists": ["comprehensive"]})
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp_diag(resp)
     data = resp.get_json()
     assert data["results"]
     first = data["results"][0]

@@ -20,6 +20,7 @@ import time
 import pytest
 
 from backend.tests.integration.conftest import create_test_grid
+from backend.tests.response_diag import resp_diag
 
 
 class TestSSECLIErrorHandling:
@@ -52,7 +53,7 @@ class TestSSECLIErrorHandling:
         )
 
         # Unknown wordlists are rejected before a task is created
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         error = response.json["error"]
         assert error["code"] == "UNKNOWN_WORDLIST"
         assert "nonexistent_wordlist_xyz" in error["message"]
@@ -131,7 +132,7 @@ class TestSSECLIErrorHandling:
             return  # Test passes - validation is working correctly
 
         # If accepted, verify SSE error handling
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
         time.sleep(3)
 
@@ -188,7 +189,7 @@ class TestSSETimeoutHandling:
             assert "error" in response.json or "message" in response.json
             return  # Test passes - validation is working correctly
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
         time.sleep(13)
 
@@ -236,7 +237,7 @@ class TestSSETimeoutHandling:
             assert "error" in response.json or "message" in response.json
             return  # Test passes - validation is working correctly
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Wait for timeout + buffer
@@ -280,7 +281,7 @@ class TestSSEValidationErrors:
         )
 
         # Should reject at validation
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         assert "error" in response.json or "message" in response.json
 
     def test_invalid_parameter_types(self, client):
@@ -311,7 +312,7 @@ class TestSSEValidationErrors:
         )
 
         # Should reject
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_invalid_algorithm_name(self, client):
         """
@@ -385,11 +386,11 @@ class TestSSEClientDisconnection:
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Should not raise errors
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)
 
         # Subsequent requests should still work (idempotent)
         sse_response_2 = client.get(f"/api/progress/{task_id}")
-        assert sse_response_2.status_code == 200
+        assert sse_response_2.status_code == 200, resp_diag(sse_response_2)
 
 
 class TestSSEEdgeCases:
@@ -530,7 +531,7 @@ class TestSSEEdgeCases:
             return  # Test passes - validation is working correctly
 
         # If accepted, verify SSE handling
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         time.sleep(7)
@@ -627,7 +628,7 @@ class TestSSEUserFriendlyMessages:
             return  # Test passes - validation error message is good
 
         # If accepted, verify SSE error message quality
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
         time.sleep(2)
 

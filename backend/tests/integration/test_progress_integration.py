@@ -12,6 +12,7 @@ import pytest
 
 from backend.app import create_app
 from backend.tests.fixtures import EMPTY_3X3_FRONTEND, PATTERN_3X3_FRONTEND
+from backend.tests.response_diag import resp_diag
 
 
 @pytest.fixture
@@ -81,7 +82,7 @@ class TestFillWithProgressEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
 
         data = json.loads(response.data)
         task_id = data["task_id"]
@@ -126,7 +127,7 @@ class TestFillWithProgressEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
 
         # Response should be immediate (not wait for fill to complete)
         # This verifies it's running in background
@@ -352,7 +353,7 @@ class TestProgressConcurrency:
                 content_type="application/json",
             )
 
-            assert response.status_code == 202
+            assert response.status_code == 202, resp_diag(response)
             data = json.loads(response.data)
             task_ids.append(data["task_id"])
 
@@ -384,7 +385,7 @@ class TestProgressCleanup:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         data = json.loads(response.data)
         task_id = data["task_id"]
 

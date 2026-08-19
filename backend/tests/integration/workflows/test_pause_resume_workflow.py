@@ -15,6 +15,8 @@ import time
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 def create_empty_grid(size=11):
     return [[{"letter": "", "isBlack": False} for _ in range(size)] for _ in range(size)]
@@ -66,14 +68,14 @@ class TestPauseResumeWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Step 2: Pause after 3s
         time.sleep(3)
 
         response = client.post(f"/api/fill/pause/{task_id}")
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
 
         # Step 3: Get saved state.
         #
@@ -107,7 +109,7 @@ class TestPauseResumeWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         summary = response.json
         assert "filled_count" in summary
 
@@ -134,7 +136,7 @@ class TestPauseResumeWorkflow:
         # 200, not 202: resume is synchronous and reports the completed run.
         # No branch (bench, main, or base) ever returned 202 here — this block was
         # never reachable, so its assertions were never checked against the route.
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert response.json["success"] is True
         assert response.json["new_task_id"]
         assert response.json["original_task_id"] == task_id
@@ -178,7 +180,7 @@ class TestPauseResumeWorkflow:
         time.sleep(2)
         response = client.post(f"/api/fill/cancel/{task_id}")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert response.json.get("success") is True
         # Cancel kills the subprocess without a checkpoint — it must not
         # claim a resumable state was saved (it used to hardcode true)

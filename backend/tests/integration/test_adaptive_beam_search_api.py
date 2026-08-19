@@ -13,6 +13,8 @@ import json
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 def create_21x21_grid_with_theme_words():
     """
@@ -122,7 +124,7 @@ def test_adaptive_mode_without_beam_search(client):
         content_type="application/json",
     )
 
-    assert response.status_code == 202
+    assert response.status_code == 202, resp_diag(response)
     data = response.json
     assert "task_id" in data
 
@@ -151,7 +153,7 @@ def test_beam_search_without_adaptive_mode(client):
         content_type="application/json",
     )
 
-    assert response.status_code == 202
+    assert response.status_code == 202, resp_diag(response)
     data = response.json
     assert "task_id" in data
 
@@ -191,7 +193,7 @@ def test_cli_command_construction(client, mocker):
         content_type="application/json",
     )
 
-    assert response.status_code == 202
+    assert response.status_code == 202, resp_diag(response)
 
     # Verify command includes:
     # - fill

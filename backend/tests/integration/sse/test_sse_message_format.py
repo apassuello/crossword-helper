@@ -19,6 +19,7 @@ import json
 import pytest
 
 from backend.tests.integration.conftest import create_test_grid
+from backend.tests.response_diag import resp_diag
 
 
 class TestSSEMessageFormatCompliance:
@@ -55,14 +56,14 @@ class TestSSEMessageFormatCompliance:
             # Validation rejected - skip header test (can't test headers without task)
             pytest.skip("Validation rejected parameters - cannot test SSE headers")
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Connect to SSE stream
         sse_response = client.get(f"/api/progress/{task_id}")
 
         # Verify headers
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)
         # Content-Type may include charset parameter
         assert "text/event-stream" in sse_response.headers["Content-Type"]
         assert sse_response.headers["Cache-Control"] == "no-cache"
@@ -91,7 +92,7 @@ class TestSSEMessageFormatCompliance:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Get SSE stream (will collect all messages until stream closes)
@@ -289,7 +290,7 @@ class TestSSEErrorHandling:
 
         # Unknown wordlists are now rejected upfront with a clear JSON error
         # (they used to silently start a task that failed mid-stream)
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         error = response.json["error"]
         assert error["code"] == "UNKNOWN_WORDLIST"
         assert "nonexistent_wordlist" in error["message"]
@@ -326,7 +327,7 @@ class TestSSEErrorHandling:
             assert "error" in response.json or "message" in response.json
             return  # Test passes - validation is working correctly
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Get SSE stream (blocks synchronously until stream ends — no sleep needed)

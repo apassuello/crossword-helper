@@ -9,6 +9,7 @@ import json
 import pytest
 
 from backend.app import create_app
+from backend.tests.response_diag import resp_diag
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ class TestHealthEndpoint:
     def test_health_check(self, client):
         """Test health check returns 200."""
         response = client.get("/api/health")
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
 
         data = json.loads(response.data)
         assert data["status"] == "healthy"
@@ -50,7 +51,7 @@ class TestPatternEndpoint:
         """Test pattern search with valid pattern."""
         response = client.post("/api/pattern", json={"pattern": "C?T"}, content_type="application/json")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
 
         data = json.loads(response.data)
         assert "results" in data
@@ -61,13 +62,13 @@ class TestPatternEndpoint:
         """Test pattern search with no request body."""
         response = client.post("/api/pattern", data="", content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_pattern_search_missing_pattern(self, client):
         """Test pattern search without pattern field."""
         response = client.post("/api/pattern", json={}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         data = json.loads(response.data)
         assert "error" in data
 
@@ -75,7 +76,7 @@ class TestPatternEndpoint:
         """Test pattern search with non-string pattern."""
         response = client.post("/api/pattern", json={"pattern": 123}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_pattern_search_with_wordlists(self, client):
         """Test pattern search with a real wordlist."""
@@ -85,7 +86,7 @@ class TestPatternEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert data["meta"]["sources_searched"] == ["comprehensive"]
 
@@ -97,7 +98,7 @@ class TestPatternEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_pattern_search_with_max_results(self, client):
         """Test pattern search with max_results parameter."""
@@ -107,7 +108,7 @@ class TestPatternEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert len(data["results"]) <= 5
 
@@ -119,7 +120,7 @@ class TestPatternEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_pattern_search_max_results_out_of_range(self, client):
         """Test pattern search with max_results out of range."""
@@ -129,7 +130,7 @@ class TestPatternEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_pattern_search_result_structure(self, client):
         """Test that pattern search results have correct structure."""
@@ -169,7 +170,7 @@ class TestNumberEndpoint:
 
         response = client.post("/api/number", json=grid_data, content_type="application/json")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert "numbering" in data
 
@@ -177,19 +178,19 @@ class TestNumberEndpoint:
         """Test grid numbering with no request body."""
         response = client.post("/api/number", data="", content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_missing_size(self, client):
         """Test grid numbering without size field."""
         response = client.post("/api/number", json={"grid": [[]]}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_missing_grid(self, client):
         """Test grid numbering without grid field."""
         response = client.post("/api/number", json={"size": 11}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_invalid_size(self, client):
         """Test grid numbering with invalid size (Phase 3: must be 3-50)."""
@@ -199,7 +200,7 @@ class TestNumberEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_non_integer_size(self, client):
         """Test grid numbering with non-integer size."""
@@ -209,7 +210,7 @@ class TestNumberEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_non_array_grid(self, client):
         """Test grid numbering with non-array grid."""
@@ -219,7 +220,7 @@ class TestNumberEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_non_2d_array(self, client):
         """Test grid numbering with non-2D array."""
@@ -229,7 +230,7 @@ class TestNumberEndpoint:
             content_type="application/json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_number_grid_with_user_numbering(self, client):
         """Test grid numbering validation with user numbering."""
@@ -241,7 +242,7 @@ class TestNumberEndpoint:
 
         response = client.post("/api/number", json=grid_data, content_type="application/json")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert "validation" in data or "numbering" in data
 
@@ -253,7 +254,7 @@ class TestNormalizeEndpoint:
         """Test normalization with valid text."""
         response = client.post("/api/normalize", json={"text": "résumé"}, content_type="application/json")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         assert "normalized" in data
         assert "original" in data
@@ -262,43 +263,43 @@ class TestNormalizeEndpoint:
         """Test normalization with no request body."""
         response = client.post("/api/normalize", data="", content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_missing_text(self, client):
         """Test normalization without text field."""
         response = client.post("/api/normalize", json={}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_non_string_text(self, client):
         """Test normalization with non-string text."""
         response = client.post("/api/normalize", json={"text": 123}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_empty_text(self, client):
         """Test normalization with empty text."""
         response = client.post("/api/normalize", json={"text": ""}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_whitespace_only(self, client):
         """Test normalization with whitespace-only text."""
         response = client.post("/api/normalize", json={"text": "   "}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_too_long(self, client):
         """Test normalization with text exceeding length limit."""
         response = client.post("/api/normalize", json={"text": "a" * 101}, content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_normalize_accented_characters(self, client):
         """Test normalization handles accented characters."""
         response = client.post("/api/normalize", json={"text": "café"}, content_type="application/json")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # Should normalize to unaccented form
         assert "e" in data["normalized"].lower() or "é" in data["normalized"].lower()
@@ -311,7 +312,7 @@ class TestErrorHandling:
         """Test that invalid JSON returns 400."""
         response = client.post("/api/pattern", data="invalid json", content_type="application/json")
 
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_wrong_content_type(self, client):
         """Test that non-JSON content type is handled."""
@@ -328,13 +329,13 @@ class TestErrorHandling:
         """Test that wrong HTTP method returns 405."""
         response = client.get("/api/pattern")  # Should be POST
 
-        assert response.status_code == 405
+        assert response.status_code == 405, resp_diag(response)
 
     def test_nonexistent_endpoint(self, client):
         """Test that nonexistent endpoint returns 404."""
         response = client.get("/api/nonexistent")
 
-        assert response.status_code == 404
+        assert response.status_code == 404, resp_diag(response)
 
 
 class TestCORS:
@@ -349,7 +350,7 @@ class TestCORS:
         # If CORS is not configured, this test can be skipped
         response.headers
         # Just verify response is valid
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
 
 
 class TestInputSanitization:
@@ -388,7 +389,7 @@ class TestInputSanitization:
         )
 
         # Should reject with error, not crash
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
 
 class TestNormalizeConventionParity:
@@ -398,18 +399,18 @@ class TestNormalizeConventionParity:
 
     def test_two_word_name(self, client):
         response = client.post("/api/normalize", json={"text": "Tina Fey"})
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert json.loads(response.data)["normalized"] == "TINAFEY"
 
     def test_hyphenated(self, client):
         response = client.post("/api/normalize", json={"text": "self-aware"})
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert json.loads(response.data)["normalized"] == "SELFAWARE"
 
     def test_apostrophe_with_space(self, client):
         """The apostrophe rule used to keep the interior space."""
         response = client.post("/api/normalize", json={"text": "don't stop"})
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert json.loads(response.data)["normalized"] == "DONTSTOP"
 
 
@@ -422,7 +423,7 @@ class TestPatternWordlistResolution:
             "/api/pattern",
             json={"pattern": "C?T", "wordlists": ["comprehensive.txt"]},
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         sources = data["meta"]["sources_searched"]
         assert "builtin" not in sources
@@ -437,7 +438,7 @@ class TestPatternWordlistResolution:
             "/api/pattern",
             json={"pattern": "C?T", "wordlists": ["definitely_not_a_list"]},
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         error = json.loads(response.data)["error"]
         assert error["code"] == "UNKNOWN_WORDLIST"
         assert "definitely_not_a_list" in error["message"]
@@ -462,7 +463,7 @@ class TestVerifyWordsWordlistSelection:
             "/api/grid/verify-words",
             json={"size": 5, "grid": grid, "wordlists": ["core/crosswordese"]},
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # Selected list only: must be crosswordese's size, not the full merge
         # of every non-archive/non-custom list under data/wordlists/ (see
@@ -475,7 +476,7 @@ class TestVerifyWordsWordlistSelection:
             "/api/grid/verify-words",
             json={"size": 5, "grid": grid, "wordlists": ["nope_not_here"]},
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         assert json.loads(response.data)["error"]["code"] == "UNKNOWN_WORDLIST"
 
     def test_verify_words_default_is_merged(self, client):
@@ -484,7 +485,7 @@ class TestVerifyWordsWordlistSelection:
             "/api/grid/verify-words",
             json={"size": 5, "grid": grid},
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # No selection: falls back to the merged dictionary (see assertion
         # below for the size threshold this enforces)
@@ -498,7 +499,7 @@ class TestVerifyWordsWordlistSelection:
             "/api/grid/clean",
             json={"size": 5, "grid": grid, "wordlists": ["core/crosswordese"]},
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # ETUI is valid in the selected list, so nothing should be removed
         assert data["removed_count"] == 0
@@ -509,7 +510,7 @@ class TestVerifyWordsWordlistSelection:
             "/api/grid/clean",
             json={"size": 5, "grid": grid, "wordlists": ["nope_not_here"]},
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         assert json.loads(response.data)["error"]["code"] == "UNKNOWN_WORDLIST"
 
 
@@ -522,7 +523,7 @@ class TestBuiltinWordlistProtection:
             "/api/wordlists/comprehensive",
             json={"add_words": ["ZZZZQQQ"]},
         )
-        assert response.status_code == 403
+        assert response.status_code == 403, resp_diag(response)
         data = json.loads(response.data)
         assert "built-in" in data["error"]
 
@@ -531,11 +532,11 @@ class TestBuiltinWordlistProtection:
             "/api/wordlists/core/crosswordese",
             json={"words": ["ONLYME"]},
         )
-        assert response.status_code == 403
+        assert response.status_code == 403, resp_diag(response)
 
     def test_delete_builtin_refused(self, client):
         response = client.delete("/api/wordlists/comprehensive")
-        assert response.status_code == 403
+        assert response.status_code == 403, resp_diag(response)
         assert "built-in" in json.loads(response.data)["error"]
 
     def test_post_overwrite_builtin_refused(self, client):
@@ -543,22 +544,22 @@ class TestBuiltinWordlistProtection:
             "/api/wordlists/comprehensive",
             json={"words": ["HIJACKED"]},
         )
-        assert response.status_code == 403
+        assert response.status_code == 403, resp_diag(response)
 
     def test_custom_list_lifecycle_still_editable(self, client):
         """Custom lists remain fully editable (create, update, delete)."""
         name = "custom/test_protection_tmp"
 
         create = client.post(f"/api/wordlists/{name}", json={"words": ["ALPHA", "BETA"]})
-        assert create.status_code == 201
+        assert create.status_code == 201, resp_diag(create)
 
         try:
             update = client.put(f"/api/wordlists/{name}", json={"add_words": ["GAMMA"]})
-            assert update.status_code == 200
+            assert update.status_code == 200, resp_diag(update)
 
             get = client.get(f"/api/wordlists/{name}")
-            assert get.status_code == 200
+            assert get.status_code == 200, resp_diag(get)
             assert "GAMMA" in json.loads(get.data)["words"]
         finally:
             delete = client.delete(f"/api/wordlists/{name}")
-            assert delete.status_code == 200
+            assert delete.status_code == 200, resp_diag(delete)

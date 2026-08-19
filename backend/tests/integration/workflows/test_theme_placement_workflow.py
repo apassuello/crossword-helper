@@ -13,6 +13,8 @@ import json
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 pytestmark = pytest.mark.slow
 
 
@@ -40,7 +42,7 @@ class TestThemePlacementWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         theme_words = response.json.get("words", [])
         assert "BIRTHDAY" in theme_words
 
@@ -51,7 +53,7 @@ class TestThemePlacementWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         suggestions = response.json.get("suggestions", [])
         assert len(suggestions) > 0
 
@@ -76,7 +78,7 @@ class TestThemePlacementWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         assert response.json["applied"]
         modified_grid = response.json["grid"]
 
@@ -119,7 +121,7 @@ class TestThemePlacementWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Get result
@@ -127,4 +129,4 @@ class TestThemePlacementWorkflow:
         sse_response = client.get(f"/api/progress/{task_id}")
         # Theme word should be unchanged in result
         # (This would require parsing SSE stream for final grid)
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)

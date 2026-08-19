@@ -13,6 +13,8 @@ import json
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 def create_difficult_grid():
     """Create grid with constraints that make filling difficult."""
@@ -57,13 +59,13 @@ class TestAdaptiveWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
         task_id = response.json["task_id"]
 
         # Get result
         # Note: client.get() on SSE blocks synchronously until stream ends — no sleep needed
         sse_response = client.get(f"/api/progress/{task_id}")
-        assert sse_response.status_code == 200
+        assert sse_response.status_code == 200, resp_diag(sse_response)
 
         # Parse SSE stream for completion
         data_str = sse_response.data.decode("utf-8")
@@ -95,7 +97,7 @@ class TestAdaptiveWorkflow:
             content_type="application/json",
         )
 
-        assert response.status_code == 202
+        assert response.status_code == 202, resp_diag(response)
 
     @pytest.mark.slow
     def test_adaptive_vs_non_adaptive_comparison(self, client):
@@ -149,5 +151,5 @@ class TestAdaptiveWorkflow:
         sse1 = client.get(f"/api/progress/{task_id_1}")
         sse2 = client.get(f"/api/progress/{task_id_2}")
 
-        assert sse1.status_code == 200
-        assert sse2.status_code == 200
+        assert sse1.status_code == 200, resp_diag(sse1)
+        assert sse2.status_code == 200, resp_diag(sse2)

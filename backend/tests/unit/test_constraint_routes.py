@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backend.app import create_app
+from backend.tests.response_diag import resp_diag
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ class TestConstraintsEndpoint:
                 },
             )
 
-            assert response.status_code == 200
+            assert response.status_code == 200, resp_diag(response)
             data = response.get_json()
             assert "constraints" in data
             assert "summary" in data
@@ -46,12 +47,12 @@ class TestConstraintsEndpoint:
     def test_post_constraints_missing_grid_returns_400(self, client):
         """POST /api/constraints without grid returns 400."""
         response = client.post("/api/constraints", json={"wordlists": ["comprehensive"]})
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_post_constraints_empty_body_returns_400(self, client):
         """POST /api/constraints with empty body returns 400."""
         response = client.post("/api/constraints", data="", content_type="application/json")
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_post_constraints_unknown_wordlist_returns_400(self, client):
         """POST /api/constraints with unresolvable wordlist returns 400."""
@@ -68,7 +69,7 @@ class TestConstraintsEndpoint:
                     "wordlists": ["nonexistent_xyzzy"],
                 },
             )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
 
 class TestImpactEndpoint:
@@ -97,7 +98,7 @@ class TestImpactEndpoint:
                 },
             )
 
-            assert response.status_code == 200
+            assert response.status_code == 200, resp_diag(response)
             data = response.get_json()
             assert "impacts" in data
 
@@ -110,7 +111,7 @@ class TestImpactEndpoint:
                 "slot": {"row": 0, "col": 0, "direction": "across", "length": 5},
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_post_impact_missing_slot_returns_400(self, client):
         """POST /api/constraints/impact without slot returns 400."""
@@ -121,7 +122,7 @@ class TestImpactEndpoint:
                 "word": "CATCH",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
     def test_post_impact_missing_slot_key_returns_400(self, client):
         """POST /api/constraints/impact with incomplete slot returns 400."""
@@ -133,7 +134,7 @@ class TestImpactEndpoint:
                 "slot": {"row": 0, "col": 0, "direction": "across"},  # missing length
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
 
 
 class TestConstraintsGridFormats:
@@ -160,7 +161,7 @@ class TestConstraintsGridFormats:
                 json={"grid": grid, "wordlists": ["comprehensive"]},
             )
 
-            assert response.status_code == 200
+            assert response.status_code == 200, resp_diag(response)
             sent_grid = mock_adapter.analyze_constraints.call_args[0][0]["grid"]
             assert sent_grid[0][0] == "C"
             assert sent_grid[0][1] == "#"
@@ -172,7 +173,7 @@ class TestConstraintsGridFormats:
             "/api/constraints",
             json={"grid": [[12345]], "wordlists": ["comprehensive"]},
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         assert "error" in response.get_json()
 
     def test_cli_failure_does_not_leak_command_line(self, client):
@@ -194,7 +195,7 @@ class TestConstraintsGridFormats:
                 },
             )
 
-            assert response.status_code == 500
+            assert response.status_code == 500, resp_diag(response)
             error_text = response.get_data(as_text=True)
             assert "crossword" not in error_text
             assert "/tmp/" not in error_text
@@ -216,4 +217,4 @@ class TestConstraintsGridFormats:
                 },
             )
 
-            assert response.status_code == 504
+            assert response.status_code == 504, resp_diag(response)

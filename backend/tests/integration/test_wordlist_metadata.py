@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 class TestWordlistMetadataStructure:
     """Unit tests for wordlist metadata structure and completeness."""
@@ -137,7 +139,7 @@ class TestWordlistAPIMetadata:
         # Get specific wordlist
         response = app_client.get(f"/api/wordlists/{test_wordlist}")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = response.get_json()
 
         assert "metadata" in data, "Response missing 'metadata' field"
@@ -147,7 +149,7 @@ class TestWordlistAPIMetadata:
         """Test custom wordlists returned by API have 'name' field (regression test)."""
         response = app_client.get("/api/wordlists?category=custom")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = response.get_json()
 
         custom_wordlists = data["wordlists"]
@@ -187,7 +189,7 @@ class TestWordlistAPIMetadata:
 
         # Verify wordlist has name in API response
         get_response = app_client.get(f"/api/wordlists/{test_name}")
-        assert get_response.status_code == 200
+        assert get_response.status_code == 200, resp_diag(get_response)
 
         data = get_response.get_json()
         assert "metadata" in data
@@ -204,7 +206,7 @@ class TestWordlistAPIMetadata:
         """Verify list endpoint returns human-readable names for UI display."""
         response = app_client.get("/api/wordlists")
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = response.get_json()
         wordlists = data["wordlists"]
 

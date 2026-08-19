@@ -10,6 +10,8 @@ Purpose: Regression protection for intersection conflict detection
 
 import pytest
 
+from backend.tests.response_diag import resp_diag
+
 
 class TestThemePlacementConflictDetection:
     """Test conflict detection in theme word placement."""
@@ -248,7 +250,7 @@ class TestThemePlacementConflictDetection:
         )
 
         # Should return 400 with all conflicts listed
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         data = response.get_json()
         assert len(data["conflicts"]) == 3, "Should report all 3 conflicts"
         assert data["applied"] is False
@@ -274,7 +276,7 @@ class TestThemePlacementConflictDetection:
         )
 
         # Should succeed and convert to dict format
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         data = response.get_json()
         result_grid = data["grid"]
 
@@ -353,7 +355,7 @@ class TestThemePlacementConflictDetection:
             "placement": {"word": "CAT", "row": 1, "col": 0, "direction": "across"},
         }
         response1 = app_client.post("/api/theme/apply-placement", json=request1)
-        assert response1.status_code == 200
+        assert response1.status_code == 200, resp_diag(response1)
         updated_grid = response1.get_json()["grid"]
 
         # Try to apply second word that conflicts
@@ -364,7 +366,7 @@ class TestThemePlacementConflictDetection:
         response2 = app_client.post("/api/theme/apply-placement", json=request2)
 
         # Should fail with conflict
-        assert response2.status_code == 400
+        assert response2.status_code == 400, resp_diag(response2)
         data = response2.get_json()
         assert data["applied"] is False
         assert len(data["conflicts"]) > 0
@@ -407,7 +409,7 @@ class TestThemePlacementEdgeCases:
         )
 
         # Should return 400 with out-of-bounds conflicts
-        assert response.status_code == 400
+        assert response.status_code == 400, resp_diag(response)
         data = response.get_json()
         assert "conflicts" in data
         assert any("out of bounds" in c.lower() for c in data["conflicts"])
@@ -445,7 +447,7 @@ class TestThemePlacementEdgeCases:
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, resp_diag(response)
         result_grid = response.get_json()["grid"]
 
         # Theme lock should be preserved
