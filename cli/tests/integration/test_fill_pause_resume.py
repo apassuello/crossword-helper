@@ -59,6 +59,18 @@ def _write_pause_grid(path: Path, algorithm: str, size: int) -> Path:
     return path
 
 
+def _diag(stdout: str, stderr: str, limit: int = 1200) -> str:
+    """
+    Assertion message for any check on a child spawned by these tests.
+
+    The child's stderr carries its progress stream and any traceback. Without it a
+    non-zero exit code is undiagnosable after the fact, and no rerun of the assertion
+    can recover it: CI run 32230539895 failed `[hybrid]` on a bare
+    `assert proc.returncode == 0` and the log records no cause.
+    """
+    return f"child stderr tail:\n{stderr[-limit:]}\n\nchild stdout tail:\n{stdout[-limit:]}"
+
+
 def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120, wait_for_search=False):
     """
     Spawn `fill` on a size×size grid tuned for `algorithm`, let it run, touch the
@@ -70,7 +82,8 @@ def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120, w
     a real CSPState -- required by any test asserting populated domains, since
     setup outlasts a 3s sleep on a blank 15×15.
 
-    Returns (proc, stdout, state_dir).
+    Returns (proc, stdout, stderr, state_dir). stderr is returned rather than
+    discarded so a caller's assertion can report why the child exited (`_diag`).
     """
     grid_file = _write_pause_grid(tmp_path / "grid.json", algorithm, size)
     state_dir = tmp_path / "state"
@@ -114,8 +127,8 @@ def _run_fill_until_paused(tmp_path, algorithm, task_id, size=15, timeout=120, w
     flag_file = flags_dir / f"crossword_pause_{task_id}.flag"
     flag_file.touch()
 
-    stdout, _ = proc.communicate(timeout=60)
-    return proc, stdout, state_dir
+    stdout, stderr = proc.communicate(timeout=60)
+    return proc, stdout, stderr, state_dir
 
 
 def _wait_for_running_marker(flags_dir: Path, task_id: str, timeout: float = 10.0) -> None:
@@ -179,9 +192,9 @@ def _pause_a_fill(tmp_path, algorithm, task_id, wait_for_search=False):
     (grid_file, state_dir, flag_dir, state_file). state_file is the on-disk
     <state_dir>/<task_id>.json.gz written at pause.
     """
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id, wait_for_search=wait_for_search)
-    assert proc.returncode == 0, stdout
-    assert json.loads(stdout)["paused"] is True
+    proc, stdout, stderr, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id, wait_for_search=wait_for_search)
+    assert proc.returncode == 0, _diag(stdout, stderr)
+    assert json.loads(stdout)["paused"] is True, _diag(stdout, stderr)
     grid_file = tmp_path / "grid.json"
     flag_dir = tmp_path / "flags"
     state_file = state_dir / f"{task_id}.json.gz"
@@ -243,10 +256,10 @@ def test_fill_accepts_pause_options(tmp_path):
     # no guarantee. The marker stays off deliberately -- this is the argv-acceptance
     # contract test the seam rule in .claude/CLAUDE.md requires, so it has to keep
     # running in the default suite a developer gets from plain `pytest`.
-    stdout, _ = proc.communicate(timeout=300)
+    stdout, stderr = proc.communicate(timeout=300)
 
-    assert proc.returncode == 0
-    assert json.loads(stdout)["success"] is True
+    assert proc.returncode == 0, _diag(stdout, stderr)
+    assert json.loads(stdout)["success"] is True, _diag(stdout, stderr)
 
 
 def test_pause_resume_list_states_accept_and_honour_the_dir_options(tmp_path):
@@ -350,9 +363,9 @@ def test_pause_resume_list_states_accept_and_honour_the_dir_options(tmp_path):
 @pytest.mark.slow
 def test_csp_pause_saves_real_csp_state(tmp_path):
     """Test B — trie/CSP pause persists its real CSPState (populated domains)."""
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, "trie", "tB", wait_for_search=True)
+    proc, stdout, stderr, state_dir = _run_fill_until_paused(tmp_path, "trie", "tB", wait_for_search=True)
 
-    assert proc.returncode == 0
+    assert proc.returncode == 0, _diag(stdout, stderr)
     out = json.loads(stdout)
     assert out["paused"] is True and out["task_id"] == "tB"
     assert isinstance(out["slots_filled"], int)
@@ -370,9 +383,9 @@ def test_csp_pause_saves_real_csp_state(tmp_path):
 @pytest.mark.slow
 def test_repair_pause_saves_degenerate_csp_state(tmp_path):
     """Test C — repair pause routes through the CLI degenerate CSPState writer."""
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, "repair", "tC")
+    proc, stdout, stderr, state_dir = _run_fill_until_paused(tmp_path, "repair", "tC")
 
-    assert proc.returncode == 0
+    assert proc.returncode == 0, _diag(stdout, stderr)
     out = json.loads(stdout)
     assert out["paused"] is True
 
@@ -390,9 +403,9 @@ def test_repair_pause_saves_degenerate_csp_state(tmp_path):
 @pytest.mark.slow
 def test_beam_pause_routes_through_degenerate_writer(tmp_path):
     """Test D — beam pause routes through the same CLI degenerate writer."""
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, "beam", "tD")
+    proc, stdout, stderr, state_dir = _run_fill_until_paused(tmp_path, "beam", "tD")
 
-    assert proc.returncode == 0
+    assert proc.returncode == 0, _diag(stdout, stderr)
     out = json.loads(stdout)
     assert out["paused"] is True
 
@@ -694,10 +707,10 @@ def test_no_orphaned_beam_state_in_default_dir(tmp_path, algorithm):
     orphan = default_store / f"{task_id}.json.gz"
 
     try:
-        proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id)
+        proc, stdout, stderr, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id)
 
-        assert proc.returncode == 0
-        assert json.loads(stdout)["paused"] is True
+        assert proc.returncode == 0, _diag(stdout, stderr)
+        assert json.loads(stdout)["paused"] is True, _diag(stdout, stderr)
 
         assert not orphan.exists(), (
             f"orchestrator wrote a native beam state to the default store " f"({orphan}); --state-dir was {state_dir}"
@@ -733,10 +746,12 @@ def test_pause_flag_cleared_only_after_state_is_durable(tmp_path, algorithm):
     unreachable in practice.
     """
     task_id = f"flag{algorithm}{uuid.uuid4().hex[:8]}"
-    proc, stdout, state_dir = _run_fill_until_paused(tmp_path, algorithm, task_id, wait_for_search=(algorithm == "trie"))
+    proc, stdout, stderr, state_dir = _run_fill_until_paused(
+        tmp_path, algorithm, task_id, wait_for_search=(algorithm == "trie")
+    )
 
-    assert proc.returncode == 0
-    assert json.loads(stdout)["paused"] is True
+    assert proc.returncode == 0, _diag(stdout, stderr)
+    assert json.loads(stdout)["paused"] is True, _diag(stdout, stderr)
 
     state_file = state_dir / f"{task_id}.json.gz"
     assert state_file.exists(), "precondition: the paused state must be durable"
