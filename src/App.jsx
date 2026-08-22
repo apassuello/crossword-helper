@@ -22,6 +22,13 @@ import WordListPanel from './components/WordListPanel';
 import ThemeWordsPanel from './components/ThemeWordsPanel';
 import './styles/App.scss';
 
+// Which lists decide whether an entry is "valid". Verify paints cells red from
+// this, and Clean clears exactly those cells — so both calls MUST pass the same
+// selection. They used to disagree (verify sent this list, clean sent nothing
+// and got every installed list merged), which left red cells sitting on the
+// grid after a clean reported success.
+const VALIDATION_WORDLISTS = ['comprehensive'];
+
 // Signature of user-authored grid content, for the save machine's dirty
 // tracking. Deliberately array-shaped and limited to durable authored fields:
 // it EXCLUDES `number` (derived by auto-renumbering, would spuriously mark
@@ -257,7 +264,7 @@ function App() {
           isBlack: cell.isBlack || false
         }))),
         size: gridSize,
-        wordlists: ['comprehensive']
+        wordlists: VALIDATION_WORDLISTS
       });
 
       // Build set of cells that belong to invalid words
@@ -307,7 +314,8 @@ function App() {
           letter: cell.letter || '',
           isBlack: cell.isBlack || false
         }))),
-        size: gridSize
+        size: gridSize,
+        wordlists: VALIDATION_WORDLISTS
       });
 
       if (removed_count === 0) {

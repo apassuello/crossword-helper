@@ -898,13 +898,16 @@ def verify_words():
 
 @api.route("/grid/clean", methods=["POST"])
 def clean_grid():
-    """POST /api/grid/clean - Remove invalid words, keep valid ones intact.
+    """POST /api/grid/clean - Clear every cell the grid flags as invalid.
 
-    For each filled word slot:
-    - If the word is valid (exists in any wordlist): keep all letters
-    - If invalid: clear letters UNLESS they belong to a valid crossing word
+    Slots are classified exactly as verify_words() classifies them, so this
+    clears precisely the cells the editor paints red:
+    - Full slot whose word is not in the wordlist -> cleared
+    - Partial slot no word of that length can complete -> cleared
+    - Anything else -> left alone
 
-    Returns the cleaned grid with only valid words preserved.
+    A crossing word that shares a cleared cell is left partially filled;
+    autofill is what puts letters back.
     """
     try:
         data = request.get_json()
@@ -966,8 +969,21 @@ def clean_grid():
             else:
                 grid_data[r][c] = letter if letter else "."
 
+        def slot_pattern(cells_in_slot):
+            """'?' for empty cells, so partial slots keep their true length.
+
+            Joining raw letters would collapse a partial slot to a shorter
+            string and hide it from the length-based checks below.
+            """
+            return "".join(get_letter(r, c) or "?" for r, c in cells_in_slot)
+
+        # Mirrors verify_words(): the unfillable check needs candidates by length
+        words_by_length = {}
+        for w in words_set:
+            words_by_length.setdefault(len(w), []).append(w)
+
         # Step 1: Extract all slots and their words
-        slots = []  # [(cells_list, direction, word)]
+        slots = []  # [(cells_list, direction, pattern)]
 
         # Across slots
         for r in range(size):
@@ -981,8 +997,7 @@ def clean_grid():
                     slot_cells.append((r, c))
                     c += 1
                 if len(slot_cells) >= 3:
-                    word = "".join(get_letter(r2, c2) for r2, c2 in slot_cells)
-                    slots.append((slot_cells, "across", word))
+                    slots.append((slot_cells, "across", slot_pattern(slot_cells)))
 
         # Down slots
         for c in range(size):
@@ -996,20 +1011,36 @@ def clean_grid():
                     slot_cells.append((r, c))
                     r += 1
                 if len(slot_cells) >= 3:
-                    word = "".join(get_letter(r2, c2) for r2, c2 in slot_cells)
-                    slots.append((slot_cells, "down", word))
+                    slots.append((slot_cells, "down", slot_pattern(slot_cells)))
 
-        # Step 2: Classify each slot
+        # Step 2: Classify each slot.
+        #
+        # This must agree cell-for-cell with verify_words(), because the grid
+        # paints exactly its invalid_words red and "clean" is the button that
+        # clears what the user sees highlighted. Same two rules: a full slot is
+        # invalid when the word is unknown, a partial slot is unfillable when
+        # no word of that length matches it.
         valid_slots = set()  # indices into slots[]
         invalid_slots = set()
 
-        for i, (cells, direction, word) in enumerate(slots):
-            # Skip slots that aren't fully filled with letters
-            if len(word) != len(cells) or not word.isalpha():
+        for i, (cells, direction, pattern) in enumerate(slots):
+            has_empty = "?" in pattern
+            if pattern == "?" * len(pattern):
+                continue  # fully empty — nothing to validate
+
+            if not has_empty:
+                if pattern in words_set:
+                    valid_slots.add(i)
+                else:
+                    invalid_slots.add(i)
                 continue
-            if word in words_set:
-                valid_slots.add(i)
-            else:
+
+            candidates = words_by_length.get(len(pattern))
+            if not candidates:
+                invalid_slots.add(i)
+                continue
+            regex = re.compile("^" + pattern.replace("?", "[A-Z]") + "$")
+            if not any(regex.match(w) for w in candidates):
                 invalid_slots.add(i)
 
         if not invalid_slots:
@@ -1025,41 +1056,22 @@ def clean_grid():
                 200,
             )
 
-        # Step 3: Count how many valid words each cell participates in
-        valid_participation = {}
-        for i in valid_slots:
+        # Step 3: Clear every cell of every flagged slot.
+        #
+        # These are exactly the cells the grid paints red, and clearing all of
+        # them is the point of the button. An earlier version spared cells
+        # shared with a valid crossing word; on a fully-crossed grid that meant
+        # every cell was spared, so nothing was cleared and the invalid entry
+        # survived a "successful" clean. Crossing words that lose a letter here
+        # are left partially filled for autofill to complete.
+        cleared_cells = 0
+        for i in invalid_slots:
             cells, _, _ = slots[i]
             for r, c in cells:
-                valid_participation[(r, c)] = valid_participation.get((r, c), 0) + 1
-
-        # Step 4: Clear letters in invalid words.
-        #
-        # Cells shared with a valid word are preserved where possible, so that
-        # cleaning one bad entry does not gut its good neighbours. But on a
-        # fully-crossed grid EVERY cell of an invalid word also belongs to a
-        # valid crossing word. Skipping all of them cleared nothing while still
-        # reporting the word as removed, so the invalid entry survived a
-        # "successful" clean. A word can only be removed by clearing at least
-        # one of its cells, so fall back to the least-damaging single cell.
-        cleared_cells = 0
-        removed_count = 0
-        for i in invalid_slots:
-            cells, _, word = slots[i]
-
-            # A previous slot may already have broken this word.
-            if any(not get_letter(r, c) for r, c in cells):
-                removed_count += 1
-                continue
-
-            targets = [(r, c) for r, c in cells if (r, c) not in valid_participation]
-            if not targets:
-                targets = [min(cells, key=lambda rc: valid_participation.get(rc, 0))]
-
-            for r, c in targets:
-                set_letter(r, c, "")
-                valid_participation.pop((r, c), None)
-                cleared_cells += 1
-            removed_count += 1
+                if get_letter(r, c):
+                    set_letter(r, c, "")
+                    cleared_cells += 1
+        removed_count = len(invalid_slots)
 
         return (
             jsonify(

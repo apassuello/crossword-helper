@@ -492,26 +492,34 @@ class TestVerifyWordsWordlistSelection:
         assert data["wordlist_size"] > 40000
 
     def test_clean_honors_selection(self, client):
-        # ETUI is classic crosswordese (present in core/crosswordese);
-        # a junk word must be removed under any selection
-        grid = self._grid_with_word("ETUI", size=5)
+        # ETUI is classic crosswordese (present in core/crosswordese).
+        # Blacked-out row 1 keeps every slot either exactly ETUI or shorter
+        # than 3, so this exercises wordlist selection only -- clean also
+        # flags unfillable partial slots, and a ragged grid would confound
+        # the two (crosswordese has no 5-letter word matching "ETUI?").
+        grid = [
+            ["E", "T", "U", "I"],
+            ["#", "#", "#", "#"],
+            [".", ".", ".", "."],
+            [".", ".", ".", "."],
+        ]
         response = client.post(
             "/api/grid/clean",
-            json={"size": 5, "grid": grid, "wordlists": ["core/crosswordese"]},
+            json={"size": 4, "grid": grid, "wordlists": ["core/crosswordese"]},
         )
         assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # ETUI is valid in the selected list, so nothing should be removed
         assert data["removed_count"] == 0
 
-    def test_clean_removes_invalid_word_whose_cells_are_all_crossed(self, client):
-        """Regression: on a fully-crossed grid, every cell of an invalid word
-        also belongs to a valid crossing word. The 'protected cells' rule then
-        cleared nothing while still reporting removed_count > 0 -- the grid came
-        back byte-identical and the invalid entry survived.
+    def test_clean_clears_every_cell_of_a_fully_crossed_invalid_word(self, client):
+        """Clean clears all cells of an invalid word, even ones a valid
+        crossing word runs through.
 
         ACI (across, row 0) is not in comprehensive.txt; its three down words
-        (ASS, CII, ISS) all are, so all three cells are 'protected'.
+        (ASS, CII, ISS) all are. An earlier version spared cells shared with a
+        valid word, which here spared all three -- nothing was cleared and the
+        invalid entry survived while the response still claimed it was removed.
         """
         grid = [
             ["A", "C", "I"],
@@ -525,14 +533,37 @@ class TestVerifyWordsWordlistSelection:
         assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
 
-        # It must actually clear something...
-        assert data["cleared_cells"] > 0, data["message"]
-        # ...and the reported count must match what really happened.
-        assert data["removed_count"] > 0
+        def letter(cell):
+            raw = (cell["letter"] if isinstance(cell, dict) else cell) or ""
+            return "" if raw == "." else raw
 
-        # The invalid across word must be gone from row 0.
-        row0 = "".join((c["letter"] if isinstance(c, dict) else c) or "" for c in data["grid"][0])
-        assert row0 != "ACI", f"invalid word survived cleaning: {row0!r}"
+        row0 = [letter(c) for c in data["grid"][0]]
+        assert row0 == ["", "", ""], f"row 0 not fully cleared: {row0!r}"
+        assert data["cleared_cells"] == 3, data["message"]
+        assert data["removed_count"] >= 1
+
+    def test_clean_clears_unfillable_partial_words(self, client):
+        """The grid paints unfillable partials red too, so clean must take
+        them -- it used to skip any slot that was not completely filled."""
+        # 'QJ?' cannot be completed by any 3-letter word in the list.
+        grid = [
+            ["Q", "J", "."],
+            [".", ".", "."],
+            [".", ".", "."],
+        ]
+        response = client.post(
+            "/api/grid/clean",
+            json={"size": 3, "grid": grid, "wordlists": ["comprehensive"]},
+        )
+        assert response.status_code == 200, resp_diag(response)
+        data = json.loads(response.data)
+
+        def letter(cell):
+            raw = (cell["letter"] if isinstance(cell, dict) else cell) or ""
+            return "" if raw == "." else raw
+
+        row0 = [letter(c) for c in data["grid"][0]]
+        assert row0 == ["", "", ""], f"unfillable partial survived: {row0!r}"
 
     def test_clean_reports_zero_when_nothing_to_clean(self, client):
         """removed_count must never overstate: a fully valid grid reports 0."""

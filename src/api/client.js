@@ -229,8 +229,13 @@ export const api = {
     return post('/api/grid/verify-words', clean({ grid, size, wordlists }));
   },
 
-  cleanGrid({ grid, size }) {
-    return post('/api/grid/clean', clean({ grid, size }));
+  // `wordlists` is not optional in practice: omitting it makes the backend
+  // validate against every installed list merged, while verifyWords validates
+  // against the ones passed here. Clean would then spare words that the grid
+  // is painting red (present in top_200k, a themed list, ...), leaving red
+  // cells behind after a "successful" clean. Pass the same selection to both.
+  cleanGrid({ grid, size, wordlists }) {
+    return post('/api/grid/clean', clean({ grid, size, wordlists }));
   },
 
   normalize(text) {

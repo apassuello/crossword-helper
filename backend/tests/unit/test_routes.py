@@ -597,16 +597,21 @@ class TestCleanGrid:
         wl.write_text("CAT\nCOB\nATM\nTMX\n")
         mocker.patch("pathlib.Path.rglob", return_value=[wl])
 
+        # Blacked out so CAT (across) and COB (down) are the only slots of
+        # length >= 3. The open-cell version of this fixture also contained
+        # the partial rows "O??" and "B??", which no word in this four-word
+        # list can complete -- clean now flags unfillable partials (they are
+        # painted red in the editor), so those rows made an "all valid words"
+        # fixture report removals. See test_clean_clears_unfillable_partial_words.
         grid = [
             ["C", "A", "T"],
-            ["O", ".", "."],
-            ["B", ".", "."],
+            ["O", "#", "#"],
+            ["B", "#", "#"],
         ]
         resp = _post_json(c, "/api/grid/clean", {"grid": grid, "size": 3})
         assert resp.status_code == 200, resp_diag(resp)
         body = resp.get_json()
-        # COB is valid across, CAT is valid across
-        # Only report on fully filled slots
+        # COB is valid down, CAT is valid across
         assert body["removed_count"] == 0 or "nothing to clean" in body.get("message", "").lower()
 
     def test_empty_body(self, client):
