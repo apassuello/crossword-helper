@@ -1025,31 +1025,52 @@ def clean_grid():
                 200,
             )
 
-        # Step 3: Build set of cells protected by valid words
-        protected_cells = set()
+        # Step 3: Count how many valid words each cell participates in
+        valid_participation = {}
         for i in valid_slots:
             cells, _, _ = slots[i]
             for r, c in cells:
-                protected_cells.add((r, c))
+                valid_participation[(r, c)] = valid_participation.get((r, c), 0) + 1
 
-        # Step 4: Clear letters in invalid words (except protected cells)
+        # Step 4: Clear letters in invalid words.
+        #
+        # Cells shared with a valid word are preserved where possible, so that
+        # cleaning one bad entry does not gut its good neighbours. But on a
+        # fully-crossed grid EVERY cell of an invalid word also belongs to a
+        # valid crossing word. Skipping all of them cleared nothing while still
+        # reporting the word as removed, so the invalid entry survived a
+        # "successful" clean. A word can only be removed by clearing at least
+        # one of its cells, so fall back to the least-damaging single cell.
         cleared_cells = 0
+        removed_count = 0
         for i in invalid_slots:
             cells, _, word = slots[i]
-            for r, c in cells:
-                if (r, c) not in protected_cells:
-                    set_letter(r, c, "")
-                    cleared_cells += 1
+
+            # A previous slot may already have broken this word.
+            if any(not get_letter(r, c) for r, c in cells):
+                removed_count += 1
+                continue
+
+            targets = [(r, c) for r, c in cells if (r, c) not in valid_participation]
+            if not targets:
+                targets = [min(cells, key=lambda rc: valid_participation.get(rc, 0))]
+
+            for r, c in targets:
+                set_letter(r, c, "")
+                valid_participation.pop((r, c), None)
+                cleared_cells += 1
+            removed_count += 1
 
         return (
             jsonify(
                 {
                     "grid": grid_data,
-                    "removed_count": len(invalid_slots),
+                    "removed_count": removed_count,
                     "valid_count": len(valid_slots),
                     "cleared_cells": cleared_cells,
                     "message": (
-                        f"Removed {len(invalid_slots)} invalid words "
+                        f"Removed {removed_count} invalid "
+                        f"{'word' if removed_count == 1 else 'words'} "
                         f"({cleared_cells} cells cleared), "
                         f"kept {len(valid_slots)} valid words"
                     ),

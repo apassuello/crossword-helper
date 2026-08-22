@@ -504,6 +504,52 @@ class TestVerifyWordsWordlistSelection:
         # ETUI is valid in the selected list, so nothing should be removed
         assert data["removed_count"] == 0
 
+    def test_clean_removes_invalid_word_whose_cells_are_all_crossed(self, client):
+        """Regression: on a fully-crossed grid, every cell of an invalid word
+        also belongs to a valid crossing word. The 'protected cells' rule then
+        cleared nothing while still reporting removed_count > 0 -- the grid came
+        back byte-identical and the invalid entry survived.
+
+        ACI (across, row 0) is not in comprehensive.txt; its three down words
+        (ASS, CII, ISS) all are, so all three cells are 'protected'.
+        """
+        grid = [
+            ["A", "C", "I"],
+            ["S", "I", "S"],
+            ["S", "I", "S"],
+        ]
+        response = client.post(
+            "/api/grid/clean",
+            json={"size": 3, "grid": grid, "wordlists": ["comprehensive"]},
+        )
+        assert response.status_code == 200, resp_diag(response)
+        data = json.loads(response.data)
+
+        # It must actually clear something...
+        assert data["cleared_cells"] > 0, data["message"]
+        # ...and the reported count must match what really happened.
+        assert data["removed_count"] > 0
+
+        # The invalid across word must be gone from row 0.
+        row0 = "".join((c["letter"] if isinstance(c, dict) else c) or "" for c in data["grid"][0])
+        assert row0 != "ACI", f"invalid word survived cleaning: {row0!r}"
+
+    def test_clean_reports_zero_when_nothing_to_clean(self, client):
+        """removed_count must never overstate: a fully valid grid reports 0."""
+        grid = [
+            ["C", "A", "T"],
+            ["A", "R", "E"],
+            ["T", "E", "N"],
+        ]
+        response = client.post(
+            "/api/grid/clean",
+            json={"size": 3, "grid": grid, "wordlists": ["comprehensive"]},
+        )
+        assert response.status_code == 200, resp_diag(response)
+        data = json.loads(response.data)
+        assert data["removed_count"] == 0
+        assert data.get("cleared_cells", 0) == 0
+
     def test_clean_unknown_wordlist_returns_400(self, client):
         grid = self._grid_with_word("CAT")
         response = client.post(
