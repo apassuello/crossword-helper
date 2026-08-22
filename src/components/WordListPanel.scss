@@ -3,6 +3,12 @@
   height: calc(100vh - 120px);
   overflow: hidden;
 
+  // This panel is rendered both full-width and inside the bench inspector
+  // rail, so its inner layout has to respond to the space it is actually
+  // given, not to the viewport. See .panel-layout below.
+  container-type: inline-size;
+  container-name: xw-panel;
+
   h2 {
     margin-bottom: 1.5rem;
     color: #667eea;
@@ -74,11 +80,20 @@
     }
   }
 
+  // Master/detail, sized for a full-width page. The 320px sidebar is a hard
+  // floor, so in a container narrower than ~700px the 1fr detail column gets
+  // whatever is left -- inside the bench inspector rail (~400px) that collapsed
+  // it to ~50px and the wordlist contents were unreadable. Stack instead once
+  // there isn't room for both.
   .panel-layout {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 2rem;
     height: calc(100% - 60px);
+
+    @container xw-panel (min-width: 700px) {
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
   }
 
   .sidebar {
