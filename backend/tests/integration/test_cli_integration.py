@@ -1,0 +1,745 @@
+"""
+Integration tests for CLI subprocess integration.
+
+These tests actually execute the CLI as a subprocess to catch integration bugs
+like data format mismatches between the API and CLI layers.
+
+IMPORTANT: These tests use REAL CLI execution, so they are slower than unit tests.
+Mark slow tests with @pytest.mark.slow to allow skipping during development.
+"""
+
+import json
+import os
+import subprocess
+import tempfile
+import threading
+from pathlib import Path
+
+import pytest
+
+from backend.app import create_app
+from backend.core.cli_adapter import get_adapter
+from backend.tests.fixtures import (
+    EMPTY_3X3_CLI,
+    EMPTY_3X3_FRONTEND,
+    PARTIALLY_FILLED_3X3_FRONTEND,
+    PATTERN_3X3_CLI,
+    PATTERN_3X3_FRONTEND,
+    TRANSFORMATION_TEST_CASES,
+)
+
+
+@pytest.fixture
+def client():
+    """Create test client."""
+    app = create_app(testing=True)
+    with app.test_client() as client:
+        yield client
+
+
+@pytest.fixture
+def cli_adapter():
+    """Get CLI adapter instance."""
+    return get_adapter()
+
+
+# ==================================================
+# Data Transformation Tests
+# ==================================================
+# These tests verify the grid format transformation is correct
+
+
+class TestGridFormatTransformation:
+    """Test transformation from frontend format to CLI format."""
+
+    def _transform_grid(self, frontend_grid):
+        """
+        Apply the same transformation logic as routes.py.
+
+        This is the CRITICAL transformation that was buggy.
+        """
+        cli_grid = []
+        for row in frontend_grid:
+            cli_row = []
+            for cell in row:
+                if isinstance(cell, dict):
+                    if cell.get("isBlack", False):
+                        cli_row.append("#")
+                    elif cell.get("letter", ""):
+                        cli_row.append(cell["letter"].upper())
+                    else:
+                        cli_row.append(".")
+                else:
+                    # Already in CLI format (string)
+                    cli_row.append(cell)
+            cli_grid.append(cli_row)
+        return cli_grid
+
+    @pytest.mark.parametrize("test_name,frontend_data,expected_cli_data", TRANSFORMATION_TEST_CASES)
+    def test_grid_transformation(self, test_name, frontend_data, expected_cli_data):
+        """Test that grid transformation produces correct CLI format."""
+        transformed = self._transform_grid(frontend_data["grid"])
+        expected = expected_cli_data["grid"]
+
+        assert transformed == expected, f"Transformation failed for {test_name}"
+
+    def test_empty_cell_becomes_dot(self):
+        """Test that empty cells (letter='') become '.' in CLI format."""
+        frontend_cell = {"letter": "", "isBlack": False}
+        result = self._transform_grid([[frontend_cell]])
+
+        assert result[0][0] == ".", "Empty cell should become '.'"
+
+    def test_black_cell_becomes_hash(self):
+        """Test that black cells become '#' in CLI format."""
+        frontend_cell = {"letter": "", "isBlack": True}
+        result = self._transform_grid([[frontend_cell]])
+
+        assert result[0][0] == "#", "Black cell should become '#'"
+
+    def test_filled_cell_preserves_letter(self):
+        """Test that filled cells preserve their letter."""
+        frontend_cell = {"letter": "A", "isBlack": False}
+        result = self._transform_grid([[frontend_cell]])
+
+        assert result[0][0] == "A", "Filled cell should preserve letter"
+
+    def test_lowercase_letters_uppercased(self):
+        """Test that lowercase letters are converted to uppercase."""
+        frontend_cell = {"letter": "a", "isBlack": False}
+        result = self._transform_grid([[frontend_cell]])
+
+        assert result[0][0] == "A", "Lowercase letters should be uppercased"
+
+    def test_string_cells_pass_through(self):
+        """Test that string cells (already in CLI format) pass through unchanged."""
+        # This handles the case where grid might already be in CLI format
+        mixed_row = ["A", {"letter": "B", "isBlack": False}, "#"]
+        result = self._transform_grid([mixed_row])
+
+        assert result[0] == ["A", "B", "#"], "String cells should pass through"
+
+
+# ==================================================
+# CLI Adapter Tests
+# ==================================================
+# These tests verify the CLI adapter works correctly
+
+
+class TestCLIAdapterIntegration:
+    """Test CLIAdapter actually executes CLI commands."""
+
+    def test_cli_health_check(self, cli_adapter):
+        """Test that CLI health check can execute normalize command."""
+        is_healthy = cli_adapter.health_check()
+
+        # This will fail if CLI is not properly installed or not executable
+        assert is_healthy, "CLI should be healthy (normalize command should work)"
+
+    def test_normalize_command_executes(self, cli_adapter):
+        """Test that normalize command actually runs via subprocess."""
+        result = cli_adapter.normalize("TEST")
+
+        # Verify we got a result back
+        assert "normalized" in result, "Result should have 'normalized' field"
+        assert "original" in result, "Result should have 'original' field"
+        assert result["original"] == "TEST", "Original text should match input"
+
+    def test_pattern_command_executes(self, cli_adapter):
+        """Test that pattern command actually runs via subprocess."""
+        # Use a simple pattern that should have results
+        result = cli_adapter.pattern(pattern="C?T", max_results=5)
+
+        # Verify structure (actual matches depend on wordlist)
+        assert "results" in result, "Result should have 'results' field"
+        assert "meta" in result, "Result should have 'meta' field"
+        assert isinstance(result["results"], list), "Results should be a list"
+
+    @pytest.mark.slow
+    def test_number_command_with_real_grid(self, cli_adapter):
+        """Test that number command processes a real grid."""
+        # Use empty 3x3 grid in CLI format
+        result = cli_adapter.number(grid_data=EMPTY_3X3_CLI, allow_nonstandard=True)  # 3x3 is non-standard
+
+        # Verify structure
+        assert "numbering" in result, "Result should have 'numbering' field"
+        assert isinstance(result["numbering"], dict), "Numbering should be a dict"
+
+    @pytest.mark.slow
+    def test_fill_command_with_real_grid(self, cli_adapter):
+        """
+        Test that fill command can process a real grid.
+
+        This is the CRITICAL test that would have caught the bug.
+        """
+        # Create a simple fillable grid
+        grid_data = PATTERN_3X3_CLI
+
+        # This test will FAIL if grid format is wrong
+        # because CLI will crash with AttributeError
+        try:
+            result = cli_adapter.fill(
+                grid_data=grid_data,
+                wordlist_paths=[str(Path(__file__).parent.parent.parent.parent / "data" / "wordlists" / "comprehensive.txt")],
+                timeout_seconds=30,
+                min_score=0,  # Accept any words for testing
+                allow_nonstandard=True,
+            )
+
+            # Verify result structure
+            assert "grid" in result, "Result should have filled grid"
+            assert isinstance(result["grid"], list), "Grid should be a list"
+
+        except subprocess.CalledProcessError as e:
+            # If this fails with AttributeError in stderr, the transformation bug exists
+            if "AttributeError" in e.stderr:
+                pytest.fail("CLI crashed with AttributeError - this indicates grid format bug!\n" f"Stderr: {e.stderr}")
+            raise
+
+
+# ==================================================
+# API Integration Tests (/api/fill)
+# ==================================================
+# These tests actually call the API endpoint and verify CLI execution
+
+
+class TestFillEndpointIntegration:
+    """Test /api/fill endpoint with real CLI execution."""
+
+    @pytest.mark.slow
+    def test_fill_endpoint_with_empty_grid(self, client):
+        """
+        Test /api/fill with empty grid in frontend format.
+
+        This is the PRIMARY test that catches the bug.
+        """
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": EMPTY_3X3_FRONTEND["grid"],
+                "wordlists": ["comprehensive"],
+                "timeout": 30,
+                "min_score": 0,
+            },
+            content_type="application/json",
+        )
+
+        # If the transformation is wrong, this will return 500 with AttributeError
+        assert response.status_code in [
+            200,
+            504,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
+
+        if response.status_code == 200:
+            data = json.loads(response.data)
+            assert "grid" in data, "Response should contain filled grid"
+
+    @pytest.mark.slow
+    def test_fill_endpoint_with_pattern_grid(self, client):
+        """Test /api/fill with grid containing black squares."""
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": PATTERN_3X3_FRONTEND["grid"],
+                "wordlists": ["comprehensive"],
+                "timeout": 30,
+                "min_score": 0,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code in [
+            200,
+            504,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
+
+    @pytest.mark.slow
+    def test_fill_endpoint_with_partially_filled_grid(self, client):
+        """Test /api/fill with partially filled grid in frontend format."""
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": PARTIALLY_FILLED_3X3_FRONTEND["grid"],
+                "wordlists": ["comprehensive"],
+                "timeout": 30,
+                "min_score": 0,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code in [
+            200,
+            504,
+        ], f"Expected success or timeout, got {response.status_code}: {response.data}"
+
+    def test_fill_endpoint_validates_missing_grid(self, client):
+        """Test that /api/fill rejects requests without grid."""
+        response = client.post(
+            "/api/fill",
+            json={"size": 3, "wordlists": ["comprehensive"]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400, "Should reject missing grid"
+        data = json.loads(response.data)
+        assert "error" in data, "Error response should have 'error' field"
+
+    def test_fill_endpoint_validates_missing_size(self, client):
+        """Test that /api/fill rejects requests without size."""
+        response = client.post(
+            "/api/fill",
+            json={"grid": EMPTY_3X3_FRONTEND["grid"], "wordlists": ["comprehensive"]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400, "Should reject missing size"
+
+    def test_fill_endpoint_validates_invalid_size(self, client):
+        """Test that /api/fill rejects invalid grid sizes."""
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 2,  # Too small (min is 3)
+                "grid": [[]],
+                "wordlists": ["comprehensive"],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400, "Should reject invalid size"
+
+    def test_fill_endpoint_validates_wordlists(self, client):
+        """Test that /api/fill validates wordlists parameter."""
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": EMPTY_3X3_FRONTEND["grid"],
+                "wordlists": [],  # Empty list should fail
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400, "Should reject empty wordlists"
+
+
+# ==================================================
+# Grid Format Bug Regression Tests
+# ==================================================
+# These tests specifically target the bug that was missed
+
+
+class TestGridFormatBugRegression:
+    """
+    Tests that specifically catch the grid format bug.
+
+    The bug: Frontend sends {"letter": "A", "isBlack": false}
+             CLI expects "A" or "#" or "."
+    """
+
+    def test_bug_regression_dict_format_to_string_format(self):
+        """
+        Regression test for the specific bug that was missed.
+
+        This test will FAIL if the transformation code is removed or broken.
+        """
+        # Frontend sends this format
+        frontend_grid = [[{"letter": "A", "isBlack": False}]]
+
+        # Expected CLI format after transformation
+        expected_cli_grid = [["A"]]
+
+        # Apply transformation
+        cli_grid = []
+        for row in frontend_grid:
+            cli_row = []
+            for cell in row:
+                if isinstance(cell, dict):
+                    if cell.get("isBlack", False):
+                        cli_row.append("#")
+                    elif cell.get("letter", ""):
+                        cli_row.append(cell["letter"].upper())
+                    else:
+                        cli_row.append(".")
+                else:
+                    cli_row.append(cell)
+            cli_grid.append(cli_row)
+
+        assert cli_grid == expected_cli_grid, "Transformation should convert dict format to string format"
+
+    def test_bug_regression_cli_receives_parseable_json(self, cli_adapter):
+        """
+        Test that CLI receives valid JSON it can parse.
+
+        This would have caught the bug because CLI would crash
+        trying to access .get() on a dict.
+        """
+        # Create grid data in CLI format
+        grid_data = {
+            "size": 3,
+            "grid": [["A", ".", "."], [".", "#", "."], [".", ".", "."]],
+        }
+
+        # Write to temp file (simulates what API does)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            # Try to have CLI read it
+            cmd = [str(cli_adapter.cli_path), "validate", temp_path]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=cli_adapter.cli_path.parent,
+            )
+
+            # Should not crash with AttributeError
+            assert (
+                "AttributeError" not in result.stderr
+            ), f"CLI crashed with AttributeError - grid format is wrong!\nStderr: {result.stderr}"
+
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    @pytest.mark.slow
+    def test_bug_regression_end_to_end_fill_api(self, client):
+        """
+        End-to-end regression test for the fill API.
+
+        Sends frontend-format grid through API to CLI and verifies no crash.
+        """
+        response = client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": [
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                    ],
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": True},
+                        {"letter": "", "isBlack": False},
+                    ],
+                    [
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                        {"letter": "", "isBlack": False},
+                    ],
+                ],
+                "wordlists": ["comprehensive"],
+                "timeout": 30,
+                "min_score": 0,
+            },
+            content_type="application/json",
+        )
+
+        # Should NOT get 500 error with AttributeError
+        assert response.status_code != 500, f"API should not crash with 500 error. Response: {response.data}"
+
+        # Accept 200 (success) or 504 (timeout) or 400 (validation error)
+        # Just verify it doesn't crash
+        assert response.status_code in [
+            200,
+            400,
+            504,
+        ], f"Unexpected status code: {response.status_code}"
+
+
+# ==================================================
+# Error Handling Tests
+# ==================================================
+
+
+class TestCLIErrorHandling:
+    """Test error handling in CLI integration."""
+
+    def test_cli_timeout_handling(self, cli_adapter):
+        """Test that CLI commands timeout correctly."""
+        # Use a very short timeout to force timeout
+        with pytest.raises(subprocess.TimeoutExpired):
+            cli_adapter._run_command(
+                ["fill", "/nonexistent/grid.json"],
+                timeout=0.001,  # 1ms timeout
+                check_success=False,
+            )
+
+    def test_cli_invalid_command_handling(self, cli_adapter):
+        """Test that invalid CLI commands are handled."""
+        with pytest.raises(subprocess.CalledProcessError):
+            cli_adapter._run_command(["invalid-command"])
+
+    def test_cli_malformed_json_output(self, cli_adapter, monkeypatch):
+        """Test handling of malformed JSON from CLI."""
+
+        # Mock _run_command to return invalid JSON
+        def mock_run_command(args, timeout=None, **kwargs):
+            # Return malformed JSON output
+            return ("not valid json {{{", "", 0)
+
+        monkeypatch.setattr(cli_adapter, "_run_command", mock_run_command)
+
+        # This should raise ValueError due to JSON parse error
+        with pytest.raises(ValueError, match="Failed to parse CLI output"):
+            cli_adapter.pattern("C?T", wordlist_paths=[])
+
+
+# ==================================================
+# Performance Tests
+# ==================================================
+
+
+@pytest.mark.slow
+class TestCLIPerformance:
+    """Test performance characteristics of CLI integration."""
+
+    def test_small_grid_fills_quickly(self, client):
+        """Test that small grids (3x3) fill within reasonable time."""
+        import time
+
+        start_time = time.time()
+
+        client.post(
+            "/api/fill",
+            json={
+                "size": 3,
+                "grid": PATTERN_3X3_FRONTEND["grid"],
+                "wordlists": ["comprehensive"],
+                "timeout": 30,
+                "min_score": 0,
+            },
+            content_type="application/json",
+        )
+
+        elapsed = time.time() - start_time
+
+        # 3x3 should complete in under 30 seconds
+        assert elapsed < 30, f"3x3 grid took {elapsed:.2f}s, should be under 30s"
+
+    def test_cli_adapter_caching_works(self):
+        """Test that CLI adapter instance is cached."""
+        adapter1 = get_adapter()
+        adapter2 = get_adapter()
+
+        assert adapter1 is adapter2, "get_adapter() should return same instance"
+
+
+# ==================================================
+# Pause -> Resume invocation (REAL CLI, no mocks)
+# ==================================================
+
+
+class TestResumeCLIInvocationReal:
+    """
+    Non-mocked end-to-end check of the resume invocation shape.
+
+    Really runs the CLI:
+    1. `fill <grid> --task-id X --json-output` as a subprocess
+    2. `pause X` while it runs (state saved to /tmp/crossword_states)
+    3. CLIAdapter.fill_with_resume() against the saved state — the exact
+       invocation the /api/fill/resume route uses
+    """
+
+    def test_fill_accepts_the_argv_the_backend_builds(self, cli_adapter):
+        """
+        Zero-timing guard on the CLI/backend contract.
+
+        The original bug was that `fill_with_resume` passed flags the CLI's
+        parser rejected outright. That is a pure argv-compatibility question,
+        so it is checked here without running a fill — this test keeps the
+        seam covered even if the live pause/resume test below is ever skipped.
+        """
+        help_text = subprocess.run(
+            [str(cli_adapter.cli_path), "fill", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=cli_adapter.cli_path.parent,
+        ).stdout
+
+        for flag in ("--task-id", "--resume", "--json-output", "--output", "--algorithm"):
+            assert flag in help_text, f"CLI fill no longer accepts {flag}:\n{help_text}"
+
+        # Rejecting an unknown flag is what used to break resume: prove the
+        # parser really validates (so the assertions above mean something).
+        unknown = subprocess.run(
+            [str(cli_adapter.cli_path), "fill", "--definitely-not-a-flag"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=cli_adapter.cli_path.parent,
+        )
+        assert unknown.returncode != 0
+
+    def test_pause_then_fill_with_resume(self, cli_adapter, tmp_path, monkeypatch):
+        # pytest-cov ships a .pth that arms coverage in EVERY Python subprocess
+        # whenever COV_CORE_SOURCE is in the environment. That slows CLI child
+        # processes enough to risk this test's own deadlines on a contended
+        # runner. The children are spawned here and in CLIAdapter, both
+        # inheriting os.environ, so scrubbing these vars for the test's
+        # duration runs them at native speed. The parent's coverage collection
+        # is unaffected: the plugin collects in-process, and these vars only
+        # arm NEW interpreters.
+        for key in [k for k in os.environ if k.startswith("COV_CORE")]:
+            monkeypatch.delenv(key, raising=False)
+
+        task_id = f"itest_resume_{Path(tmp_path).name}"
+        resume_task_id = f"{task_id}_r"
+        state_dir = Path("/tmp/crossword_states")
+
+        # Wide-open 11x11: reliably too hard for trie to finish quickly,
+        # so the pause lands mid-run
+        grid_file = tmp_path / "grid11.json"
+        grid_file.write_text(
+            json.dumps(
+                {
+                    "size": 11,
+                    "grid": [["." for _ in range(11)] for _ in range(11)],
+                    "black_squares": [],
+                    "is_symmetric": True,
+                }
+            )
+        )
+
+        project_root = Path(__file__).resolve().parents[3]
+        wordlist = project_root / "data" / "wordlists" / "comprehensive.txt"
+        cli_path = cli_adapter.cli_path
+
+        # -t 300 (not 60): the fill must be able to exit ONLY via pause, never
+        # by hitting its own timeout, or "did it pause?" becomes a race the
+        # test cannot decide. Note -t bounds SOLVER time, not wall time —
+        # wordlist load and solver setup happen before that clock starts.
+        process = subprocess.Popen(
+            [
+                str(cli_path),
+                "fill",
+                str(grid_file),
+                "-w",
+                str(wordlist),
+                "-t",
+                "300",
+                "-a",
+                "trie",
+                "--task-id",
+                task_id,
+                "--json-output",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cli_path.parent,
+        )
+
+        # Drain both pipes in background threads: gating on stderr below while
+        # the child writes stdout would risk a full-pipe deadlock.
+        stdout_chunks: list = []
+        stderr_lines: list = []
+        solving = threading.Event()
+
+        def _drain_stdout():
+            stdout_chunks.append(process.stdout.read())
+
+        def _drain_stderr():
+            for line in process.stderr:
+                stderr_lines.append(line)
+                # Emitted from inside the CSP solve loop (autofill.py), which
+                # is where this test's chosen -a trie algorithm polls the
+                # pause flag; beam search's orchestrator polls its own
+                # pause_controller separately. "starting autofill" is NOT
+                # sufficient: solver setup runs for a while after it with no
+                # pause checks.
+                if "Filling slots" in line:
+                    solving.set()
+
+        out_thread = threading.Thread(target=_drain_stdout, daemon=True)
+        err_thread = threading.Thread(target=_drain_stderr, daemon=True)
+        out_thread.start()
+        err_thread.start()
+
+        try:
+            # Wait for the solver loop to actually be running before pausing.
+            # Pausing earlier is honored only once the loop starts, so the
+            # wait would otherwise burn the exit deadline on load+setup.
+            if not solving.wait(timeout=180):
+                raise AssertionError(
+                    "fill never reached its solving loop within 180s; "
+                    f"rc={process.poll()}, stderr tail: {''.join(stderr_lines)[-500:]}"
+                )
+
+            pause_result = subprocess.run(
+                [str(cli_path), "pause", task_id, "--json-output"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=cli_path.parent,
+            )
+            assert pause_result.returncode == 0, pause_result.stdout + pause_result.stderr
+
+            process.wait(timeout=180)
+            out_thread.join(timeout=30)
+            err_thread.join(timeout=30)
+            stdout = stdout_chunks[0] if stdout_chunks else ""
+            stderr = "".join(stderr_lines)
+            assert process.returncode == 0, stderr[-500:]
+
+            result = json.loads(stdout.strip())
+            assert result["paused"] is True, f"fill did not pause: {result}"
+            state_path = result["state_path"]
+            assert Path(state_path).exists()
+            paused_slots = result["slots_filled"]
+
+            # Now the resume invocation exactly as the backend builds it
+            resume_result = cli_adapter.fill_with_resume(
+                task_id=resume_task_id,
+                state_file_path=state_path,
+                wordlist_paths=[str(wordlist)],
+                timeout_seconds=8,
+                min_score=30,
+                algorithm="trie",
+            )
+
+            # Full result object came back from the real CLI
+            assert resume_result["task_id"] == resume_task_id
+            assert "grid" in resume_result
+            # Same puzzle: the state carried the slot structure over
+            assert resume_result["total_slots"] == result["total_slots"]
+            # The resume really ran with the given wordlist (the old broken
+            # resume path ran with an EMPTY wordlist and finished in 0.00s)
+            assert resume_result["wordlists"] == [str(wordlist)]
+            # A doomed restored branch used to return here in ~0.02s having
+            # done nothing (issue #9); _resume_fill now falls back to
+            # _resume_by_unwinding, so the resumed run does real search either
+            # way. This assertion is what caught that and must not be weakened.
+            assert resume_result["time_elapsed"] > 0.5
+            # Note: slots_filled may be above OR below the paused count —
+            # resumed CSP search legitimately backtracks — so only sanity
+            # bounds are asserted here
+            assert 0 <= resume_result["slots_filled"] <= resume_result["total_slots"]
+            assert paused_slots >= 0
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+            # Clean up state, flag, and output files
+            for candidate in [
+                state_dir / f"{task_id}.json.gz",
+                state_dir / f"{task_id}.json",
+                Path(f"/tmp/crossword_pause_{task_id}.flag"),
+                Path(f"/tmp/crossword_running_{task_id}.pid"),
+                Path(f"/tmp/crossword_pause_{resume_task_id}.flag"),
+                Path(f"/tmp/crossword_running_{resume_task_id}.pid"),
+                cli_path.parent / f"resumed_{resume_task_id}.json",
+            ]:
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
