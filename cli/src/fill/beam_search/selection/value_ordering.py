@@ -1,0 +1,550 @@
+"""
+Value ordering strategies for beam search.
+
+This module implements various strategies for ordering candidate words,
+including LCV (Least Constraining Value) and quality-based ordering.
+"""
+
+import logging
+import random
+import time
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional, Tuple
+
+from ....core.grid import Grid
+from ..state import BeamState
+
+logger = logging.getLogger(__name__)
+
+
+class ValueOrderingStrategy(ABC):
+    """Abstract base class for value ordering strategies."""
+
+    # Optional absolute epoch deadline. Set by BeamManager before each
+    # expansion; strategies with expensive per-candidate work (LCV) honor it.
+    deadline: Optional[float] = None
+
+    @abstractmethod
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidate values for a slot.
+
+        Args:
+            slot: Slot to fill
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Ordered list of (word, score) tuples
+        """
+
+
+class LCVValueOrdering(ValueOrderingStrategy):
+    """
+    Least Constraining Value (LCV) ordering strategy.
+
+    Orders words by how many options they leave for crossing slots,
+    preferring words that preserve the most flexibility.
+    """
+
+    def __init__(self, pattern_matcher, min_score_func):
+        """
+        Initialize LCV ordering.
+
+        Args:
+            pattern_matcher: Pattern matching utility
+            min_score_func: Function to get min score for a given length
+        """
+        self.pattern_matcher = pattern_matcher
+        self.get_min_score = min_score_func
+        self.lcv_cache = {}  # Cache for LCV calculations
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates by Least Constraining Value heuristic.
+
+        For each candidate word:
+        1. Temporarily place it
+        2. Count remaining options for crossing slots
+        3. Prefer words that leave more options
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Ordered list of candidates
+        """
+        if not candidates:
+            return candidates
+
+        # Get crossing slots for this slot
+        crossing_slots = self._get_crossing_slots(slot, state.grid)
+        if not crossing_slots:
+            # No crossings - order by quality score only
+            return sorted(candidates, key=lambda x: -x[1])
+
+        lcv_scored = []
+        deadline = self.deadline
+        for word, quality_score in candidates:
+            # Respect the time budget: LCV does a pattern search per candidate
+            # per crossing slot, so cost scales with the number of crossings
+            # and grid openness. When the deadline passes, fall back to
+            # quality ordering for the rest.
+            if deadline is not None and time.time() >= deadline:
+                break
+
+            # Skip already used words
+            if word in state.used_words:
+                continue
+
+            # Calculate constraint impact
+            total_remaining = 0
+            for crossing in crossing_slots:
+                # Skip already filled slots
+                crossing_id = (crossing["row"], crossing["col"], crossing["direction"])
+                if crossing_id in state.slot_assignments:
+                    continue
+
+                # THEME PRESERVATION: Temporarily place word and get pattern
+                # This may fail if word conflicts with locked cells (theme words)
+                try:
+                    state.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+                    pattern = state.grid.get_pattern_for_slot(crossing)
+                    state.grid.remove_word(slot["row"], slot["col"], slot["length"], slot["direction"])
+                except ValueError:
+                    # Word conflicts with locked cells - skip it entirely
+                    # This word cannot be placed, so give it very low score
+                    total_remaining = -999999
+                    break
+
+                # Count how many words would be eliminated
+                min_score = self.get_min_score(crossing["length"])
+                crossing_candidates = self.pattern_matcher.find(pattern, min_score=min_score)
+
+                # Filter out used words
+                available = [w for w, s in crossing_candidates if w not in state.used_words]
+                total_remaining += len(available)
+
+            # Higher total_remaining = less constraining = better
+            lcv_scored.append((word, quality_score, total_remaining))
+
+        if not lcv_scored:
+            if deadline is not None and time.time() >= deadline:
+                # Deadline hit before any candidate could be LCV-scored:
+                # fall back to plain quality ordering instead of reporting
+                # "no candidates" (which would falsely kill the beam state).
+                unused = [(w, s) for w, s in candidates if w not in state.used_words]
+                return sorted(unused, key=lambda x: -x[1])
+            return []
+
+        # Calculate adjusted scores that preserve LCV information
+        # Instead of just sorting and discarding constraint info, we adjust the scores
+        # so downstream strategies (ThresholdDiverseOrdering) preserve the ordering
+
+        # Find max_remaining to normalize constraint penalties
+        max_remaining = max(r for _, _, r in lcv_scored) if lcv_scored else 1
+
+        adjusted_candidates = []
+        for word, quality_score, total_remaining in lcv_scored:
+            # Calculate how many constraints this word removes (higher = worse)
+            constraints_removed = max_remaining - total_remaining
+
+            # Combine quality with constraint penalty
+            # Weight of 0.7 makes constraint impact significant
+            adjusted_score = quality_score - (0.7 * constraints_removed)
+            adjusted_candidates.append((word, int(adjusted_score)))
+
+        # Sort by adjusted score (quality - constraint penalty)
+        adjusted_candidates.sort(key=lambda x: -x[1])
+
+        return adjusted_candidates
+
+    def _get_crossing_slots(self, slot: Dict, grid: Grid) -> List[Dict]:
+        """Get all slots that cross the given slot."""
+        crossing = []
+        all_slots = grid.get_word_slots()
+
+        for other_slot in all_slots:
+            if self._slots_intersect(slot, other_slot):
+                crossing.append(other_slot)
+
+        return crossing
+
+    def _slots_intersect(self, slot1: Dict, slot2: Dict) -> bool:
+        """Check if two slots intersect."""
+        if slot1["direction"] == slot2["direction"]:
+            return False
+
+        if slot1["direction"] == "across":
+            across_slot = slot1
+            down_slot = slot2
+        else:
+            across_slot = slot2
+            down_slot = slot1
+
+        across_row = across_slot["row"]
+        across_col_start = across_slot["col"]
+        across_col_end = across_col_start + across_slot["length"] - 1
+
+        down_col = down_slot["col"]
+        down_row_start = down_slot["row"]
+        down_row_end = down_row_start + down_slot["length"] - 1
+
+        return down_row_start <= across_row <= down_row_end and across_col_start <= down_col <= across_col_end
+
+
+class StratifiedValueOrdering(ValueOrderingStrategy):
+    """
+    Stratified shuffling strategy to prevent alphabetical bias.
+
+    Groups candidates by quality tiers and shuffles within each tier
+    to avoid beam collapse from alphabetical ordering.
+    """
+
+    def __init__(self, tier_size: int = 5):
+        """
+        Initialize stratified ordering.
+
+        Args:
+            tier_size: Number of candidates per quality tier
+        """
+        self.tier_size = tier_size
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Apply stratified shuffling to candidates.
+
+        Groups candidates into quality tiers and shuffles within each tier
+        to prevent alphabetical bias while preserving quality ordering.
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Stratified and shuffled candidates
+        """
+        if len(candidates) <= self.tier_size:
+            # Small list - just shuffle
+            shuffled = candidates.copy()
+            random.shuffle(shuffled)
+            return shuffled
+
+        # Sort by quality first
+        sorted_candidates = sorted(candidates, key=lambda x: -x[1])
+
+        # Group into tiers
+        tiers = []
+        for i in range(0, len(sorted_candidates), self.tier_size):
+            tier = sorted_candidates[i : i + self.tier_size]
+            random.shuffle(tier)  # Shuffle within tier
+            tiers.append(tier)
+
+        # Flatten tiers back to single list
+        result = []
+        for tier in tiers:
+            result.extend(tier)
+
+        return result
+
+
+class CompositeValueOrdering(ValueOrderingStrategy):
+    """
+    Composite strategy that combines multiple ordering strategies.
+
+    Allows chaining strategies like LCV followed by stratified shuffling.
+    """
+
+    def __init__(self, strategies: List[ValueOrderingStrategy]):
+        """
+        Initialize composite ordering.
+
+        Args:
+            strategies: List of strategies to apply in order
+        """
+        self.strategies = strategies
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Apply multiple ordering strategies in sequence.
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Candidates ordered by all strategies
+        """
+        result = candidates
+        for strategy in self.strategies:
+            # Propagate the current deadline to child strategies
+            strategy.deadline = self.deadline
+            result = strategy.order_values(slot, result, state)
+        return result
+
+    def track_word_usage(self, word: str):
+        """
+        Forward word usage tracking to all strategies that support it.
+
+        Allows composite strategy to propagate tracking calls to child
+        strategies (e.g., ThresholdDiverseOrdering).
+
+        Args:
+            word: Word that was just placed
+        """
+        for strategy in self.strategies:
+            if hasattr(strategy, "track_word_usage"):
+                strategy.track_word_usage(word)
+
+
+class QualityValueOrdering(ValueOrderingStrategy):
+    """
+    Simple quality-based ordering strategy.
+
+    Orders candidates by their quality scores, with optional
+    filtering of low-quality words.
+    """
+
+    def __init__(self, min_quality: int = 0):
+        """
+        Initialize quality ordering.
+
+        Args:
+            min_quality: Minimum quality threshold
+        """
+        self.min_quality = min_quality
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates by quality score.
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Candidates ordered by quality (highest first)
+        """
+        # Filter by minimum quality
+        filtered = [(w, s) for w, s in candidates if s >= self.min_quality]
+
+        # Sort by quality score (descending)
+        return sorted(filtered, key=lambda x: -x[1])
+
+
+class ThresholdDiverseOrdering(ValueOrderingStrategy):
+    """
+    Threshold-and-temperature ordering: filters candidates by a quality
+    threshold, then applies temperature-based randomization for exploration
+    while preserving top candidates for exploitation.
+
+    Algorithm:
+    1. Set quality threshold (e.g., score >= 50)
+    2. Filter candidates above threshold
+    3. If too few, adaptively lower threshold
+    4. Within threshold group, order by LCV (if available)
+    5. Add temperature-based randomization for exploration
+    6. Preserve top candidates for exploitation
+
+    This balances exploration (trying diverse words) with exploitation
+    (preferring high-quality words).
+
+    Based on:
+    - Diverse Beam Search paper (Vijayakumar et al. 2016)
+
+    This module's actual default parameters are set in __init__ below
+    (threshold, temperature) and in the instantiation at
+    cli/src/fill/beam_search/orchestrator.py.
+    """
+
+    def __init__(self, threshold: int = 50, temperature: float = 0.8):
+        """
+        Initialize threshold-diverse ordering.
+
+        Args:
+            threshold: Minimum quality score to consider (default 50)
+            temperature: Randomization factor 0-1 (0=greedy, 1=fully random)
+                        Default 0.8 provides balanced exploration
+        """
+        self.threshold = threshold
+        self.temperature = temperature
+        self.recent_bigrams = {}  # Track recently used letter pairs for diversity
+        self.bigram_decay = 0.9  # Decay factor per word placed
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates by threshold + diversity.
+
+        Algorithm:
+        1. Apply bigram diversity penalties
+        2. Filter to candidates above threshold
+        3. If too few, gradually lower threshold (adaptive)
+        4. Sort by quality within threshold group
+        5. Preserve top 20% for exploitation
+        6. Shuffle remaining with temperature for exploration
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Ordered candidates balancing quality and diversity
+        """
+        if not candidates:
+            return candidates
+
+        # Apply bigram diversity penalties
+        # Penalize words with recently-used letter patterns
+        diversity_adjusted = []
+        for word, score in candidates:
+            penalty = 0
+
+            # Check each bigram (pair of adjacent letters)
+            for i in range(len(word) - 1):
+                bigram = word[i : i + 2]
+                if bigram in self.recent_bigrams:
+                    # Penalize proportional to recent usage
+                    penalty += self.recent_bigrams[bigram] * 5  # 5 points per occurrence
+
+            diversity_adjusted.append((word, score - int(penalty)))
+
+        # Use diversity-adjusted scores for rest of ordering
+        candidates = diversity_adjusted
+
+        # Adaptive threshold lowering when stuck
+        current_threshold = self.threshold
+        filtered = [(w, s) for w, s in candidates if s >= current_threshold]
+
+        # Lower threshold if too few candidates (adaptive)
+        while len(filtered) < 5 and current_threshold > 0:
+            current_threshold -= 10
+            filtered = [(w, s) for w, s in candidates if s >= current_threshold]
+
+        if len(filtered) < 2:
+            # Very few candidates, use all
+            filtered = candidates
+
+        # Sort by quality
+        sorted_candidates = sorted(filtered, key=lambda x: -x[1])
+
+        if self.temperature == 0:
+            # Greedy: no randomization
+            return sorted_candidates
+
+        # Exploitation: Keep top 20% as-is (preserve best options)
+        top_k = max(1, len(sorted_candidates) // 5)
+        top_candidates = sorted_candidates[:top_k]
+        rest_candidates = sorted_candidates[top_k:]
+
+        # Exploration: Shuffle remaining with temperature
+        if self.temperature >= 1.0:
+            # Full randomization
+            random.shuffle(rest_candidates)
+        elif self.temperature > 0:
+            # Weighted shuffle based on temperature
+            # Higher temperature = more shuffling
+            for i in range(len(rest_candidates)):
+                if random.random() < self.temperature:
+                    # Swap with random position
+                    j = random.randint(i, len(rest_candidates) - 1)
+                    rest_candidates[i], rest_candidates[j] = (
+                        rest_candidates[j],
+                        rest_candidates[i],
+                    )
+
+        return top_candidates + rest_candidates
+
+    def track_word_usage(self, word: str):
+        """
+        Track bigrams from a selected word to encourage pattern diversity.
+
+        After a word is placed, record its letter bigrams and apply decay
+        to all tracked bigrams. This encourages natural diversity by
+        penalizing repeated patterns without permanent exclusion.
+
+        Args:
+            word: The word that was just placed (uppercase)
+        """
+        # Add bigrams from selected word
+        for i in range(len(word) - 1):
+            bigram = word[i : i + 2]
+            # Increment count for this bigram
+            self.recent_bigrams[bigram] = self.recent_bigrams.get(bigram, 0) + 1
+
+        # Apply decay to all bigram counts (prevents permanent penalties)
+        # This allows patterns to be used again after some time
+        for bigram in list(self.recent_bigrams.keys()):
+            self.recent_bigrams[bigram] *= self.bigram_decay
+
+            # Remove bigrams with very low counts to keep dict small
+            if self.recent_bigrams[bigram] < 0.1:
+                del self.recent_bigrams[bigram]
+
+
+class ThemeWordPriorityOrdering(ValueOrderingStrategy):
+    """
+    Theme word priority ordering strategy.
+
+    Prioritizes words from a designated theme wordlist by:
+    1. Sorting theme words to the front of the candidate list
+    2. Adding a score bonus (+50) to theme words
+    3. Maintaining quality ordering within theme/non-theme groups
+
+    This ensures theme words are tried first while preserving the
+    existing quality-based ordering as a secondary criterion.
+    """
+
+    def __init__(self, theme_words: Optional[set] = None):
+        """
+        Initialize theme word priority ordering.
+
+        Args:
+            theme_words: Set of theme words to prioritize (uppercase)
+        """
+        self.theme_words = theme_words or set()
+
+    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
+        """
+        Order candidates with theme words first.
+
+        Algorithm:
+        1. Separate theme words from non-theme words
+        2. Apply +50 score bonus to theme words
+        3. Sort each group by (adjusted) score
+        4. Return theme words + non-theme words
+
+        Args:
+            slot: Slot being filled
+            candidates: List of (word, score) tuples
+            state: Current beam state
+
+        Returns:
+            Candidates with theme words prioritized
+        """
+        if not candidates or not self.theme_words:
+            # No theme words configured, return as-is
+            return candidates
+
+        theme_candidates = []
+        non_theme_candidates = []
+
+        for word, score in candidates:
+            if word in self.theme_words:
+                # Theme word: add +50 bonus
+                theme_candidates.append((word, score + 50))
+            else:
+                # Non-theme word: keep original score
+                non_theme_candidates.append((word, score))
+
+        # Sort each group by score (descending)
+        theme_candidates.sort(key=lambda x: -x[1])
+        non_theme_candidates.sort(key=lambda x: -x[1])
+
+        # Theme words first, then non-theme
+        return theme_candidates + non_theme_candidates
