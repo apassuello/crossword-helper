@@ -1,0 +1,7 @@
+{
+  "strictness": 1,
+  "commentTypes": ["logic", "syntax", "style"],
+  "fileChangeLimit": 1000,
+  "includeConfidenceScore": true,
+  "instructions": "This PR's diff is a whole-codebase snapshot, constructed deliberately (base is an empty orphan branch) so every file in the repo appears as new — the goal is a one-time exhaustive bug hunt, not a normal incremental review. Focus your findings on cli/** (the Python CLI — the single source of truth for crossword logic: autofill/CSP, beam search, iterative repair, hybrid fill, pattern matching, pause/resume state serialization) and src/** (the React GUI). Within backend/**, only report issues in the CLI-adapter seam (backend/core/cli_adapter.py and the routes that call it) since that boundary is a known defect hotspot; skip pure style feedback elsewhere in backend/, docs/, and config files. Hunt for real bugs: logic errors, off-by-one and edge-case mishandling, race conditions, incorrect state/lock handling, unhandled exceptions, resource leaks, and any function whose behavior contradicts its own docstring or nearby comments. Be exhaustive rather than concise."
+}
