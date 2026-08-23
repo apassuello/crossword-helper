@@ -1,0 +1,245 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Crossword Helper API Schemas",
+  "description": "JSON Schema definitions for API request/response validation",
+
+  "schemas": {
+    "grid": {
+      "type": "object",
+      "required": ["size", "grid"],
+      "properties": {
+        "size": {
+          "type": "integer",
+          "enum": [11, 15, 21],
+          "description": "Grid dimension (square grids only)"
+        },
+        "grid": {
+          "type": "array",
+          "description": "2D array representing grid",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z#.]$",
+              "description": "A-Z = letter, # = black, . = empty"
+            }
+          }
+        },
+        "numbering": {
+          "type": "object",
+          "description": "Optional user numbering for validation",
+          "patternProperties": {
+            "^\\(\\d+,\\d+\\)$": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+
+    "pattern_request": {
+      "type": "object",
+      "required": ["pattern"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "pattern": "^[A-Z?]{3,20}$",
+          "description": "Crossword pattern with ? wildcards (3-20 chars)"
+        },
+        "wordlists": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["personal", "standard"]
+          },
+          "default": ["standard"],
+          "description": "List of wordlist names to search"
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "description": "Maximum results to return"
+        }
+      }
+    },
+
+    "pattern_response": {
+      "type": "object",
+      "required": ["results", "meta"],
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["word", "score", "source", "length"],
+            "properties": {
+              "word": {
+                "type": "string",
+                "pattern": "^[A-Z]+$"
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "source": {
+                "type": "string",
+                "enum": ["onelook", "local", "both", "personal", "standard"]
+              },
+              "length": {
+                "type": "integer",
+                "minimum": 3
+              },
+              "letter_quality": {
+                "type": "object",
+                "properties": {
+                  "common": {"type": "integer"},
+                  "uncommon": {"type": "integer"}
+                }
+              }
+            }
+          }
+        },
+        "meta": {
+          "type": "object",
+          "required": ["total_found", "query_time_ms"],
+          "properties": {
+            "pattern": {"type": "string"},
+            "total_found": {"type": "integer"},
+            "sources_searched": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "query_time_ms": {"type": "integer"}
+          }
+        }
+      }
+    },
+
+    "numbering_response": {
+      "type": "object",
+      "required": ["numbering", "grid_info"],
+      "properties": {
+        "numbering": {
+          "type": "object",
+          "patternProperties": {
+            "^\\(\\d+,\\d+\\)$": {"type": "integer"}
+          }
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "is_valid": {"type": "boolean"},
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "position": {"type": "string"},
+                  "expected": {"type": ["integer", "null"]},
+                  "actual": {"type": "integer"},
+                  "reason": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "grid_info": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "array",
+              "items": {"type": "integer"},
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "black_squares": {"type": "integer"},
+            "word_count": {"type": "integer"},
+            "meets_nyt_standards": {"type": "boolean"},
+            "issues": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+
+    "normalize_request": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
+
+    "normalize_response": {
+      "type": "object",
+      "required": ["original", "normalized", "rule"],
+      "properties": {
+        "original": {"type": "string"},
+        "normalized": {
+          "type": "string",
+          "pattern": "^[A-Z]+$"
+        },
+        "rule": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["two_word_names", "title_with_article", "hyphenated", "apostrophe", "default"]
+            },
+            "description": {"type": "string"},
+            "explanation": {"type": "string"},
+            "examples": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "form": {"type": "string"},
+              "note": {"type": "string"},
+              "rule": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+
+    "error_response": {
+      "type": "object",
+      "required": ["error", "code"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "code": {
+          "type": "string",
+          "description": "Machine-readable error code"
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional additional context"
+        }
+      }
+    }
+  }
+}

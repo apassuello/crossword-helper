@@ -1,0 +1,130 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# React build
+frontend/dist/
+.vite/
+*.local
+
+# React source `src/lib/` — the Python `lib/` rule above (unanchored) would
+# otherwise ignore this JS source directory. Re-include it.
+!src/lib/
+
+# Test output files
+test_filled*.json
+
+# Test outputs
+test_phase*.json
+
+# Development/demo scripts
+demo_theme_entries.py
+test_theme_entries.py
+test_grid.json
+archive/
+
+# Test artifacts and results
+test_results/
+test_*.json
+*_test_result*.json
+*_test_summary*.md
+ENDPOINT_COVERAGE_VISUAL.txt
+DIAGRAM_PACKAGE_MANIFEST.txt
+
+# Temporary documentation
+START_HERE.md
+DOCUMENTATION_INDEX.md
+*_TEMP.md
+*_WIP.md
+
+# Test data (if moved to tests/fixtures)
+test_data/
+test_grids/
+
+# Claude Code
+.claude/
+
+# Root-level copies of committed resources
+/art-of-construction.pdf
+
+# Downloaded third-party sources (fetched by scripts/research/)
+data/research/
+
+# Utility scripts output
+*.log
+*.tmp
+*.temp
+
+# Coverage reports
+coverage.xml
+.coverage.*
+
+# Personal wordlists (kept local only) — ignore all custom lists except the
+# tracked demo file, so personal filenames never appear in this tracked file.
+data/wordlists/custom/*
+!data/wordlists/custom/demo_words.txt
+
+# Session handoff logs (local only)
+.handoff/
+
+# Local scrub patterns for pre-commit guard (never committed; gitignored per Global Constraints)
+.scrub-patterns
+
+# Design bundle snapshot (D2:A) — port source for Tasks 9-12/20-21; local-only,
+# contains personal fill examples so MUST stay out of this public repo.
+.design-bundle/

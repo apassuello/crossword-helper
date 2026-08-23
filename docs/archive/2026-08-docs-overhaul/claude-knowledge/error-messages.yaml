@@ -1,0 +1,290 @@
+# Error Messages
+
+# Standard error messages for Crossword Helper API
+# Format: {code: {message, http_status, user_action}}
+
+# Pattern Matching Errors
+pattern_errors:
+  PATTERN_REQUIRED:
+    message: "Pattern is required"
+    http_status: 400
+    user_action: "Provide a pattern string (e.g., '?I?A')"
+
+  PATTERN_TOO_SHORT:
+    message: "Pattern must be at least 3 characters"
+    http_status: 400
+    user_action: "Use a pattern with 3 or more characters"
+
+  PATTERN_TOO_LONG:
+    message: "Pattern must be at most 20 characters"
+    http_status: 400
+    user_action: "Use a shorter pattern (max 20 characters)"
+
+  PATTERN_INVALID_CHARS:
+    message: "Pattern can only contain A-Z and ? (wildcard)"
+    http_status: 400
+    user_action: "Use only uppercase letters and ? for wildcards"
+
+  PATTERN_NOT_UPPERCASE:
+    message: "Pattern must be uppercase"
+    http_status: 400
+    user_action: "Convert pattern to uppercase (e.g., 'cat' → 'CAT')"
+
+  WORDLIST_NOT_FOUND:
+    message: "Wordlist '{name}' not found"
+    http_status: 404
+    user_action: "Use 'standard' or 'personal' wordlist"
+
+  NO_RESULTS_FOUND:
+    message: "No words match pattern '{pattern}'"
+    http_status: 200  # Success with empty results
+    user_action: "Try a broader pattern with more ? wildcards"
+
+# Grid Validation Errors
+grid_errors:
+  GRID_REQUIRED:
+    message: "Grid is required"
+    http_status: 400
+    user_action: "Provide a 2D grid array"
+
+  SIZE_REQUIRED:
+    message: "Grid size is required"
+    http_status: 400
+    user_action: "Specify size as 11, 15, or 21"
+
+  INVALID_GRID_SIZE:
+    message: "Grid size must be 11, 15, or 21"
+    http_status: 400
+    user_action: "Use standard crossword size (11, 15, or 21)"
+
+  GRID_NOT_SQUARE:
+    message: "Grid must be square (rows = columns)"
+    http_status: 400
+    user_action: "Ensure grid has equal rows and columns"
+
+  GRID_DIMENSION_MISMATCH:
+    message: "Grid dimensions don't match specified size"
+    http_status: 400
+    user_action: "Grid array must be {size}×{size}"
+
+  INVALID_GRID_CHARACTER:
+    message: "Invalid character '{char}' at position ({row},{col})"
+    http_status: 400
+    user_action: "Use only: A-Z (letters), # (black), . (empty)"
+
+  GRID_EMPTY:
+    message: "Grid cannot be empty"
+    http_status: 400
+    user_action: "Provide a grid with at least one cell"
+
+  ISOLATED_REGION:
+    message: "Grid has isolated white square regions"
+    http_status: 400
+    user_action: "All white squares must connect"
+
+  SHORT_WORD:
+    message: "Grid contains word shorter than 3 letters at position ({row},{col})"
+    http_status: 400
+    user_action: "All words must be at least 3 letters long"
+
+  NO_SYMMETRY:
+    message: "Grid lacks 180° rotational symmetry"
+    http_status: 400
+    user_action: "Black squares must mirror across grid center"
+
+# Numbering Errors
+numbering_errors:
+  NUMBERING_MISMATCH:
+    message: "User numbering doesn't match calculated numbering"
+    http_status: 200  # Success with validation failure
+    user_action: "Review differences in validation.errors array"
+
+  INVALID_NUMBERING_FORMAT:
+    message: "Numbering key '{key}' has invalid format"
+    http_status: 400
+    user_action: "Use format '(row,col)' with 0-based indices"
+
+  NUMBERING_OUT_OF_BOUNDS:
+    message: "Numbering position ({row},{col}) is outside grid"
+    http_status: 400
+    user_action: "Ensure all positions are within grid bounds"
+
+# Convention Normalization Errors
+convention_errors:
+  TEXT_REQUIRED:
+    message: "Text is required"
+    http_status: 400
+    user_action: "Provide text to normalize"
+
+  TEXT_EMPTY:
+    message: "Text cannot be empty"
+    http_status: 400
+    user_action: "Provide non-empty text"
+
+  TEXT_TOO_SHORT:
+    message: "Text must be at least 2 characters"
+    http_status: 400
+    user_action: "Provide text with 2 or more characters"
+
+  TEXT_TOO_LONG:
+    message: "Text must be at most 100 characters"
+    http_status: 400
+    user_action: "Use shorter text (max 100 characters)"
+
+  NO_RULE_MATCHED:
+    message: "No normalization rule matched text '{text}'"
+    http_status: 200  # Success with default rule
+    user_action: "Text normalized using default rule (uppercase, remove spaces)"
+
+# System Errors
+system_errors:
+  INTERNAL_SERVER_ERROR:
+    message: "An unexpected error occurred"
+    http_status: 500
+    user_action: "Try again. If problem persists, check server logs"
+
+  ONELOOK_API_TIMEOUT:
+    message: "OneLook API request timed out"
+    http_status: 200  # Success with fallback to local
+    user_action: "Results from local wordlists only (OneLook unavailable)"
+
+  ONELOOK_API_ERROR:
+    message: "OneLook API returned error: {error}"
+    http_status: 200  # Success with fallback to local
+    user_action: "Results from local wordlists only (OneLook error)"
+
+  RATE_LIMIT_EXCEEDED:
+    message: "Too many requests. Please try again later"
+    http_status: 429
+    user_action: "Wait 60 seconds before making more requests"
+
+  WORDLIST_LOAD_ERROR:
+    message: "Failed to load wordlist '{name}'"
+    http_status: 500
+    user_action: "Check that wordlist file exists and is readable"
+
+  INVALID_JSON:
+    message: "Request body must be valid JSON"
+    http_status: 400
+    user_action: "Check JSON syntax in request body"
+
+  MISSING_CONTENT_TYPE:
+    message: "Content-Type header must be application/json"
+    http_status: 400
+    user_action: "Set Content-Type: application/json header"
+
+# Success Messages
+success_messages:
+  PATTERN_SEARCH_SUCCESS:
+    message: "Found {count} matching words"
+
+  GRID_NUMBERED_SUCCESS:
+    message: "Grid numbered successfully ({count} numbers assigned)"
+
+  GRID_VALIDATION_SUCCESS:
+    message: "Grid numbering is valid"
+
+  GRID_VALIDATION_FAILED:
+    message: "Grid numbering validation found {count} errors"
+
+  NORMALIZATION_SUCCESS:
+    message: "Text normalized using rule: {rule_type}"
+
+  HEALTH_CHECK_SUCCESS:
+    message: "Service is healthy"
+
+# User-Friendly Error Examples
+examples:
+  pattern_matching:
+    - request:
+        pattern: "CA"
+      error:
+        code: "PATTERN_TOO_SHORT"
+        message: "Pattern must be at least 3 characters"
+        fix: "Use pattern 'CA?' or 'CAT'"
+
+    - request:
+        pattern: "ca?t"
+      error:
+        code: "PATTERN_NOT_UPPERCASE"
+        message: "Pattern must be uppercase"
+        fix: "Use pattern 'CA?T'"
+
+    - request:
+        pattern: "C@?T"
+      error:
+        code: "PATTERN_INVALID_CHARS"
+        message: "Pattern can only contain A-Z and ? (wildcard)"
+        fix: "Use pattern 'C??T'"
+
+  grid_validation:
+    - request:
+        size: 7
+        grid: [[]]
+      error:
+        code: "INVALID_GRID_SIZE"
+        message: "Grid size must be 11, 15, or 21"
+        fix: "Use size: 11, 15, or 21"
+
+    - request:
+        size: 15
+        grid: [["C","A","T"],["A","R","E"]]
+      error:
+        code: "GRID_DIMENSION_MISMATCH"
+        message: "Grid dimensions don't match specified size"
+        fix: "Provide 15×15 grid array"
+
+    - request:
+        size: 3
+        grid: [["C","7","T"],["A","R","E"],["B","#","E"]]
+      error:
+        code: "INVALID_GRID_CHARACTER"
+        message: "Invalid character '7' at position (0,1)"
+        fix: "Replace '7' with letter A-Z, # (black), or . (empty)"
+
+  normalization:
+    - request:
+        text: ""
+      error:
+        code: "TEXT_EMPTY"
+        message: "Text cannot be empty"
+        fix: "Provide non-empty text"
+
+    - request:
+        text: "A"
+      error:
+        code: "TEXT_TOO_SHORT"
+        message: "Text must be at least 2 characters"
+        fix: "Provide text with 2+ characters"
+
+# HTTP Status Code Reference
+status_codes:
+  200: "Success - Request completed successfully"
+  400: "Bad Request - Invalid input parameters"
+  404: "Not Found - Resource doesn't exist"
+  429: "Too Many Requests - Rate limit exceeded"
+  500: "Internal Server Error - Unexpected server error"
+  503: "Service Unavailable - External service (OneLook) unavailable"
+
+# Standard Error Response Format
+error_response_format: |
+  {
+    "error": "Human-readable error message",
+    "code": "MACHINE_READABLE_ERROR_CODE",
+    "details": {
+      "field": "Additional context",
+      "provided_value": "What user sent",
+      "expected_value": "What was expected"
+    }
+  }
+
+# Standard Success Response Format
+success_response_format: |
+  {
+    "results": [...],  # Main response data
+    "meta": {
+      "total_found": 127,
+      "query_time_ms": 245,
+      "sources_searched": ["onelook", "standard"]
+    }
+  }

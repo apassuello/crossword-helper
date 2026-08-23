@@ -1,0 +1,48 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+
+  precision: 2
+  round: down
+  range: "60...100"
+
+ignore:
+  - "tests/"
+  - "**/*_test.py"
+  - "**/test_*.py"
+  - "tests/legacy/"
+  - "cli/tests/performance/"
+
+comment:
+  layout: "header, diff, flags, components"
+  behavior: default
+  require_changes: false
+
+flags:
+  backend:
+    paths:
+      - backend/
+  cli:
+    paths:
+      - cli/src/
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: 80%
+  individual_components:
+    - component_id: backend
+      name: Backend
+      paths:
+        - backend/**
+    - component_id: cli
+      name: CLI
+      paths:
+        - cli/src/**
