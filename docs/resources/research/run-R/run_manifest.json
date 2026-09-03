@@ -1,0 +1,75 @@
+{
+  "run_id": "Crossword_Tools_CodeRead_RunR_20260902",
+  "task": "TASK R \u2014 read the grid, entry and lookup code of five open-source crossword construction tools; report R1-R6 per repo with file paths and line ranges, plus a comparison table.",
+  "date": "2026-09-02",
+  "mode": "primary-source code reading (no web search); all corpora retrieved to disk and read in the main thread",
+  "assumptions": [
+    "The user's output contract (SOURCES table schema, per-question findings, gaps section) supersedes the deep-research skill's report template (no Executive Summary / Recommendations sections). Explicit rule: 'No design recommendations for our system.'",
+    "'Retrieval status FETCHED' for a code source means the named files were read in full or the cited regions were read directly from the local clone.",
+    "Line ranges are pinned to the commit SHAs / tarball hash recorded below; they are unverifiable against any other revision.",
+    "exet delegates its grid and clue data structures to Exolve (same author, separate repo); Exolve is therefore added as a source rather than reported as 'not present' in exet.",
+    "Phil vendors a modified glucose-3.0 SAT solver that carries Phil's crossword-specific grid/entry/lookup code; it is reported under Phil with its own licence."
+  ],
+  "pins": {
+    "phil": {
+      "sha": "28720cc8ef79611761761e785953ed7e4546ccf2",
+      "last_commit": "2025-01-02"
+    },
+    "exet": {
+      "sha": "ea5711805d7733ebd5350d5a49f082b10389dd40",
+      "last_commit": "2026-08-19"
+    },
+    "exolve": {
+      "sha": "85dd54908580625e7f5338f1beaef878d8629ab4",
+      "last_commit": "2026-08-14"
+    },
+    "crosshatch": {
+      "sha": "e169519b944359bd6f22ab489bf6a672f56f6fe5",
+      "last_commit": "2021-05-30"
+    },
+    "crossword-composer": {
+      "sha": "912c5eec86f88fa9fe9cd8a26562e47b35855c5e",
+      "last_commit": "2020-04-18"
+    },
+    "qxw": {
+      "tarball": "qxw-20200708.tar.gz",
+      "sha256": "ed6c6effb815789ec3f7214738c905570e58030e5b8e5b493fec8c70148d23ea",
+      "release": "20200708"
+    }
+  },
+  "corpus_root": "corpus/repos",
+  "artifacts": {
+    "report": "RUN_R_REPORT.md",
+    "sources": "sources.jsonl (15 rows)",
+    "evidence": "evidence.jsonl (206 rows)",
+    "builder": "build_evidence.py",
+    "gates": [
+      "gate_evidence.py",
+      "gate_citations.py"
+    ]
+  },
+  "gates": {
+    "gate_evidence": {
+      "scope": "206 rows: quote must occur verbatim inside its cited line range",
+      "red_probe": "wrong line range + mistyped quote, both rejected",
+      "result": "PASS 206/206",
+      "genuine_catch": "E176 (two-line comment cited as one line); E192 (locator naming the wrong one of two similar functions)"
+    },
+    "gate_citations": {
+      "scope": "469 qualified (path:N-M) + 72 bare (:N-M, resolved against the nearest preceding qualified path) citations in the report resolve to a real file with an in-bounds range",
+      "red_probe": "out-of-bounds bare range, bare ref with no preceding path, and non-existent file; all rejected",
+      "result": "PASS 541/541",
+      "genuine_catch": "51 under-qualified paths, all fully qualified"
+    }
+  },
+  "corrections_during_run": [
+    "The R5 absence claim ('where can this word go' is absent) was initially written flat; running the search it claimed surfaced ExolveGridInferrer in exolve/exolve-from-text.js, so the claim was scoped to the task's sense of the question and the inferrer reported separately.",
+    "Qxw R3 initially stated 'no per-entry ownership'. struct word.fe (common.h:217), derived per filler run at filler.c:1044-1047, exempts a constructor-completed entry from the dictionary constraint at filler.c:525. Section 5 R3, table 6.1 and gap 8.1 were amended.",
+    "gate_citations.py initially matched only qualified path:N-M citations, leaving 72 bare :N-M references in the report unguarded while reporting a full pass. The gate was extended to resolve bare refs against the nearest preceding qualified path, re-run red, then green."
+  ],
+  "validators_skipped": {
+    "claims.jsonl": "not emitted",
+    "validation_report.json": "not emitted",
+    "why": "The deep-research validators check [N] markers against a numbered Bibliography. This report cites sources as [S1]-[S15] and code as path:line with no numbered bibliography, so validate_report/verify_citations would pass vacuously or fail on an unsupported format. The claim ledger is the note field of each evidence.jsonl row, checked by gate_evidence.py and gate_citations.py."
+  }
+}

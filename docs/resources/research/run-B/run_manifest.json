@@ -1,0 +1,21 @@
+{
+  "version": "3.0.0",
+  "query": "RUN B: finding and ranking the words that fit a crossword slot \u2014 wildcard pattern data structures, crossing-effect ranking heuristics, word-list scoring conventions, length-dependent tolerance, letter-position/crossability tables, and constructor-facing explanation studies",
+  "mode": "deep",
+  "started_at": "2026-09-02T10:49:36.109704+00:00",
+  "finished_at": null,
+  "gate_attempts": 1,
+  "assumptions": [],
+  "provider_config": {
+    "primary": "search-cli",
+    "scholarly": null
+  },
+  "report_dir": "/Users/apa/Documents/deep-research-cc/Crossword_Slot_Fill_Ranking_RunB_Research_20260902",
+  "artifact_paths": {
+    "sources": "sources.jsonl",
+    "evidence": "evidence.jsonl",
+    "claims": "claims.jsonl",
+    "report": "report.md"
+  },
+  "continuation": null
+}

@@ -1,0 +1,21 @@
+{
+  "version": "3.0.0",
+  "query": "RUN C: Where a given word can go, and which placement leaves the grid fillable (crossword construction)",
+  "mode": "deep",
+  "started_at": "2026-09-02T10:49:08.527195+00:00",
+  "finished_at": null,
+  "gate_attempts": 3,
+  "assumptions": [],
+  "provider_config": {
+    "primary": "search-cli",
+    "scholarly": null
+  },
+  "report_dir": "/Users/apa/Documents/deep-research-cc/Crossword_Placement_Research_20260902",
+  "artifact_paths": {
+    "sources": "sources.jsonl",
+    "evidence": "evidence.jsonl",
+    "claims": "claims.jsonl",
+    "report": "report.md"
+  },
+  "continuation": null
+}

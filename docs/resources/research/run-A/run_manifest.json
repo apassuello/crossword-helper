@@ -1,0 +1,31 @@
+{
+  "version": "3.0.0",
+  "query": "RUN A: how to represent a crossword grid, its entries and their crossings \u2014 CP variable models, open-source tool representations, interchange formats, cell ownership and consistent removal, flat index-based layouts for Rust/WASM",
+  "mode": "deep",
+  "started_at": "2026-09-02T17:12:38.938915+00:00",
+  "finished_at": "2026-09-02T18:05:44.257288+00:00",
+  "gate_attempts": 0,
+  "assumptions": [
+    "OUTPUT CONTRACT OVERRIDE: the user's contract (SOURCES table with the given 10-column schema, then per-question findings A1-A5 citing source ids, then a gaps section) supersedes the deep-research skill's report template. No Executive Summary, no Recommendations, no Synthesis & Insights sections \u2014 the user's rule is explicit: 'No design recommendations for our system. Findings and sources only.' Same override Run R recorded.",
+    "REUSE OF PRIOR RUNS IN THIS PROGRAMME. Question A2 asks for the file/module locations of each tool's grid and entry representation, and states that reading the code itself was Task R. Task R ran on 2026-09-02 (Crossword_Tools_CodeRead_RunR_20260902) over SHA-pinned clones and already reports R1 (grid data structure), R2 (entry/slot structure), R3 (letter ownership) and R6 (serialisation) per tool with file paths and line ranges. Run A therefore does NOT re-read that code; A2's contribution is the DESIGN-NOTE layer Run R did not cover \u2014 READMEs, the Qxw manual, and issue trackers \u2014 plus pointers into Run R's sections. All five pinned SHAs were independently re-confirmed against the GitHub default-branch commit log on 2026-09-02.",
+    "The four A1 founding papers were already retrieved to disk by Run C (Crossword_Placement_Research_20260902) on the same day and were copied into this run's corpus/A1 rather than re-fetched. Beacham et al. 2001 was additionally re-downloaded from the authors' own copy at cs.uwaterloo.ca/~vanbeek/Publications/cai01a.pdf; the two files are byte-identical in size (220,279 bytes).",
+    "BEACHAM 2001 IS OCR. That PDF embeds Type-3 fonts with no unicode mapping, so pdftotext returns garbage. The readable text used in this run is a 300-dpi Tesseract OCR (corpus/A1/beacham2001_ocr.txt). Character-level fidelity is not guaranteed; every quote taken from it is flagged as OCR in the report and in evidence.jsonl locators.",
+    "CLAIMS LEDGER IS HAND-BUILT. extract_claims.py maps a report's [N] markers to sources POSITIONALLY by file order in sources.jsonl. This run's SOURCES table is hand-curated and its ids are not positional, so extract_claims would silently attach evidence from the wrong source. claims.jsonl is therefore built by hand from the report's own citations, as Run R did.",
+    "Every evidence row written in the main thread is machine-verified verbatim against the local file it names before being appended (_persist.py). The verifier folds whitespace, ligatures, curly quotes and dashes; it was negative-controlled (an absent string and a near-miss with the quote marks stripped are both refused) and positive-controlled on a known span.",
+    "CLAIMS LEDGER SEMANTICS. claims.jsonl is a source-level provenance index (one row per S-id in the SOURCES table, carrying that source's evidence rows), not a sentence-level claim index. verify_claim_support therefore has no claim text to match and would score these rows needs_review; a low 'factual_unsupported' figure on this run is true but nearly vacuous. The S-id -> source_id map is explicit, not positional or fuzzy, and was audited independently: 53/53 mappings are corroborated by the SOURCES-table row itself, and 0 evidence rows belong to a source other than the one their claim cites.",
+    "OUTPUT-CONTRACT CONSEQUENCE FOR THE GATES. The user's contract replaces the skill's report template, so validate_report.py's required-section check (Executive Summary, Recommendations, Bibliography, Methodology Appendix) cannot pass and is not made to pass by contorting the report. The retrieval-integrity rule IS satisfied: the report carries a '## Retrieval access' block naming every source judged on HTTP probes alone.",
+    "Four works are registered twice in sources.jsonl, under an author-mirror URL and a DOI, because different retrieval agents fetched them by different routes (Beacham et al. 2001, Botea 2007, Anbulagan & Botea 2008, the Qxw manual). Both registrations are kept rather than merged: each records a retrieval that actually happened. The SOURCES table presents one row per work."
+  ],
+  "provider_config": {
+    "primary": "search-cli / curl (HTTP)",
+    "scholarly": "Semantic Scholar graph API (batch endpoint)"
+  },
+  "report_dir": "/Users/apa/Documents/deep-research-cc/Crossword_Grid_Representation_RunA_Research_20260902",
+  "artifact_paths": {
+    "sources": "sources.jsonl",
+    "evidence": "evidence.jsonl",
+    "claims": "claims.jsonl",
+    "report": "report.md"
+  },
+  "continuation": null
+}

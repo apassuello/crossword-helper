@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "run_dir": ".",
+  "mode": "deep",
+  "gate_attempts": 3,
+  "violations": [],
+  "violation_count": 0,
+  "warnings": [],
+  "warning_count": 0
+}

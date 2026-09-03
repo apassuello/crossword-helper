@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "run_dir": "/Users/apa/Documents/deep-research-cc/Crossword_Placement_Research_20260902",
+  "mode": "deep",
+  "gate_attempts": 3,
+  "violations": [],
+  "violation_count": 0,
+  "warnings": [
+    {
+      "rule": "closure_claim_needs_non_http_evidence",
+      "detail": "claim row 85: asserts inaccessibility but supporting evidence is subagent_http \u2014 no JS-capable retrieval (browser_session/mcp_tool_call) backs it. If this claim is not about source availability, or already scopes itself to the retrieval client, ignore this warning. Text: 'ResearchGate returned HTTP 403 to an HTTP client with a browser User-Agent and was not tested in a browser, so nothing h'",
+      "severity": "warning"
+    }
+  ],
+  "warning_count": 1
+}
