@@ -63,12 +63,28 @@ Why: a green suite once coexisted with pause/resume broken end to end.
 ❌ Quoting counts, timings or "FIXED" in docs or docstrings → ✅ name the command that proves it
 Why: source docstrings claimed a "454k word" list; the file has ~44k. See `docs/dev/FABRICATION-LOG.md`.
 
+❌ Treating a docstring as prose, not a testable claim about the code beside it → ✅ read them
+together; a contradiction is a bug
+Why: `beam_search_autofill.py`'s docstring said task_id "is intentionally NOT forwarded" (`950fa79`,
+true when written); `2ef7d47` added the `task_id` param and forwarded it in the `super().__init__()`
+call below without touching the docstring. Fixed in `fc3f2aa`, which names both commits. No test
+covered the difference, so nothing failed. Different failure than the entry above — that one is a
+fabricated number, this is a docstring contradicting the code next to it.
+
 ❌ Gating a liveness check on an iteration counter → ✅ gate it on elapsed time
 Why: `iterations % N == 0` bounds latency only if an iteration is cheap. Pause was polled that way
 on both solver paths; a beam iteration on a blank 15x15 outlasts the whole run, so `iterations`
 reached 1 in 20s and the pause flag was never read (#26). `autofill.py` already learned this for
 timeouts — "checking only every 100 iterations let slow-running grids overrun the timeout budget,
 since iteration count alone does not track wall-clock time".
+
+❌ Trusting pre-commit lint to catch a defect in a file the commit didn't touch → ✅ lint the full
+tree periodically, not only the diff
+Why: `.pre-commit-config.yaml`'s ruff hook runs only on changed files (no `always_run`, unlike
+`check-guards`). `backend/tests/unit/test_routes.py` defined `TestFillWithProgress` twice — line 415
+(7 methods) and line 655 (2) — Python binds the later class, so the first 7 methods never ran, and
+the suite stayed green because no commit touched the file to trigger the lint. F811 fired the moment
+one finally did (`0c6ac10`); collection in that file went 51 → 58.
 
 ---
 

@@ -104,6 +104,20 @@ uniform across the phases a test budgets separately**
 - Do not diagnose this as "slow CI runners". That misdiagnosis cost three CI attempts, then two
   more after this block was written to prevent it.
 
+**[BUG] `communicate(timeout=)` and a dedicated reader thread on the same pipe race**
+- Symptom: stderr progress events go missing silently — no exception, no timeout, just fewer
+  `send_progress` calls than the child actually emitted.
+- Cause: `subprocess.communicate(timeout=)` drains stdout **and** stderr internally. Pairing it with
+  a reader thread on the SAME pipe means the two readers compete for each line; whichever loses gets
+  nothing, because a line landing in `communicate()`'s own buffer is never parsed or forwarded.
+- Measured (`b5751e7`): a synthetic 20-line child lost 1 of 20 lines, in two of three runs, under
+  the naive (thread-plus-`communicate()`) version.
+- Fix: capture the stream into a local, then set `process.stderr = None` **before** starting the
+  reader thread, so `communicate()` sees no stream to manage — exactly one reader on the pipe
+  throughout. Live at `_pump_stderr` / `run_cli_with_progress` in `backend/api/routes.py`.
+- Distinct from the pytest-cov block above, which also mentions `communicate(timeout=)`: that one
+  bounds *wall* time while `-t` bounds *solver* time — a different budget, not this race.
+
 **[SPEC] A `slow`-marked test runs automatically only if a job names its file.** `pytest.ini`
 sets `addopts = -m "not slow"`, so every ordinary invocation deselects slow tests. One job
 overrides this: `pause-resume-seam` in `.github/workflows/test.yml` runs `pytest -m slow` against
@@ -159,6 +173,19 @@ paths draw randomness at `iterative_repair.py:398/647/906` and `value_ordering.p
 failed intermittently under repetition. Seed both runs from one value so the shared phase
 reproduces, then assert the property the code actually guarantees: hybrid returns the best of its
 own beam and repair passes (`hybrid_autofill.py:200-215`). Fixed in `06f8036`.
+
+**[BUG] A percentage margin on a deterministic delay flakes under load — bound with a fixed ceiling**
+- Symptom: a timing assertion written as a multiple of the test's own sleep interval (e.g.
+  `elapsed < 1.5 * sleep_interval`) fails intermittently in CI, despite the buggy and fixed
+  behaviors differing by orders of magnitude.
+- Cause: a percentage margin is only as stable as the wall-clock value it's a percentage of;
+  scheduling jitter on a loaded runner can push a near-instant path past a sub-second relative bound.
+- Fix: use a fixed ceiling (e.g. `assert elapsed < 3.0`) sized well below the buggy behavior's
+  magnitude — never a multiple of the deterministic delay.
+- This is already a code comment at `cli/tests/unit/test_beam_search.py:344-345` ("fixed ceiling,
+  not % — % margins are fragile on loaded CI runners") — and it recurred anyway, in the same file: a
+  draft test using `1.5 * sleep_interval` flaked under concurrent load despite a roughly 300x
+  RED/GREEN gap (`2e5e1e0`, ~16s vs ~0.05s). That recurrence is why the lesson is repeated here.
 
 **[SPEC] `Grid.set_black_square` enforces 180° symmetry by default.** A fixture blacking `(10,10)`
 silently blacks `(0,0)` as well, so the slot layout under test is not the one you wrote. Pass
