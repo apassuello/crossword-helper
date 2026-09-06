@@ -1,7 +1,7 @@
 # Research sources index
 
 Generated 2026-09-02 from the four deep-research runs' own SOURCES tables. Rows are copied, not re-verified; open the run report before citing.
-The four reports, with their evidence and claims files, are in `docs/resources/research/run-{A,B,C,R}/`. The corpus (saved papers, pages, cloned repositories; 47 unique PDFs, about 64 MB) stays in the run directories under `/Users/apa/Documents/deep-research-cc/`; `saved_path` is relative to the run directory named in each section.
+The four reports, with their evidence and claims files, are in `docs/resources/research/run-{A,B,C,R}/`. The corpus (saved papers, pages, cloned repositories; 47 unique PDFs, about 64 MB) stays in the run directories under `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/` — present in the working tree but excluded by `.gitignore` (`data/research/`), so it is never committed; `saved_path` is relative to the run directory named in each section.
 What the runs hold beyond this index, per run directory: the report (findings, 3,236 lines across the four), `evidence.jsonl` (865 machine-verified quotes with locators), `claims.jsonl` (213 claims, A/B/C), and `corpus/` (saved papers, pages, cloned repositories). This file indexes the sources only.
 Retrieval status is the run's own label: FETCHED = full text read from a saved file; ABSTRACT = abstract or landing page only; SNIPPET = search results only.
 
@@ -9,7 +9,7 @@ Retrieval status is the run's own label: FETCHED = full text read from a saved f
 ## Run A: Grid and entry data model
 
 Report (in repo): `docs/resources/research/run-A/REPORT.md`, with `evidence.jsonl`, `claims.jsonl`, `run_manifest.json`, `validation_report.json` alongside.  
-Corpus (outside repo): `/Users/apa/Documents/deep-research-cc/Crossword_Grid_Representation_RunA_Research_20260902/corpus/`  
+Corpus (in working tree, gitignored, not committed): `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/Crossword_Grid_Representation_RunA_Research_20260902/corpus/`  
 Rows: 53
 
 | id | type | citation | url or doi | year | retrieval | saved path | licence / access | relevance | what it gives us |
@@ -71,7 +71,7 @@ Rows: 53
 ## Run B: Slot to words: lookup, ranking, word-list scales
 
 Report (in repo): `docs/resources/research/run-B/REPORT.md`, with `evidence.jsonl`, `claims.jsonl`, `run_manifest.json`, `validation_report.json` alongside.  
-Corpus (outside repo): `/Users/apa/Documents/deep-research-cc/Crossword_Slot_Fill_Ranking_RunB_Research_20260902/corpus/`  
+Corpus (in working tree, gitignored, not committed): `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/Crossword_Slot_Fill_Ranking_RunB_Research_20260902/corpus/`  
 Rows: 59
 
 | id | type | citation | url or doi | year | retrieval | saved path | licence / access | relevance | what it gives us |
@@ -139,7 +139,7 @@ Rows: 59
 ## Run C: Word to slots: placement practice and fillability
 
 Report (in repo): `docs/resources/research/run-C/REPORT.md`, with `evidence.jsonl`, `claims.jsonl`, `run_manifest.json`, `validation_report.json` alongside.  
-Corpus (outside repo): `/Users/apa/Documents/deep-research-cc/Crossword_Placement_Research_20260902/corpus/`  
+Corpus (in working tree, gitignored, not committed): `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/Crossword_Placement_Research_20260902/corpus/`  
 Rows: 52
 
 | id | type | citation | url or doi | year | retrieval | saved path | licence / access | relevance | what it gives us |
@@ -199,8 +199,8 @@ Rows: 52
 
 ## Run R: Code reading of five construction tools
 
-Report (in repo): `docs/resources/research/run-R/REPORT.md`, with `evidence.jsonl`, `claims.jsonl`, `run_manifest.json`, `validation_report.json` alongside.  
-Corpus (outside repo): `/Users/apa/Documents/deep-research-cc/Crossword_Tools_CodeRead_RunR_20260902/corpus/`  
+Report (in repo): `docs/resources/research/run-R/REPORT.md`, with `evidence.jsonl` and `run_manifest.json` alongside (no `claims.jsonl` or `validation_report.json` for this run).  
+Corpus (in working tree, gitignored, not committed): `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/Crossword_Tools_CodeRead_RunR_20260902/corpus/`  
 Rows: 15
 
 | id | type | citation | url or doi | year | retrieval | saved path | licence / access | relevance | what it gives us |
