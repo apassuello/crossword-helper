@@ -3,9 +3,13 @@
 #   1. dead relative links
 #   2. derivable state asserted in prose (counts, pass rates, "FIXED")
 #
-# Scope note: archives and the fabrication log are EXCLUDED. Archived docs are
-# historical records and are allowed to be stale (charter Rule 2), and
-# FABRICATION-LOG.md necessarily quotes the banned strings it exists to document.
+# Scope note: archives, the fabrication log and imported research reports are
+# EXCLUDED. Archived docs are historical records and are allowed to be stale
+# (charter Rule 2); FABRICATION-LOG.md necessarily quotes the banned strings it
+# exists to document; and docs/resources/research/ holds verbatim reports of
+# external literature whose figures describe that literature's scope, not this
+# repo's state. Those reports are also mirrored in the gitignored research
+# bundle, so editing them here to satisfy a guard would fork the two copies.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
@@ -14,7 +18,7 @@ cd "$(dirname "$0")/.." || exit 1
 MARKER=$(mktemp "${TMPDIR:-/tmp}/docs-check.XXXXXXXX")
 trap 'rm -f "$MARKER"' EXIT
 
-EXCLUDE='^(docs/archive/|\.archive/|docs/dev/FABRICATION-LOG\.md)'
+EXCLUDE='^(docs/archive/|\.archive/|docs/resources/research/|docs/dev/FABRICATION-LOG\.md)'
 
 live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 
