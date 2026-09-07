@@ -116,7 +116,7 @@ class LetterBitsetIndex:
         if resolved is None:
             return 0
         _, mask = resolved
-        return sum(bin(int(chunk)).count("1") for chunk in mask)
+        return _popcount(mask)
 
     def has_matches(self, pattern: str, min_score: int = 30) -> bool:
         """True if any word matches pattern; equal to count_matches(pattern, min_score) > 0."""
@@ -126,6 +126,71 @@ class LetterBitsetIndex:
             return False
         _, mask = resolved
         return bool(np.any(mask))
+
+    def mask(self, pattern: str, min_score: int = 0) -> np.ndarray:
+        """
+        Resolve an already-canonical pattern to its uint64 eligibility mask.
+
+        Unlike find, this does not normalise: pattern must already be
+        upper-case with '?' for a wildcard and every other character a
+        letter of the alphabet. Degrades to an all-zero array of shape
+        (ceil(N_L/64),) -- never an exception -- for the same inputs find
+        degrades to [] for: a length with no words, an empty pattern, or a
+        letter outside the alphabet. min_score defaults to 0, not find's 30,
+        because a propagator seeds a domain before any score floor applies.
+        """
+        resolved = self._eligible_mask(pattern, min_score)
+        if resolved is not None:
+            return resolved[1]
+        length = len(pattern)
+        num_chunks = self._bits[length].shape[-1] if length in self._bits else 0
+        return np.zeros(num_chunks, dtype=np.uint64)
+
+    def letters_at(self, length: int, pos: int, mask: np.ndarray) -> int:
+        """
+        Alphabet bitmask of letters occurring at pos among the word ids mask selects.
+
+        Bit a is set iff any(bits[length][pos][a] & mask). An all-zero mask
+        (including one mask() returned for a length this index holds no
+        words for) never indexes per-length storage and returns 0.
+        """
+        if not np.any(mask):
+            return 0
+        hits = np.any(self._bits[length][pos] & mask, axis=-1)
+        letters = 0
+        for position, hit in enumerate(hits):
+            if hit:
+                letters |= 1 << position
+        return letters
+
+    def restrict(self, length: int, pos: int, letters: int, mask: np.ndarray) -> np.ndarray:
+        """
+        Narrow mask to the word ids whose letter at pos is one of letters.
+
+        Equal to mask & OR(bits[length][pos][a] for a in letters), letters
+        an alphabet bitmask. An empty letters set empties the mask; an
+        all-zero mask never indexes per-length storage and is returned as
+        is (a copy).
+        """
+        if not np.any(mask):
+            return mask.copy()
+        bits = self._bits[length]
+        allowed = np.zeros_like(mask)
+        for position in range(len(self.alphabet)):
+            if letters & (1 << position):
+                allowed |= bits[pos, position, :]
+        return mask & allowed
+
+    def words(self, length: int, mask: np.ndarray) -> list[tuple[str, int]]:
+        """(text, score) pairs, in canonical order, for the word ids mask selects."""
+        if not np.any(mask):
+            return []
+        words = self._words[length]
+        return [(words[word_id].text, int(words[word_id].score)) for word_id in _ids_from_mask(mask)]
+
+    def count(self, mask: np.ndarray) -> int:
+        """Popcount of mask: the number of word ids it selects."""
+        return _popcount(mask)
 
     def _eligible_mask(self, pattern: str, min_score: int) -> tuple[int, np.ndarray] | None:
         """
@@ -185,6 +250,11 @@ def _prefix_mask(n_eligible: int, num_chunks: int) -> np.ndarray:
     if remainder:
         mask[full_chunks] = (np.uint64(1) << np.uint64(remainder)) - np.uint64(1)
     return mask
+
+
+def _popcount(mask: np.ndarray) -> int:
+    """Total set bits across a chunked uint64 mask: the number of word ids it selects."""
+    return sum(bin(int(chunk)).count("1") for chunk in mask)
 
 
 def _ids_from_mask(mask: np.ndarray) -> list[int]:
