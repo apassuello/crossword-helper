@@ -1,5 +1,5 @@
 # Domain Capability Family — Design
-**Version 0.1.1** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.2** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
 
 ---
 
@@ -126,6 +126,8 @@ class LetterBitsetIndex:
 Behaviour pinned to exact values:
 - `from_word_list` takes a `WordList`, never a file path. Length bounds (3–21) and de-duplication
   are inherited from `WordList`'s own validation (`cli/src/fill/word_list.py`).
+- The §2 alphabet cap raises exactly
+  `ValueError(f"alphabet has {n} letters; the index supports at most 64")`, `n = len(alphabet)`.
 - `find` normalises first: `pattern.upper().replace(".", "?")` — the same step
   `TriePatternMatcher.find` performs (`cli/src/fill/trie_pattern_matcher.py`). The primitives do
   **not** normalise; they require a canonical pattern.
@@ -141,7 +143,9 @@ Behaviour pinned to exact values:
 - `letters_at(L, pos, mask)` has bit `a` set iff `any(bits[L][pos][a] & mask)`.
 - `save` writes, per length, `bits_L`, `scores_L`, `texts_L` (a NumPy `U` array), plus `alphabet`.
   `load` rebuilds `words[L]` from `texts_L`/`scores_L`. Round trip is exact.
-- `stats()` is the only place the footprint is reported. Do not quote its numbers in prose.
+- `stats()` returns exactly the keys `{"words": int, "lengths": tuple[int, ...], "alphabet": str,
+  "bytes": int}` — `alphabet` the letters joined in order, `bytes` the summed `nbytes` of every
+  stored array. It is the only place the footprint is reported; do not quote its numbers in prose.
 
 Equivalence contract (the test that is written first, RED against a stub):
 - For every pattern `p` in a fixed sample and `m in {0, 30, 50}`:
@@ -537,6 +541,9 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.2** — 2026-09-07 — planning amendment, C1 only: pinned the alphabet-cap `ValueError`
+  message and the exact key set of `stats()`. Both were interfaces §4 named without fixing, and two
+  implementers would not have converged on either. No behaviour changed.
 - **0.1.1** — 2026-09-07 — owner approved 0.1.0. Three review findings applied: the singleton
   not-equals rule became a phase between arc-consistency passes, so the fixed point is confluent
   with the rule on (§7); `refine` added, because the idempotence property had no entry point taking
