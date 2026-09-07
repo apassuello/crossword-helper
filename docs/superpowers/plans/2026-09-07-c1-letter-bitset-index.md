@@ -95,8 +95,9 @@ def canonical_words(word_list: WordList) -> dict[int, tuple[ScoredWord, ...]]: .
 - A length with no words has no key. An empty `WordList` returns `{}`.
 - The function reads `word_list.words` and sorts it. It must **not** delegate to
   `WordList.get_by_length`, which sorts by score alone and leaves equal-scored words in insertion
-  order (`cli/src/fill/word_list.py`, the `_length_index` sort in `add_words`). See the normative
-  case below — this is the trap the task exists to avoid.
+  order (`cli/src/fill/word_list.py`, the `_length_index` sort in `add_words`). The fixture below
+  inserts `CAB` before `ACT` at equal score precisely so that a delegating implementation returns
+  the wrong order and fails the second normative row.
 
 **Normative cases** — build a `WordList` from the scored pairs
 `[("CAT", 90), ("COT", 90), ("CUT", 70), ("BAT", 50), ("CAB", 30), ("ACT", 30)]`.
@@ -106,7 +107,6 @@ The implementer's tests must cover every row; exact values:
 |---|---|
 | `canonical_words(wl).keys()` | `{3}` |
 | `[w.text for w in canonical_words(wl)[3]]` | `["CAT", "COT", "CUT", "BAT", "ACT", "CAB"]` |
-| `[w.text for w in wl.get_by_length(3)]` | `["CAT", "COT", "CUT", "BAT", "CAB", "ACT"]` — differs at the tie; assert this divergence so a future delegation to `get_by_length` fails loudly |
 | `canonical_words(WordList([]))` | `{}` |
 | `type(canonical_words(wl)[3])` | `tuple` |
 
@@ -249,15 +249,28 @@ For the last row, build a `WordList` whose words span 65 distinct uppercase alph
 `WordList._is_valid_word` accepts any `str.isalpha()` and `str.isupper()` text, so uppercase Greek
 or Cyrillic letters qualify alongside A–Z.
 
-Also add one test against the real list, `data/wordlists/comprehensive.txt`, running the same
-differential comparison over the sample. Mark it `@pytest.mark.slow` if it exceeds a couple of
-seconds.
+**The real-list case.** Add one test running the same differential comparison over the sample
+against `data/wordlists/comprehensive.txt`. Two things are pinned so it behaves identically however
+pytest is invoked:
+- Resolve the path from the test file, never relatively — `REPO_ROOT = Path(__file__).resolve().parents[3]`,
+  then `REPO_ROOT / "data" / "wordlists" / "comprehensive.txt"`. That is the existing idiom in
+  `cli/tests/integration/test_fill_pause_resume.py:29`, and `parents[3]` is correct from
+  `cli/tests/unit/` too. A bare relative path resolves against the repo root under `pytest` and
+  against `cli/` under `cd cli && pytest`, so it cannot pass both.
+- Load with `WordList.from_file(path, use_cache=False)`. The default is `True`, which reads a 19 MB
+  sibling `.pkl` whenever its mtime is not older than the source. Both paths load today and yield
+  the same list, so this is for determinism, not correctness: the test should not depend on a build
+  artifact's timestamp.
+
+Mark it `@pytest.mark.slow` if it exceeds a couple of seconds.
 
 - [ ] **Step 1: Write the failing differential test**
 
 Design the tests yourself. Write the differential test against a stub `LetterBitsetIndex` whose
-methods raise `NotImplementedError`, so the first run is RED for the right reason. Cover every
-normative row and every pattern class in the sample list.
+`from_word_list` returns a bare instance and whose *query* methods raise, so the RED run fails in
+the assertions rather than erroring during fixture setup. A stub that raises at construction makes
+every test error identically and proves nothing. Cover every normative row and every pattern class
+in the sample list.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -274,10 +287,11 @@ Build the layout above in `from_word_list`, then the three query methods.
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd cli && python -m pytest tests/unit/test_letter_bitset.py -v
-cd cli && python -m pytest tests/unit/test_letter_bitset.py -v -m slow
+cd cli && python -m pytest tests/unit/test_letter_bitset.py -v -o addopts=""
 ```
-Expected: PASS on both, output pristine.
+Expected: PASS, output pristine, the real-list case included. `-o addopts=""` clears `pytest.ini`'s
+default `-m "not slow"` so slow tests run too; do not use a bare `-m slow`, which exits rc=5 when
+nothing carries the marker.
 
 - [ ] **Step 5: Commit**
 
@@ -347,7 +361,8 @@ The primitives are the reason the index exists — C3 calls them in its inner lo
 - `restrict(L, pos, letters, mask(p)) == OR(mask(p with position pos replaced by a) for a in letters)`
 
 **Invariants** to assert on the real list as well as the fixture: no repeated text within a length;
-the lengths present are exactly those `WordList` holds.
+the lengths present are exactly those `WordList` holds. Load the real list exactly as Task 2 pins it
+— `parents[3]`-anchored path, `use_cache=False`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -366,10 +381,9 @@ Expected: FAIL on the new cases — the primitives do not exist. Task 2's cases 
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd cli && python -m pytest tests/unit/test_letter_bitset.py -v
-cd cli && python -m pytest tests/unit/test_letter_bitset.py -v -m slow
+cd cli && python -m pytest tests/unit/test_letter_bitset.py -v -o addopts=""
 ```
-Expected: PASS on both, output pristine.
+Expected: PASS, output pristine.
 
 - [ ] **Step 5: Commit**
 
@@ -404,6 +418,9 @@ git commit -m "feat(domain): add bitset primitives for constraint propagation"
 - `save` writes a NumPy `.npz` containing, per length `L`, the arrays `bits_{L}`, `scores_{L}` and
   `texts_{L}` (a NumPy `U` array), plus a single `alphabet` array. **Flat arrays only** — no
   pickled objects, so the file stays readable from a future Rust port (spec §2).
+- `save` writes to exactly the path it is given: the caller supplies the `.npz` suffix, and `save`
+  must not let `np.savez` append one. `np.savez` appends `.npz` when the name lacks it, which would
+  leave `load(path)` looking at a file that does not exist.
 - `load` rebuilds `words[L]` from `texts_{L}` and `scores_{L}`. The round trip is exact: a loaded
   index reproduces every `find` result and every primitive result of the index that saved it.
 - `stats()` returns exactly the keys
@@ -441,7 +458,7 @@ Expected: FAIL on the new cases only.
 - [ ] **Step 4: Run the full suite**
 
 ```bash
-cd cli && python -m pytest tests/unit/test_letter_bitset.py tests/unit/test_wordorder.py -v
+cd cli && python -m pytest tests/unit/test_letter_bitset.py tests/unit/test_wordorder.py -v -o addopts=""
 pytest
 npm run build
 ```
