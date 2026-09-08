@@ -12,9 +12,11 @@ Slot order, and therefore Slot.id, follows Grid.enumerate_white_runs' walk
 (all across runs in row-major order, then all down runs in column-major
 order) filtered to length >= min_length the way Grid.get_word_slots filters
 it -- so a slot built here and looked up by id agrees with the grid's own
-oracle at every min_length. crossings is always () in this module: Task 2
-populates it. fixed_from_grid/pattern (Task 3) and to_dict/from_dict
-(Task 4) are later additions to this same file, not built here.
+oracle at every min_length. Crossings are pinned across-first: a Crossing's
+across_id always names an "across" slot and down_id a "down" one, regardless
+of which slot an oracle names first. fixed_from_grid/pattern (Task 3) and
+to_dict/from_dict (Task 4) are later additions to this same file, not built
+here.
 """
 
 from __future__ import annotations
@@ -141,11 +143,48 @@ class SlotModel:
             cell for cell in range(num_cells) if not is_black[cell] and cell_across[cell] == -1 and cell_down[cell] == -1
         )
 
+        # Materialise crossings from the slots themselves -- not from cell_across/cell_down --
+        # so the agreement assert below compares two independently derived things. An across
+        # slot and a down slot share at most one cell (perpendicular runs), found here purely
+        # from Slot.cells.
+        across_slots = [s for s in slots if s.direction == "across"]
+        down_slots_with_sets = [(s, set(s.cells)) for s in slots if s.direction == "down"]
+
+        crossings: list[Crossing] = []
+        for across in across_slots:
+            for down, down_cell_set in down_slots_with_sets:
+                shared = set(across.cells) & down_cell_set
+                if not shared:
+                    continue
+                (cell,) = shared
+                crossings.append(
+                    Crossing(
+                        cell=cell,
+                        across_id=across.id,
+                        across_pos=across.cells.index(cell),
+                        down_id=down.id,
+                        down_pos=down.cells.index(cell),
+                    )
+                )
+        crossings.sort(key=lambda c: c.cell)
+
+        # Agreement assert: cell_across/cell_down were built above by marking cells while
+        # walking runs -- an independent route from the crossings just built by intersecting
+        # slot cell sets. A discrepancy here means the two routes disagree, which should never
+        # happen; per spec 6 this is an internal invariant, hence a bare assert.
+        for crossing in crossings:
+            assert cell_across[crossing.cell] == crossing.across_id
+            assert cell_down[crossing.cell] == crossing.down_id
+            assert slots[crossing.across_id].cells[crossing.across_pos] == crossing.cell
+            assert slots[crossing.down_id].cells[crossing.down_pos] == crossing.cell
+        mutually_owned_cells = {i for i in range(num_cells) if cell_across[i] != -1 and cell_down[i] != -1}
+        assert {c.cell for c in crossings} == mutually_owned_cells
+
         return cls(
             size=size,
             blacks=black_cells,
             slots=tuple(slots),
-            crossings=(),
+            crossings=tuple(crossings),
             cell_across=tuple(cell_across),
             cell_down=tuple(cell_down),
             unslotted=unslotted,
