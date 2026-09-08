@@ -407,3 +407,160 @@ class TestPrimitiveInvariantsOnRealWordList:
     def test_words_of_all_wildcard_mask_has_no_repeated_text(self, real_bitset_index, length):
         texts = [text for text, _ in real_bitset_index.words(length, real_bitset_index.mask("?" * length))]
         assert len(texts) == len(set(texts))
+
+
+class TestStats:
+    """Exact values from the task-4 brief's normative-cases table, on FIXTURE_WORDS."""
+
+    def test_stats_words_is_total_word_count(self, bitset_index):
+        assert bitset_index.stats()["words"] == 6
+
+    def test_stats_lengths_is_the_lengths_present(self, bitset_index):
+        assert bitset_index.stats()["lengths"] == (3,)
+
+    def test_stats_alphabet_is_the_letters_joined_in_order(self, bitset_index):
+        assert bitset_index.stats()["alphabet"] == "ABCOTU"
+
+    def test_stats_key_set_is_pinned_exactly(self, bitset_index):
+        assert sorted(bitset_index.stats().keys()) == ["alphabet", "bytes", "lengths", "words"]
+
+    def test_stats_bytes_is_a_positive_int(self, bitset_index):
+        bytes_value = bitset_index.stats()["bytes"]
+        assert isinstance(bytes_value, int)
+        assert bytes_value > 0
+
+    def test_stats_bytes_grows_with_a_bigger_index(self, bitset_index, real_bitset_index):
+        """Not pinned to an exact value, but a bigger backing WordList must report more, never equal or less."""
+        assert real_bitset_index.stats()["bytes"] > bitset_index.stats()["bytes"]
+
+    def test_stats_lengths_elements_are_native_ints_not_numpy_scalars(self, bitset_index):
+        assert all(isinstance(length, int) for length in bitset_index.stats()["lengths"])
+
+    def test_stats_on_empty_word_list_reports_zero_words_and_no_lengths(self):
+        idx = LetterBitsetIndex.from_word_list(WordList([]))
+        stats = idx.stats()
+        assert stats["words"] == 0
+        assert stats["lengths"] == ()
+        assert stats["alphabet"] == ""
+        assert stats["bytes"] == 0
+
+
+class TestPersistenceArchiveFormat:
+    """The on-disk boundary contract: flat arrays only, since a later Rust port must read this file directly."""
+
+    def test_save_writes_only_the_pinned_keys(self, bitset_index, tmp_path):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        with np.load(path) as data:
+            assert sorted(data.files) == ["alphabet", "bits_3", "scores_3", "texts_3"]
+
+    def test_save_writes_no_pickled_object_arrays(self, bitset_index, tmp_path):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        with np.load(path) as data:
+            for key in data.files:
+                assert data[key].dtype.kind != "O", f"{key} is a pickled-object array, not a flat array"
+
+    def test_save_writes_texts_as_a_unicode_array(self, bitset_index, tmp_path):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        with np.load(path) as data:
+            assert data["texts_3"].dtype.kind == "U"
+
+    def test_save_writes_to_exactly_the_given_path(self, bitset_index, tmp_path):
+        """save must not let np.savez append a suffix or otherwise relocate the file it is given."""
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        assert list(tmp_path.iterdir()) == [path]
+
+    def test_save_on_empty_word_list_writes_only_the_alphabet_key(self, tmp_path):
+        idx = LetterBitsetIndex.from_word_list(WordList([]))
+        path = tmp_path / "empty.npz"
+        idx.save(path)
+
+        with np.load(path) as data:
+            assert list(data.files) == ["alphabet"]
+
+
+class TestPersistenceRoundTrip:
+    """save/load round trip, using pytest's tmp_path for the file (task-4 brief)."""
+
+    def test_load_after_save_reproduces_normative_find(self, bitset_index, tmp_path):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.find("C?T", 0) == [("CAT", 90), ("COT", 90), ("CUT", 70)]
+
+    def test_loaded_index_reports_the_same_alphabet_and_letter_index(self, bitset_index, tmp_path):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.alphabet == bitset_index.alphabet
+        assert loaded.letter_index == bitset_index.letter_index
+
+    def test_loaded_index_stats_equal_the_original(self, bitset_index, tmp_path):
+        """Two independently constructed objects: dtype drift or a dropped length would surface here."""
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.stats() == bitset_index.stats()
+
+    def test_round_trip_on_empty_word_list_preserves_empty_state(self, tmp_path):
+        idx = LetterBitsetIndex.from_word_list(WordList([]))
+        path = tmp_path / "empty.npz"
+        idx.save(path)
+
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.alphabet == ()
+        assert loaded.find("???", 0) == []
+        assert loaded.stats() == idx.stats()
+
+    @pytest.mark.parametrize("min_score", MIN_SCORES)
+    @pytest.mark.parametrize("pattern", PATTERN_SAMPLE)
+    def test_round_trip_agrees_with_original_on_find_mask_count_letters_at_and_words(
+        self, bitset_index, tmp_path, pattern, min_score
+    ):
+        path = tmp_path / "index.npz"
+        bitset_index.save(path)
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.find(pattern, min_score) == bitset_index.find(pattern, min_score)
+
+        original_mask = bitset_index.mask(pattern, min_score)
+        loaded_mask = loaded.mask(pattern, min_score)
+        assert np.array_equal(loaded_mask, original_mask)
+
+        assert loaded.count(loaded_mask) == bitset_index.count(original_mask)
+
+        length = len(pattern)
+        for pos in range(length):
+            assert loaded.letters_at(length, pos, loaded_mask) == bitset_index.letters_at(length, pos, original_mask)
+
+        assert loaded.words(length, loaded_mask) == bitset_index.words(length, original_mask)
+
+
+class TestPersistenceRoundTripOnRealWordList:
+    """Same round trip, over the shipping comprehensive word list -- the only fixture with num_chunks > 1,
+    so this is the direct check that the 3-D bits array's shape survives a save/load cycle intact.
+    """
+
+    @pytest.mark.parametrize("min_score", MIN_SCORES)
+    @pytest.mark.parametrize("pattern", PATTERN_SAMPLE)
+    def test_round_trip_agrees_with_original_on_find_and_mask(self, real_bitset_index, tmp_path, pattern, min_score):
+        path = tmp_path / "index.npz"
+        real_bitset_index.save(path)
+        loaded = LetterBitsetIndex.load(path)
+
+        assert loaded.find(pattern, min_score) == real_bitset_index.find(pattern, min_score)
+        assert np.array_equal(loaded.mask(pattern, min_score), real_bitset_index.mask(pattern, min_score))

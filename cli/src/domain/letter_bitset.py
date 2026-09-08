@@ -23,6 +23,8 @@ equivalence contract this claims.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from src.domain.wordorder import canonical_words
 from src.fill.word_list import ScoredWord, WordList
@@ -191,6 +193,77 @@ class LetterBitsetIndex:
     def count(self, mask: np.ndarray) -> int:
         """Popcount of mask: the number of word ids it selects."""
         return _popcount(mask)
+
+    def stats(self) -> dict:
+        """
+        Summary of this index's size: total words, the lengths present, the alphabet, and a byte footprint.
+
+        bytes is the summed nbytes of the arrays this index holds in memory
+        (the per-length bits and scores arrays) -- not a prediction of a
+        saved file's size, which also carries word text. Its exact value is
+        not part of the contract; only that it is positive whenever the
+        index holds any words.
+        """
+        lengths = tuple(sorted(self._bits))
+        words = sum(len(self._words[length]) for length in lengths)
+        alphabet = "".join(self.alphabet)
+        num_bytes = sum(self._bits[length].nbytes + self._scores[length].nbytes for length in lengths)
+        return {"words": words, "lengths": lengths, "alphabet": alphabet, "bytes": num_bytes}
+
+    def save(self, path: Path) -> None:
+        """
+        Persist this index to path as a NumPy .npz archive of flat arrays only.
+
+        Writes, per length L present, bits_{L} (uint64), scores_{L}
+        (int32), and texts_{L} (a NumPy U array of that length's words in
+        canonical order), plus a single alphabet array. No pickled Python
+        objects: letter_index is recoverable from alphabet the same way
+        from_word_list derives it, and each length L is recoverable from
+        the key names themselves, so neither is stored as its own array.
+
+        Opens path itself and hands np.savez the open file, not the path,
+        so np.savez cannot append its own .npz suffix and write somewhere
+        other than the path given.
+        """
+        arrays: dict[str, np.ndarray] = {"alphabet": np.array(self.alphabet, dtype="U1")}
+        for length in self._bits:
+            arrays[f"bits_{length}"] = self._bits[length]
+            arrays[f"scores_{length}"] = self._scores[length]
+            arrays[f"texts_{length}"] = np.array([word.text for word in self._words[length]], dtype=f"U{length}")
+
+        with open(path, "wb") as handle:
+            np.savez(handle, **arrays)
+
+    @classmethod
+    def load(cls, path: Path) -> "LetterBitsetIndex":
+        """
+        Rebuild an index from a file written by save.
+
+        Reconstructs words[L] by zipping texts_L with scores_L; letter_index
+        is re-derived from alphabet the same way from_word_list builds it,
+        and the set of lengths present is read off which bits_{L} keys the
+        archive has, not a separately stored list. The round trip is exact:
+        every find, mask, count, letters_at and words result the saved
+        index gave is reproduced by the loaded one.
+        """
+        with np.load(path) as data:
+            alphabet = tuple(data["alphabet"].tolist())
+            letter_index = {letter: position for position, letter in enumerate(alphabet)}
+
+            lengths = sorted(int(key[len("bits_") :]) for key in data.files if key.startswith("bits_"))
+            words: dict[int, tuple[ScoredWord, ...]] = {}
+            scores: dict[int, np.ndarray] = {}
+            bits: dict[int, np.ndarray] = {}
+            for length in lengths:
+                bits[length] = data[f"bits_{length}"]
+                scores[length] = data[f"scores_{length}"]
+                texts = data[f"texts_{length}"].tolist()
+                words[length] = tuple(
+                    ScoredWord(text=text, score=int(score), length=length)
+                    for text, score in zip(texts, scores[length].tolist())
+                )
+
+        return cls(alphabet, letter_index, words, scores, bits)
 
     def _eligible_mask(self, pattern: str, min_score: int) -> tuple[int, np.ndarray] | None:
         """
