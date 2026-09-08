@@ -49,6 +49,9 @@ Every task's requirements implicitly include this section.
   §12).
 - **Tests are never `slow`** (spec §11). Every oracle in this plan runs on a small fixture grid and
   a fixture `WordList`; none touches `data/wordlists/comprehensive.txt`.
+- **Branch:** `feat/c2-slot-model`, cut from `main`. One commit per task, plus whatever review-fix
+  commits the gates produce, then merge — the C1 precedent (`feat/c1-letter-bitset`, which took six
+  commits for four tasks). Never commit this plan's work to `main` directly.
 - **Commits:** one conventional commit per task, `feat(domain): ...`. No AI attribution trailers.
 
 ### Error behaviour — a plan-level convention, not a spec statement
@@ -408,7 +411,9 @@ def pattern(model: SlotModel, slot_id: int, fixed: tuple[str, ...]) -> str: ...
   result has length `Slot.length`.
 - `pattern` reads only `model` and `fixed`; it never touches a `Grid`. This is the separation the
   whole capability rests on — the model is geometry, `fixed` is content.
-- A `slot_id` outside `range(len(model.slots))` raises `IndexError`.
+- A `slot_id` that `model.slots` itself rejects raises `IndexError`. **Negative indices are not
+  guarded** — `model.slots[-1]` is slot 9 natively, and this plan adds no check to change that,
+  per the error-behaviour convention above. Do not test `pattern(model, -1, fixed)` as an error.
 - `len(fixed) != model.size * model.size` raises `ValueError`.
 
 **The invariant** — this is the task's real acceptance test, and it is byte-for-byte (spec §6):
@@ -436,6 +441,20 @@ After `g.place_word("CAT", 0, 0, "across")`:
 Slots 5, 6 and 7 are the down slots through cells 0, 1 and 2 — each picks up exactly one letter at
 position 0, which is what makes this placement a useful case rather than a trivial one.
 
+Then, on the same grid, `g.place_word("HORSE", 0, 4, "down", lock=True)` — **a locked placement**,
+which is the case that discriminates `fixed_from_grid`'s "locked or not" rule (spec §6). Nothing in
+the contract may treat these five cells differently from `CAT`'s:
+
+| what | exact value |
+|---|---|
+| `g.is_locked(0, 4)` | `True` — and `g.is_locked(0, 0)` is `False`, so the two placements differ in lock only |
+| `fixed_from_grid(g)[4], [9], [14], [19], [24]` | `"H"`, `"O"`, `"R"`, `"S"`, `"E"` |
+| `fixed_from_grid(g)[0:3]` | `("C", "A", "T")` — unchanged |
+| patterns, slots 0–9 in id order | `("CAT", "???", "????R", "???S", "??E", "C??", "A???", "T????", "???", "HORSE")` |
+
+The down word crosses three *across* slots — 2, 3 and 4 pick up `R`, `S` and `E` at their last
+position — so this row also exercises the invariant in the orientation `CAT` does not.
+
 | call | result |
 |---|---|
 | `pattern(model, 10, fixed)` | raises `IndexError` |
@@ -444,8 +463,9 @@ position 0, which is what makes this placement a useful case rather than a trivi
 - [ ] **Step 1: Write the failing test**
 
 Design the tests yourself. Cover the table, the invariant over every slot both before and after the
-placement, and both error cases. Include at least one placement of your own beyond `CAT` — a down
-word, so the invariant is exercised in the other orientation.
+placement, and both error cases. Assert the invariant over every slot three times: on the empty
+grid, after `CAT`, and after the locked `HORSE` — the last is the down word that exercises the
+other orientation, so no further placement of your own is needed.
 
 - [ ] **Step 2: Run test to verify it fails**
 
