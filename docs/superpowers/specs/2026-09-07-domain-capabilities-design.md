@@ -23,7 +23,7 @@ plain-text extracts of those sections were used to write this document.
   backed by per-(length, position, letter) letter bitsets.
 - Built as capabilities, one at a time, each a library module under `cli/src/domain/` with its own
   tests. Nothing is wired to the CLI, the adapter, a route or the UI in this pass.
-- Build order: C1 → C1b → C2 → C3 → C4 → C6. There is no C5.
+- Build order: C1 → C2 → C3 → C4 → C1b → C6. There is no C5.
 
 | # | Decision (Arthur, 2026-09-07) | What it beat |
 |---|---|---|
@@ -35,6 +35,7 @@ plain-text extracts of those sections were used to write this document.
 | 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html` attests no ranking option | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
 | 7 | singleton not-equals propagation is implemented, cited `[?]` to A-S3 | leaving it out — a false "not refuted" on two same-length singletons |
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
+| 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -192,8 +193,11 @@ class's own layout changing. Add the key in the commit that first wires a real c
 
 **[SPEC]**
 Option: precomputed one- and two-position inverted index, CrossHatch [R-S5]. Module
-`cli/src/domain/inverted_index.py`. Built second because the owner chose it as the next capability;
-it is a validation artefact — the equivalence harness of §4 is parametrised over both index classes.
+`cli/src/domain/inverted_index.py`. Built after C4, not second (decision 9) — it is a validation
+artefact, not a dependency, and nothing in C2–C4 needs it. The equivalence harness of §4 is
+parametrised over both index classes at that point; the deferred C1 Minor "dedup the duplicated
+invariant classes" is done in the same pass. This section keeps its number; only the build
+position moved (§1, §11).
 
 ```python
 class InvertedIndex:
@@ -514,10 +518,10 @@ Room left by C2/C3:
 | Step | Module | Oracle(s) | Marked `slow` when |
 |---|---|---|---|
 | C1 | `letter_bitset.py` | `TriePatternMatcher.find`; the four primitive derivations; round trip | real-list run exceeds a couple of seconds |
-| C1b | `inverted_index.py` | same harness, parametrised | same |
 | C2 | `slot_model.py` | `get_word_slots`; `get_slot_crossings` + `get_crossing_position`; `get_pattern_for_slot`; round trip | never |
 | C3 | `propagator.py` | brute force; `analyze_constraints`; `CSPAutofill._ac3`; `analyze_placement_impact` | real-list runs |
 | C4 | `fillability.py` | C3's, through `assess` | — |
+| C1b | `inverted_index.py` | same harness, parametrised | same |
 | C6 | `ownership.py` | decided with the option | — |
 
 - Every step: `superpowers:test-driven-development` — the differential test is written first and
@@ -549,6 +553,10 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.3** — 2026-09-08 — build order only: C1b deferred to after C4 (decision 9). §1's order line
+  and §11's row order updated. No contract, module or oracle changed — §5 already recorded that
+  nothing in C2–C4 depends on C1b, so the move is a reordering, not a redesign. The deferred C1
+  Minor "dedup the duplicated invariant classes at C1b's parametrisation pass" travels with C1b.
 - **0.1.2** — 2026-09-07 — planning amendment, C1 only: pinned the alphabet-cap `ValueError`
   message and the exact key set of `stats()`. Both were interfaces §4 named without fixing, and two
   implementers would not have converged on either. No behaviour changed.
