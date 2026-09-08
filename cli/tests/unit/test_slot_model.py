@@ -1,6 +1,7 @@
 """
 Tests for src.domain.slot_model (Task 1 geometry; Task 2 crossings; Task 3
-the Grid bridge -- fixed_from_grid and pattern).
+the Grid bridge -- fixed_from_grid and pattern; Task 4 serialisation --
+to_dict and from_dict).
 
 Fixture is the 5x5 grid pinned by the task-1 brief (blacks at (0,3), (1,3),
 (3,0), (4,1) -- cell indices 3, 8, 15, 21), built with validate_size=False
@@ -13,9 +14,11 @@ from the grid diagram.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from src.core.grid import Grid
-from src.domain.slot_model import Crossing, SlotModel, fixed_from_grid, pattern
+from src.domain.slot_model import Crossing, Slot, SlotModel, fixed_from_grid, pattern
 from src.fill.autofill import Autofill
 from src.fill.beam_search.utils.slot_utils import SlotIntersectionHelper
 from src.fill.word_list import WordList
@@ -448,3 +451,155 @@ class TestPatternMatchesGridByteForByte:
         fixed = fixed_from_grid(horse_grid)
         slot = model.slots[slot_id]
         assert pattern(model, slot_id, fixed) == horse_grid.get_pattern_for_slot(_slot_dict(slot))
+
+
+# ---------------------------------------------------------------------------
+# Task 4: serialisation round trip -- to_dict / from_dict.
+# ---------------------------------------------------------------------------
+
+SCHEMA_KEYS = {"size", "blacks", "slots", "crossings", "cell_across", "cell_down", "unslotted"}
+
+# literal, from the task-4 brief's normative table (m.to_dict()["slots"][0]).
+FIRST_SLOT_DICT = {"id": 0, "direction": "across", "row": 0, "col": 0, "length": 3, "cells": [0, 1, 2]}
+
+# literal, from the task-4 brief's normative table (m.to_dict()["crossings"][9]).
+TENTH_CROSSING_DICT = {"cell": 13, "across_id": 2, "across_pos": 3, "down_id": 8, "down_pos": 0}
+
+
+@pytest.fixture(scope="module")
+def no_slots_model(fixture_grid) -> SlotModel:
+    """Same fixture blacks, min_length above every run length in the grid.
+
+    No run anywhere reaches min_length, so slots and crossings are both
+    empty and unslotted holds every white cell, in ascending order --
+    useful as a many-element sequence for order-preservation checks that
+    the 1-element UNSLOTTED tuple above can't exercise.
+    """
+    return SlotModel.from_grid(fixture_grid, min_length=100)
+
+
+class TestToDict:
+    """SlotModel.to_dict(): the seven schema keys, as plain JSON-native containers."""
+
+    def test_returns_exactly_the_seven_schema_keys(self, model):
+        assert set(model.to_dict().keys()) == SCHEMA_KEYS
+
+    def test_size(self, model):
+        assert model.to_dict()["size"] == 5
+
+    def test_blacks(self, model):
+        assert model.to_dict()["blacks"] == [3, 8, 15, 21]
+
+    def test_unslotted(self, model):
+        assert model.to_dict()["unslotted"] == [20]
+
+    def test_slots_count(self, model):
+        assert len(model.to_dict()["slots"]) == 10
+
+    def test_crossings_count(self, model):
+        assert len(model.to_dict()["crossings"]) == 18
+
+    def test_first_slot_dict_matches_normative_table(self, model):
+        assert model.to_dict()["slots"][0] == FIRST_SLOT_DICT
+
+    def test_tenth_crossing_dict_matches_normative_table(self, model):
+        assert model.to_dict()["crossings"][9] == TENTH_CROSSING_DICT
+
+    def test_direction_travels_as_its_literal_string(self, model):
+        directions = {s["direction"] for s in model.to_dict()["slots"]}
+        assert directions == {"across", "down"}
+
+    def test_top_level_sequence_fields_are_plain_lists_not_tuples(self, model):
+        d = model.to_dict()
+        for key in ("blacks", "slots", "crossings", "cell_across", "cell_down", "unslotted"):
+            assert type(d[key]) is list
+
+    def test_slot_and_crossing_entries_are_plain_dicts_not_dataclasses(self, model):
+        d = model.to_dict()
+        assert type(d["slots"][0]) is dict
+        assert type(d["crossings"][0]) is dict
+        assert not isinstance(d["slots"][0], Slot)
+        assert not isinstance(d["crossings"][0], Crossing)
+
+    def test_slot_cells_field_is_a_plain_list(self, model):
+        assert type(model.to_dict()["slots"][0]["cells"]) is list
+
+    def test_empty_crossings_model_serialises_crossings_as_an_empty_list(self):
+        built = SlotModel.from_blacks(3, [3, 4, 5], min_length=3)
+        assert built.to_dict()["crossings"] == []
+
+    def test_survives_a_json_round_trip_unchanged(self, model):
+        """json.dumps/loads must not alter the dict at all -- every value is already JSON-native."""
+        d = model.to_dict()
+        assert json.loads(json.dumps(d)) == d
+
+
+class TestFromDict:
+    """SlotModel.from_dict(): the inverse of to_dict, restoring tuples throughout."""
+
+    def test_in_memory_round_trip(self, model):
+        assert SlotModel.from_dict(model.to_dict()) == model
+
+    def test_json_round_trip(self, model):
+        assert SlotModel.from_dict(json.loads(json.dumps(model.to_dict()))) == model
+
+    def test_json_round_trip_on_the_empty_crossings_unslotted_model(self):
+        built = SlotModel.from_blacks(3, [3, 4, 5], min_length=3)
+        assert SlotModel.from_dict(json.loads(json.dumps(built.to_dict()))) == built
+
+    def test_slots_field_is_a_tuple_after_from_dict(self, model):
+        assert type(SlotModel.from_dict(model.to_dict()).slots) is tuple
+
+    def test_crossings_field_is_a_tuple_after_from_dict(self, model):
+        assert type(SlotModel.from_dict(model.to_dict()).crossings) is tuple
+
+    def test_scalar_sequence_fields_are_tuples_after_from_dict(self, model):
+        restored = SlotModel.from_dict(model.to_dict())
+        for key in ("blacks", "cell_across", "cell_down", "unslotted"):
+            assert type(getattr(restored, key)) is tuple
+
+    def test_nested_slot_cells_is_a_tuple_after_from_dict(self, model):
+        restored = SlotModel.from_dict(model.to_dict())
+        for slot in restored.slots:
+            assert type(slot.cells) is tuple
+
+    def test_slots_are_actual_slot_instances(self, model):
+        restored = SlotModel.from_dict(model.to_dict())
+        assert all(isinstance(s, Slot) for s in restored.slots)
+
+    def test_crossings_are_actual_crossing_instances(self, model):
+        restored = SlotModel.from_dict(model.to_dict())
+        assert all(isinstance(c, Crossing) for c in restored.crossings)
+
+    def test_preserves_crossings_order(self, model):
+        """Equality on the tuple field is already order-sensitive; asserted directly
+        so a from_dict that re-sorts or reverses crossings fails here, not just
+        indirectly through the whole-model round-trip test above."""
+        restored = SlotModel.from_dict(model.to_dict())
+        assert restored.crossings == model.crossings
+
+    def test_preserves_unslotted_order_on_a_many_element_sequence(self, no_slots_model):
+        """UNSLOTTED above has one element, too few to expose a reordering bug;
+        no_slots_model's unslotted sequence has many elements, so a reversal
+        or re-sort on the way back in actually changes the tuple."""
+        assert len(no_slots_model.unslotted) > 1
+        restored = SlotModel.from_dict(no_slots_model.to_dict())
+        assert restored.unslotted == no_slots_model.unslotted
+
+    def test_round_trip_on_the_empty_crossings_model(self):
+        built = SlotModel.from_blacks(3, [3, 4, 5], min_length=3)
+        assert SlotModel.from_dict(built.to_dict()) == built
+
+    def test_round_trip_on_the_no_slots_model(self, no_slots_model):
+        assert SlotModel.from_dict(no_slots_model.to_dict()) == no_slots_model
+
+    def test_missing_size_key_raises_key_error(self):
+        with pytest.raises(KeyError):
+            SlotModel.from_dict({"size": 5})
+
+    @pytest.mark.parametrize("missing_key", sorted(SCHEMA_KEYS))
+    def test_missing_any_single_top_level_key_raises_key_error(self, model, missing_key):
+        d = model.to_dict()
+        del d[missing_key]
+        with pytest.raises(KeyError):
+            SlotModel.from_dict(d)

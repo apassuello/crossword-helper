@@ -18,8 +18,9 @@ of which slot an oracle names first. fixed_from_grid and pattern (Task 3)
 read a Grid's letters into a flat `fixed` tuple and render a slot's pattern
 from `model` and `fixed` alone -- pattern never touches a Grid, which is
 what lets one model stay constant while fixed changes underneath it.
-to_dict/from_dict (Task 4) are a later addition to this same file, not built
-here.
+to_dict/from_dict (Task 4) flatten a model to plain dicts/lists/ints/strings
+and rebuild it from that shape, restoring every list-shaped field -- and
+each nested Slot.cells -- back to a tuple so dataclass equality holds.
 """
 
 from __future__ import annotations
@@ -198,6 +199,87 @@ class SlotModel:
         """(row, col, direction) for slot_id -- the key shape Autofill.slot_id_map uses."""
         slot = self.slots[slot_id]
         return (slot.row, slot.col, slot.direction)
+
+    def to_dict(self) -> dict:
+        """
+        Flatten this model into plain, JSON-native containers: dicts, lists,
+        ints and strings only -- no tuples, dataclass instances or NumPy
+        scalars. Keys are the dataclass field names at every level, per spec
+        2026-09-08-c2-slot-model section 6. `direction` is carried through as
+        its own string ("across"/"down"); every other value is an int.
+        """
+        return {
+            "size": self.size,
+            "blacks": list(self.blacks),
+            "slots": [
+                {
+                    "id": slot.id,
+                    "direction": slot.direction,
+                    "row": slot.row,
+                    "col": slot.col,
+                    "length": slot.length,
+                    "cells": list(slot.cells),
+                }
+                for slot in self.slots
+            ],
+            "crossings": [
+                {
+                    "cell": crossing.cell,
+                    "across_id": crossing.across_id,
+                    "across_pos": crossing.across_pos,
+                    "down_id": crossing.down_id,
+                    "down_pos": crossing.down_pos,
+                }
+                for crossing in self.crossings
+            ],
+            "cell_across": list(self.cell_across),
+            "cell_down": list(self.cell_down),
+            "unslotted": list(self.unslotted),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SlotModel":
+        """
+        Rebuild a SlotModel from to_dict's output (or an equivalent dict,
+        such as one that has been through json.dumps/json.loads).
+
+        Every list-shaped field is restored to a tuple, including each
+        nested Slot.cells -- dataclass equality treats a list where a tuple
+        belongs as unequal even when the elements match. Order is preserved
+        exactly as given; this only round-trips correctly because to_dict's
+        `slots` and `crossings` already carry the model's pinned order.
+
+        Raises:
+            KeyError: if d is missing any of the seven top-level keys.
+        """
+        return cls(
+            size=d["size"],
+            blacks=tuple(d["blacks"]),
+            slots=tuple(
+                Slot(
+                    id=slot["id"],
+                    direction=slot["direction"],
+                    row=slot["row"],
+                    col=slot["col"],
+                    length=slot["length"],
+                    cells=tuple(slot["cells"]),
+                )
+                for slot in d["slots"]
+            ),
+            crossings=tuple(
+                Crossing(
+                    cell=crossing["cell"],
+                    across_id=crossing["across_id"],
+                    across_pos=crossing["across_pos"],
+                    down_id=crossing["down_id"],
+                    down_pos=crossing["down_pos"],
+                )
+                for crossing in d["crossings"]
+            ),
+            cell_across=tuple(d["cell_across"]),
+            cell_down=tuple(d["cell_down"]),
+            unslotted=tuple(d["unslotted"]),
+        )
 
 
 def fixed_from_grid(grid: Grid) -> tuple[str, ...]:
