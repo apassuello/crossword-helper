@@ -13,6 +13,7 @@ from that same oracle on the fixture below, per the task-2 brief's table.
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import numpy as np
@@ -336,26 +337,37 @@ class TestPrimitiveDerivedOracles:
 
     @pytest.mark.parametrize("min_score", MIN_SCORES)
     @pytest.mark.parametrize("pattern", PATTERN_SAMPLE)
-    def test_restrict_to_one_letter_equals_mask_of_pattern_with_that_letter_at_pos(self, bitset_index, pattern, min_score):
-        """Only valid at a wildcard position: restrict narrows an *unconstrained* slot, like a real arc revision.
+    def test_restrict_to_a_letter_set_equals_the_union_of_per_letter_masks(self, bitset_index, pattern, min_score):
+        """The brief's oracle is over a letters *set*: restrict(pos, letters, mask(p)) == OR(mask(p
+        with pos := a) for a in letters). Checked for every 1-, 2- and 3-letter subset of the alphabet
+        at each wildcard position -- restrict's reason for existing over a per-letter lookup is
+        OR-accumulating across multiple set bits (its loop is `allowed |= bits[pos, a, :]`), so a
+        singleton-only sweep cannot exercise that accumulation; a mutation honouring only the lowest
+        set bit of `letters` would pass a singleton-only version of this property.
 
-        At a position already fixed in `pattern`, substituting a different
-        letter changes what the pattern means and the two sides diverge by
-        construction -- this is not a gap in the oracle, it is why the
-        primitive takes (length, pos, mask) instead of a second pattern.
+        Only valid at a wildcard position: restrict narrows an *unconstrained* slot, like a real arc
+        revision. At a position already fixed in `pattern`, substituting a different letter changes
+        what the pattern means and the two sides diverge by construction -- this is not a gap in the
+        oracle, it is why the primitive takes (length, pos, mask) instead of a second pattern.
         """
         idx = bitset_index
         length = len(pattern)
         base_mask = idx.mask(pattern, min_score)
+        subset_sizes = [size for size in (1, 2, 3) if size <= len(idx.alphabet)]
         for pos, char in enumerate(pattern):
             if char != "?":
                 continue
-            for letter in idx.alphabet:
-                letters = 1 << idx.letter_index[letter]
-                substituted = pattern[:pos] + letter + pattern[pos + 1 :]
-                expected = idx.mask(substituted, min_score)
-                actual = idx.restrict(length, pos, letters, base_mask)
-                assert np.array_equal(actual, expected)
+            for subset_size in subset_sizes:
+                for subset in itertools.combinations(idx.alphabet, subset_size):
+                    letters = 0
+                    expected = np.zeros_like(base_mask)
+                    for letter in subset:
+                        letters |= 1 << idx.letter_index[letter]
+                        substituted = pattern[:pos] + letter + pattern[pos + 1 :]
+                        expected |= idx.mask(substituted, min_score)
+                    actual = idx.restrict(length, pos, letters, base_mask)
+                    detail = f"pattern={pattern!r} pos={pos} subset={subset}"
+                    assert np.array_equal(actual, expected), detail
 
 
 class TestPrimitiveInvariants:
