@@ -178,6 +178,14 @@ list, rather than hardcoding 26, costs nothing today and keeps the index honest 
 carries accented letters. The test that touches the real list is marked `slow` if it exceeds a
 couple of seconds; `pytest.ini` deselects `slow` by default.
 
+**[NOTE] The archive carries no `version` key, and C1b is not the reason to add one**
+`save` writes `alphabet`, `bits_{L}`, `scores_{L}` and `texts_{L}` and nothing else. Adding a
+`version` scalar later is additive on both sides — `load` derives the lengths it reads from the
+`bits_*` keys and ignores keys it does not know, so an older archive reads as the unversioned one.
+C1b does not force it: its `InvertedIndex` (§5) is a separate class holding its own `one`/`two`
+dicts and never touches these arrays, so the only thing that can invalidate an archive is this
+class's own layout changing. Add the key in the commit that first wires a real caller, not before.
+
 ---
 
 ## 5. C1b — lookup: CrossHatch inverted index

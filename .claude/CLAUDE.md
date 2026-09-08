@@ -86,6 +86,16 @@ Why: `.pre-commit-config.yaml`'s ruff hook runs only on changed files (no `alway
 the suite stayed green because no commit touched the file to trigger the lint. F811 fired the moment
 one finally did (`0c6ac10`); collection in that file went 51 → 58.
 
+❌ Reaching for `WordList.get_by_length` when you need canonical order → ✅ use
+`cli/src/domain/wordorder.py`'s `canonical_words`
+Why: `get_by_length` sorts by score alone — the `_length_index` sort at the end of `add_words` is
+`key=w.score, reverse=True`, and Python's sort is stable, so equal-scored words keep *insertion*
+order. Canonical order is `(-score, text)`. On the six-word fixture the two differ at one tie:
+`get_by_length` yields `CAB, ACT` where canonical is `ACT, CAB`. A word's id is its position in
+canonical order, so delegating silently renumbers every id — and `LetterBitsetIndex` and the
+planned `InvertedIndex` can only convert masks between them because both assign ids from the same
+function. The docstring saying "sorted by score descending" is accurate and still not what you want.
+
 ---
 
 ## Extensibility
