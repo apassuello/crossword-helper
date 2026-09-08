@@ -36,6 +36,8 @@ plain-text extracts of those sections were used to write this document.
 | 7 | singleton not-equals propagation is implemented, cited `[?]` to A-S3 | leaving it out — a false "not refuted" on two same-length singletons |
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
 | 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
+| 10 | *(2026-09-08)* `direction` serialises as its string | 0/1 ints — honours §6's "ints and lists only" literally, but the dump then matches no existing slot dict |
+| 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -253,17 +255,17 @@ class SlotModel:
     size: int
     blacks: tuple[int, ...]           # sorted cell indices
     slots: tuple[Slot, ...]           # index == Slot.id
-    crossings: tuple[Crossing, ...]
+    crossings: tuple[Crossing, ...]   # sorted by .cell
     cell_across: tuple[int, ...]      # len size*size; slot id or -1
     cell_down: tuple[int, ...]        # len size*size; slot id or -1
-    unslotted: tuple[int, ...]        # white cells with no slot in either direction
+    unslotted: tuple[int, ...]        # sorted cell indices; white cells with no slot either way
 
     @classmethod
     def from_grid(cls, grid: Grid, min_length: int = 3) -> "SlotModel": ...
     @classmethod
     def from_blacks(cls, size: int, blacks: Iterable[int], min_length: int = 3) -> "SlotModel": ...
     def slot_key(self, slot_id: int) -> tuple[int, int, str]: ...   # (row, col, direction)
-    def to_dict(self) -> dict: ...                                   # JSON: ints and lists only
+    def to_dict(self) -> dict: ...                                   # JSON: ints, strings and lists only
     @classmethod
     def from_dict(cls, d: dict) -> "SlotModel": ...
 
@@ -278,6 +280,11 @@ Behaviour pinned to exact values:
 - `unslotted` is **geometric**: a white cell whose across run and down run are both shorter than
   `min_length`. It is not run-A §A4's zero-owner cell, which is a provenance question (C6).
   A white cell in a two-cell across run and a five-cell down run is owned by the down slot only.
+- `crossings` and `unslotted` are both **sorted by cell index**, as `blacks` already is. A cell is
+  crossed by at most one across and one down slot, so `Crossing.cell` is unique and the sort is
+  total with no tie-break. Round-trip equality and every normative table depend on this order.
+- `direction` travels as its string (`"across"`/`"down"`) through `to_dict`/`from_dict`, matching
+  every existing slot dict in the codebase. It is the one non-int scalar on the wire.
 - `crossings` is derivable from `cell_across`/`cell_down` plus `Slot.cells`; it is materialised
   (orca-solver's shape) and `from_*` asserts the two agree.
 - `fixed_from_grid` reads every filled white cell — locked or not. Black and empty cells give `""`.
@@ -294,7 +301,11 @@ Oracles:
   positions from `SlotIntersectionHelper.get_crossing_position`
   (`cli/src/fill/beam_search/utils/slot_utils.py`). `get_slot_crossings` alone carries no
   positions and cannot catch a transposed `across_pos`/`down_pos`.
-- a second position oracle, if the object can be built without side effects in a test:
+- a second position oracle — the condition "can be built without side effects" is **met**, checked
+  against source: `CSPAutofill(grid, word_list)` creates its own `PatternMatcher` and defaults
+  `pause_controller=None`, and `_initialize_csp` builds the constraint graph via its own
+  `_get_intersection` (`autofill.py:851`), independent of `SlotIntersectionHelper`. Domains are
+  built in the same call, so pass a tiny fixture `WordList` and the oracle stays non-`slow`:
   `CSPAutofill.constraints[i] = [(j, pos1, pos2), ...]` (`cli/src/fill/autofill.py`, built in
   `_initialize_csp`'s crossing loop). Its ids index the slot list it was given, not `SlotModel`'s;
   map through `slot_id_map[model.slot_key(s)]`.
@@ -553,6 +564,11 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.4** — 2026-09-08 — planning amendment, C2 only, surfaced writing the C2 plan: pinned the
+  sort order of `crossings` and `unslotted` (decision 11) and the wire form of `direction`
+  (decision 10) — §6 fixed neither, and two implementers would not have converged on either.
+  Resolved §6's conditional second oracle against source: the condition is met, so the oracle is
+  in. No behaviour changed that §6 had already fixed.
 - **0.1.3** — 2026-09-08 — build order only: C1b deferred to after C4 (decision 9). §1's order line
   and §11's row order updated. No contract, module or oracle changed — §5 already recorded that
   nothing in C2–C4 depends on C1b, so the move is a reordering, not a redesign. The deferred C1
