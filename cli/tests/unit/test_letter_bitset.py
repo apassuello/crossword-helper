@@ -177,6 +177,34 @@ class TestNormativeCases:
         with pytest.raises(ValueError, match=r"^alphabet has 65 letters; the index supports at most 64$"):
             LetterBitsetIndex.from_word_list(word_list)
 
+    def test_from_word_list_accepts_alphabet_of_exactly_64_letters(self):
+        """The boundary the whole uint64 storage layout rests on: 64 is legal, 65 (above) is not."""
+        word_list = _word_list_spanning_n_letters(64)
+
+        idx = LetterBitsetIndex.from_word_list(word_list)
+
+        assert len(idx.alphabet) == 64
+
+    def test_top_alphabet_bit_is_live_through_letters_at_and_restrict(self):
+        """Bit 63 -- the highest bit a uint64 chunk provides -- must actually carry a letter's
+        occurrences through letters_at and restrict, not merely exist as unused headroom.
+        """
+        word_list = _word_list_spanning_n_letters(64)
+        idx = LetterBitsetIndex.from_word_list(word_list)
+        top_letter = idx.alphabet[63]
+        assert idx.letter_index[top_letter] == 63
+
+        carrier = next(word for word in word_list.words if top_letter in word.text)
+        pos = carrier.text.index(top_letter)
+        mask = idx.mask("?" * carrier.length)
+
+        letters = idx.letters_at(carrier.length, pos, mask)
+        assert letters & (1 << 63)
+
+        restricted = idx.restrict(carrier.length, pos, 1 << 63, mask)
+        assert idx.count(restricted) > 0
+        assert all(text[pos] == top_letter for text, _ in idx.words(carrier.length, restricted))
+
     def test_from_word_list_on_empty_word_list_builds_and_finds_nothing(self):
         """An empty WordList is valid input (WordList's own validation, not re-checked here) and must not crash."""
         idx = LetterBitsetIndex.from_word_list(WordList([]))
@@ -243,6 +271,15 @@ class TestDifferentialAgainstTrieOracleOnRealWordlist:
         actual = _by_sort_order(real_bitset_index.find(pattern, min_score))
 
         assert actual == expected
+
+    def test_find_all_wildcard_on_real_wordlist_is_already_in_score_then_text_order(self, real_bitset_index):
+        """The other tests in this class sort both sides before comparing, so none of them pin find's own
+        return order on data spanning multiple 64-bit chunks -- a chunk-decode bug in _ids_from_mask
+        that silently reordered chunks would still pass every one of them. This does not sort first.
+        """
+        results = real_bitset_index.find("???", 0)
+
+        assert results == _by_sort_order(results)
 
 
 class TestPropagatorPrimitiveNormativeCases:

@@ -106,7 +106,8 @@ class LetterBitsetIndex:
         length, mask = resolved
 
         words = self._words[length]
-        results = [(words[word_id].text, int(words[word_id].score)) for word_id in _ids_from_mask(mask)]
+        scores = self._scores[length]
+        results = [(words[word_id].text, int(scores[word_id])) for word_id in _ids_from_mask(mask)]
         if max_results is not None:
             results = results[:max_results]
         return results
@@ -160,9 +161,9 @@ class LetterBitsetIndex:
             return 0
         hits = np.any(self._bits[length][pos] & mask, axis=-1)
         letters = 0
-        for position, hit in enumerate(hits):
+        for a, hit in enumerate(hits):
             if hit:
-                letters |= 1 << position
+                letters |= 1 << a
         return letters
 
     def restrict(self, length: int, pos: int, letters: int, mask: np.ndarray) -> np.ndarray:
@@ -178,9 +179,9 @@ class LetterBitsetIndex:
             return mask.copy()
         bits = self._bits[length]
         allowed = np.zeros_like(mask)
-        for position in range(len(self.alphabet)):
-            if letters & (1 << position):
-                allowed |= bits[pos, position, :]
+        for a in range(len(self.alphabet)):
+            if letters & (1 << a):
+                allowed |= bits[pos, a, :]
         return mask & allowed
 
     def words(self, length: int, mask: np.ndarray) -> list[tuple[str, int]]:
@@ -188,7 +189,8 @@ class LetterBitsetIndex:
         if not np.any(mask):
             return []
         words = self._words[length]
-        return [(words[word_id].text, int(words[word_id].score)) for word_id in _ids_from_mask(mask)]
+        scores = self._scores[length]
+        return [(words[word_id].text, int(scores[word_id])) for word_id in _ids_from_mask(mask)]
 
     def count(self, mask: np.ndarray) -> int:
         """Popcount of mask: the number of word ids it selects."""
