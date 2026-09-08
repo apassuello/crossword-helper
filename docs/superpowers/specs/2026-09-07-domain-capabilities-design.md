@@ -1,5 +1,6 @@
 # Domain Capability Family — Design
-**Version 0.1.2** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.6** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+(amended 2026-09-08; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
 
@@ -37,6 +38,7 @@ plain-text extracts of those sections were used to write this document.
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
 | 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
 | 10 | *(2026-09-08)* `direction` serialises as its string | 0/1 ints — honours §6's "ints and lists only" literally, but the dump then matches no existing slot dict |
+| 12 | *(2026-09-08)* C2's error contract, pinned here rather than in the plan | leaving it to the plan — the same class of choice as 10 and 11, which were ratified here, so the plan would have been authoring spec |
 | 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
 
 **[NOTE]**
@@ -287,6 +289,12 @@ Behaviour pinned to exact values:
   every existing slot dict in the codebase. It is the one non-int scalar on the wire.
 - `crossings` is derivable from `cell_across`/`cell_down` plus `Slot.cells`; it is materialised
   (orca-solver's shape) and `from_*` asserts the two agree.
+- **Errors.** `from_blacks` raises `ValueError` for a black index outside `range(size * size)`;
+  duplicates collapse rather than raise. `pattern` raises `ValueError` when
+  `len(fixed) != size * size`. Bad lookups are **not** guarded and raise natively —
+  `slots[slot_id]` gives `IndexError`, and a negative `slot_id` therefore indexes from the end
+  rather than erroring; `from_dict` gives `KeyError` for a missing key. No exact messages are
+  pinned: nothing consumes them while the family stays unwired (decision 3).
 - `fixed_from_grid` reads every filled white cell — locked or not. Black and empty cells give `""`.
 - `pattern` emits the fixed letter or `?` per cell. Invariant test: for every slot,
   `pattern(model, s, fixed_from_grid(grid)) == grid.get_pattern_for_slot(slot_dict)`, byte for byte.
@@ -302,7 +310,9 @@ Oracles:
   (`cli/src/fill/beam_search/utils/slot_utils.py`). `get_slot_crossings` alone carries no
   positions and cannot catch a transposed `across_pos`/`down_pos`.
 - a second position oracle — the condition "can be built without side effects" is **met**, checked
-  against source: `Autofill(grid, word_list)` creates its own `PatternMatcher` and defaults
+  against source: `Autofill(grid, word_list)` creates its own matcher — `TriePatternMatcher` at the
+  default `algorithm="trie"` (`autofill.py:86`), a separate class from `PatternMatcher` and not a
+  subclass of it — and defaults
   `pause_controller=None`, and `_initialize_csp` builds the constraint graph via its own
   `_get_intersection` (`autofill.py:851`), independent of `SlotIntersectionHelper`. Domains are
   built in the same call, so pass a tiny fixture `WordList` and the oracle stays non-`slow`:
@@ -564,6 +574,12 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.6** — 2026-09-08 — three corrections from an independent review of the C2 plan. C2's
+  error contract moves here from the plan (decision 12): it is the same class of underspecified
+  choice as 10 and 11, so resolving it in the plan would have been the plan authoring spec.
+  §6 said `Autofill` "creates its own `PatternMatcher`"; at the default `algorithm="trie"` it
+  builds a `TriePatternMatcher`, which is not a subclass of `PatternMatcher`. The header version
+  line had read 0.1.2 since 0.1.3 landed — nothing checks it, so it drifted silently.
 - **0.1.5** — 2026-09-08 — correction, no design change: the class this document called
   `CSPAutofill` in five places is named `Autofill` (`cli/src/fill/autofill.py:42`). `git log -S`
   over `cli/` finds the name `CSPAutofill` in no commit — it never existed, and the error survived

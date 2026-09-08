@@ -17,7 +17,7 @@ which this plan modifies or replaces.
 
 **Tech Stack:** Python 3.9+ · pytest
 
-**Spec:** `docs/superpowers/specs/2026-09-07-domain-capabilities-design.md` (v0.1.5, §1–§3, §6, §11).
+**Spec:** `docs/superpowers/specs/2026-09-07-domain-capabilities-design.md` (v0.1.6, §1–§3, §6, §11).
 Read §2, §3 and §6 before starting. This plan implements **C2 only** — C1b, C3, C4 and C6 are out of
 scope. Note the build order changed at v0.1.3: C2 follows C1 directly, and C1b is deferred to after
 C4.
@@ -54,19 +54,17 @@ Every task's requirements implicitly include this section.
   commits for four tasks). Never commit this plan's work to `main` directly.
 - **Commits:** one conventional commit per task, `feat(domain): ...`. No AI attribution trailers.
 
-### Error behaviour — a plan-level convention, not a spec statement
+### Error behaviour
 
-Spec §6 pins no error behaviour for C2. Rather than let four tasks each invent one, this plan
-applies the convention already in the tree, and **no exact messages are pinned** because nothing
-consumes them in this pass (spec decision 3 — nothing is wired):
+**Pinned by spec §6 and decision 12**, not by this plan. An earlier draft resolved it here; that
+was the plan authoring spec, which the writing-plans skill forbids, so it moved. Restated for the
+implementer:
 
-- **`ValueError` for input this module rejects** — the codebase convention, used by
-  `Grid.__init__` for a bad size (`grid.py:41`) and pinned by spec §2 for `|alphabet| > 64`.
-- **Native `IndexError` / `KeyError` for a bad lookup** — what indexing a tuple or a dict raises on
-  its own; no guard is added to convert them.
-
-If a caller in C3 or C4 needs a different contract, that is a spec amendment then, not a change
-made quietly here.
+- **`ValueError` for input the module rejects** — an out-of-range black index; a `fixed` tuple of
+  the wrong length. The codebase convention (`Grid.__init__`, `grid.py:41`).
+- **Native `IndexError` / `KeyError` for a bad lookup**, unguarded. A **negative `slot_id` therefore
+  indexes from the end and does not raise** — `model.slots[-1]` is slot 9.
+- **No exact messages are pinned**; nothing consumes them while the family is unwired (decision 3).
 
 ### Fixture traps — both will silently produce the wrong grid
 
@@ -189,7 +187,10 @@ class SlotModel:
   are *both* `-1`. It is not a provenance or ownership judgement (that is C6, spec §9). A white cell
   in a two-cell across run and a five-cell down run is owned by the down slot and is **not**
   unslotted.
-- `crossings` is `()` in this task. Task 2 fills it.
+- `crossings` is `()` in this task. Task 2 fills it. **Any test you write asserting
+  `model.crossings == ()` is scoped to Task 1 and is superseded there** — Task 2's first step
+  rewrites it into the 18-row assertion. Retiring it then is expected, not a licence to weaken
+  any other assertion.
 - `slot_key(slot_id)` returns `(row, col, direction)` — the key shape
   `Autofill.slot_id_map` uses (`autofill.py:107`, `:619`), so a slot can be looked up across the two
   models.
@@ -300,6 +301,12 @@ constructors gain the agreement assertion below.
   `cell_across` / `cell_down` plus `Slot.cells` — the spec's word is "asserts" (§6) and this is an
   internal invariant that should never fire, so a bare `assert` is correct here rather than a raised
   domain exception.
+- **The assert must compare two independently derived things, or it is a no-op.** If you build
+  `crossings` by scanning cells where `cell_across[c] != -1 and cell_down[c] != -1` and then assert
+  agreement with those same two arrays, you are checking a value against its own inputs and the
+  assert can never fail. Materialise `crossings` from the *slots* — walk each across slot's `cells`
+  against the down slot covering each cell — and let `cell_across`/`cell_down` be the independent
+  side of the check. Both routes pass all 18 normative rows; only this one has teeth.
 - A grid with no crossings at all yields `crossings == ()`, not an error.
 
 **Normative cases** — all 18 crossings of the fixture, in the exact order the field must hold them:
@@ -342,13 +349,14 @@ each `Slot`. Neither reads `cells` or `id`.
   it the other way round and forgetting to swap puts the very transposition the spec warns about
   inside the test.
 - **`get_slot_crossings` is valid only at `min_length=3`.** It calls `grid.get_word_slots()` with no
-  argument (`slot_utils.py:145`), so it always sees the default filter regardless of the model's
+  argument (`slot_utils.py:156`), so it always sees the default filter regardless of the model's
   `min_length`. Do not test crossings at other `min_length` values against this oracle.
 
 *Oracle B — `Autofill` (`cli/src/fill/autofill.py`):*
 - Build `Autofill(grid, word_list)` then call `_initialize_csp(grid.get_word_slots(3))`. It creates
-  its own `PatternMatcher` and defaults `pause_controller=None`, so no further setup is needed
-  (spec §6).
+  its own matcher — `TriePatternMatcher` at the default `algorithm="trie"` (`autofill.py:86`),
+  which is a separate class from `PatternMatcher`, not a subclass — and defaults
+  `pause_controller=None`, so no further setup is needed (spec §6).
 - Read `solver.constraints[i] == [(j, my_pos, other_pos), ...]` (`autofill.py:105`). It builds the
   graph through its own `_get_intersection` (`autofill.py:851`), independent of
   `SlotIntersectionHelper` — that independence is the point of having a second oracle.
@@ -368,6 +376,10 @@ uniqueness of `.cell`, and a grid whose model has no crossings.
 Run: `cd cli && python -m pytest tests/unit/test_slot_model.py -v`
 Expected: FAIL — `crossings` is still `()` from Task 1. Confirm the failure is the empty tuple, not
 an import or fixture error.
+
+**Before running:** rewrite Task 1's `crossings == ()` assertion into this task's 18-row
+assertion. It is the one Task 1 test this task supersedes; leaving it in place makes Step 4
+unreachable, since `crossings` cannot be both empty and 18 rows long.
 
 - [ ] **Step 3: Implement to pass the test**
 
