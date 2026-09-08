@@ -6,7 +6,8 @@ runs of white cells (of at least min_length) exist, in what order, and which
 slot (if any) owns each cell in each direction. Cell indices are
 row * size + col throughout -- no (row, col) tuples in any stored field --
 so the structure carries only ints, strings and tuples and can be ported to
-Rust+WASM later (spec 2026-09-08-c2-slot-model, "Flat and index-based").
+Rust+WASM later (spec 2026-09-07-domain-capabilities-design, section 2,
+"Flat and index-based").
 
 Slot order, and therefore Slot.id, follows Grid.enumerate_white_runs' walk
 (all across runs in row-major order, then all down runs in column-major
@@ -205,7 +206,7 @@ class SlotModel:
         Flatten this model into plain, JSON-native containers: dicts, lists,
         ints and strings only -- no tuples, dataclass instances or NumPy
         scalars. Keys are the dataclass field names at every level, per spec
-        2026-09-08-c2-slot-model section 6. `direction` is carried through as
+        2026-09-07-domain-capabilities-design section 6. `direction` is carried through as
         its own string ("across"/"down"); every other value is an int.
         """
         return {
@@ -288,8 +289,8 @@ def fixed_from_grid(grid: Grid) -> tuple[str, ...]:
     half of the geometry/content split the rest of this module depends on.
 
     A filled white cell gives its letter whether or not it is locked --
-    lock provenance is a separate concern (spec 2026-09-08-c2-slot-model,
-    section 6) and plays no part here. A black cell and an empty white cell
+    lock provenance is a separate concern (spec
+    2026-09-07-domain-capabilities-design, section 6) and plays no part here. A black cell and an empty white cell
     both give "".
     """
     return tuple(

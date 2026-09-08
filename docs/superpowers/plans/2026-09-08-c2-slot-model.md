@@ -32,7 +32,8 @@ Every task's requirements implicitly include this section.
   annotations (`int | None`) are a runtime error at 3.9, so **the new module starts with
   `from __future__ import annotations`**, as `cli/src/domain/letter_bitset.py` already does. With
   it, the spec's `X | Y` signature style may be written literally.
-- **Line length is 127** for black, isort, ruff and flake8 (`pyproject.toml`, `setup.cfg`).
+- **Line length is 127** for black, isort and ruff (`pyproject.toml`), and for flake8 via
+  `--max-line-length=127` in `.pre-commit-config.yaml`. There is no `setup.cfg` in this repo.
   Pre-commit enforces all four; never `--no-verify`.
 - **Import root is `cli/`.** Tests and modules import as `from src.domain.slot_model import ...`,
   `from src.core.grid import Grid`, matching every existing test in `cli/tests/unit/`.
