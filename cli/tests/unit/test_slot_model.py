@@ -1,5 +1,6 @@
 """
-Tests for src.domain.slot_model (Task 1 geometry; Task 2 crossings).
+Tests for src.domain.slot_model (Task 1 geometry; Task 2 crossings; Task 3
+the Grid bridge -- fixed_from_grid and pattern).
 
 Fixture is the 5x5 grid pinned by the task-1 brief (blacks at (0,3), (1,3),
 (3,0), (4,1) -- cell indices 3, 8, 15, 21), built with validate_size=False
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 from src.core.grid import Grid
-from src.domain.slot_model import Crossing, SlotModel
+from src.domain.slot_model import Crossing, SlotModel, fixed_from_grid, pattern
 from src.fill.autofill import Autofill
 from src.fill.beam_search.utils.slot_utils import SlotIntersectionHelper
 from src.fill.word_list import WordList
@@ -306,3 +307,144 @@ class TestSlotKey:
     def test_out_of_range_slot_id_raises_index_error_unguarded(self, model):
         with pytest.raises(IndexError):
             model.slot_key(10)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: the Grid bridge -- fixed_from_grid and pattern.
+#
+# fixture_grid/model above are module-scoped and never mutated by any test
+# above this point; the fixtures below build their own Grid instances (or
+# clone one) before placing words, so no test here can leak state into the
+# TestNormativeCases/TestCrossings*/TestFromGrid*/TestFromBlacks*/TestSlotKey
+# classes above, and no ordering between test files or classes matters.
+# ---------------------------------------------------------------------------
+
+
+def _slot_dict(slot) -> dict:
+    return {"row": slot.row, "col": slot.col, "length": slot.length, "direction": slot.direction}
+
+
+@pytest.fixture(scope="module")
+def cat_grid() -> Grid:
+    """The fixture grid plus one unlocked placement: CAT across at (0, 0)."""
+    g = Grid(FIXTURE_SIZE, validate_size=False)
+    for row, col in FIXTURE_BLACK_POSITIONS:
+        g.set_black_square(row, col, enforce_symmetry=False)
+    g.place_word("CAT", 0, 0, "across")
+    return g
+
+
+@pytest.fixture(scope="module")
+def horse_grid(cat_grid) -> Grid:
+    """cat_grid plus a second, locked placement: HORSE down at (0, 4)."""
+    g = cat_grid.clone()
+    g.place_word("HORSE", 0, 4, "down", lock=True)
+    return g
+
+
+# (slot id 0-9) -- literal, from the task-3 brief's normative tables.
+EMPTY_PATTERNS = ("???", "???", "?????", "????", "???", "???", "????", "?????", "???", "?????")
+CAT_PATTERNS = ("CAT", "???", "?????", "????", "???", "C??", "A???", "T????", "???", "?????")
+HORSE_PATTERNS = ("CAT", "???", "????R", "???S", "??E", "C??", "A???", "T????", "???", "HORSE")
+
+
+class TestFixedFromGrid:
+    """fixed_from_grid(grid): a flat, index-based read of grid content only -- no locked-ness."""
+
+    def test_length_is_size_squared(self, fixture_grid):
+        assert len(fixed_from_grid(fixture_grid)) == FIXTURE_SIZE * FIXTURE_SIZE
+
+    def test_empty_grid_is_all_empty_strings(self, fixture_grid):
+        assert fixed_from_grid(fixture_grid) == ("",) * (FIXTURE_SIZE * FIXTURE_SIZE)
+
+    def test_black_cells_are_empty_string(self, fixture_grid):
+        fixed = fixed_from_grid(fixture_grid)
+        for black in FIXTURE_BLACKS:
+            assert fixed[black] == ""
+
+    def test_unlocked_filled_cells_give_their_letters(self, cat_grid):
+        assert fixed_from_grid(cat_grid)[0:3] == ("C", "A", "T")
+
+    def test_black_cell_stays_empty_string_next_to_a_filled_word(self, cat_grid):
+        """Cell 3 is (0, 3), a black square adjacent to CAT's last letter at cell 2."""
+        assert fixed_from_grid(cat_grid)[3] == ""
+
+    def test_empty_white_cell_stays_empty_string_after_an_unrelated_placement(self, cat_grid):
+        """Cell 5 is (1, 0): white, untouched by the CAT placement at row 0."""
+        assert fixed_from_grid(cat_grid)[5] == ""
+
+    def test_locked_placement_differs_from_unlocked_only_in_lock_state(self, horse_grid):
+        """Sanity check on the fixture itself, not on fixed_from_grid: the two placements
+        this task discriminates between must actually differ only in lock, not in anything else."""
+        assert horse_grid.is_locked(0, 4) is True
+        assert horse_grid.is_locked(0, 0) is False
+
+    def test_locked_filled_cells_give_their_letters_same_as_unlocked(self, horse_grid):
+        """The rule under test: a filled white cell gives its letter locked or not."""
+        fixed = fixed_from_grid(horse_grid)
+        assert (fixed[4], fixed[9], fixed[14], fixed[19], fixed[24]) == ("H", "O", "R", "S", "E")
+
+    def test_earlier_unlocked_placement_is_unaffected_by_a_later_locked_one(self, horse_grid):
+        assert fixed_from_grid(horse_grid)[0:3] == ("C", "A", "T")
+
+
+class TestPattern:
+    """pattern(model, slot_id, fixed): reads only model and fixed, never a Grid."""
+
+    def test_empty_grid_patterns_match_normative_table(self, model, fixture_grid):
+        fixed = fixed_from_grid(fixture_grid)
+        actual = tuple(pattern(model, s.id, fixed) for s in model.slots)
+        assert actual == EMPTY_PATTERNS
+
+    def test_cat_placement_patterns_match_normative_table(self, model, cat_grid):
+        fixed = fixed_from_grid(cat_grid)
+        actual = tuple(pattern(model, s.id, fixed) for s in model.slots)
+        assert actual == CAT_PATTERNS
+
+    def test_locked_horse_placement_patterns_match_normative_table(self, model, horse_grid):
+        fixed = fixed_from_grid(horse_grid)
+        actual = tuple(pattern(model, s.id, fixed) for s in model.slots)
+        assert actual == HORSE_PATTERNS
+
+    def test_result_length_equals_slot_length_for_every_slot(self, model, horse_grid):
+        fixed = fixed_from_grid(horse_grid)
+        for s in model.slots:
+            assert len(pattern(model, s.id, fixed)) == s.length
+
+    def test_out_of_range_slot_id_raises_index_error(self, model, fixture_grid):
+        fixed = fixed_from_grid(fixture_grid)
+        with pytest.raises(IndexError):
+            pattern(model, 10, fixed)
+
+    def test_negative_slot_id_addresses_from_the_end_without_raising(self, model, horse_grid):
+        """Same unguarded-negative-index contract as SlotModel.slot_key: model.slots[-1] is slot 9."""
+        fixed = fixed_from_grid(horse_grid)
+        assert pattern(model, -1, fixed) == HORSE_PATTERNS[9]
+
+    def test_wrong_length_fixed_raises_value_error(self, model):
+        with pytest.raises(ValueError):
+            pattern(model, 0, ("",) * (model.size * model.size - 1))
+
+
+class TestPatternMatchesGridByteForByte:
+    """The task's real acceptance test (spec 6): pattern(...) must equal
+    grid.get_pattern_for_slot(...) exactly, for every slot, in every one of
+    the three fixture states -- not just the rows the brief's tables name."""
+
+    @pytest.mark.parametrize("slot_id", range(10))
+    def test_matches_grid_oracle_on_empty_grid(self, model, fixture_grid, slot_id):
+        fixed = fixed_from_grid(fixture_grid)
+        slot = model.slots[slot_id]
+        assert pattern(model, slot_id, fixed) == fixture_grid.get_pattern_for_slot(_slot_dict(slot))
+
+    @pytest.mark.parametrize("slot_id", range(10))
+    def test_matches_grid_oracle_after_cat(self, model, cat_grid, slot_id):
+        fixed = fixed_from_grid(cat_grid)
+        slot = model.slots[slot_id]
+        assert pattern(model, slot_id, fixed) == cat_grid.get_pattern_for_slot(_slot_dict(slot))
+
+    @pytest.mark.parametrize("slot_id", range(10))
+    def test_matches_grid_oracle_after_locked_horse(self, model, horse_grid, slot_id):
+        fixed = fixed_from_grid(horse_grid)
+        slot = model.slots[slot_id]
+        assert pattern(model, slot_id, fixed) == horse_grid.get_pattern_for_slot(_slot_dict(slot))

@@ -14,8 +14,11 @@ order) filtered to length >= min_length the way Grid.get_word_slots filters
 it -- so a slot built here and looked up by id agrees with the grid's own
 oracle at every min_length. Crossings are pinned across-first: a Crossing's
 across_id always names an "across" slot and down_id a "down" one, regardless
-of which slot an oracle names first. fixed_from_grid/pattern (Task 3) and
-to_dict/from_dict (Task 4) are later additions to this same file, not built
+of which slot an oracle names first. fixed_from_grid and pattern (Task 3)
+read a Grid's letters into a flat `fixed` tuple and render a slot's pattern
+from `model` and `fixed` alone -- pattern never touches a Grid, which is
+what lets one model stay constant while fixed changes underneath it.
+to_dict/from_dict (Task 4) are a later addition to this same file, not built
 here.
 """
 
@@ -24,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from src.core.cell_types import WILDCARD
 from src.core.grid import Grid
 
 
@@ -194,3 +198,39 @@ class SlotModel:
         """(row, col, direction) for slot_id -- the key shape Autofill.slot_id_map uses."""
         slot = self.slots[slot_id]
         return (slot.row, slot.col, slot.direction)
+
+
+def fixed_from_grid(grid: Grid) -> tuple[str, ...]:
+    """
+    Read a Grid's letter content into a flat, index-based tuple: the content
+    half of the geometry/content split the rest of this module depends on.
+
+    A filled white cell gives its letter whether or not it is locked --
+    lock provenance is a separate concern (spec 2026-09-08-c2-slot-model,
+    section 6) and plays no part here. A black cell and an empty white cell
+    both give "".
+    """
+    return tuple(
+        grid.get_cell(row, col) if grid.has_letter(row, col) else "" for row in range(grid.size) for col in range(grid.size)
+    )
+
+
+def pattern(model: SlotModel, slot_id: int, fixed: tuple[str, ...]) -> str:
+    """
+    Render slot_id's pattern from model and fixed alone -- never touches a
+    Grid, which is what lets one model stay constant while fixed changes
+    underneath it.
+
+    Each of the slot's cells, in Slot.cells order, contributes its letter
+    from fixed if non-empty, else the wildcard.
+
+    Raises:
+        ValueError: if len(fixed) != model.size * model.size.
+        IndexError: if slot_id is out of range for model.slots, unguarded --
+            a negative slot_id therefore indexes from the end natively.
+    """
+    expected_length = model.size * model.size
+    if len(fixed) != expected_length:
+        raise ValueError(f"fixed must have length {expected_length} for a {model.size}x{model.size} grid, got {len(fixed)}")
+    slot = model.slots[slot_id]
+    return "".join(fixed[cell] if fixed[cell] else WILDCARD for cell in slot.cells)
