@@ -302,11 +302,11 @@ Oracles:
   (`cli/src/fill/beam_search/utils/slot_utils.py`). `get_slot_crossings` alone carries no
   positions and cannot catch a transposed `across_pos`/`down_pos`.
 - a second position oracle — the condition "can be built without side effects" is **met**, checked
-  against source: `CSPAutofill(grid, word_list)` creates its own `PatternMatcher` and defaults
+  against source: `Autofill(grid, word_list)` creates its own `PatternMatcher` and defaults
   `pause_controller=None`, and `_initialize_csp` builds the constraint graph via its own
   `_get_intersection` (`autofill.py:851`), independent of `SlotIntersectionHelper`. Domains are
   built in the same call, so pass a tiny fixture `WordList` and the oracle stays non-`slow`:
-  `CSPAutofill.constraints[i] = [(j, pos1, pos2), ...]` (`cli/src/fill/autofill.py`, built in
+  `Autofill.constraints[i] = [(j, pos1, pos2), ...]` (`cli/src/fill/autofill.py`, built in
   `_initialize_csp`'s crossing loop). Its ids index the slot list it was given, not `SlotModel`'s;
   map through `slot_id_map[model.slot_key(s)]`.
 - round trip: `from_dict(to_dict(m)) == m`.
@@ -400,7 +400,7 @@ Properties and tests:
   (`cli/src/core/constraint_analyzer.py`), with `min_score=0` and an uncapped matcher.
 - Fixed point vs the existing AC-3: with `not_equals=False` and a constant `min_score` (the CSP
   holds a single `int`), for every open slot `s`,
-  `set(w for w, _ in words(mask_s)) == CSPAutofill.domains[slot_id_map[model.slot_key(s)]]` after
+  `set(w for w, _ in words(mask_s)) == Autofill.domains[slot_id_map[model.slot_key(s)]]` after
   `_ac3()` on the same grid and list, and `bool(wiped) == (not _ac3() or has_empty_domain())`.
   The CSP is initialised from `grid.get_empty_slots()` — slots with at least one empty cell, the
   same set as this module's open slots — so fixed slots are absent on both sides. See the `[NOTE]`
@@ -436,7 +436,7 @@ kept regardless (decision 7), because without it two same-length singletons on o
 "not refuted" for a state that has no fill.
 
 **[NOTE]**
-The codebase already contains AC-3: `CSPAutofill._ac3` and `_revise` in
+The codebase already contains AC-3: `Autofill._ac3` and `_revise` in
 `cli/src/fill/autofill.py`, inside the CSP autofill the briefs record as retiring. `_revise` is the
 textbook pairwise revise over word sets; this module's step 4 does the same revision in one
 `letters_at` and one `restrict` per side. Neither the research section nor the first draft of this
@@ -530,7 +530,7 @@ Room left by C2/C3:
 |---|---|---|---|
 | C1 | `letter_bitset.py` | `TriePatternMatcher.find`; the four primitive derivations; round trip | real-list run exceeds a couple of seconds |
 | C2 | `slot_model.py` | `get_word_slots`; `get_slot_crossings` + `get_crossing_position`; `get_pattern_for_slot`; round trip | never |
-| C3 | `propagator.py` | brute force; `analyze_constraints`; `CSPAutofill._ac3`; `analyze_placement_impact` | real-list runs |
+| C3 | `propagator.py` | brute force; `analyze_constraints`; `Autofill._ac3`; `analyze_placement_impact` | real-list runs |
 | C4 | `fillability.py` | C3's, through `assess` | — |
 | C1b | `inverted_index.py` | same harness, parametrised | same |
 | C6 | `ownership.py` | decided with the option | — |
@@ -564,6 +564,12 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.5** — 2026-09-08 — correction, no design change: the class this document called
+  `CSPAutofill` in five places is named `Autofill` (`cli/src/fill/autofill.py:42`). `git log -S`
+  over `cli/` finds the name `CSPAutofill` in no commit — it never existed, and the error survived
+  0.1.0's red-team, both advisor reviews and all of C1, whose oracle was the trie rather than this
+  class. Every member the document attributes to it — `_initialize_csp`, `_ac3`, `_revise`,
+  `constraints`, `domains`, `slot_id_map` — is correct and is defined on `Autofill`.
 - **0.1.4** — 2026-09-08 — planning amendment, C2 only, surfaced writing the C2 plan: pinned the
   sort order of `crossings` and `unslotted` (decision 11) and the wire form of `direction`
   (decision 10) — §6 fixed neither, and two implementers would not have converged on either.
