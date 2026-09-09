@@ -11,9 +11,11 @@
 **Spec:** `docs/superpowers/specs/2026-09-07-domain-capabilities-design.md` — §7 is the contract; §2 (project-wide constraints), §3 (vocabulary), §4 (C1 surface) and §6 (C2 surface) bind it.
 
 > **Amendment 0.1.7 — decisions 13 and 14 ratified 2026-09-09; decision 15 is still open.**
-> Decision 14 was ratified *against* the proposal: `crossing_counts` validates the word length.
-> Tasks 2, 3 and 4 are unblocked. **Task 1 rests on decision 15 and does not start until it is
-> settled.** Task 0 was never affected.
+> Decision 14 was ratified *against* the proposal: `crossing_counts` validates the word length, and
+> the proposal's premise was wrong — decision 12 declined to guard *lookups*, while §4 and §6
+> already pin three shape guards of the same kind. Decisions 13 and 14 no longer gate anything.
+> **Decision 15 still gates Task 1, and Tasks 2, 3 and 4 all consume Task 1's output — so Task 0 is
+> the only task that can start before 15 is settled.**
 
 ## Global Constraints
 
@@ -239,7 +241,7 @@ git commit -m "feat(domain): add propagator state and initial_state"
 
 ### Task 2: Arc consistency — `refine` and `propagate` with `not_equals=False`
 
-> **Blocked until the owner ratifies amendment 0.1.7 decisions 13 and 15.**
+> Decision 13 (the `_refine` seam and non-mutation) is ratified. This task consumes Task 1, which still waits on decision 15.
 
 Spec §7 steps 3, 4, 6 and 7. The not-equals phase (step 5) is stubbed off by `not_equals=False` and lands in Task 3.
 
@@ -361,7 +363,7 @@ git commit -m "feat(domain): add arc-consistency propagation to a fixed point"
 
 ### Task 3: The not-equals rule
 
-> **Blocked until the owner ratifies amendment 0.1.7 decision 13.**
+> Decision 13 (the `_refine` seam and non-mutation) is ratified. This task consumes Task 1, which still waits on decision 15.
 
 Spec §7 step 2's second half and step 5. No code oracle exists — brute force and hand fixtures are the oracle.
 
@@ -447,7 +449,7 @@ git commit -m "feat(domain): add singleton not-equals propagation as a phase"
 
 ### Task 4: `crossing_counts`
 
-> **Blocked until the owner ratifies amendment 0.1.7 decision 14.**
+> Decision 14 is ratified **against** the plan's original proposal — see the `len(word)` criterion below, which now requires a `ValueError`. This task consumes Task 1, which still waits on decision 15.
 
 Spec §7's last primitive. Decision 6 is binding: this is a quantity, and **no ranking rule ships**.
 
@@ -470,7 +472,7 @@ def crossing_counts(state: DomainState, index, slot_id: int, word: str) -> tuple
   `index.count(mask_other & bits[L_other][pos_other][letter_index[word[pos_self]]])` — equivalently `index.count(index.restrict(L_other, pos_other, 1 << letter_index[word[pos_self]], mask_other))`.
 - **Crossings into fixed slots are omitted** — the returned tuple is shorter, not zero-padded.
 - A letter outside the index alphabet contributes `0` for that crossing (not an exception).
-- **`len(word)` is validated (decision 14).** Before any crossing is walked, `len(word) != model.slots[slot_id].length` raises exactly `ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")`, where `length` is the slot's length. This is the one guard in the family — decision 12's "bad lookups raise natively" governs C2 and is unchanged.
+- **`len(word)` is validated (decision 14).** Before any crossing is walked, `len(word) != model.slots[slot_id].length` raises exactly `ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")`, where `length` is the slot's length. This follows the family's existing convention: it is a shape guard on a per-call argument, the same class as §4's alphabet cap and §6's `from_blacks` range and `pattern` `len(fixed)` checks. Decision 12 declined to guard *lookups* and is unchanged.
 - Decision 6: no ranking rule, no sort, no aggregation. The tuple is returned in crossing order.
 
 **Normative cases** — exact values. All on `FIX-A` with an all-empty `fixed` and `min_score=0`, evaluated on `initial_state` (unpropagated), unless a row says otherwise. Slot 2's crossings are at cells `10, 11, 12, 13, 14` (other slots `5, 6, 7, 8, 9`); slot 7's are at cells `2, 7, 12, 17, 22`.

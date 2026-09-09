@@ -41,7 +41,7 @@ plain-text extracts of those sections were used to write this document.
 | 12 | *(2026-09-08)* C2's error contract, pinned here rather than in the plan | leaving it to the plan — the same class of choice as 10 and 11, which were ratified here, so the plan would have been authoring spec |
 | 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
 | 13 | *(2026-09-09)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
-| 14 | *(2026-09-09)* `crossing_counts` raises `ValueError` when `len(word)` is not the slot's length | leaving it unguarded — consistent with decision 12, but a short word then raises `IndexError` from an internal expression and a long word silently scores its prefix, which is a wrong answer rather than an error |
+| 14 | *(2026-09-09)* `crossing_counts` raises `ValueError` when `len(word)` is not the slot's length | leaving it unguarded, which the draft wrongly argued was what decision 12 implied — 12 declined to guard *lookups*, never shape guards, and §4 and §6 already pin three of those |
 | 15 | *(2026-09-09, **proposed** — awaiting owner)* in `cell_letters`, black-or-unslotted wins over fixed | letting a fixed letter show through on an unslotted cell — reads more informatively, but the three cases in step 7 then overlap and no rule says which wins |
 
 **[NOTE]**
@@ -481,10 +481,14 @@ Decision 15 is **still open**.
   mutating `refine` makes §7's idempotence property vacuous — it would compare a state to itself.
 - **Decision 14 — `crossing_counts` validates `len(word)`.** It raises exactly
   `ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")` when
-  `len(word) != model.slots[slot_id].length`, checked before any crossing is walked. This is the one
-  guard in the family and a deliberate departure from decision 12: unguarded, a short word raises
-  `IndexError` from an internal expression and a long word silently scores its prefix — a wrong
-  answer rather than an error. Decision 12 is unchanged; it governs C2.
+  `len(word) != model.slots[slot_id].length`, checked before any crossing is walked. This follows
+  the family's existing convention rather than departing from it: a **shape guard on a per-call
+  argument** is exactly what §4's alphabet cap and §6's `from_blacks` range check and `pattern`
+  `len(fixed)` check already are. Decision 12 declined to guard **lookups** — `slots[slot_id]`,
+  `from_dict`'s keys — and says nothing about shape. The draft of this amendment argued the
+  opposite and was wrong on that premise. Unguarded, a short word surfaces as an `IndexError` from
+  an internal expression and a long word silently scores its prefix, which is a wrong answer rather
+  than an error.
 - **Decision 15 — `cell_letters` case precedence. STILL OPEN.** Step 7's three cases are not
   disjoint: an unslotted white cell can hold a letter, so it is both "a fixed cell" and "an
   unslotted cell". The proposal is to pin black-or-unslotted first, making such a cell `0`
@@ -609,9 +613,10 @@ Room left by C2/C3:
   interfaces §7 named without fixing: the queue-order seam plus `refine`'s non-mutation
   (decision 13), `crossing_counts` on a wrong-length word (14), and `cell_letters` case precedence
   (15). **13 and 14 ratified by the owner 2026-09-09; 15 still open.** 14 was ratified against the
-  proposal — the draft argued for leaving the length unguarded, consistent with decision 12, and
-  the owner chose an explicit `ValueError` instead, so that a short word cannot surface as an
-  internal `IndexError` and a long word cannot silently score its prefix. No behaviour changed that §7 had already fixed. Two further
+  proposal, and the proposal's premise was wrong, not merely out-voted: it argued that guarding
+  would break decision 12, but 12 declined to guard *lookups*, while §4 and §6 already pin three
+  shape guards of exactly the kind decision 14 adds. The ratified answer is the more consistent
+  one. No behaviour changed that §7 had already fixed. Two further
   gaps found in the same pass are **derivations, not amendments**, and live in the plan: the
   state-equality predicate the idempotence and confluence tests compare with (dataclass `==` raises
   on `list[np.ndarray]`), and the scope of the `Autofill._ac3` oracle — `_ac3` returns `False` at
