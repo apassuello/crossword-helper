@@ -150,7 +150,7 @@ jobs:
     - name: Check documentation
       run: ./scripts/docs-check.sh
 
-  pause-resume-seam:
+  slow-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -188,15 +188,20 @@ jobs:
     # four times across the `test` matrix would buy nothing but CI minutes.
     # Own job rather than a step in `test`, matching the single-concern
     # `guards`/`docs` jobs above -- a step here would still pay the 4x matrix
-    # cost. Serial (no -n auto): these tests share /tmp state/flag dirs via
-    # file IPC and are not safe to parallelize against each other.
-    - name: Run pause/resume seam gate (slow, real subprocess)
-      run: |
-        pytest -m slow -v \
-          backend/tests/integration/test_pause_resume_e2e.py \
-          cli/tests/integration/test_pause_resume_e2e.py \
-          cli/tests/integration/test_fill_pause_resume.py \
-          backend/tests/integration/workflows/test_pause_resume_workflow.py
+    # cost. Serial (no -n auto): the pause/resume tests share /tmp state/flag
+    # dirs via file IPC and are not safe to parallelize against each other.
+    #
+    # No path arguments, for the same reason the `test` job stopped enumerating
+    # subdirectories: this step named four pause/resume files, so a slow test
+    # anywhere else ran nowhere -- not here, and not in `test`, which deselects
+    # `slow`. The domain propagator's real-word-list oracle test was written
+    # against that gap. `-m slow` with no paths cannot orphan a marked test.
+    #
+    # Cost of the widening, measured before it landed:
+    # `pytest -m slow` over the tree, rc=0, under nine minutes wall-clock. That
+    # is the command to re-run if this job's runtime ever needs re-justifying.
+    - name: Run the slow suite (real subprocess, real word list)
+      run: pytest -m slow -v
 
   # Performance job removed - benchmarks are manual scripts, not automated tests
   # Run manually when needed: python cli/tests/performance/benchmark_algorithms.py
