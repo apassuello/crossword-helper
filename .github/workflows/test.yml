@@ -44,13 +44,25 @@ jobs:
         fi
         pytest backend/tests/unit cli/tests/unit -v $COV_ARGS -n auto
 
-    - name: Run integration tests
+    # Everything under pytest.ini's testpaths except the unit dirs the step
+    # above already ran -- an exclusion list, deliberately, not an enumeration.
+    # Enumerating subdirectories silently orphans any test file added outside
+    # the list: backend/tests/test_api.py and backend/tests/test_openapi_contract.py
+    # sit directly under backend/tests/, so `pytest` picks them up locally via
+    # testpaths while CI never ran them. Excluding what is already covered
+    # cannot orphan a new file; enumerating what to include can, and did.
+    # Proof this step covers them: `pytest --collect-only -q` from the repo root
+    # and this step's argv must report the same set outside the unit dirs.
+    - name: Run integration and remaining tests
       run: |
         COV_ARGS=""
         if [ "${{ matrix.python-version }}" = "3.12" ]; then
           COV_ARGS="--cov=backend --cov=cli --cov-append --cov-report=xml --cov-report=term"
         fi
-        pytest backend/tests/integration cli/tests/integration -v $COV_ARGS
+        pytest backend/tests cli/tests tests \
+          --ignore=backend/tests/unit \
+          --ignore=cli/tests/unit \
+          -v $COV_ARGS
 
     - name: Verify coverage file exists
       if: matrix.python-version == '3.12'
