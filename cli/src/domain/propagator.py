@@ -1,5 +1,5 @@
 """
-Propagator state: dataclasses and the unpropagated-mask half of arc setup.
+Propagator: dataclasses, initial masks, and arc consistency to a fixed point.
 
 DomainState holds a SlotModel alongside two views derived from one `fixed`
 tuple: word_masks, one eligibility mask per slot (None for a fixed slot),
@@ -7,17 +7,25 @@ and cell_letters, an alphabet bitmask per cell combining the locked-in fixed
 letters with the per-position AND of every open slot's own mask.
 initial_state (spec 2026-09-09-c3-propagator, section 7 steps 1-2's first
 half) builds both from scratch -- no cross-slot arc-consistency pass and no
-not-equals removal; both belong to propagate (Tasks 2 and 3).
+not-equals removal.
 
-Revision and Result are the propagation-record shapes propagate and
-not_equals build so every C3 task shares one vocabulary; this module only
-defines them -- constructing one is Tasks 2/3's job, not initial_state's.
+refine/_refine/propagate (section 7 steps 3, 4, 6, 7) revise those masks to
+a fixed point over model.crossings: refine runs from an existing
+DomainState with the natural queue, _refine is the private seam that takes
+an explicit arc sequence so a confluence test can permute it (decision 13),
+and propagate is initial_state followed by refine. Both not_equals phases
+(step 2's fixed-word removal and step 5's singleton rule) are Task 3's --
+every entry point here accepts the flag and is a no-op while it is False.
+
+Revision and Result are the propagation-record shapes refine/_refine/
+propagate build so every C3 task shares one vocabulary.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
-from typing import Callable, Union
+from typing import Callable, Sequence, Union
 
 import numpy as np
 from src.domain.letter_bitset import LetterBitsetIndex
@@ -89,6 +97,32 @@ def initial_state(
         policy = min_score(slot.length) if callable(min_score) else min_score
         word_masks.append(index.mask(slot_pattern, policy))
 
+    cell_letters = _cell_letters(model, index, fixed, word_masks)
+
+    return DomainState(model=model, word_masks=word_masks, cell_letters=cell_letters, fixed=fixed)
+
+
+def _cell_letters(
+    model: SlotModel,
+    index: LetterBitsetIndex,
+    fixed: tuple[str, ...],
+    word_masks: list[np.ndarray | None],
+) -> np.ndarray:
+    """
+    Spec section 7 step 7's rule -- a pure function of (model, fixed,
+    word_masks), so initial_state and refine's fixed point both recompute
+    cell_letters through this one function rather than each carrying their
+    own copy of the precedence rule.
+
+    Precedence per cell (decision 15): a black or unslotted cell is 0
+    regardless of what fixed holds there (a grid defect has no legal
+    letter); otherwise a fixed cell is the single bit of its letter, or 0
+    if that letter is outside index.alphabet; otherwise (a slotted, unfilled
+    cell) it starts as every alphabet bit. Then for every open slot and
+    position, cell_letters is ANDed down by that slot's own word_mask's
+    letters_at -- which is where an empty mask (a wipeout) zeroes every one
+    of its cells.
+    """
     num_cells = model.size * model.size
     full_mask = (1 << len(index.alphabet)) - 1
     defect_cells = set(model.blacks) | set(model.unslotted)
@@ -110,4 +144,148 @@ def initial_state(
         for position, cell in enumerate(slot.cells):
             cell_letters[cell] &= np.uint64(index.letters_at(slot.length, position, word_mask))
 
-    return DomainState(model=model, word_masks=word_masks, cell_letters=cell_letters, fixed=fixed)
+    return cell_letters
+
+
+def _open_arc_queue(model: SlotModel, word_masks: list[np.ndarray | None]) -> list[int]:
+    """The natural queue (decision 13): indices into model.crossings, in that
+    order, of every crossing whose two slots are both open."""
+    return [
+        idx
+        for idx, crossing in enumerate(model.crossings)
+        if word_masks[crossing.across_id] is not None and word_masks[crossing.down_id] is not None
+    ]
+
+
+def _crossings_by_slot(model: SlotModel) -> dict[int, list[tuple[int, int]]]:
+    """slot id -> [(crossing index, the slot on the other side of it), ...],
+    each slot's list in model.crossings order."""
+    by_slot: dict[int, list[tuple[int, int]]] = {slot.id: [] for slot in model.slots}
+    for idx, crossing in enumerate(model.crossings):
+        by_slot[crossing.across_id].append((idx, crossing.down_id))
+        by_slot[crossing.down_id].append((idx, crossing.across_id))
+    return by_slot
+
+
+def _enqueue_other_crossings(
+    slot_crossings: dict[int, list[tuple[int, int]]],
+    masks: list[np.ndarray | None],
+    slot_id: int,
+    exclude_crossing: int,
+    pending: "deque[int]",
+) -> None:
+    """Enqueue every crossing of slot_id other than the one just processed,
+    skipping any whose other slot is fixed -- that arc was never in the open-
+    open set to begin with (spec section 7 step 4)."""
+    for crossing_idx, other_slot in slot_crossings[slot_id]:
+        if crossing_idx == exclude_crossing:
+            continue
+        if masks[other_slot] is not None:
+            pending.append(crossing_idx)
+
+
+def refine(state: DomainState, index: LetterBitsetIndex, min_score: MinScore = 0, not_equals: bool = True) -> Result:
+    """
+    Run the arc-consistency fixed point (spec section 7 steps 3-7) from an
+    existing DomainState, rather than from (model, fixed) the way propagate
+    does.
+
+    The initial queue is the natural one -- model.crossings' own order,
+    filtered to the crossings whose two slots are both open (spec section 7
+    step 3) -- built here and handed to the private _refine seam (decision
+    13), which takes it as an explicit argument so a confluence test can
+    permute it while refine itself always passes this one order.
+
+    Does not mutate state or any array it holds; see _refine.
+    """
+    queue = _open_arc_queue(state.model, state.word_masks)
+    return _refine(state, index, min_score, not_equals, queue)
+
+
+def _refine(
+    state: DomainState,
+    index: LetterBitsetIndex,
+    min_score: MinScore,
+    not_equals: bool,
+    queue: Sequence[int],
+) -> Result:
+    """
+    The fixed-point loop (spec section 7 steps 4, 6, 7), taking its initial
+    arc sequence as an explicit argument (decision 13) so refine's natural
+    order and a test's permuted order run through the identical algorithm.
+
+    Per popped crossing (cell, a, i, b, j): allowed is the intersection of
+    what each side's mask admits at the shared cell; each side is narrowed
+    to allowed via index.restrict, and a side that changed gets a Revision,
+    its new mask stored, and every other crossing of that slot (whose other
+    side is open) re-enqueued. An empty mask is not a stop -- its letters_at
+    is 0, so restrict on the far side empties in turn, and that cascade is
+    exactly the point (spec section 7 step 4).
+
+    Does not mutate state or any array it holds: masks starts as a shallow
+    copy of state.word_masks (untouched slots keep their original array
+    reference, which this function never writes into), and every touched
+    slot's replacement comes from index.restrict, which always returns a
+    new array rather than an in-place edit. wiped and cell_letters are
+    computed fresh at the end from the local masks list.
+
+    not_equals is accepted so Task 3 can extend this signature's behaviour
+    without changing its shape; step 5's singleton-clearing phase is not
+    implemented here -- not_equals=False is the only value this task's
+    contract requires, and it is already a no-op by simply never running
+    that phase.
+    """
+    model = state.model
+    masks: list[np.ndarray | None] = list(state.word_masks)
+    slot_crossings = _crossings_by_slot(model)
+
+    pending: "deque[int]" = deque(queue)
+    revisions: list[Revision] = []
+
+    while pending:
+        crossing_idx = pending.popleft()
+        crossing = model.crossings[crossing_idx]
+        a, i, b, j = crossing.across_id, crossing.across_pos, crossing.down_id, crossing.down_pos
+        length_a = model.slots[a].length
+        length_b = model.slots[b].length
+        mask_a = masks[a]
+        mask_b = masks[b]
+
+        allowed = index.letters_at(length_a, i, mask_a) & index.letters_at(length_b, j, mask_b)
+        new_a = index.restrict(length_a, i, allowed, mask_a)
+        new_b = index.restrict(length_b, j, allowed, mask_b)
+
+        if not np.array_equal(new_a, mask_a):
+            revisions.append(Revision(source_crossing=crossing_idx, source_slot=b, slot=a, removed=mask_a ^ new_a))
+            masks[a] = new_a
+            _enqueue_other_crossings(slot_crossings, masks, a, crossing_idx, pending)
+
+        if not np.array_equal(new_b, mask_b):
+            revisions.append(Revision(source_crossing=crossing_idx, source_slot=a, slot=b, removed=mask_b ^ new_b))
+            masks[b] = new_b
+            _enqueue_other_crossings(slot_crossings, masks, b, crossing_idx, pending)
+
+    wiped = tuple(slot.id for slot in model.slots if masks[slot.id] is not None and index.count(masks[slot.id]) == 0)
+    cell_letters = _cell_letters(model, index, state.fixed, masks)
+    new_state = DomainState(model=model, word_masks=masks, cell_letters=cell_letters, fixed=state.fixed)
+    return Result(state=new_state, wiped=wiped, revisions=tuple(revisions))
+
+
+def propagate(
+    model: SlotModel,
+    index: LetterBitsetIndex,
+    fixed: tuple[str, ...],
+    min_score: MinScore = 0,
+    not_equals: bool = True,
+) -> Result:
+    """
+    Build the unpropagated DomainState for (model, fixed) and run it to the
+    arc-consistency fixed point: initial_state, then refine.
+
+    Step 2's not-equals half -- removing a fixed slot's on-list word from
+    every same-length open mask, between initial_state and refine -- is
+    Task 3's; it is a no-op while not_equals=False, which is this task's
+    entire scope.
+    """
+    state = initial_state(model, index, fixed, min_score)
+    return refine(state, index, min_score=min_score, not_equals=not_equals)
