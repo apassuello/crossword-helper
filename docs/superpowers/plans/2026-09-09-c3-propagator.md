@@ -10,12 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-07-domain-capabilities-design.md` — §7 is the contract; §2 (project-wide constraints), §3 (vocabulary), §4 (C1 surface) and §6 (C2 surface) bind it.
 
-> **Amendment 0.1.7 — decisions 13 and 14 ratified 2026-09-09; decision 15 is still open.**
-> Decision 14 was ratified *against* the proposal: `crossing_counts` validates the word length, and
-> the proposal's premise was wrong — decision 12 declined to guard *lookups*, while §4 and §6
-> already pin three shape guards of the same kind. Decisions 13 and 14 no longer gate anything.
-> **Decision 15 still gates Task 1, and Tasks 2, 3 and 4 all consume Task 1's output — so Task 0 is
-> the only task that can start before 15 is settled.**
+> **Amendment 0.1.7 — all three decisions ratified 2026-09-09. Every task is unblocked.**
+> Two were ratified against the proposal. **14** on its answer: `crossing_counts` validates the word
+> length, and the proposal's premise was wrong — decision 12 declined to guard *lookups*, while §4
+> and §6 already pin three shape guards of the same kind. **15** on its reasoning: the value is
+> unchanged (`0`), but it holds because an unslotted white cell is a **grid defect** where no letter
+> may legally sit — not because of a precedence rule chosen for tidiness.
 
 ## Global Constraints
 
@@ -210,7 +210,7 @@ def initial_state(model, index, fixed, min_score: MinScore = 0) -> DomainState: 
 | `cell_letters[20]` | `0` — unslotted wins over the fixed letter |
 | every `word_masks[s]` | identical to the all-empty-`fixed` case above |
 
-*Without decision 15 the same cell would carry the single bit of `A`, so this row is the one that distinguishes the two readings.*
+*Without decision 15 the same cell would carry the single bit of `A`, so this row is the one that distinguishes the two readings. The ratified reading is that cell `20` is a **grid defect** — white but in no entry — so `0` is not a sentinel but the true count of letters that may legally sit there. The typed letter stays readable from `fixed[20]`, and `model.unslotted` is the defect list. Labelling it as a defect in a user-facing report is a C4 question, recorded as a `[NOTE]` under spec §8; C3 adds nothing for it.*
 
 **Traceability note.** `initial_state`'s `min_score` normalisation, the open/fixed split and the `None` for fixed slots are spec §7 steps 1–2. `cell_letters` on an unpropagated state is derived, as argued above. Decision 15's precedence is amendment 0.1.7.
 
@@ -241,7 +241,7 @@ git commit -m "feat(domain): add propagator state and initial_state"
 
 ### Task 2: Arc consistency — `refine` and `propagate` with `not_equals=False`
 
-> Decision 13 (the `_refine` seam and non-mutation) is ratified. This task consumes Task 1, which still waits on decision 15.
+> Decision 13 (the `_refine` seam and `refine`'s non-mutation) is ratified — both are live requirements below, not proposals.
 
 Spec §7 steps 3, 4, 6 and 7. The not-equals phase (step 5) is stubbed off by `not_equals=False` and lands in Task 3.
 
@@ -363,7 +363,7 @@ git commit -m "feat(domain): add arc-consistency propagation to a fixed point"
 
 ### Task 3: The not-equals rule
 
-> Decision 13 (the `_refine` seam and non-mutation) is ratified. This task consumes Task 1, which still waits on decision 15.
+> Decision 13 is ratified; the confluence harness below permutes `_refine`'s queue.
 
 Spec §7 step 2's second half and step 5. No code oracle exists — brute force and hand fixtures are the oracle.
 
@@ -449,7 +449,7 @@ git commit -m "feat(domain): add singleton not-equals propagation as a phase"
 
 ### Task 4: `crossing_counts`
 
-> Decision 14 is ratified **against** the plan's original proposal — see the `len(word)` criterion below, which now requires a `ValueError`. This task consumes Task 1, which still waits on decision 15.
+> Decision 14 is ratified **against** this plan's original proposal — see the `len(word)` criterion below, which now requires a `ValueError` with a pinned message.
 
 Spec §7's last primitive. Decision 6 is binding: this is a quantity, and **no ranking rule ships**.
 

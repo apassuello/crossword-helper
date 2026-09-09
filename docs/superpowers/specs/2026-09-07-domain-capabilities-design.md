@@ -42,7 +42,7 @@ plain-text extracts of those sections were used to write this document.
 | 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
 | 13 | *(2026-09-09)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
 | 14 | *(2026-09-09)* `crossing_counts` raises `ValueError` when `len(word)` is not the slot's length | leaving it unguarded, which the draft wrongly argued was what decision 12 implied — 12 declined to guard *lookups*, never shape guards, and §4 and §6 already pin three of those |
-| 15 | *(2026-09-09, **proposed** — awaiting owner)* in `cell_letters`, black-or-unslotted wins over fixed | letting a fixed letter show through on an unslotted cell — reads more informatively, but the three cases in step 7 then overlap and no rule says which wins |
+| 15 | *(2026-09-09)* in `cell_letters`, an unslotted cell is `0` whatever `fixed` holds — it is a grid defect, so no letter may legally sit there | letting the fixed letter show through — it would report content for a cell that should not be white, and make `0` mean "outside the puzzle" when empty but "here is a letter" when filled |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -466,9 +466,8 @@ That flip is correct behaviour and is covered by a fixture, not treated as a def
 
 **[SPEC] Planning amendment, 2026-09-09 — three interfaces §7 named without fixing**
 Surfaced writing the C3 plan. Each is a choice between defensible answers, not a derivation, so two
-implementers would not have converged. Decisions 13 and 14 were **ratified by the owner on
-2026-09-09** — 14 against the proposal, which had argued for leaving the length unguarded.
-Decision 15 is **still open**.
+implementers would not have converged. All three were **ratified by the owner on 2026-09-09**.
+Two went against the proposal: 14 on its answer, 15 on its reasoning.
 
 - **Decision 13 — the queue-order seam, and `refine` does not mutate.** §7 claims "the fixed point is
   unique for a given input regardless of queue order", but no public entry point can vary the order:
@@ -489,12 +488,14 @@ Decision 15 is **still open**.
   opposite and was wrong on that premise. Unguarded, a short word surfaces as an `IndexError` from
   an internal expression and a long word silently scores its prefix, which is a wrong answer rather
   than an error.
-- **Decision 15 — `cell_letters` case precedence. STILL OPEN.** Step 7's three cases are not
-  disjoint: an unslotted white cell can hold a letter, so it is both "a fixed cell" and "an
-  unslotted cell". The proposal is to pin black-or-unslotted first, making such a cell `0`
-  regardless of `fixed`; the alternative is to let the fixed letter show through. Not ratified —
-  Task 1 does not start until it is. Independent of the choice: a fixed letter outside the index
-  alphabet is `0`, because it has no bit to set.
+- **Decision 15 — an unslotted cell is `0`, because it is a grid defect.** Step 7's three cases
+  are not disjoint: an unslotted white cell can hold a letter, so it is both "a fixed cell" and "an
+  unslotted cell". The draft resolved this as a precedence rule chosen for sentinel consistency.
+  The owner's reframing (2026-09-09) is the ratified rationale and is stronger: a white cell in no
+  entry is a **defect in the grid**, not a free cell, so no letter may legally sit there and `0` is
+  the true answer rather than a convention. `model.unslotted` is the list of such cells; the letter
+  a user typed there stays readable from `fixed[cell]`, so nothing is lost. A fixed letter outside
+  the index alphabet is likewise `0` — it has no bit to set.
 
 ---
 
@@ -523,6 +524,18 @@ def assess(model, index, fixed, min_score: MinScore = 0) -> FillabilityReport: .
   `StateEvaluator.evaluate_state_viability`'s penalty ladder
   (`cli/src/fill/beam_search/evaluation/state_evaluator.py`) go past what any source licenses; the
   fillability research section records that a surviving domain "certifies nothing".
+
+**[NOTE] Labelling unslotted cells as a defect — decide with the `[?]` below**
+The owner asked on 2026-09-09 that a white cell belonging to no entry be surfaced as a **grid
+defect** rather than a neutral cell — that reframing is what ratified decision 15, where such a
+cell's `cell_letters` is `0` because no letter may legally sit there. C3 needs nothing for this:
+`SlotModel.unslotted` already is the list, and it is derivable from `cell_across`/`cell_down` being
+`-1` in both directions, so no ownership model is involved and this is not C6 provenance. What is
+missing is only the label. The proposed field is `unslotted_cells: tuple[int, ...]`, copied from
+`model.unslotted`; decide it alongside the `[?]` below when the C4 plan is written, since both ask
+what `FillabilityReport` names. A second, weaker grade — a cell in exactly one entry, "unchecked" —
+is equally derivable from the same two arrays, but no `applied.html` option attests it, so §2 puts
+it out of scope; recorded here, not licensed.
 
 **[?] Open, owner's call — an off-list slot completed by its crossings**
 By §3 a slot is fixed the moment its pattern has no `?`, whoever filled the cells. Two down entries
@@ -612,11 +625,12 @@ Room left by C2/C3:
 - **0.1.7** — 2026-09-09 — planning amendment, C3 only, surfaced writing the C3 plan. Pinned three
   interfaces §7 named without fixing: the queue-order seam plus `refine`'s non-mutation
   (decision 13), `crossing_counts` on a wrong-length word (14), and `cell_letters` case precedence
-  (15). **13 and 14 ratified by the owner 2026-09-09; 15 still open.** 14 was ratified against the
+  (15). **All three ratified by the owner 2026-09-09.** 14 was ratified against the
   proposal, and the proposal's premise was wrong, not merely out-voted: it argued that guarding
   would break decision 12, but 12 declined to guard *lookups*, while §4 and §6 already pin three
   shape guards of exactly the kind decision 14 adds. The ratified answer is the more consistent
-  one. No behaviour changed that §7 had already fixed. Two further
+  one. 15 kept the proposal's *value* but replaced its *reasoning*: `0` is not a precedence rule
+  picked for tidiness, it is what an unslotted cell — a grid defect — can legally hold. No behaviour changed that §7 had already fixed. Two further
   gaps found in the same pass are **derivations, not amendments**, and live in the plan: the
   state-equality predicate the idempotence and confluence tests compare with (dataclass `==` raises
   on `list[np.ndarray]`), and the scope of the `Autofill._ac3` oracle — `_ac3` returns `False` at
