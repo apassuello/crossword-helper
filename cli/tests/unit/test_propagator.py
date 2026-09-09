@@ -1,6 +1,7 @@
 """
 Tests for src.domain.propagator (Task 1: dataclasses/initial_state; Task 2:
-arc-consistency refine/propagate with not_equals=False).
+arc-consistency refine/propagate with not_equals=False; Task 3: the
+not-equals rule live under not_equals=True).
 
 Fixture is FIX-A, the 5x5 grid pinned by global-constraints.md (blacks at
 cell indices 3, 8, 15, 21; one unslotted cell, 20) together with
@@ -18,6 +19,17 @@ call anything in src.domain.propagator: a brute-force complete-fill
 enumerator (test-local, using only pattern/index.words/index.mask) and the
 existing CSP AC-3 in src.fill.autofill.Autofill, run directly against a real
 Grid rather than through fill().
+
+Task 3 adds three further geometries -- FIX-B, FIX-G, FIX-H (plus an
+off-list variant of FIX-H's own geometry) -- each built with
+SlotModel.from_blacks per the task-3 brief, and reuses Task 2's
+_brute_force_fills/_states_equal/_natural_queue harnesses rather than
+duplicating them. Every Revision comparison in this file's Task-3 tests is
+a field-by-field predicate over the integer fields, never `in`, `==`, or
+`set()` against a Revision or a Result: both are frozen dataclasses over a
+NumPy array, so those operators raise once a mask spans more than one
+uint64 chunk -- FIXTURE_WORDS never produces that, but the predicate form
+is written to hold regardless.
 """
 
 from __future__ import annotations
@@ -77,6 +89,10 @@ CANONICAL_LENGTH_3 = [
     ("SAP", 20),
     ("SPY", 20),
 ]
+
+# Text-only view of the same set (task-3 tests build a fixed-length-3 target
+# set and then subtract/compare, where the score half is irrelevant).
+CANONICAL_LENGTH_3_WORDS = {text for text, _ in CANONICAL_LENGTH_3}
 
 EMPTY_FIXED = tuple("" for _ in range(FIXTURE_SIZE * FIXTURE_SIZE))
 
@@ -149,6 +165,15 @@ CELL_LETTERS_FIXED_POINT = (
 # -- three isolated length-4 across slots, no crossings (task-2 brief).
 FIX_C_BLACKS = (4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 18, 19, 24)
 
+# FIX-B, the twins (task-3 brief): two isolated length-3 across slots (cells
+# 0-2 and 10-12), no crossings.
+FIX_B_BLACKS = (3, 4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+
+# FIX-G/FIX-H share this geometry (task-3 brief): three isolated length-3
+# across slots (cells 0-2, 10-12, 20-22), no crossings. FIX-G leaves slot 0
+# open (a singleton via step 5); FIX-H fixes it outright (step 2 instead).
+FIX_G_BLACKS = (3, 4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18, 19, 23, 24)
+
 
 @pytest.fixture(scope="module")
 def fixture_word_list() -> WordList:
@@ -163,6 +188,16 @@ def bitset_index(fixture_word_list) -> LetterBitsetIndex:
 @pytest.fixture(scope="module")
 def model() -> SlotModel:
     return SlotModel.from_blacks(FIXTURE_SIZE, FIXTURE_BLACKS, min_length=3)
+
+
+@pytest.fixture(scope="module")
+def fix_b_model() -> SlotModel:
+    return SlotModel.from_blacks(FIXTURE_SIZE, FIX_B_BLACKS, min_length=3)
+
+
+@pytest.fixture(scope="module")
+def fix_g_model() -> SlotModel:
+    return SlotModel.from_blacks(FIXTURE_SIZE, FIX_G_BLACKS, min_length=3)
 
 
 def _new_fix_a_grid() -> Grid:
@@ -401,6 +436,26 @@ def _open_slot_ids(model: SlotModel, fixed: tuple) -> list:
     return [slot.id for slot in model.slots if "?" in pattern(model, slot.id, fixed)]
 
 
+def _fixed_slot_texts_on_list(model: SlotModel, fixed: tuple, index: LetterBitsetIndex) -> set:
+    """
+    The on-list text of every fixed slot -- task-3's distinctness seed.
+
+    A fixed slot's word is not available to any open slot either (FIX-H:
+    slot 0 is fixed at SPY, which is on-list, so no brute-force fill may
+    also place SPY at slot 1 or 2). Off-list fixed text (index.count == 0)
+    contributes nothing, matching step 2's own "off the index removes
+    nothing" rule.
+    """
+    texts = set()
+    for slot in model.slots:
+        slot_pattern = pattern(model, slot.id, fixed)
+        if "?" in slot_pattern:
+            continue
+        if index.count(index.mask(slot_pattern, 0)) > 0:
+            texts.add(slot_pattern)
+    return texts
+
+
 def _brute_force_fills(model: SlotModel, fixed: tuple, index: LetterBitsetIndex) -> list:
     """
     Exhaustive, propagator-independent oracle: every complete, consistent
@@ -414,7 +469,11 @@ def _brute_force_fills(model: SlotModel, fixed: tuple, index: LetterBitsetIndex)
     simulating a shared cell grid. A word already used by another slot in
     the same fill is rejected (distinctness) -- required so that "wiped
     non-empty implies zero solutions" is not falsified by a repeats-allowed
-    reading (task-2 brief).
+    reading (task-2 brief). Distinctness is seeded with every fixed slot's
+    own on-list text before recursion starts (task-3): a fixed slot never
+    appears in open_slots or candidates, so without this seed its word
+    would be free for an open slot to reuse, which is exactly what the
+    not-equals rule forbids (FIX-H).
 
     Returns a list of {slot_id: word} dicts, one per complete fill.
     """
@@ -423,6 +482,7 @@ def _brute_force_fills(model: SlotModel, fixed: tuple, index: LetterBitsetIndex)
         slot.id: [text for text, _ in index.words(slot.length, index.mask("?" * slot.length, 0))] for slot in open_slots
     }
     patterns = {slot.id: pattern(model, slot.id, fixed) for slot in open_slots}
+    seeded_used = _fixed_slot_texts_on_list(model, fixed, index)
 
     fills: list = []
 
@@ -458,7 +518,7 @@ def _brute_force_fills(model: SlotModel, fixed: tuple, index: LetterBitsetIndex)
             for cell in new_cells:
                 del cell_values[cell]
 
-    backtrack(0, {}, set(), {})
+    backtrack(0, {}, set(seeded_used), {})
     return fills
 
 
@@ -908,3 +968,399 @@ class TestRevisionFieldsAreConsistent:
         result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
         for revision in result.revisions:
             assert bitset_index.count(revision.removed) >= 1
+
+
+class TestFixBTwins:
+    """FIX-B, the twins (task-3 brief) -- two isolated length-3 slots, no
+    crossings, both patterns "?PY" and both masks the singleton {SPY}
+    under not_equals=False. Both settings from the brief's table."""
+
+    @pytest.fixture
+    def fix_b_fixed(self) -> tuple:
+        return _fixed_with({1: "P", 2: "Y", 11: "P", 12: "Y"})
+
+    def test_no_crossings_in_this_geometry(self, fix_b_model):
+        assert fix_b_model.crossings == ()
+
+    def test_both_patterns_are_py(self, fix_b_model, fix_b_fixed):
+        assert pattern(fix_b_model, 0, fix_b_fixed) == "?PY"
+        assert pattern(fix_b_model, 1, fix_b_fixed) == "?PY"
+
+    def test_not_equals_false_both_slots_keep_spy(self, fix_b_model, bitset_index, fix_b_fixed):
+        result = propagate(fix_b_model, bitset_index, fix_b_fixed, min_score=0, not_equals=False)
+        assert bitset_index.words(3, result.state.word_masks[0]) == [("SPY", 20)]
+        assert bitset_index.words(3, result.state.word_masks[1]) == [("SPY", 20)]
+        assert result.wiped == ()
+
+    def test_not_equals_true_both_slots_wipe(self, fix_b_model, bitset_index, fix_b_fixed):
+        result = propagate(fix_b_model, bitset_index, fix_b_fixed, min_score=0, not_equals=True)
+        assert bitset_index.count(result.state.word_masks[0]) == 0
+        assert bitset_index.count(result.state.word_masks[1]) == 0
+        assert result.wiped == (0, 1)
+
+    def test_not_equals_true_records_a_revision_for_each_side(self, fix_b_model, bitset_index, fix_b_fixed):
+        """Each slot clears the other -- two Revisions, one per direction
+        (spec section 7 step 5: 'two same-length slots holding the same
+        singleton clear each other and both wipe'). Presence, never
+        position: never compare a Revision with ==/in/set()."""
+        result = propagate(fix_b_model, bitset_index, fix_b_fixed, min_score=0, not_equals=True)
+        assert any(r.source_crossing == -1 and r.source_slot == 1 and r.slot == 0 for r in result.revisions)
+        assert any(r.source_crossing == -1 and r.source_slot == 0 and r.slot == 1 for r in result.revisions)
+
+
+class TestFixGGentleCase:
+    """FIX-G (task-3 brief) -- the rule removes without collapsing. Slot
+    0's own pattern is already the singleton {SPY} (no crossing needed),
+    and step 5 clears SPY from slots 1 and 2 without wiping either."""
+
+    @pytest.fixture
+    def fix_g_fixed(self) -> tuple:
+        return _fixed_with({1: "P", 2: "Y", 10: "S"})
+
+    def test_no_crossings_in_this_geometry(self, fix_g_model):
+        assert fix_g_model.crossings == ()
+
+    def test_patterns_match_the_table(self, fix_g_model, fix_g_fixed):
+        assert pattern(fix_g_model, 0, fix_g_fixed) == "?PY"
+        assert pattern(fix_g_model, 1, fix_g_fixed) == "S??"
+        assert pattern(fix_g_model, 2, fix_g_fixed) == "???"
+
+    def test_slot_0_is_open_not_fixed(self, fix_g_model, bitset_index, fix_g_fixed):
+        """Open, since '?' is still present -- this is exactly what makes
+        it a singleton the step-5 phase can see, unlike FIX-H's slot 0."""
+        state = initial_state(fix_g_model, bitset_index, fix_g_fixed, min_score=0)
+        assert state.word_masks[0] is not None
+
+    def test_not_equals_false_row(self, fix_g_model, bitset_index, fix_g_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_g_fixed, min_score=0, not_equals=False)
+        assert bitset_index.words(3, result.state.word_masks[0]) == [("SPY", 20)]
+        words_1 = {t for t, _ in bitset_index.words(3, result.state.word_masks[1])}
+        words_2 = {t for t, _ in bitset_index.words(3, result.state.word_masks[2])}
+        assert words_1 == {"SEA", "SPA", "SET", "SAP", "SPY"}
+        assert words_2 == set(CANONICAL_LENGTH_3_WORDS)
+        assert result.wiped == ()
+
+    def test_not_equals_true_row(self, fix_g_model, bitset_index, fix_g_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_g_fixed, min_score=0, not_equals=True)
+        assert bitset_index.words(3, result.state.word_masks[0]) == [("SPY", 20)]
+        words_1 = {t for t, _ in bitset_index.words(3, result.state.word_masks[1])}
+        words_2 = {t for t, _ in bitset_index.words(3, result.state.word_masks[2])}
+        assert words_1 == {"SEA", "SPA", "SET", "SAP"}
+        assert words_2 == set(CANONICAL_LENGTH_3_WORDS) - {"SPY"}
+        assert result.wiped == ()
+
+    def test_not_equals_true_revisions_are_sourced_from_slot_0(self, fix_g_model, bitset_index, fix_g_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_g_fixed, min_score=0, not_equals=True)
+        assert any(r.source_crossing == -1 and r.source_slot == 0 and r.slot == 1 for r in result.revisions)
+        assert any(r.source_crossing == -1 and r.source_slot == 0 and r.slot == 2 for r in result.revisions)
+
+
+class TestFixHStepTwoDiscriminator:
+    """FIX-H (task-3 brief) -- same geometry as FIX-G, but slot 0 is fully
+    fixed at SPY rather than an open singleton, so identical removals on
+    slots 1/2 must come from step 2, not step 5. The brief is explicit
+    that testing only FIX-G or only FIX-H cannot tell the two rules apart
+    -- see TestFixGAndFixHProduceIdenticalRemovalsByDifferentRules below
+    for the direct side-by-side comparison."""
+
+    @pytest.fixture
+    def fix_h_fixed(self) -> tuple:
+        return _fixed_with({0: "S", 1: "P", 2: "Y", 10: "S"})
+
+    def test_slot_0_pattern_is_fully_fixed(self, fix_g_model, fix_h_fixed):
+        assert pattern(fix_g_model, 0, fix_h_fixed) == "SPY"
+
+    def test_slot_0_word_mask_is_none_not_a_singleton_step_5_can_see(self, fix_g_model, bitset_index, fix_h_fixed):
+        state = initial_state(fix_g_model, bitset_index, fix_h_fixed, min_score=0)
+        assert state.word_masks[0] is None
+
+    def test_not_equals_false_leaves_1_and_2_at_the_full_domains(self, fix_g_model, bitset_index, fix_h_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_h_fixed, min_score=0, not_equals=False)
+        words_1 = {t for t, _ in bitset_index.words(3, result.state.word_masks[1])}
+        words_2 = {t for t, _ in bitset_index.words(3, result.state.word_masks[2])}
+        assert words_1 == {"SEA", "SPA", "SET", "SAP", "SPY"}
+        assert words_2 == set(CANONICAL_LENGTH_3_WORDS)
+        assert result.wiped == ()
+
+    def test_not_equals_true_row(self, fix_g_model, bitset_index, fix_h_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_h_fixed, min_score=0, not_equals=True)
+        assert result.state.word_masks[0] is None
+        words_1 = {t for t, _ in bitset_index.words(3, result.state.word_masks[1])}
+        words_2 = {t for t, _ in bitset_index.words(3, result.state.word_masks[2])}
+        assert words_1 == {"SEA", "SPA", "SET", "SAP"}
+        assert words_2 == set(CANONICAL_LENGTH_3_WORDS) - {"SPY"}
+        assert result.wiped == ()
+
+    def test_revision_present_for_slot_1_sourced_from_the_fixed_slot(self, fix_g_model, bitset_index, fix_h_fixed):
+        """The task's own presence check: source_crossing == -1 and
+        source_slot == 0 (the fixed slot) for slot 1, asserted by
+        presence, never position."""
+        result = propagate(fix_g_model, bitset_index, fix_h_fixed, min_score=0, not_equals=True)
+        assert any(r.source_crossing == -1 and r.source_slot == 0 and r.slot == 1 for r in result.revisions)
+
+    def test_revision_present_for_slot_2_sourced_from_the_fixed_slot(self, fix_g_model, bitset_index, fix_h_fixed):
+        result = propagate(fix_g_model, bitset_index, fix_h_fixed, min_score=0, not_equals=True)
+        assert any(r.source_crossing == -1 and r.source_slot == 0 and r.slot == 2 for r in result.revisions)
+
+
+class TestFixGAndFixHProduceIdenticalRemovalsByDifferentRules:
+    """The task-3 brief's discriminator point, made explicit as its own
+    comparison: FIX-G's step-5 removal and FIX-H's step-2 removal land on
+    the same final masks for slots 1 and 2, even though slot 0 is open in
+    one and fixed in the other."""
+
+    def test_slot_1_masks_are_equal(self, fix_g_model, bitset_index):
+        fixed_g = _fixed_with({1: "P", 2: "Y", 10: "S"})
+        fixed_h = _fixed_with({0: "S", 1: "P", 2: "Y", 10: "S"})
+        result_g = propagate(fix_g_model, bitset_index, fixed_g, min_score=0, not_equals=True)
+        result_h = propagate(fix_g_model, bitset_index, fixed_h, min_score=0, not_equals=True)
+        assert np.array_equal(result_g.state.word_masks[1], result_h.state.word_masks[1])
+
+    def test_slot_2_masks_are_equal(self, fix_g_model, bitset_index):
+        fixed_g = _fixed_with({1: "P", 2: "Y", 10: "S"})
+        fixed_h = _fixed_with({0: "S", 1: "P", 2: "Y", 10: "S"})
+        result_g = propagate(fix_g_model, bitset_index, fixed_g, min_score=0, not_equals=True)
+        result_h = propagate(fix_g_model, bitset_index, fixed_h, min_score=0, not_equals=True)
+        assert np.array_equal(result_g.state.word_masks[2], result_h.state.word_masks[2])
+
+
+class TestOffListContrastOnFixHGeometry:
+    """The off-list contrast (task-3 brief) -- FIX-H's own geometry, but
+    slot 0's fixed text is XYZ: X and Z are outside FIXTURE_WORDS' alphabet
+    (AEINPRSTVY), so slot 0 is still fixed (no wildcard) but off-list.
+    Step 2 removes nothing; both settings leave slots 1/2 at their
+    not_equals=False values."""
+
+    @pytest.fixture
+    def off_list_fixed(self) -> tuple:
+        return _fixed_with({0: "X", 1: "Y", 2: "Z", 10: "S"})
+
+    def test_slot_0_is_fixed_and_off_list(self, fix_g_model, bitset_index, off_list_fixed):
+        assert pattern(fix_g_model, 0, off_list_fixed) == "XYZ"
+        state = initial_state(fix_g_model, bitset_index, off_list_fixed, min_score=0)
+        assert state.word_masks[0] is None
+        assert bitset_index.count(bitset_index.mask("XYZ", 0)) == 0
+
+    def test_not_equals_true_leaves_1_and_2_unchanged(self, fix_g_model, bitset_index, off_list_fixed):
+        result = propagate(fix_g_model, bitset_index, off_list_fixed, min_score=0, not_equals=True)
+        words_1 = {t for t, _ in bitset_index.words(3, result.state.word_masks[1])}
+        words_2 = {t for t, _ in bitset_index.words(3, result.state.word_masks[2])}
+        assert words_1 == {"SEA", "SPA", "SET", "SAP", "SPY"}
+        assert words_2 == set(CANONICAL_LENGTH_3_WORDS)
+
+    def test_no_not_equals_revisions_are_produced(self, fix_g_model, bitset_index, off_list_fixed):
+        result = propagate(fix_g_model, bitset_index, off_list_fixed, min_score=0, not_equals=True)
+        assert not any(r.source_crossing == -1 for r in result.revisions)
+
+
+class TestPartialEntryFlipWithNotEqualsDefault:
+    """The partial-entry flip (spec section 7 [NOTE], FIX-A), re-run
+    through propagate's not_equals=True default: fixing only cell 0 to X
+    keeps slot 0 open with an empty mask (0 in wiped); completing to XYZ
+    makes it fixed (0 not in wiped). Correct behaviour, not a defect --
+    Task 1 pinned this at the initial_state level; this re-pins it at
+    propagate's new default so a not-equals regression could not silently
+    flip which side of the boundary either fixed tuple lands on."""
+
+    def test_partial_x_leaves_slot_0_open_and_wiped(self, model, bitset_index):
+        fixed = _fixed_with({0: "X"})
+        result = propagate(model, bitset_index, fixed, min_score=0)
+        assert pattern(model, 0, fixed) == "X??"
+        assert result.state.word_masks[0] is not None
+        assert 0 in result.wiped
+
+    def test_complete_xyz_makes_slot_0_fixed_and_excludes_it_from_wiped(self, model, bitset_index):
+        fixed = _fixed_with({0: "X", 1: "Y", 2: "Z"})
+        result = propagate(model, bitset_index, fixed, min_score=0)
+        assert pattern(model, 0, fixed) == "XYZ"
+        assert result.state.word_masks[0] is None
+        assert 0 not in result.wiped
+
+
+class TestConfluenceWithNotEquals:
+    """Confluence (task-3 brief's property list), now with not_equals=True
+    -- the same permutation harness as Task 2's TestConfluence, reused
+    rather than duplicated, on both FIX-A scenarios that class covers.
+    Independently confirmed before writing this file: neither scenario's
+    not_equals=False fixed point has a same-length singleton collision
+    (FIX-A's own singletons -- ARISE/TRIES/EVERY at length 5, NEAR/EARN at
+    length 4, SPY/SAP at length 3 -- are already pairwise distinct), so
+    this exercises the phase loop under queue permutation without itself
+    triggering a removal; FIX-B/FIX-G/FIX-H above and TestIdempotence-
+    WithNotEquals below cover cases where the rule does remove something."""
+
+    def test_natural_and_reverse_order_agree(self, model, bitset_index):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        queue = _natural_queue(model, state.word_masks)
+
+        natural = _refine(state, bitset_index, 0, True, queue)
+        reversed_result = _refine(state, bitset_index, 0, True, list(reversed(queue)))
+
+        assert _states_equal(natural.state, reversed_result.state)
+        assert natural.wiped == reversed_result.wiped
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
+    def test_random_shuffles_agree_with_natural_order(self, model, bitset_index, seed):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        queue = _natural_queue(model, state.word_masks)
+
+        natural = _refine(state, bitset_index, 0, True, queue)
+        shuffled = list(queue)
+        random.Random(seed).shuffle(shuffled)
+        shuffled_result = _refine(state, bitset_index, 0, True, shuffled)
+
+        assert _states_equal(natural.state, shuffled_result.state)
+        assert natural.wiped == shuffled_result.wiped
+
+    def test_confluence_also_holds_on_a_partially_fixed_grid_that_cascades(self, model, bitset_index):
+        fixed = _fixed_with({0: "E", 1: "A", 2: "R"})
+        state = initial_state(model, bitset_index, fixed, min_score=0)
+        queue = _natural_queue(model, state.word_masks)
+
+        natural = _refine(state, bitset_index, 0, True, queue)
+        shuffled = list(queue)
+        random.Random(7).shuffle(shuffled)
+        shuffled_result = _refine(state, bitset_index, 0, True, shuffled)
+
+        assert _states_equal(natural.state, shuffled_result.state)
+        assert natural.wiped == shuffled_result.wiped
+
+
+class TestNotEqualsPhaseRunsOnlyAtArcConsistentPoints:
+    """Structural guard against the exact anti-pattern the task-3 brief
+    warns against ('do not optimise it into the loop'): every masks
+    snapshot the not-equals phase actually sees must already satisfy the
+    arc-consistency support property (every open-open crossing agrees at
+    its shared cell -- the same property TestSupportAtFixedPoint checks
+    at the very end, checked here at every intermediate phase call too).
+    If the phase were interleaved into step 4's loop instead of run only
+    once that loop drains, some crossing would still be unprocessed at an
+    intermediate call and this would catch the disagreement."""
+
+    def test_every_phase_call_on_fixa_sees_full_arc_support(self, model, bitset_index, monkeypatch):
+        import src.domain.propagator as propagator_module
+
+        snapshots = []
+        real_phase = propagator_module._singleton_not_equals_phase
+
+        def spy(model_arg, index_arg, masks_arg):
+            snapshots.append(list(masks_arg))
+            return real_phase(model_arg, index_arg, masks_arg)
+
+        monkeypatch.setattr(propagator_module, "_singleton_not_equals_phase", spy)
+
+        propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=True)
+
+        assert snapshots, "expected the not-equals phase to run at least once on FIX-A"
+        for masks in snapshots:
+            for crossing in model.crossings:
+                mask_a = masks[crossing.across_id]
+                mask_b = masks[crossing.down_id]
+                if mask_a is None or mask_b is None:
+                    continue
+                length_a = model.slots[crossing.across_id].length
+                length_b = model.slots[crossing.down_id].length
+                letters_a = bitset_index.letters_at(length_a, crossing.across_pos, mask_a)
+                letters_b = bitset_index.letters_at(length_b, crossing.down_pos, mask_b)
+                assert letters_a == letters_b
+
+
+class TestIdempotenceWithNotEquals:
+    """Idempotence (task-3 brief's property list), now with not_equals=True,
+    across FIX-A's own fixed point, FIX-A's wiped-out cascade, and the
+    three not-equals fixtures where the rule actually removed something
+    the first time through."""
+
+    def test_fixa_baseline(self, model, bitset_index):
+        result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=True)
+        again = refine(result.state, bitset_index, min_score=0, not_equals=True)
+        assert _states_equal(again.state, result.state)
+        assert again.revisions == ()
+
+    def test_fixa_wiped_out_cascade(self, model, bitset_index):
+        fixed = _fixed_with({0: "E", 1: "A", 2: "R"})
+        result = propagate(model, bitset_index, fixed, min_score=0, not_equals=True)
+        again = refine(result.state, bitset_index, min_score=0, not_equals=True)
+        assert _states_equal(again.state, result.state)
+        assert again.revisions == ()
+
+    def test_fix_b(self, fix_b_model, bitset_index):
+        fixed = _fixed_with({1: "P", 2: "Y", 11: "P", 12: "Y"})
+        result = propagate(fix_b_model, bitset_index, fixed, min_score=0, not_equals=True)
+        again = refine(result.state, bitset_index, min_score=0, not_equals=True)
+        assert _states_equal(again.state, result.state)
+        assert again.revisions == ()
+
+    def test_fix_g(self, fix_g_model, bitset_index):
+        fixed = _fixed_with({1: "P", 2: "Y", 10: "S"})
+        result = propagate(fix_g_model, bitset_index, fixed, min_score=0, not_equals=True)
+        again = refine(result.state, bitset_index, min_score=0, not_equals=True)
+        assert _states_equal(again.state, result.state)
+        assert again.revisions == ()
+
+    def test_fix_h(self, fix_g_model, bitset_index):
+        fixed = _fixed_with({0: "S", 1: "P", 2: "Y", 10: "S"})
+        result = propagate(fix_g_model, bitset_index, fixed, min_score=0, not_equals=True)
+        again = refine(result.state, bitset_index, min_score=0, not_equals=True)
+        assert _states_equal(again.state, result.state)
+        assert again.revisions == ()
+
+
+class TestSoundnessAgainstBruteForceWithNotEquals:
+    """Soundness (task-3 brief's property list) against brute force with
+    not_equals=True -- FIX-A (where the rule fires but removes nothing
+    extra, independently confirmed above) and FIX-G/FIX-H (where it does),
+    using the corrected _brute_force_fills that seeds distinctness with
+    fixed slots' own on-list text. Necessary on FIX-H: slot 0 is fixed at
+    SPY, an on-list word, and without the seed the enumerator would
+    happily place SPY at slot 1 or 2 too, which not_equals=True's fixed
+    point (correctly) never allows."""
+
+    def test_fixa_every_fill_word_survives(self, model, bitset_index):
+        result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=True)
+        fills = _brute_force_fills(model, EMPTY_FIXED, bitset_index)
+        assert fills, "expected at least one brute-force fill on FIX-A"
+        for fill in fills:
+            for slot_id, word in fill.items():
+                slot = model.slots[slot_id]
+                mask = result.state.word_masks[slot_id]
+                words_in_mask = {text for text, _ in bitset_index.words(slot.length, mask)}
+                assert word in words_in_mask
+
+    def test_fixa_nonempty_wiped_would_imply_zero_solutions(self, model, bitset_index):
+        result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=True)
+        fills = _brute_force_fills(model, EMPTY_FIXED, bitset_index)
+        if result.wiped:
+            assert fills == []
+
+    def test_fix_b_has_zero_brute_force_solutions_matching_its_nonempty_wiped(self, fix_b_model, bitset_index):
+        fixed = _fixed_with({1: "P", 2: "Y", 11: "P", 12: "Y"})
+        result = propagate(fix_b_model, bitset_index, fixed, min_score=0, not_equals=True)
+        fills = _brute_force_fills(fix_b_model, fixed, bitset_index)
+        assert result.wiped != ()
+        assert fills == []
+
+    def test_fix_h_every_fill_word_survives_and_never_reuses_the_fixed_word(self, fix_g_model, bitset_index):
+        fixed = _fixed_with({0: "S", 1: "P", 2: "Y", 10: "S"})
+        result = propagate(fix_g_model, bitset_index, fixed, min_score=0, not_equals=True)
+        fills = _brute_force_fills(fix_g_model, fixed, bitset_index)
+        assert fills, "expected at least one brute-force fill on FIX-H's open slots"
+        for fill in fills:
+            assert "SPY" not in fill.values()
+            for slot_id, word in fill.items():
+                slot = fix_g_model.slots[slot_id]
+                mask = result.state.word_masks[slot_id]
+                words_in_mask = {text for text, _ in bitset_index.words(slot.length, mask)}
+                assert word in words_in_mask
+
+    def test_fix_g_every_fill_word_survives(self, fix_g_model, bitset_index):
+        fixed = _fixed_with({1: "P", 2: "Y", 10: "S"})
+        result = propagate(fix_g_model, bitset_index, fixed, min_score=0, not_equals=True)
+        fills = _brute_force_fills(fix_g_model, fixed, bitset_index)
+        assert fills, "expected at least one brute-force fill on FIX-G's open slots"
+        for fill in fills:
+            for slot_id, word in fill.items():
+                slot = fix_g_model.slots[slot_id]
+                mask = result.state.word_masks[slot_id]
+                words_in_mask = {text for text, _ in bitset_index.words(slot.length, mask)}
+                assert word in words_in_mask

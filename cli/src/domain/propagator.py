@@ -13,9 +13,12 @@ refine/_refine/propagate (section 7 steps 3, 4, 6, 7) revise those masks to
 a fixed point over model.crossings: refine runs from an existing
 DomainState with the natural queue, _refine is the private seam that takes
 an explicit arc sequence so a confluence test can permute it (decision 13),
-and propagate is initial_state followed by refine. Both not_equals phases
-(step 2's fixed-word removal and step 5's singleton rule) are Task 3's --
-every entry point here accepts the flag and is a no-op while it is False.
+and propagate is initial_state followed by refine. not_equals gates two
+rules: step 2's fixed-word removal (propagate only, between initial_state
+and refine) and step 5's singleton rule (a phase inside _refine, run only
+once the arc queue is empty -- never interleaved into step 4's loop, per
+the spec's [NOTE] on why that would break confluence). Both are no-ops
+when not_equals is False.
 
 Revision and Result are the propagation-record shapes refine/_refine/
 propagate build so every C3 task shares one vocabulary.
@@ -196,6 +199,10 @@ def refine(state: DomainState, index: LetterBitsetIndex, min_score: MinScore = 0
     13), which takes it as an explicit argument so a confluence test can
     permute it while refine itself always passes this one order.
 
+    not_equals is forwarded to _refine unchanged; it gates step 5's
+    singleton-clearing phase there. Step 2's fixed-word removal is not run
+    here -- it belongs to propagate, between initial_state and this call.
+
     Does not mutate state or any array it holds; see _refine.
     """
     queue = _open_arc_queue(state.model, state.word_masks)
@@ -210,9 +217,10 @@ def _refine(
     queue: Sequence[int],
 ) -> Result:
     """
-    The fixed-point loop (spec section 7 steps 4, 6, 7), taking its initial
-    arc sequence as an explicit argument (decision 13) so refine's natural
-    order and a test's permuted order run through the identical algorithm.
+    The fixed-point loop (spec section 7 steps 4, 5, 6, 7), taking its
+    initial arc sequence as an explicit argument (decision 13) so refine's
+    natural order and a test's permuted order run through the identical
+    algorithm.
 
     Per popped crossing (cell, a, i, b, j): allowed is the intersection of
     what each side's mask admits at the shared cell; each side is narrowed
@@ -222,18 +230,28 @@ def _refine(
     is 0, so restrict on the far side empties in turn, and that cascade is
     exactly the point (spec section 7 step 4).
 
+    Step 5 (not_equals) runs only once this inner queue is fully drained,
+    never interleaved into it -- interleaving the singleton rule into step
+    4 is non-confluent (spec section 7's [NOTE]): a slot on its way to
+    empty may or may not pass through a transient singleton depending on
+    queue order, and firing the rule on that transient state makes the
+    result depend on order. Collecting singletons only at a genuine
+    arc-consistent fixed point removes that transient case, so this
+    function alternates two whole phases -- drain the arc queue, then run
+    the singleton phase once -- rather than checking for singletons inside
+    the loop above. If the phase changes anything, every crossing of every
+    slot it touched is re-enqueued and the outer loop returns to draining
+    the arc queue (spec section 7 step 5's own "return to step 4"); the
+    outer loop stops only once a drain leaves the queue empty and the
+    following phase removes nothing (step 6's fixed point, extended by
+    not_equals).
+
     Does not mutate state or any array it holds: masks starts as a shallow
     copy of state.word_masks (untouched slots keep their original array
     reference, which this function never writes into), and every touched
-    slot's replacement comes from index.restrict, which always returns a
-    new array rather than an in-place edit. wiped and cell_letters are
-    computed fresh at the end from the local masks list.
-
-    not_equals is accepted so Task 3 can extend this signature's behaviour
-    without changing its shape; step 5's singleton-clearing phase is not
-    implemented here -- not_equals=False is the only value this task's
-    contract requires, and it is already a no-op by simply never running
-    that phase.
+    slot's replacement -- from index.restrict or from the not_equals
+    helpers -- is always a new array, never an in-place edit. wiped and
+    cell_letters are computed fresh at the end from the local masks list.
     """
     model = state.model
     masks: list[np.ndarray | None] = list(state.word_masks)
@@ -242,33 +260,92 @@ def _refine(
     pending: "deque[int]" = deque(queue)
     revisions: list[Revision] = []
 
-    while pending:
-        crossing_idx = pending.popleft()
-        crossing = model.crossings[crossing_idx]
-        a, i, b, j = crossing.across_id, crossing.across_pos, crossing.down_id, crossing.down_pos
-        length_a = model.slots[a].length
-        length_b = model.slots[b].length
-        mask_a = masks[a]
-        mask_b = masks[b]
+    while True:
+        while pending:
+            crossing_idx = pending.popleft()
+            crossing = model.crossings[crossing_idx]
+            a, i, b, j = crossing.across_id, crossing.across_pos, crossing.down_id, crossing.down_pos
+            length_a = model.slots[a].length
+            length_b = model.slots[b].length
+            mask_a = masks[a]
+            mask_b = masks[b]
 
-        allowed = index.letters_at(length_a, i, mask_a) & index.letters_at(length_b, j, mask_b)
-        new_a = index.restrict(length_a, i, allowed, mask_a)
-        new_b = index.restrict(length_b, j, allowed, mask_b)
+            allowed = index.letters_at(length_a, i, mask_a) & index.letters_at(length_b, j, mask_b)
+            new_a = index.restrict(length_a, i, allowed, mask_a)
+            new_b = index.restrict(length_b, j, allowed, mask_b)
 
-        if not np.array_equal(new_a, mask_a):
-            revisions.append(Revision(source_crossing=crossing_idx, source_slot=b, slot=a, removed=mask_a ^ new_a))
-            masks[a] = new_a
-            _enqueue_other_crossings(slot_crossings, masks, a, crossing_idx, pending)
+            if not np.array_equal(new_a, mask_a):
+                revisions.append(Revision(source_crossing=crossing_idx, source_slot=b, slot=a, removed=mask_a ^ new_a))
+                masks[a] = new_a
+                _enqueue_other_crossings(slot_crossings, masks, a, crossing_idx, pending)
 
-        if not np.array_equal(new_b, mask_b):
-            revisions.append(Revision(source_crossing=crossing_idx, source_slot=a, slot=b, removed=mask_b ^ new_b))
-            masks[b] = new_b
-            _enqueue_other_crossings(slot_crossings, masks, b, crossing_idx, pending)
+            if not np.array_equal(new_b, mask_b):
+                revisions.append(Revision(source_crossing=crossing_idx, source_slot=a, slot=b, removed=mask_b ^ new_b))
+                masks[b] = new_b
+                _enqueue_other_crossings(slot_crossings, masks, b, crossing_idx, pending)
+
+        if not not_equals:
+            break
+
+        phase_revisions, changed_slots = _singleton_not_equals_phase(model, index, masks)
+        if not phase_revisions:
+            break
+        revisions.extend(phase_revisions)
+        for slot_id in changed_slots:
+            _enqueue_other_crossings(slot_crossings, masks, slot_id, -1, pending)  # -1: no real crossing, so exclude nothing
 
     wiped = tuple(slot.id for slot in model.slots if masks[slot.id] is not None and index.count(masks[slot.id]) == 0)
     cell_letters = _cell_letters(model, index, state.fixed, masks)
     new_state = DomainState(model=model, word_masks=masks, cell_letters=cell_letters, fixed=state.fixed)
     return Result(state=new_state, wiped=wiped, revisions=tuple(revisions))
+
+
+def _singleton_not_equals_phase(
+    model: SlotModel,
+    index: LetterBitsetIndex,
+    masks: list[np.ndarray | None],
+) -> tuple[tuple[Revision, ...], set[int]]:
+    """
+    Spec section 7 step 5, run once against an arc-consistent set of masks.
+
+    Collects every open slot whose current mask is a singleton -- a
+    property of the state handed in, read once up front so a slot this
+    call itself empties out cannot retroactively join or leave that set.
+    Each collected singleton then clears its one word id from every other
+    open slot of the same length: a target slot loses that bit only if it
+    was actually present (a real removal, mirroring step 4's own
+    if-changed guard), which is what lets two same-length slots holding
+    the same singleton clear each other and both end up empty -- neither
+    is excluded from being a source merely because it is also a target.
+
+    Mutates masks in place (the caller's local list) but never a mask
+    array itself: every replacement is a fresh array from a bitwise op.
+    Returns the Revisions produced and the set of slot ids actually
+    changed, for the caller to re-enqueue.
+    """
+    singletons = [
+        (slot.id, masks[slot.id]) for slot in model.slots if masks[slot.id] is not None and index.count(masks[slot.id]) == 1
+    ]
+
+    revisions: list[Revision] = []
+    changed: set[int] = set()
+    for source_id, singleton_mask in singletons:
+        source_length = model.slots[source_id].length
+        for slot in model.slots:
+            target_id = slot.id
+            if target_id == source_id or slot.length != source_length:
+                continue
+            target_mask = masks[target_id]
+            if target_mask is None:
+                continue
+            removed = target_mask & singleton_mask
+            if not np.any(removed):
+                continue
+            masks[target_id] = target_mask & ~singleton_mask
+            revisions.append(Revision(source_crossing=-1, source_slot=source_id, slot=target_id, removed=removed))
+            changed.add(target_id)
+
+    return tuple(revisions), changed
 
 
 def propagate(
@@ -280,12 +357,77 @@ def propagate(
 ) -> Result:
     """
     Build the unpropagated DomainState for (model, fixed) and run it to the
-    arc-consistency fixed point: initial_state, then refine.
+    arc-consistency fixed point: initial_state, then (if not_equals) step
+    2's fixed-word removal, then refine.
 
-    Step 2's not-equals half -- removing a fixed slot's on-list word from
-    every same-length open mask, between initial_state and refine -- is
-    Task 3's; it is a no-op while not_equals=False, which is this task's
-    entire scope.
+    Step 2 belongs here rather than in initial_state or refine: it needs
+    the fixed slots' own text, which initial_state already classified as
+    fixed by giving them a None mask, but it runs exactly once, before arc
+    consistency's queue is even built -- not on every call refine's own
+    fixed point might see. A fixed slot whose text is off the index (mask
+    count 0) contributes no removal; a same-length open slot that never
+    actually held the removed word contributes no Revision either,
+    mirroring step 4's own if-changed guard.
     """
     state = initial_state(model, index, fixed, min_score)
-    return refine(state, index, min_score=min_score, not_equals=not_equals)
+    if not_equals:
+        masks, step_2_revisions = _fixed_word_removals(model, index, fixed, state.word_masks)
+        if step_2_revisions:
+            cell_letters = _cell_letters(model, index, fixed, masks)
+            state = DomainState(model=model, word_masks=masks, cell_letters=cell_letters, fixed=fixed)
+    else:
+        step_2_revisions = ()
+
+    result = refine(state, index, min_score=min_score, not_equals=not_equals)
+    if step_2_revisions:
+        result = Result(state=result.state, wiped=result.wiped, revisions=step_2_revisions + result.revisions)
+    return result
+
+
+def _fixed_word_removals(
+    model: SlotModel,
+    index: LetterBitsetIndex,
+    fixed: tuple[str, ...],
+    word_masks: list[np.ndarray | None],
+) -> tuple[list[np.ndarray | None], tuple[Revision, ...]]:
+    """
+    Spec section 7 step 2's not-equals half: every fixed slot whose text is
+    in the index removes that word id from every same-length open mask.
+
+    A fixed slot's text is pattern(model, slot.id, fixed) with no wildcard
+    left in it, by definition of fixed (spec section 3) -- resolving it
+    through index.mask(text, 0) at a score floor of 0 answers "is this
+    word in the index at all", independent of whatever min_score policy
+    the caller's own masks were built with: the word is already committed
+    as this slot's answer, so its presence in the dictionary is a fact
+    about the word list, not something a score floor should gate. An
+    off-list text (count 0) contributes no removal.
+
+    Returns a fresh word_masks list (word_masks itself is only shallow-
+    copied, never written into) and the Revisions produced, one per
+    (fixed slot, target slot) pair that actually lost a bit.
+    """
+    masks = list(word_masks)
+    revisions: list[Revision] = []
+
+    for slot in model.slots:
+        if masks[slot.id] is not None:
+            continue  # open -- not a not-equals source
+        text = pattern(model, slot.id, fixed)
+        word_mask = index.mask(text, 0)
+        if index.count(word_mask) == 0:
+            continue  # off-list; nothing to remove
+
+        for target in model.slots:
+            if target.id == slot.id or target.length != slot.length:
+                continue
+            target_mask = masks[target.id]
+            if target_mask is None:
+                continue
+            removed = target_mask & word_mask
+            if not np.any(removed):
+                continue
+            masks[target.id] = target_mask & ~word_mask
+            revisions.append(Revision(source_crossing=-1, source_slot=slot.id, slot=target.id, removed=removed))
+
+    return masks, tuple(revisions)
