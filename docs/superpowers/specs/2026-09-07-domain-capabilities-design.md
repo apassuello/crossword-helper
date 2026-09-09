@@ -1,5 +1,5 @@
 # Domain Capability Family — Design
-**Version 0.1.6** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.7** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
 (amended 2026-09-08; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
@@ -40,6 +40,9 @@ plain-text extracts of those sections were used to write this document.
 | 10 | *(2026-09-08)* `direction` serialises as its string | 0/1 ints — honours §6's "ints and lists only" literally, but the dump then matches no existing slot dict |
 | 12 | *(2026-09-08)* C2's error contract, pinned here rather than in the plan | leaving it to the plan — the same class of choice as 10 and 11, which were ratified here, so the plan would have been authoring spec |
 | 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
+| 13 | *(2026-09-09, **proposed** — awaiting owner)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
+| 14 | *(2026-09-09, **proposed** — awaiting owner)* `crossing_counts` does not validate `len(word)` | `ValueError` on a length mismatch — defensible, but decision 12 declined to guard anywhere else in the family while it stays unwired |
+| 15 | *(2026-09-09, **proposed** — awaiting owner)* in `cell_letters`, black-or-unslotted wins over fixed | letting a fixed letter show through on an unslotted cell — reads more informatively, but the three cases in step 7 then overlap and no rule says which wins |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -461,6 +464,29 @@ and clears the instant its last letter is typed (it becomes a fixed slot, the us
 That flip is correct behaviour and is covered by a fixture, not treated as a defect. A per-slot
 "user-asserted" flag that would smooth it is provenance — C6.
 
+**[SPEC] Planning amendment, 2026-09-09 — three interfaces §7 named without fixing**
+Surfaced writing the C3 plan. Each is a choice between defensible answers, not a derivation, so two
+implementers would not have converged. All three are **proposed and awaiting the owner**; nothing is
+built against them until ratified.
+
+- **Decision 13 — the queue-order seam, and `refine` does not mutate.** §7 claims "the fixed point is
+  unique for a given input regardless of queue order", but no public entry point can vary the order:
+  the initial queue is every crossing whose two slots are open (step 3), and §6 pins `crossings`
+  sorted by cell, so the module has exactly one order and the property compares a run to itself.
+  Pin a private seam — `_refine(state, index, min_score, not_equals, queue) -> Result`, where `queue`
+  is the initial arc sequence; `refine` calls it with the natural order and the confluence test
+  passes permutations of the same arc set. Separately, `refine` and `_refine` return a **new**
+  `DomainState` and mutate neither `state` nor its arrays: `DomainState` is not frozen, and a
+  mutating `refine` makes §7's idempotence property vacuous — it would compare a state to itself.
+- **Decision 14 — `crossing_counts` does not validate `len(word)`.** A `word` shorter than the slot
+  raises `IndexError` natively from the pinned `word[pos_self]` — a derivation, and consistent with
+  decision 12. A **longer** word is the real gap: every `pos_self` is in range, so the call silently
+  scores the prefix. That is pinned as accepted behaviour rather than guarded.
+- **Decision 15 — `cell_letters` case precedence.** Step 7's three cases are not disjoint: an
+  unslotted white cell can hold a letter, so it is both "a fixed cell" and "an unslotted cell".
+  Precedence is pinned black-or-unslotted first: such a cell is `0` regardless of `fixed`. A fixed
+  letter outside the index alphabet is likewise `0` — it has no bit to set.
+
 ---
 
 ## 8. C4 — fillability
@@ -574,6 +600,15 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.7** — 2026-09-09 — planning amendment, C3 only, surfaced writing the C3 plan; **proposed,
+  awaiting the owner**. Pinned three interfaces §7 named without fixing: the queue-order seam plus
+  `refine`'s non-mutation (decision 13), `crossing_counts` on a wrong-length word (14), and
+  `cell_letters` case precedence (15). No behaviour changed that §7 had already fixed. Two further
+  gaps found in the same pass are **derivations, not amendments**, and live in the plan: the
+  state-equality predicate the idempotence and confluence tests compare with (dataclass `==` raises
+  on `list[np.ndarray]`), and the scope of the `Autofill._ac3` oracle — `_ac3` returns `False` at
+  `autofill.py:948` the first time a domain empties, so it stops short of a fixed point and its
+  per-slot domains are only comparable on grids where it returns `True`.
 - **0.1.6** — 2026-09-08 — three corrections from an independent review of the C2 plan. C2's
   error contract moves here from the plan (decision 12): it is the same class of underspecified
   choice as 10 and 11, so resolving it in the plan would have been the plan authoring spec.
