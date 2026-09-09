@@ -12,8 +12,8 @@
 
 > **Amendment 0.1.7 is PROPOSED, not ratified.** Decisions 13, 14 and 15 (spec §1 table and the
 > §7 amendment block, commit `dd8782a`) were authored while writing this plan and are awaiting the
-> owner. Task 2 rests on decision 13, Task 4 on 14, Task 2 on 15. **Do not start Task 2 or Task 4
-> until the owner has ratified them.** Tasks 0 and 1 are unaffected.
+> owner. Tasks 2 and 3 rest on decision 13, Task 1 on decision 15, Task 4 on decision 14. **Do not
+> start Task 1, 2, 3 or 4 until the owner has ratified them.** Only Task 0 is unaffected.
 
 ## Global Constraints
 
@@ -25,7 +25,7 @@ Every task's requirements implicitly include this section.
 - **Alphabet masks are Python `int`, at most 64 bits.** Word masks are NumPy `uint64` arrays (spec §2).
 - **Canonical pattern** is uppercase with `?` for a blank (spec §3). The C1 primitives (`mask`, `letters_at`, `restrict`, `words`, `count`) do **not** normalise; `pattern(model, slot_id, fixed)` already emits the canonical form.
 - **Open slot** = its pattern contains at least one `?`. **Fixed slot** = it contains none (spec §3).
-- **`MinScore = int | Callable[[int], int]`.** An `int` is a constant policy; a callable is applied as `min_score(length)`. Every entry point takes it and defaults to `0`.
+- **`MinScore = int | Callable[[int], int]`.** An `int` is a constant policy; a callable is applied as `min_score(length)`. Every entry point takes it and defaults to `0`. **Write the alias in the `typing.Union` form** — `MinScore = Union[int, Callable[[int], int]]`. The spec writes it with `|`, but a module-level alias is a *runtime* expression that `from __future__ import annotations` does not defer, and `int | Callable[...]` raises `TypeError` on Python 3.9, which README's badge and CLAUDE.md both still claim as the floor. Annotations may keep the `|` form; the alias may not.
 - **The oracle matcher is `TriePatternMatcher(word_list)`, never `PatternMatcher`.** `PatternMatcher.find` defaults `max_results=100` (`cli/src/fill/pattern_matcher.py:41`) while `TriePatternMatcher.find` defaults `None` (`cli/src/fill/trie_pattern_matcher.py:67`), and both `analyze_constraints` and `analyze_placement_impact` call `pattern_matcher.find(pattern, min_score=0)` with no `max_results`. A `PatternMatcher` silently caps every count at 100.
 - **Every oracle is valid at `min_length=3` only.** `Grid.get_empty_slots`, `analyze_constraints` and `analyze_placement_impact` all call `grid.get_word_slots()` with no argument. Build every `SlotModel` in a test with `min_length=3`.
 - **Fixtures pass Python `int` only** into `SlotModel.from_blacks` / `from_grid`. `from_blacks` never coerces, so a NumPy-sourced `blacks` or `size` leaks `numpy.int64` and breaks `to_dict`'s no-NumPy contract.
@@ -201,6 +201,15 @@ def initial_state(model, index, fixed, min_score: MinScore = 0) -> DomainState: 
 
 *The per-position letter sets those intersect, for reference — `index.letters_at(L, p, index.mask("?" * L, 0))`: length 3 is `EPS, AEP, APRTY`; length 4 is `EN, AE, AR, NR`; length 5 is `AET, RV, EI, ERS, ESY`.*
 
+*Decision 15's precedence, which no other row exercises — `FIX-A` with `fixed[20] = "A"` and nothing else. Cell `20` is white and in `model.unslotted`, in no slot either way, so:*
+
+| assertion | value |
+|---|---|
+| `cell_letters[20]` | `0` — unslotted wins over the fixed letter |
+| every `word_masks[s]` | identical to the all-empty-`fixed` case above |
+
+*Without decision 15 the same cell would carry the single bit of `A`, so this row is the one that distinguishes the two readings.*
+
 **Traceability note.** `initial_state`'s `min_score` normalisation, the open/fixed split and the `None` for fixed slots are spec §7 steps 1–2. `cell_letters` on an unpropagated state is derived, as argued above. Decision 15's precedence is amendment 0.1.7.
 
 - [ ] **Step 1: Write the failing test**
@@ -248,12 +257,12 @@ Spec §7 steps 3, 4, 6 and 7. The not-equals phase (step 5) is stubbed off by `n
 def propagate(model, index, fixed, min_score: MinScore = 0, not_equals: bool = True) -> Result: ...
 def refine(state: DomainState, index, min_score: MinScore = 0, not_equals: bool = True) -> Result: ...
 def _refine(state: DomainState, index, min_score: MinScore, not_equals: bool,
-            queue: Sequence[Crossing]) -> Result: ...
+            queue: Sequence[int]) -> Result: ...
 ```
 
 **Behavioral criteria:**
 - `propagate(...)` is `refine(initial_state(model, index, fixed, min_score), ...)`, with step 2's not-equals half applied in between (Task 3; a no-op while `not_equals=False`).
-- `refine(state, ...)` calls `_refine` with the **natural queue**: every crossing in `model.crossings` order whose two slots are both open. `_refine` takes that sequence as an argument so tests can permute it (**decision 13**).
+- `refine(state, ...)` calls `_refine` with the **natural queue**: the **indices into `model.crossings`**, in that order, of every crossing whose two slots are both open. `_refine` takes that sequence as an argument so tests can permute it (**decision 13**). Indices rather than `Crossing` objects, so `Revision.source_crossing` is the queue element itself and needs no lookup; the amendment says only "arc sequence", so this is the plan choosing within it.
 - **`refine`, `propagate` and `_refine` do not mutate their argument.** The returned `Result.state` is a new `DomainState` with new `word_masks` and a new `cell_letters` array; the caller's `state` and every array it holds are unchanged afterwards (**decision 13**).
 - Revision step (spec §7 step 4), per popped crossing `(cell, a, across_pos, b, down_pos)`:
   `allowed = index.letters_at(L_a, i, mask_a) & index.letters_at(L_b, j, mask_b)`; then `index.restrict(L_a, i, allowed, mask_a)` and likewise for `b`. For **each side that changed**, record a `Revision`, store the new mask, and enqueue every *other* crossing of that slot.
@@ -269,6 +278,7 @@ def _refine(state: DomainState, index, min_score: MinScore, not_equals: bool,
 - **Idempotence.** `refine(result.state, index, min_score, not_equals=False)` returns a state equal to `result.state` and `revisions == ()`. Non-mutation makes this non-vacuous.
 - **Support.** At the fixed point, for every crossing whose two slots are open, `index.letters_at(L_a, i, mask_a) == index.letters_at(L_b, j, mask_b)`.
 - **Soundness against brute force.** With `FIXTURE_WORDS` on `FIX-A`, enumerate every complete fill by exhaustive search over `index.words(L, index.mask("?" * L, 0))` per slot. Every word of every complete solution must be in the fixed-point mask of its slot, and a non-empty `wiped` must imply zero solutions.
+- **A complete fill uses each word at most once.** The enumerator must enforce distinctness. This is not decoration: on `FIX-B` (Task 3) a repeats-allowed search finds the fill `(SPY, SPY)`, while `not_equals=True` reports `wiped == (0, 1)` — so "`wiped` non-empty ⟹ zero solutions" would reject a correct implementation. With distinctness `FIX-B` has no complete fill and the property holds. Traceable to spec decision 7's rationale: two same-length singletons on one word describe "a state that has no fill". `not_equals=False` stays sound under the same enumerator, because propagation without the rule is a relaxation. On `FIX-A` both readings give the same three fills.
 
 **Normative cases** — exact values.
 
@@ -394,7 +404,21 @@ Spec §7 step 2's second half and step 5. No code oracle exists — brute force 
 
 `wiped == ()` for both settings.
 
-*Step 2, the fixed-slot rule — `FIX-A` with `fixed[0..2] = "E","A","R"`, `min_score=0`. Slot 0 is fixed and its text `EAR` **is** in the index, so `EAR` is removed from every open length-3 mask. Slot 5's pattern is `E??`, whose only match is `EAR`, so slot 5 is `{EAR}` under `not_equals=False` and **empty** under `not_equals=True`. With `fixed[0..2] = "X","Y","Z"` instead, slot 0 is still fixed but `XYZ` is not in the index, so step 2 removes nothing.*
+*`FIX-H`, the step-2 discriminator — same geometry as `FIX-G`, but slot 0 is **fully fixed** instead of an open singleton. `SlotModel.from_blacks(5, [3,4,5,6,7,8,9,13,14,15,16,17,18,19,23,24], min_length=3)` with `fixed[0]="S", fixed[1]="P", fixed[2]="Y", fixed[10]="S"`. Slot 0's pattern is `SPY` — no `?`, so it is fixed, `word_masks[0] is None`, and it is not a singleton the step-5 phase can see. `SPY` **is** in the index, so step 2 alone does the work:*
+
+| slot | pattern | `not_equals=False` | `not_equals=True` |
+|---|---|---|---|
+| 0 | `SPY` | `None` (fixed) | `None` (fixed) |
+| 1 | `S??` | `SEA, SPA, SET, SAP, SPY` | `SEA, SPA, SET, SAP` |
+| 2 | `???` | all 9 length-3 words | the 9 minus `SPY` |
+
+`wiped == ()` for both settings. `FIX-G` and `FIX-H` produce identical removals by different rules — `FIX-G` through step 5 (slot 0 open and a singleton), `FIX-H` through step 2 (slot 0 fixed and on-list). Testing only one of them cannot tell the two rules apart.
+
+*Under `not_equals=True` on `FIX-H`, a `Revision` with `source_crossing == -1` and `source_slot == 0` is present for each of slots 1 and 2. Assert presence, never position — `revisions` order is not part of the contract.*
+
+*The off-list contrast — the same fixture with `fixed[0..2] = "X","Y","Z"`. Slot 0 is still fixed, but `XYZ` is not in the index, so step 2 removes nothing and both settings leave slots 1 and 2 at their `not_equals=False` values above.*
+
+*Do **not** use `FIX-A` with `EAR` fixed at cells 0–2 as a step-2 case. It is a fixed on-list word, but slots 6 and 7 wipe immediately on `A???` and `R????` and the cascade empties all nine open slots, so `wiped == (1, 2, 3, 4, 5, 6, 7, 8, 9)` and slot 5 is empty under **both** settings — the fixture cannot discriminate. Slot 5's `{EAR}` is its *initial-state* value, pinned in Task 1, not a fixed-point one.*
 
 *The partial-entry flip (spec §7 `[NOTE]`) — `FIX-A`. With `fixed[0] = "X"` only, slot 0's pattern is `X??`: it is **open**, its mask is empty, and `0 ∈ wiped`. Completing it to `fixed[0..2] = "X","Y","Z"` makes the pattern `XYZ`: slot 0 becomes **fixed**, `word_masks[0] is None`, and `0 ∉ wiped`. That flip is correct behaviour, not a defect.*
 
