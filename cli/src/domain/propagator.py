@@ -22,6 +22,12 @@ when not_equals is False.
 
 Revision and Result are the propagation-record shapes refine/_refine/
 propagate build so every C3 task shares one vocabulary.
+
+crossing_counts (section 7's last primitive) reads an existing DomainState
+-- it never calls refine or propagate -- and returns one count per open
+crossing of a candidate word at a slot, in model.crossings order. Decision
+6 is binding: this is a quantity, not a ranking, so nothing here sorts or
+aggregates the tuple it returns.
 """
 
 from __future__ import annotations
@@ -431,3 +437,57 @@ def _fixed_word_removals(
             revisions.append(Revision(source_crossing=-1, source_slot=slot.id, slot=target.id, removed=removed))
 
     return masks, tuple(revisions)
+
+
+def crossing_counts(state: DomainState, index: LetterBitsetIndex, slot_id: int, word: str) -> tuple[int, ...]:
+    """
+    Spec section 7's last primitive: for a candidate word at slot_id, one
+    count per crossing of slot_id whose other slot is open, walked in
+    model.crossings order (section 6 pins that order by .cell).
+
+    Each count is index.count(index.restrict(L_other, pos_other,
+    1 << letter_index[word[pos_self]], mask_other)) -- how many words the
+    other slot's own current mask would still admit at the shared cell if
+    word were placed there. A crossing into a fixed slot is omitted, not
+    zero-padded, so the returned tuple can be shorter than slot_id's own
+    crossing count. A letter outside index.alphabet has no letter_index
+    entry to look up, so that crossing contributes 0 rather than raising.
+
+    Reads state alone -- never calls refine or propagate, and never
+    mutates state or anything it holds.
+
+    Decision 6: this is a quantity, not a ranking. No sort, no
+    aggregation -- the tuple comes back in crossing order.
+
+    Raises:
+        ValueError: if len(word) != model.slots[slot_id].length, checked
+            before any crossing is walked.
+    """
+    model = state.model
+    length = model.slots[slot_id].length
+    if len(word) != length:
+        raise ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")
+
+    counts: list[int] = []
+    for crossing in model.crossings:
+        if crossing.across_id == slot_id:
+            self_pos, other_id, other_pos = crossing.across_pos, crossing.down_id, crossing.down_pos
+        elif crossing.down_id == slot_id:
+            self_pos, other_id, other_pos = crossing.down_pos, crossing.across_id, crossing.across_pos
+        else:
+            continue
+
+        mask_other = state.word_masks[other_id]
+        if mask_other is None:
+            continue  # crossing into a fixed slot: omitted, not zero-padded
+
+        letter_bit = index.letter_index.get(word[self_pos])
+        if letter_bit is None:
+            counts.append(0)  # out-of-alphabet letter: contributes 0, never raises
+            continue
+
+        length_other = model.slots[other_id].length
+        restricted = index.restrict(length_other, other_pos, 1 << letter_bit, mask_other)
+        counts.append(index.count(restricted))
+
+    return tuple(counts)

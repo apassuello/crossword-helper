@@ -1,7 +1,8 @@
 """
 Tests for src.domain.propagator (Task 1: dataclasses/initial_state; Task 2:
 arc-consistency refine/propagate with not_equals=False; Task 3: the
-not-equals rule live under not_equals=True).
+not-equals rule live under not_equals=True; Task 4: crossing_counts, the
+last public name in the module).
 
 Fixture is FIX-A, the 5x5 grid pinned by global-constraints.md (blacks at
 cell indices 3, 8, 15, 21; one unslotted cell, 20) together with
@@ -38,6 +39,15 @@ phase both fires on a real crossing and re-enqueues it -- every attempt
 either collapsed straight to an empty domain or cascaded to a full wipe
 before a second, uncrossed slot could show a distinct fixed point. That
 class documents why CASCADE_WORDS exists rather than reusing FIXTURE_WORDS.
+
+Task 4's crossing_counts tests build initial_state directly and never call
+refine or propagate -- the brief's contract is unpropagated by design.
+TestCrossingCountsAgainstPlacementImpactOracle differentially checks one
+normative row against analyze_placement_impact, and stops there: the
+brief explicitly forbids extending that oracle to the fixed-crossing or
+off-list-fixed-word rows, since the analyzer counts fixed crossings and
+reports a phantom elimination for an off-list fixed word. Those two rows
+use the brief's hand-built values instead, like every other Task-4 row.
 """
 
 from __future__ import annotations
@@ -51,9 +61,20 @@ from typing import Callable
 
 import numpy as np
 import pytest
+from src.core.constraint_analyzer import analyze_placement_impact
 from src.core.grid import Grid
 from src.domain.letter_bitset import LetterBitsetIndex
-from src.domain.propagator import DomainState, MinScore, Result, Revision, _refine, initial_state, propagate, refine
+from src.domain.propagator import (
+    DomainState,
+    MinScore,
+    Result,
+    Revision,
+    _refine,
+    crossing_counts,
+    initial_state,
+    propagate,
+    refine,
+)
 from src.domain.slot_model import SlotModel, pattern
 from src.fill.autofill import Autofill
 from src.fill.trie_pattern_matcher import TriePatternMatcher
@@ -1560,3 +1581,102 @@ class TestSoundnessAgainstBruteForceWithNotEquals:
                 mask = result.state.word_masks[slot_id]
                 words_in_mask = {text for text, _ in bitset_index.words(slot.length, mask)}
                 assert word in words_in_mask
+
+
+class TestCrossingCountsContractShape:
+    """Structural guard on the last public name the module exports (task-4 brief)."""
+
+    def test_signature(self):
+        params = inspect.signature(crossing_counts).parameters
+        assert list(params) == ["state", "index", "slot_id", "word"]
+
+
+class TestCrossingCountsNormativeCases:
+    """Task-4 brief's normative table, verbatim: FIX-A, all-empty fixed,
+    min_score=0, evaluated on initial_state (unpropagated) -- crossing_counts
+    reads a state, it does not propagate, so every case here builds
+    initial_state directly and never calls refine or propagate."""
+
+    def test_slot_2_arise(self, model, bitset_index):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        assert crossing_counts(state, bitset_index, 2, "ARISE") == (3, 1, 2, 5, 1)
+
+    def test_slot_2_zrise_out_of_alphabet_letter_contributes_zero_not_raise(self, model, bitset_index):
+        """Z is outside AEINPRSTVY -- the brief's own note on this row."""
+        assert "Z" not in bitset_index.alphabet
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        assert crossing_counts(state, bitset_index, 2, "ZRISE") == (0, 1, 2, 5, 1)
+
+    def test_slot_7_tries(self, model, bitset_index):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        assert crossing_counts(state, bitset_index, 7, "TRIES") == (2, 2, 2, 1, 5)
+
+    def test_slot_2_word_too_short_raises_with_exact_message(self, model, bitset_index):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        with pytest.raises(ValueError) as exc_info:
+            crossing_counts(state, bitset_index, 2, "SPY")
+        assert str(exc_info.value) == "word 'SPY' has length 3; slot 2 has length 5"
+
+    def test_slot_2_word_too_long_raises_with_exact_message(self, model, bitset_index):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        with pytest.raises(ValueError) as exc_info:
+            crossing_counts(state, bitset_index, 2, "ARISEN")
+        assert str(exc_info.value) == "word 'ARISEN' has length 6; slot 2 has length 5"
+
+    def test_length_guard_raises_before_any_crossing_is_walked(self, model, bitset_index, monkeypatch):
+        """The brief: 'Before any crossing is walked, len(word) != ... raises'
+        -- guarded here by making LetterBitsetIndex.restrict itself fail the
+        test if the implementation ever reaches the crossing loop before
+        raising. Patched on the class (not the module-scoped bitset_index
+        instance) so monkeypatch's teardown removes it cleanly."""
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("restrict must not run before the length guard raises")
+
+        monkeypatch.setattr(LetterBitsetIndex, "restrict", fail_if_called)
+        with pytest.raises(ValueError):
+            crossing_counts(state, bitset_index, 2, "SPY")
+
+    def test_slot_2_arise_with_fixed_crossing_omitted_not_zero_padded(self, model, bitset_index):
+        """fixed[0]="S", fixed[5]="P", fixed[10]="A" fixes slot 5 (down,
+        cells 0/5/10) to SPA, so the cell-10 crossing (slot 2 <-> slot 5) is
+        omitted -- the tuple has 4 entries, not 5 with a 0 standing in for it."""
+        fixed = _fixed_with({0: "S", 5: "P", 10: "A"})
+        assert pattern(model, 5, fixed) == "SPA"  # confirms slot 5 is fixed, not still open
+        state = initial_state(model, bitset_index, fixed, min_score=0)
+
+        result = crossing_counts(state, bitset_index, 2, "ARISE")
+
+        assert result == (1, 2, 5, 1)
+        assert len(result) == 4  # shorter than slot 2's 5 crossings, not zero-padded to 5
+
+
+class TestCrossingCountsAgainstPlacementImpactOracle:
+    """The brief's differential oracle: on initial_state with no placed
+    words and no fixed crossing slots, each entry equals the `after` count
+    analyze_placement_impact reports for the corresponding crossing slot,
+    reordered into model.crossings' by-cell order. The brief pins this for
+    crossing_counts(s, index, 2, "ARISE") only, and explicitly forbids
+    extending it to the fixed-crossing or off-list-fixed-word rows (the
+    analyzer counts fixed crossings and reports a phantom elimination for
+    an off-list fixed word) -- those two rows stay hand-built, above."""
+
+    def test_slot_2_arise_matches_the_analyzers_after_counts_reordered(self, model, bitset_index, fixture_word_list):
+        state = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        actual = crossing_counts(state, bitset_index, 2, "ARISE")
+
+        grid = _new_fix_a_grid()
+        slot = model.slots[2]
+        slot_dict = {"row": slot.row, "col": slot.col, "direction": slot.direction, "length": slot.length}
+        matcher = TriePatternMatcher(fixture_word_list)
+        impact = analyze_placement_impact(grid, "ARISE", slot_dict, fixture_word_list, matcher)
+
+        expected = []
+        for crossing in model.crossings:
+            if crossing.across_id != 2:
+                continue
+            row, col, direction = model.slot_key(crossing.down_id)
+            expected.append(impact["impacts"][f"{row},{col},{direction}"]["after"])
+
+        assert actual == tuple(expected) == (3, 1, 2, 5, 1)
