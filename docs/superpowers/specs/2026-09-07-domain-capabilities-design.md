@@ -40,8 +40,8 @@ plain-text extracts of those sections were used to write this document.
 | 10 | *(2026-09-08)* `direction` serialises as its string | 0/1 ints — honours §6's "ints and lists only" literally, but the dump then matches no existing slot dict |
 | 12 | *(2026-09-08)* C2's error contract, pinned here rather than in the plan | leaving it to the plan — the same class of choice as 10 and 11, which were ratified here, so the plan would have been authoring spec |
 | 11 | *(2026-09-08)* `crossings` and `unslotted` sorted by cell index | `crossings` by `(across_id, across_pos)` — equally total, reads naturally slot-by-slot in C3, but puts two ordering rules in one dataclass |
-| 13 | *(2026-09-09, **proposed** — awaiting owner)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
-| 14 | *(2026-09-09, **proposed** — awaiting owner)* `crossing_counts` does not validate `len(word)` | `ValueError` on a length mismatch — defensible, but decision 12 declined to guard anywhere else in the family while it stays unwired |
+| 13 | *(2026-09-09)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
+| 14 | *(2026-09-09)* `crossing_counts` raises `ValueError` when `len(word)` is not the slot's length | leaving it unguarded — consistent with decision 12, but a short word then raises `IndexError` from an internal expression and a long word silently scores its prefix, which is a wrong answer rather than an error |
 | 15 | *(2026-09-09, **proposed** — awaiting owner)* in `cell_letters`, black-or-unslotted wins over fixed | letting a fixed letter show through on an unslotted cell — reads more informatively, but the three cases in step 7 then overlap and no rule says which wins |
 
 **[NOTE]**
@@ -466,8 +466,9 @@ That flip is correct behaviour and is covered by a fixture, not treated as a def
 
 **[SPEC] Planning amendment, 2026-09-09 — three interfaces §7 named without fixing**
 Surfaced writing the C3 plan. Each is a choice between defensible answers, not a derivation, so two
-implementers would not have converged. All three are **proposed and awaiting the owner**; nothing is
-built against them until ratified.
+implementers would not have converged. Decisions 13 and 14 were **ratified by the owner on
+2026-09-09** — 14 against the proposal, which had argued for leaving the length unguarded.
+Decision 15 is **still open**.
 
 - **Decision 13 — the queue-order seam, and `refine` does not mutate.** §7 claims "the fixed point is
   unique for a given input regardless of queue order", but no public entry point can vary the order:
@@ -478,14 +479,18 @@ built against them until ratified.
   passes permutations of the same arc set. Separately, `refine` and `_refine` return a **new**
   `DomainState` and mutate neither `state` nor its arrays: `DomainState` is not frozen, and a
   mutating `refine` makes §7's idempotence property vacuous — it would compare a state to itself.
-- **Decision 14 — `crossing_counts` does not validate `len(word)`.** A `word` shorter than the slot
-  raises `IndexError` natively from the pinned `word[pos_self]` — a derivation, and consistent with
-  decision 12. A **longer** word is the real gap: every `pos_self` is in range, so the call silently
-  scores the prefix. That is pinned as accepted behaviour rather than guarded.
-- **Decision 15 — `cell_letters` case precedence.** Step 7's three cases are not disjoint: an
-  unslotted white cell can hold a letter, so it is both "a fixed cell" and "an unslotted cell".
-  Precedence is pinned black-or-unslotted first: such a cell is `0` regardless of `fixed`. A fixed
-  letter outside the index alphabet is likewise `0` — it has no bit to set.
+- **Decision 14 — `crossing_counts` validates `len(word)`.** It raises exactly
+  `ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")` when
+  `len(word) != model.slots[slot_id].length`, checked before any crossing is walked. This is the one
+  guard in the family and a deliberate departure from decision 12: unguarded, a short word raises
+  `IndexError` from an internal expression and a long word silently scores its prefix — a wrong
+  answer rather than an error. Decision 12 is unchanged; it governs C2.
+- **Decision 15 — `cell_letters` case precedence. STILL OPEN.** Step 7's three cases are not
+  disjoint: an unslotted white cell can hold a letter, so it is both "a fixed cell" and "an
+  unslotted cell". The proposal is to pin black-or-unslotted first, making such a cell `0`
+  regardless of `fixed`; the alternative is to let the fixed letter show through. Not ratified —
+  Task 1 does not start until it is. Independent of the choice: a fixed letter outside the index
+  alphabet is `0`, because it has no bit to set.
 
 ---
 
@@ -600,10 +605,13 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
-- **0.1.7** — 2026-09-09 — planning amendment, C3 only, surfaced writing the C3 plan; **proposed,
-  awaiting the owner**. Pinned three interfaces §7 named without fixing: the queue-order seam plus
-  `refine`'s non-mutation (decision 13), `crossing_counts` on a wrong-length word (14), and
-  `cell_letters` case precedence (15). No behaviour changed that §7 had already fixed. Two further
+- **0.1.7** — 2026-09-09 — planning amendment, C3 only, surfaced writing the C3 plan. Pinned three
+  interfaces §7 named without fixing: the queue-order seam plus `refine`'s non-mutation
+  (decision 13), `crossing_counts` on a wrong-length word (14), and `cell_letters` case precedence
+  (15). **13 and 14 ratified by the owner 2026-09-09; 15 still open.** 14 was ratified against the
+  proposal — the draft argued for leaving the length unguarded, consistent with decision 12, and
+  the owner chose an explicit `ValueError` instead, so that a short word cannot surface as an
+  internal `IndexError` and a long word cannot silently score its prefix. No behaviour changed that §7 had already fixed. Two further
   gaps found in the same pass are **derivations, not amendments**, and live in the plan: the
   state-equality predicate the idempotence and confluence tests compare with (dataclass `==` raises
   on `list[np.ndarray]`), and the scope of the `Autofill._ac3` oracle — `_ac3` returns `False` at

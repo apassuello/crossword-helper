@@ -10,10 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-07-domain-capabilities-design.md` — §7 is the contract; §2 (project-wide constraints), §3 (vocabulary), §4 (C1 surface) and §6 (C2 surface) bind it.
 
-> **Amendment 0.1.7 is PROPOSED, not ratified.** Decisions 13, 14 and 15 (spec §1 table and the
-> §7 amendment block, commit `dd8782a`) were authored while writing this plan and are awaiting the
-> owner. Tasks 2 and 3 rest on decision 13, Task 1 on decision 15, Task 4 on decision 14. **Do not
-> start Task 1, 2, 3 or 4 until the owner has ratified them.** Only Task 0 is unaffected.
+> **Amendment 0.1.7 — decisions 13 and 14 ratified 2026-09-09; decision 15 is still open.**
+> Decision 14 was ratified *against* the proposal: `crossing_counts` validates the word length.
+> Tasks 2, 3 and 4 are unblocked. **Task 1 rests on decision 15 and does not start until it is
+> settled.** Task 0 was never affected.
 
 ## Global Constraints
 
@@ -470,7 +470,7 @@ def crossing_counts(state: DomainState, index, slot_id: int, word: str) -> tuple
   `index.count(mask_other & bits[L_other][pos_other][letter_index[word[pos_self]]])` — equivalently `index.count(index.restrict(L_other, pos_other, 1 << letter_index[word[pos_self]], mask_other))`.
 - **Crossings into fixed slots are omitted** — the returned tuple is shorter, not zero-padded.
 - A letter outside the index alphabet contributes `0` for that crossing (not an exception).
-- **`len(word)` is not validated (decision 14).** A word shorter than the slot raises `IndexError` natively from `word[pos_self]`; a longer word silently scores its prefix. Neither is guarded and no message is pinned.
+- **`len(word)` is validated (decision 14).** Before any crossing is walked, `len(word) != model.slots[slot_id].length` raises exactly `ValueError(f"word {word!r} has length {len(word)}; slot {slot_id} has length {length}")`, where `length` is the slot's length. This is the one guard in the family — decision 12's "bad lookups raise natively" governs C2 and is unchanged.
 - Decision 6: no ranking rule, no sort, no aggregation. The tuple is returned in crossing order.
 
 **Normative cases** — exact values. All on `FIX-A` with an all-empty `fixed` and `min_score=0`, evaluated on `initial_state` (unpropagated), unless a row says otherwise. Slot 2's crossings are at cells `10, 11, 12, 13, 14` (other slots `5, 6, 7, 8, 9`); slot 7's are at cells `2, 7, 12, 17, 22`.
@@ -480,6 +480,8 @@ def crossing_counts(state: DomainState, index, slot_id: int, word: str) -> tuple
 | `crossing_counts(s, index, 2, "ARISE")` | `(3, 1, 2, 5, 1)` |
 | `crossing_counts(s, index, 2, "ZRISE")` | `(0, 1, 2, 5, 1)` — `Z` is outside `AEINPRSTVY` |
 | `crossing_counts(s, index, 7, "TRIES")` | `(2, 2, 2, 1, 5)` |
+| `crossing_counts(s, index, 2, "SPY")` | raises `ValueError("word 'SPY' has length 3; slot 2 has length 5")` |
+| `crossing_counts(s, index, 2, "ARISEN")` | raises `ValueError("word 'ARISEN' has length 6; slot 2 has length 5")` |
 | `crossing_counts(s, index, 2, "ARISE")` with `fixed[0]="S", fixed[5]="P", fixed[10]="A"` | `(1, 2, 5, 1)` — slot 5 is now fixed (`SPA`), so the cell-10 crossing is omitted |
 
 **The `analyze_placement_impact` oracle.** On `initial_state` with `min_score=0`, no placed words and no fixed crossing slots, each entry equals the `after` count `analyze_placement_impact(grid, word, slot, word_list, TriePatternMatcher(word_list))` reports for the corresponding crossing slot. Verified for `crossing_counts(s, index, 2, "ARISE")`: the analyzer returns `after` of `3` for `0,0,down`, `1` for `0,1,down`, `2` for `0,2,down`, `1` for `0,4,down` and `5` for `2,3,down` — the same five values, reordered into `model.crossings`' by-cell order. Its keys are `"{row},{col},{direction}"`; map them through `model.slot_key`.
