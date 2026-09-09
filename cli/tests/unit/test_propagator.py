@@ -30,6 +30,14 @@ a field-by-field predicate over the integer fields, never `in`, `==`, or
 NumPy array, so those operators raise once a mask spans more than one
 uint64 chunk -- FIXTURE_WORDS never produces that, but the predicate form
 is written to hold regardless.
+
+TestConfluenceWithNotEqualsCascade below adds one more geometry and its
+own small word list (CASCADE_WORDS): FIXTURE_WORDS' 14 words over a
+10-letter alphabet turned out too dense for a fixture where the not-equals
+phase both fires on a real crossing and re-enqueues it -- every attempt
+either collapsed straight to an empty domain or cascaded to a full wipe
+before a second, uncrossed slot could show a distinct fixed point. That
+class documents why CASCADE_WORDS exists rather than reusing FIXTURE_WORDS.
 """
 
 from __future__ import annotations
@@ -1221,6 +1229,194 @@ class TestConfluenceWithNotEquals:
         shuffled = list(queue)
         random.Random(7).shuffle(shuffled)
         shuffled_result = _refine(state, bitset_index, 0, True, shuffled)
+
+        assert _states_equal(natural.state, shuffled_result.state)
+        assert natural.wiped == shuffled_result.wiped
+
+
+# CASCADE_WORDS -- a supplementary, length-3-only word list scoped to
+# TestConfluenceWithNotEqualsCascade below, used instead of FIXTURE_WORDS
+# because FIXTURE_WORDS' 14 words over a 10-letter alphabet leave no room
+# to arrange a fixture where the not-equals phase both fires on a real
+# crossing and re-enqueues it without the whole grid collapsing to an
+# empty domain or cascading to a full wipe (independently confirmed before
+# writing this class): every letter and word below is chosen so each
+# slot's own local pattern picks out an exact, disjoint candidate set from
+# the other slots' local patterns, so the propagation path the class
+# docstring describes is the only one the word list can produce.
+CASCADE_WORDS = [
+    ("CAT", 50),
+    ("BAT", 50),
+    ("CIG", 50),
+    ("BIG", 50),
+    ("TOP", 50),
+    ("TUB", 50),
+    ("DEN", 50),
+    ("FEZ", 50),
+    ("FOX", 50),
+    ("NOR", 50),
+]
+
+CASCADE_SIZE = 7
+
+# Open cells of an isolated singleton slot (0-2), a fully open bystander
+# slot (4-6) that exists only so the mutation-sensitivity mechanism below
+# has a same-length slot to remove a word from, an across slot crossing
+# two down slots at row 2 cols 0-2, and a second, independent across/down
+# trio at row 2 cols 4-6 -- see the class docstring for what each one is
+# for. Blacks are every other cell of the CASCADE_SIZE x CASCADE_SIZE grid.
+_CASCADE_OPEN_CELLS = frozenset({0, 1, 2, 4, 5, 6, 14, 15, 16, 18, 19, 20, 21, 28, 23, 30, 25, 32, 27, 34})
+CASCADE_BLACKS = tuple(cell for cell in range(CASCADE_SIZE * CASCADE_SIZE) if cell not in _CASCADE_OPEN_CELLS)
+
+
+@pytest.fixture(scope="module")
+def cascade_word_list() -> WordList:
+    return WordList(list(CASCADE_WORDS))
+
+
+@pytest.fixture(scope="module")
+def cascade_index(cascade_word_list) -> LetterBitsetIndex:
+    return LetterBitsetIndex.from_word_list(cascade_word_list)
+
+
+@pytest.fixture(scope="module")
+def cascade_model() -> SlotModel:
+    return SlotModel.from_blacks(CASCADE_SIZE, CASCADE_BLACKS, min_length=3)
+
+
+@pytest.fixture
+def cascade_fixed() -> tuple:
+    """
+    Pins every slot's pattern (global-constraints.md / spec section 2's
+    cell-index rule): slot 0 -> "CA?" (the singleton source, CAT); slot 1 -> "???" (the
+    bystander target, fully open); slot 2 -> "?A?" (the direct not-equals
+    target, CAT/BAT); slot 3 -> "?E?" (the pivot, DEN/FEZ); slot 4 -> "?I?"
+    (the downstream slot, CIG/BIG); slot 5 -> "???" (the untouched slot,
+    crosses slot 2's other cell); slot 6 -> "?OX" (FOX, one pivot anchor);
+    slot 7 -> "?OR" (NOR, the other). Cell numbers are literal, verified
+    against SlotModel.from_blacks(CASCADE_SIZE, CASCADE_BLACKS) directly
+    rather than derived by hand.
+    """
+    empty = tuple("" for _ in range(CASCADE_SIZE * CASCADE_SIZE))
+    overrides = {0: "C", 1: "A", 15: "A", 19: "E", 21: "I", 25: "O", 32: "X", 27: "O", 34: "R"}
+    fixed = list(empty)
+    for cell, letter in overrides.items():
+        fixed[cell] = letter
+    return tuple(fixed)
+
+
+class TestConfluenceWithNotEqualsCascade:
+    """
+    Closes the evidentiary gap the task-3 review flagged: every other
+    confluence test in this file either has zero crossings (FIX-B/FIX-G/
+    FIX-H) or has crossings but never actually triggers the not-equals
+    phase (FIX-A, whose own singletons are already pairwise distinct at
+    the arc-consistent fixed point). Nothing in that set exercises the
+    phase-then-re-enqueue branch at propagator.py's step-5 handling
+    (`for slot_id in changed_slots: _enqueue_other_crossings(...)`).
+
+    cascade_model has 8 slots, all length 3, over two independent
+    components:
+
+    - Slot 0 is isolated and already a singleton (CAT) at initial_state --
+      no crossing needed to produce it. Slot 2 is a direct not-equals
+      target: it starts at {CAT, BAT} and crosses slot 4 at one cell and
+      slot 5 at the other. Arc consistency alone (not_equals=False) leaves
+      slot 2 untouched (both its letters are already present on both
+      sides of each crossing), so the CAT/BAT split survives to the
+      not_equals=False fixed point. Only the not-equals phase, once slot 0
+      is collected as a singleton, removes CAT from slot 2 (a
+      source_crossing=-1 Revision) -- and that removal is what the phase
+      itself re-enqueues: slot 2's crossing with slot 4 is reprocessed,
+      and slot 4 -- never a direct target of the phase, no Revision on it
+      ever carries source_crossing=-1 -- loses a candidate through that
+      real arc, ending at a different fixed point than not_equals=False
+      leaves it at. Slot 5 crosses slot 2 too but is never touched by
+      either mechanism, a control showing the cascade is scoped to the
+      crossing that actually changed.
+
+    - Slots 3, 6, 7 are a second, independent trio: slot 3 starts at
+      {DEN, FEZ} and crosses slot 6 (a singleton, FOX) at one cell and
+      slot 7 (a singleton, NOR) at the other. Both crossings remove one of
+      slot 3's two candidates, so slot 3 (and, transitively, slots 6/7)
+      reach an empty mask at the true, order-independent arc-consistent
+      fixed point regardless of which crossing is processed first -- but
+      on the way there, slot 3 passes through a transient singleton (FEZ
+      if slot 3-slot 6's crossing is processed first, DEN if slot 3-slot
+      7's is processed first). Slot 1 is fully open and same-length, so it
+      holds both DEN and FEZ as candidates going in. A correct
+      implementation never lets this transience leak out (slot 3 is empty,
+      not a singleton, by the time the phase legitimately runs, so it is
+      never treated as a source), which is exactly why every confluence
+      assertion below must hold; the "prove it can fail" step in the task
+      report interleaves the phase into the arc loop instead and shows
+      slot 1 ending up missing FEZ xor DEN depending on processing order.
+
+    Every value below comes from running propagate/_refine against
+    cascade_model/cascade_index/cascade_fixed, not from hand-computation.
+    """
+
+    DOWNSTREAM = 4
+
+    def test_patterns_match_cascade_fixed_s_docstring(self, cascade_model, cascade_fixed):
+        """Pins the slot-role mapping the class docstring and DOWNSTREAM
+        rely on against cascade_model's actual slot order -- a guard
+        against a from_blacks ordering change silently retargeting which
+        slot id is "the downstream one", the way FIX-B/FIX-G/FIX-H each
+        pin their own patterns."""
+        expected = {0: "CA?", 1: "???", 2: "?A?", 3: "?E?", 4: "?I?", 5: "???", 6: "?OX", 7: "?OR"}
+        for slot_id, expected_pattern in expected.items():
+            assert pattern(cascade_model, slot_id, cascade_fixed) == expected_pattern
+
+    def test_geometry_has_real_crossings(self, cascade_model):
+        assert len(cascade_model.crossings) > 0
+
+    def test_phase_produces_at_least_one_direct_removal(self, cascade_model, cascade_index, cascade_fixed):
+        result = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=True)
+        assert any(r.source_crossing == -1 for r in result.revisions)
+
+    def test_downstream_slot_is_never_a_direct_target_of_the_phase(self, cascade_model, cascade_index, cascade_fixed):
+        result = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=True)
+        assert not any(r.slot == self.DOWNSTREAM and r.source_crossing == -1 for r in result.revisions)
+
+    def test_downstream_slot_has_a_real_crossing_revision(self, cascade_model, cascade_index, cascade_fixed):
+        """The cascade itself: a Revision on the downstream slot whose
+        source_crossing is a real arc index, produced only because the
+        phase's own removal on slot 2 re-enqueued slot 2's crossing with
+        this slot -- and that Revision does not appear at all under
+        not_equals=False, confirming propagator.py:295's re-enqueue branch
+        (dead in every other test in this file) is what produces it."""
+        result_true = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=True)
+        result_false = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=False)
+        assert any(r.slot == self.DOWNSTREAM and r.source_crossing != -1 for r in result_true.revisions)
+        assert not any(r.slot == self.DOWNSTREAM for r in result_false.revisions)
+
+    def test_downstream_slot_fixed_point_differs_from_not_equals_false(self, cascade_model, cascade_index, cascade_fixed):
+        result_true = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=True)
+        result_false = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=False)
+        assert not np.array_equal(
+            result_true.state.word_masks[self.DOWNSTREAM], result_false.state.word_masks[self.DOWNSTREAM]
+        )
+
+    def test_natural_and_reverse_order_agree(self, cascade_model, cascade_index, cascade_fixed):
+        state = initial_state(cascade_model, cascade_index, cascade_fixed, min_score=0)
+        queue = _natural_queue(cascade_model, state.word_masks)
+
+        natural = _refine(state, cascade_index, 0, True, queue)
+        reversed_result = _refine(state, cascade_index, 0, True, list(reversed(queue)))
+
+        assert _states_equal(natural.state, reversed_result.state)
+        assert natural.wiped == reversed_result.wiped
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
+    def test_random_shuffles_agree_with_natural_order(self, cascade_model, cascade_index, cascade_fixed, seed):
+        state = initial_state(cascade_model, cascade_index, cascade_fixed, min_score=0)
+        queue = _natural_queue(cascade_model, state.word_masks)
+
+        natural = _refine(state, cascade_index, 0, True, queue)
+        shuffled = list(queue)
+        random.Random(seed).shuffle(shuffled)
+        shuffled_result = _refine(state, cascade_index, 0, True, shuffled)
 
         assert _states_equal(natural.state, shuffled_result.state)
         assert natural.wiped == shuffled_result.wiped
