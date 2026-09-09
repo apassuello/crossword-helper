@@ -14,6 +14,7 @@ from the grid diagram.
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -393,6 +394,15 @@ class TestFixedFromGrid:
 
 class TestPattern:
     """pattern(model, slot_id, fixed): reads only model and fixed, never a Grid."""
+
+    def test_signature_is_exactly_model_slot_id_fixed(self):
+        """C3's whole design rests on pattern being a pure function of
+        (model, slot_id, fixed), so one SlotModel stays constant while fixed
+        changes underneath it. Pins the signature itself rather than passing a
+        stubbed Grid: a stub is simply never consulted, so a behavioral guard
+        would let an added optional grid=None parameter slip straight through
+        while still breaking this contract."""
+        assert tuple(inspect.signature(pattern).parameters) == ("model", "slot_id", "fixed")
 
     def test_empty_grid_patterns_match_normative_table(self, model, fixture_grid):
         fixed = fixed_from_grid(fixture_grid)
