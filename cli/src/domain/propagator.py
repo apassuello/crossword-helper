@@ -285,7 +285,12 @@ def refine(state: DomainState, index: LetterBitsetIndex, min_score: MinScore = 0
     both only narrow a mask, never widen it -- which is why propagate may
     pass the same min_score through both initial_state and refine without
     double-counting, and a slot the floor empties is reported in wiped like
-    any other empty slot.
+    any other empty slot. The same only-narrows property means min_score
+    here is a lower bound on what has already been applied to state, not a
+    floor a caller can reset downward: calling refine again at a lower
+    min_score than the one state was already narrowed to keeps the
+    narrower domain rather than widening back out to the lower floor's own
+    answer.
 
     The initial queue is the natural one -- model.crossings' own order,
     filtered to the crossings whose two slots are both open (spec section 7

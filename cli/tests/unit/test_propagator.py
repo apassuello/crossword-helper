@@ -997,6 +997,7 @@ class TestRefineFloorNonMutation:
 
         assert result.state is not raw
         assert result.state.word_masks is not raw.word_masks
+        assert result.state.cell_letters is not raw.cell_letters
         for original, snapshot in zip(raw.word_masks, mask_snapshots):
             if snapshot is None:
                 assert original is None
