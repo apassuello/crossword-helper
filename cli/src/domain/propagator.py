@@ -273,20 +273,56 @@ def refine(state: DomainState, index: LetterBitsetIndex, min_score: MinScore = 0
     existing DomainState, rather than from (model, fixed) the way propagate
     does.
 
+    min_score (decision 17, spec 0.1.8) is applied here, before anything
+    else: every slot whose mask is not None is ANDed with
+    index.mask(pattern(state.model, slot.id, state.fixed), policy), policy
+    resolved per slot exactly as initial_state resolves it -- min_score
+    itself when min_score is an int, min_score(slot.length) when it is
+    callable. A fixed slot (mask None) is left alone. The narrowing records
+    no Revision: it runs before the fixed-point loop that produces them,
+    and Revision.source_crossing has no encoding for a score policy. It is
+    idempotent when the floor is unchanged -- arc consistency and this AND
+    both only narrow a mask, never widen it -- which is why propagate may
+    pass the same min_score through both initial_state and refine without
+    double-counting, and a slot the floor empties is reported in wiped like
+    any other empty slot.
+
     The initial queue is the natural one -- model.crossings' own order,
     filtered to the crossings whose two slots are both open (spec section 7
-    step 3) -- built here and handed to the private _refine seam (decision
-    13), which takes it as an explicit argument so a confluence test can
-    permute it while refine itself always passes this one order.
+    step 3) -- built from the narrowed masks and handed to the private
+    _refine seam (decision 13), which takes it as an explicit argument so a
+    confluence test can permute it while refine itself always passes this
+    one order.
 
     not_equals is forwarded to _refine unchanged; it gates step 5's
     singleton-clearing phase there. Step 2's fixed-word removal is not run
     here -- it belongs to propagate, between initial_state and this call.
 
-    Does not mutate state or any array it holds; see _refine.
+    Does not mutate state or any array it holds: the narrowing above builds
+    a fresh word_masks list (state.word_masks itself is only read, never
+    written into), and every open slot's entry in it is a new array from
+    index.mask's own AND, never an in-place edit. See _refine for the rest
+    of the fixed-point loop's own non-mutation.
     """
-    queue = _open_arc_queue(state.model, state.word_masks)
-    return _refine(state, index, min_score, not_equals, queue)
+    model = state.model
+    narrowed_masks: list[np.ndarray | None] = []
+    for slot in model.slots:
+        mask = state.word_masks[slot.id]
+        if mask is None:
+            narrowed_masks.append(None)
+            continue
+        policy = min_score(slot.length) if callable(min_score) else min_score
+        narrowed_masks.append(mask & index.mask(pattern(model, slot.id, state.fixed), policy))
+
+    # cell_letters is carried over unchanged rather than recomputed: this
+    # DomainState is a transient argument to _refine alone, which never
+    # reads state.cell_letters (it recomputes cell_letters fresh from its
+    # own local masks list at the end, via _cell_letters) and never returns
+    # this object -- so recomputing it here would be pure waste.
+    narrowed_state = DomainState(model=model, word_masks=narrowed_masks, cell_letters=state.cell_letters, fixed=state.fixed)
+
+    queue = _open_arc_queue(model, narrowed_masks)
+    return _refine(narrowed_state, index, min_score, not_equals, queue)
 
 
 def _refine(

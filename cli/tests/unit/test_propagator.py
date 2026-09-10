@@ -151,6 +151,14 @@ def _length_dependent_min_score(length: int) -> int:
     return 40 if length == 3 else 0
 
 
+def _empties_length_4_via_refine(length: int) -> int:
+    """The decision-17 task-3 brief's callable-policy case for refine: 0 for
+    length-3 slots (no floor at all), 60 for every other length -- high
+    enough to exclude NEAR (score 50), slot 3's only survivor at the
+    floor-0 fixed point, from ever being considered."""
+    return 0 if length == 3 else 60
+
+
 # Per-slot letter counts (index.count(m) for m in word_masks), FIX-A, all-empty fixed,
 # slot ids 0..9 -- literal, from the task-1 brief's normative table.
 MASK_COUNTS_MIN_SCORE_0 = (9, 9, 3, 2, 9, 9, 2, 3, 9, 3)
@@ -888,6 +896,188 @@ class TestIdempotence:
         assert again.revisions == ()
 
 
+class TestRefineAppliesMinScoreOnFixture:
+    """Decision 17 (spec 0.1.8): refine's own task-3 brief (the
+    decisions-16-17 bundle, not this file's earlier not-equals Task 3),
+    normative fixture table -- FIX-A, all-empty fixed, not_equals=False.
+    Both rows are stated against the floor-0 fixed point (FIXED_POINT_WORDS
+    / CELL_LETTERS_FIXED_POINT above), reached from a floor-0 *raw*
+    (unpropagated) initial_state so refine's own narrowing, not
+    initial_state's, is what is under test."""
+
+    def test_floor_20_removes_nothing_state_equals_floor_0_fixed_point(self, model, bitset_index):
+        """FIXTURE_WORDS' lowest score is 20 (SPY, SAP) -- LetterBitsetIndex.mask
+        keeps a word scoring exactly min_score, so a floor of 20 filters out
+        nothing at all and must reproduce the floor-0 fixed point exactly."""
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        result = refine(raw, bitset_index, min_score=20, not_equals=False)
+        reference = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert _states_equal(result.state, reference.state)
+        assert result.wiped == ()
+
+    def test_floor_25_empties_every_open_slot(self, model, bitset_index):
+        """Floor 25 excludes SPY and SAP (both score 20) from consideration
+        before the arc loop even starts; FIX-A is fully coupled (task-3
+        brief), so losing either's slot's only floor-0 solution word
+        cascades to a total wipeout -- every one of the ten slots, not just
+        slots 4 and 8."""
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        result = refine(raw, bitset_index, min_score=25, not_equals=False)
+        assert result.wiped == tuple(range(10))
+        for slot in model.slots:
+            mask = result.state.word_masks[slot.id]
+            assert mask is not None
+            assert bitset_index.count(mask) == 0
+
+
+class TestRefineFloorEquivalentToPropagate:
+    """Decision 17's normative equivalence criterion: for a blank grid and
+    not_equals=False, refine(initial_state(model, index, fixed, 0), index,
+    min_score=X) and propagate(model, index, fixed, X, not_equals=False)
+    reach the same DomainState (spec 0.1.8's own wording) -- compared via
+    == directly, not the test-local _states_equal oracle, since the spec
+    explicitly names DomainState.__eq__ (decision 16) as what this needs."""
+
+    @pytest.mark.parametrize("floor", [0, 20, 25])
+    def test_refine_from_floor_0_equals_propagate_at_the_same_floor(self, model, bitset_index, floor):
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        from_refine = refine(raw, bitset_index, min_score=floor, not_equals=False)
+        from_propagate = propagate(model, bitset_index, EMPTY_FIXED, min_score=floor, not_equals=False)
+        assert from_refine.state == from_propagate.state
+
+
+class TestRefineFloorIdempotence:
+    """Applying the same floor twice through refine is a no-op: arc
+    consistency and the min_score AND both only narrow, so a second call
+    at the identical floor changes nothing further and records no
+    revisions of its own."""
+
+    @pytest.mark.parametrize("floor", [20, 25])
+    def test_calling_refine_twice_at_the_same_floor_changes_nothing_further(self, model, bitset_index, floor):
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        first = refine(raw, bitset_index, min_score=floor, not_equals=False)
+        second = refine(first.state, bitset_index, min_score=floor, not_equals=False)
+        assert _states_equal(second.state, first.state)
+        assert second.revisions == ()
+
+
+class TestRefineFloorNonMutation:
+    """The same non-mutation guarantee TestNonMutation pins for min_score=0,
+    but at a floor that actually removes bits (25) -- min_score=0's own AND
+    is a no-op against an already-floor-0 state, so only a nonzero floor
+    exercises the narrowing code path this guarantee must hold for too."""
+
+    def test_original_state_and_arrays_unchanged_after_refine_with_a_floor(self, model, bitset_index):
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        mask_snapshots = [None if m is None else m.copy() for m in raw.word_masks]
+        cell_letters_snapshot = raw.cell_letters.copy()
+
+        result = refine(raw, bitset_index, min_score=25, not_equals=False)
+
+        assert result.state is not raw
+        assert result.state.word_masks is not raw.word_masks
+        for original, snapshot in zip(raw.word_masks, mask_snapshots):
+            if snapshot is None:
+                assert original is None
+            else:
+                assert np.array_equal(original, snapshot)
+        assert np.array_equal(raw.cell_letters, cell_letters_snapshot)
+
+
+class TestRefineFloorFixedSlotsUntouched:
+    """A fixed slot's mask (None) must stay None after a nonzero floor --
+    the narrowing loop must skip it exactly as the arc-consistency loop
+    already does."""
+
+    def test_a_fixed_slots_mask_stays_none_after_a_nonzero_floor(self, model, bitset_index):
+        fixed = _fixed_with({0: "E", 1: "A", 2: "R"})
+        state = initial_state(model, bitset_index, fixed, min_score=0)
+        assert state.word_masks[0] is None  # sanity: slot 0 is genuinely fixed here
+        result = refine(state, bitset_index, min_score=25, not_equals=False)
+        assert result.state.word_masks[0] is None
+
+
+class TestRefineFloorNarrowingIsolatedFromArcConsistency:
+    """FIX-C (SlotModel.from_blacks(5, FIX_C_BLACKS, min_length=3)): three
+    isolated length-4 across slots, no crossings at all
+    (model.crossings == (), pinned in TestFixCWipeoutWithOpenRegionRemaining
+    too). Since _open_arc_queue can never enqueue anything on this
+    geometry, any change these tests observe in a slot's mask is
+    attributable solely to refine's own min_score narrowing, never to the
+    arc-consistency loop -- unlike FIX-A, where the two are entangled by
+    the fixture's own tight coupling. That isolation is what makes "the
+    narrowing records no Revision" and "a slot the floor empties appears in
+    wiped" independently falsifiable rather than merely consistent with an
+    arc-consistency cascade that could produce the same numbers a different
+    way."""
+
+    @pytest.fixture
+    def fix_c_model(self) -> SlotModel:
+        return SlotModel.from_blacks(FIXTURE_SIZE, FIX_C_BLACKS, min_length=3)
+
+    def test_no_crossings_in_this_geometry(self, fix_c_model):
+        assert fix_c_model.crossings == ()
+
+    def test_narrowing_removes_a_word_and_records_no_revision(self, fix_c_model, bitset_index):
+        """FIXTURE_WORDS' only two length-4 words are EARN (60) and NEAR
+        (50); a floor of 55 must remove NEAR from all three isolated slots
+        but leave EARN, and -- since nothing here can ever reach the arc
+        queue -- that removal must not surface as a Revision anywhere."""
+        raw = initial_state(fix_c_model, bitset_index, EMPTY_FIXED, min_score=0)
+        for slot in fix_c_model.slots:
+            assert bitset_index.count(raw.word_masks[slot.id]) == 2  # sanity: EARN and NEAR both present
+
+        result = refine(raw, bitset_index, min_score=55, not_equals=False)
+
+        assert result.revisions == ()
+        for slot in fix_c_model.slots:
+            words = {text for text, _ in bitset_index.words(4, result.state.word_masks[slot.id])}
+            assert words == {"EARN"}
+        assert result.wiped == ()
+
+    def test_a_floor_above_every_word_empties_every_slot_via_narrowing_alone(self, fix_c_model, bitset_index):
+        """A floor of 61 -- above EARN's own score -- must empty all three
+        slots (decision 17: "a slot the floor empties is reported in wiped
+        like any other empty slot"), with the emptying attributable to the
+        narrowing alone since this geometry has no crossing to cascade
+        through."""
+        raw = initial_state(fix_c_model, bitset_index, EMPTY_FIXED, min_score=0)
+        result = refine(raw, bitset_index, min_score=61, not_equals=False)
+        assert result.wiped == (0, 1, 2)
+        assert result.revisions == ()
+        for slot in fix_c_model.slots:
+            assert bitset_index.count(result.state.word_masks[slot.id]) == 0
+
+
+class TestRefineCallableMinScorePolicy:
+    """Decision 17's callable-policy case: a policy returning 0 for length 3
+    and 60 for every other length empties every FIX-A slot, because slot
+    3's only floor-0 survivor (NEAR) scores 50."""
+
+    def test_callable_policy_empties_every_slot_on_the_fixture(self, model, bitset_index):
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        result = refine(raw, bitset_index, min_score=_empties_length_4_via_refine, not_equals=False)
+        assert result.wiped == tuple(range(10))
+        for slot in model.slots:
+            assert bitset_index.count(result.state.word_masks[slot.id]) == 0
+
+    def test_callable_is_resolved_once_per_open_slot_not_once_overall(self, model, bitset_index):
+        """Guards specifically against resolving the callable a single time
+        (e.g. off the first slot's length) and reusing that one int for
+        every slot -- the mutation this file's own task-3 brief names."""
+        calls: list[int] = []
+
+        def spy(length: int) -> int:
+            calls.append(length)
+            return _empties_length_4_via_refine(length)
+
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        refine(raw, bitset_index, min_score=spy, not_equals=False)
+
+        assert len(calls) == len(model.slots)
+        assert calls == [slot.length for slot in model.slots]
+
+
 class TestSupportAtFixedPoint:
     """At the fixed point, every crossing whose two slots are open must
     agree at the shared cell -- letters_at from one side equals letters_at
@@ -1129,6 +1319,75 @@ class TestRealWordListAgainstAc3:
         assert {r.slot for r in phase_revisions} == set(target_slots)
         assert all(r.source_slot == 0 for r in phase_revisions)
         assert not any(r.source_crossing == -1 for r in off.revisions)
+
+
+@pytest.mark.slow
+class TestRefineMinScoreRealWordList:
+    """Decision 17's real-list table: data/wordlists/comprehensive.txt,
+    blank FIX-A, not_equals=False. Domain sizes are index.count per slot,
+    in slot-id order -- literal, from the task-3 brief's normative table.
+    Run explicitly: pytest cli/tests/unit/test_propagator.py -m slow -v --
+    pytest.ini deselects `slow` by default."""
+
+    def test_domain_sizes_match_normative_table_at_each_floor(self, model):
+        """Built the same way the fixture table's own rows are:
+        refine(initial_state(model, index, EMPTY_FIXED, 0), index,
+        min_score=floor, not_equals=False) -- exercising refine's own
+        narrowing directly, not propagate's, which would still land on the
+        right numbers via initial_state's pre-existing per-slot floor even
+        if refine's own narrowing did nothing at all. One real_index build
+        shared across all three floor rows (each pytest.mark.parametrize
+        case would otherwise rebuild it from comprehensive.txt), so this
+        walks the table as a loop inside a single test."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+        raw = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+
+        table = [
+            (0, (), (1751, 1751, 8054, 4479, 1751, 1751, 4479, 8054, 1751, 8054)),
+            (30, (), (848, 848, 6685, 3513, 848, 848, 3513, 6660, 848, 6772)),
+            (50, tuple(range(10)), tuple(0 for _ in range(10))),
+        ]
+        for floor, expected_wiped, expected_sizes in table:
+            result = refine(raw, real_index, min_score=floor, not_equals=False)
+            assert result.wiped == expected_wiped, f"floor {floor}"
+            sizes = tuple(real_index.count(result.state.word_masks[slot.id]) for slot in model.slots)
+            assert sizes == expected_sizes, f"floor {floor}"
+
+    def test_floor_30_is_non_degenerate_the_three_length_5_slots_differ(self, model):
+        """The brief's own claim about why floor 30 is the row that matters:
+        the three length-5 slots (2, 7, 9) land on three *different* sizes,
+        so a floor applied without the subsequent arc-consistency fixed
+        point would not reproduce it."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+        raw = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+
+        result = refine(raw, real_index, min_score=30, not_equals=False)
+        sizes = {slot_id: real_index.count(result.state.word_masks[slot_id]) for slot_id in (2, 7, 9)}
+        assert len(set(sizes.values())) == 3
+
+    def test_refine_from_floor_0_equals_propagate_at_floor_30_on_the_real_list(self, model):
+        """The equivalence criterion at scale, on masks many uint64 chunks
+        wide -- this is where Task 1's DomainState.__eq__ (decision 16)
+        earns its keep: the dataclass-generated __eq__ raises ValueError
+        past one chunk, and comprehensive.txt's length-5 masks are exactly
+        that. Uses == directly, not the test-local _states_equal oracle,
+        for that reason."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+
+        raw = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        assert any(
+            mask is not None and mask.shape[0] > 1 for mask in raw.word_masks
+        ), "fixture must actually exercise a multi-chunk mask"
+
+        from_refine = refine(raw, real_index, min_score=30, not_equals=False)
+        from_propagate = propagate(model, real_index, EMPTY_FIXED, min_score=30, not_equals=False)
+        assert from_refine.state == from_propagate.state
 
 
 @pytest.mark.slow
