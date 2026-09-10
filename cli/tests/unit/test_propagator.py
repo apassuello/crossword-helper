@@ -936,13 +936,34 @@ class TestRefineFloorEquivalentToPropagate:
     min_score=X) and propagate(model, index, fixed, X, not_equals=False)
     reach the same DomainState (spec 0.1.8's own wording) -- compared via
     == directly, not the test-local _states_equal oracle, since the spec
-    explicitly names DomainState.__eq__ (decision 16) as what this needs."""
+    explicitly names DomainState.__eq__ (decision 16) as what this needs.
+
+    One method below leaves not_equals at its default (True) instead --
+    I1 (final whole-branch review, merge gate): every nonzero-floor case
+    above passes not_equals=False explicitly, and not_equals=True is the
+    default for both refine and propagate, so the composition of decision
+    17's narrowing with _refine's step-5 singleton phase had no coverage
+    at all before this. On a blank grid step 2's fixed-word removal is
+    vacuous (EMPTY_FIXED has no fixed slot to source a removal from), so
+    the equivalence criterion above extends unchanged to not_equals left
+    at its default."""
 
     @pytest.mark.parametrize("floor", [0, 20, 25])
     def test_refine_from_floor_0_equals_propagate_at_the_same_floor(self, model, bitset_index, floor):
         raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
         from_refine = refine(raw, bitset_index, min_score=floor, not_equals=False)
         from_propagate = propagate(model, bitset_index, EMPTY_FIXED, min_score=floor, not_equals=False)
+        assert from_refine.state == from_propagate.state
+
+    def test_refine_from_floor_0_equals_propagate_at_floor_25_with_not_equals_defaulted(self, model, bitset_index):
+        """I1: not_equals left at its default (True) rather than passed, so
+        this is exactly refine(state, index, min_score=policy) -- the call
+        the class docstring above says had no coverage. Semantically
+        identical to writing not_equals=True explicitly, since True is the
+        default both functions already declare."""
+        raw = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        from_refine = refine(raw, bitset_index, min_score=25)
+        from_propagate = propagate(model, bitset_index, EMPTY_FIXED, min_score=25)
         assert from_refine.state == from_propagate.state
 
 
@@ -1290,10 +1311,13 @@ class TestRealWordListAgainstAc3:
             assert actual == expected
 
     def test_fixed_word_removal_clears_a_real_list_word_from_its_same_length_slots(self, model):
-        """not_equals=True has no multi-chunk coverage anywhere else on this
-        branch. CAT fixed at cells 0-2 closes slot 0 on a word that is on the
-        real list, so step 2's fixed-word removal must strike CAT from every
-        open same-length slot -- an exact, falsifiable claim about which word
+        """Step 2's fixed-word removal has no other multi-chunk coverage on
+        this branch (TestRefineMinScoreRealWordList's not_equals-defaulted
+        method below exercises step 5's composition with decision 17's
+        floor instead, on a blank grid where step 2 is vacuous). CAT fixed
+        at cells 0-2 closes slot 0 on a word that is on the real list, so
+        step 2's fixed-word removal must strike CAT from every open
+        same-length slot -- an exact, falsifiable claim about which word
         leaves which slots, on masks many chunks wide. This is step 2, not
         step 5: slot 0 is closed, so it is never a singleton source."""
         assert COMPREHENSIVE_WORDLIST.is_file()
@@ -1327,7 +1351,12 @@ class TestRefineMinScoreRealWordList:
     blank FIX-A, not_equals=False. Domain sizes are index.count per slot,
     in slot-id order -- literal, from the task-3 brief's normative table.
     Run explicitly: pytest cli/tests/unit/test_propagator.py -m slow -v --
-    pytest.ini deselects `slow` by default."""
+    pytest.ini deselects `slow` by default.
+
+    Two methods below leave not_equals at its default (True) instead of
+    passing False, and introduce no new normative table of their own --
+    see TestRefineFloorEquivalentToPropagate's not_equals-defaulted method
+    and I1 (final whole-branch review, merge gate) for why."""
 
     def test_domain_sizes_match_normative_table_at_each_floor(self, model):
         """Built the same way the fixture table's own rows are:
@@ -1388,6 +1417,40 @@ class TestRefineMinScoreRealWordList:
         from_refine = refine(raw, real_index, min_score=30, not_equals=False)
         from_propagate = propagate(model, real_index, EMPTY_FIXED, min_score=30, not_equals=False)
         assert from_refine.state == from_propagate.state
+
+    def test_refine_from_floor_0_equals_propagate_at_floor_30_on_the_real_list_with_not_equals_defaulted(self, model):
+        """I1's real-list twin of the equivalence test above, with
+        not_equals left at its default (True) rather than passed -- the
+        untested combination the merge-gate finding names. No new
+        normative sizes: this compares two existing entry points' states
+        to each other, the same way the sibling test above does."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+
+        raw = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        from_refine = refine(raw, real_index, min_score=30)
+        from_propagate = propagate(model, real_index, EMPTY_FIXED, min_score=30)
+        assert from_refine.state == from_propagate.state
+
+    def test_refine_at_a_lower_floor_does_not_widen_a_state_already_narrowed_to_a_higher_floor(self, model):
+        """M2 (final whole-branch review): refine's narrowing AND can only
+        narrow a mask, never widen it (see refine's own docstring), so a
+        state built at floor 30 and then re-refined at min_score=0 keeps
+        the floor-30 sizes -- it does not fall back to the wider floor-0
+        row. Both rows are the same normative table
+        test_domain_sizes_match_normative_table_at_each_floor above already
+        pins; no new normative value is introduced here."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+        raw = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+
+        floor_30 = refine(raw, real_index, min_score=30, not_equals=False)
+        reset = refine(floor_30.state, real_index, min_score=0, not_equals=False)
+
+        sizes = tuple(real_index.count(reset.state.word_masks[slot.id]) for slot in model.slots)
+        assert sizes == (848, 848, 6685, 3513, 848, 848, 3513, 6660, 848, 6772)
 
 
 @pytest.mark.slow
