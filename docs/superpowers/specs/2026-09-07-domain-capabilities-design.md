@@ -1,6 +1,6 @@
 # Domain Capability Family — Design
-**Version 0.1.7** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
-(amended 2026-09-08; this line is not checked by anything — verify it against §13 before citing it)
+**Version 0.1.8** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+(amended 2026-09-10; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
 
@@ -43,6 +43,8 @@ plain-text extracts of those sections were used to write this document.
 | 13 | *(2026-09-09)* `refine` gets a private queue-order seam and does not mutate its argument | a public `queue_order` parameter — puts a test-only seam on the consumer surface; or testing confluence only through brute force, which checks the answer, not the order-independence §7 claims |
 | 14 | *(2026-09-09)* `crossing_counts` raises `ValueError` when `len(word)` is not the slot's length | leaving it unguarded, which the draft wrongly argued was what decision 12 implied — 12 declined to guard *lookups*, never shape guards, and §4 and §6 already pin three of those |
 | 15 | *(2026-09-09)* in `cell_letters`, an unslotted cell is `0` whatever `fixed` holds — it is a grid defect, so no letter may legally sit there | letting the fixed letter show through — it would report content for a cell that should not be white, and make `0` mean "outside the puzzle" when empty but "here is a letter" when filled |
+| 16 | *(2026-09-10)* a domain struct holding an `np.ndarray`, directly or transitively, is declared `eq=False`, defines its own `__eq__`, and has `__hash__ is None` | leaving `==` unused by convention — no test, linter or CI job in this repo can enforce it, and the failure is size-dependent, so it is silent on the fixture and raises on the real list. Also rejected: bare `eq=False` with no `__eq__`, which yields identity equality *and* a working identity `__hash__` — a silent wrong answer where the generated one at least raises |
+| 17 | *(2026-09-10)* `refine` applies `min_score` to every open slot's mask before running the fixed point | accepting it and ignoring it — the signature §7 pinned then promises a filter it never performs, and `refine` is the re-propagation entry point (§7 step 8), so a caller that changes score policy gets silently unfiltered masks. Also rejected: dropping the parameter, which is honest but leaves `refine` unable to express the one thing its own consumer needs |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -361,6 +363,33 @@ def refine(state: DomainState, index, min_score: MinScore = 0, not_equals: bool 
 def crossing_counts(state: DomainState, index, slot_id: int, word: str) -> tuple[int, ...]: ...
 ```
 
+**[SPEC] Value semantics of the structs above (decision 16).** `@dataclass(frozen=True)` promises
+value equality and hashability; an `np.ndarray` field delivers neither. `arr == arr` returns an
+array, whose truth value raises `ValueError` **only once the array holds more than one element** —
+so `Revision.__eq__` is silently correct on a small fixture and raises on `comprehensive.txt`, while
+`DomainState` and `Result` raise everywhere through their `cell_letters` / `state` fields. The
+generated `__hash__` raises `TypeError` naming `numpy.ndarray`, yet `__hash__ is not None` still
+advertises `Hashable` to any `isinstance` check. Therefore `DomainState`, `Revision`, `Result` and
+§8's `FillabilityReport` are declared `eq=False`, define `__eq__` explicitly, and each has
+`__hash__ is None`. Two structs are equal iff their non-array fields compare `==` and every array
+field compares `np.array_equal`; for `word_masks`, pairwise **both `None` or `np.array_equal`** — do
+not collapse the `None` case into a bare `np.array_equal`, which returns the right answer only
+because NumPy coerces `None` to a 0-d object array. `Revision.removed` is always a fresh array,
+never an alias of a live mask, or content equality drifts as that mask narrows. Each `__eq__`
+carries a per-field negative test, mutated to fail — an incomplete `__eq__` is silent in exactly the
+way the rejected bare `eq=False` is. Note that `@dataclass(frozen=True)` plus an in-body
+`__hash__ = None` does **not** work: `dataclasses` treats that assignment as "no explicit hash" and
+installs its own.
+
+**[SPEC] `min_score` in `refine` (decision 17).** `refine` applies the policy to every open slot
+before building its queue: for each slot whose mask is not `None`, the mask is ANDed with
+`index.mask(pattern(model, slot.id, state.fixed), policy(slot.length))`, resolving a callable
+`min_score` per slot exactly as `initial_state` does. `DomainState` carries `model` and `fixed`, so
+this needs nothing the caller does not already hand it. It is idempotent when the floor is unchanged
+— arc consistency only narrows, so re-applying the seeding floor is a no-op — which is why
+`propagate` may pass the same `min_score` through both `initial_state` and `refine` without
+double-counting. A slot the floor empties is reported in `wiped` like any other empty slot.
+
 Algorithm, pinned:
 1. Open and fixed slots per §3. A fixed slot gets `word_masks[s] = None`, is never in `wiped`, and
    constrains its crossers only through `fixed` (its letters are already in their patterns).
@@ -517,6 +546,10 @@ class FillabilityReport:
 def assess(model, index, fixed, min_score: MinScore = 0) -> FillabilityReport: ...
 ```
 
+- `FillabilityReport` falls under decision 16's family rule: it is `eq=False` with an explicit
+  `__eq__` and `__hash__ is None`, because `cell_letters` makes its generated `==` raise on every
+  grid. It is a *report* type, so `assess(...) == FillabilityReport(...)` is the most natural test
+  anyone will write against it — see §7's value-semantics block for the exact predicate.
 - `assess` is `propagate` plus a report; `refuted = bool(result.wiped)`.
 - The guarantee is one-sided and the field is named for it: `refuted=True` is a proof;
   `refuted=False` certifies nothing. The type carries no threshold, penalty or confidence.
@@ -622,6 +655,21 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.8** — 2026-09-10 — implementation amendment, surfaced by the C3 whole-branch review.
+  Two decisions, **both ratified by the owner 2026-09-10**. Decision 16 promotes the value
+  semantics of the §7 structs from the plan into this document, and **0.1.7 was wrong to classify
+  that predicate as a derivation**: it gave the cause as "dataclass `==` raises on
+  `list[np.ndarray]`", which is false on the project's own 14-word fixture — a 1-chunk
+  `list[np.ndarray]` comparison *succeeds*, and what actually raises is `cell_letters`. The real
+  property is that any struct holding an array, directly or transitively, has no usable `==` and no
+  usable `__hash__`, and whether that surfaces as a `ValueError`, a `TypeError`, or a silently
+  wrong `True` is a function of array width — i.e. of the word list. A finding whose stated cause
+  is fixture-local has not been derived, so the classification that kept it out of the spec does
+  not hold. It also missed two of the four affected types: `Result` (raises everywhere, never
+  mentioned) and `Revision` (silently `True` on the fixture). Decision 17 fixes `refine`'s
+  `min_score`, which §7 declared and steps 3–7 never used, so the parameter accepted a policy and
+  ignored it. Neither decision changes behaviour §7 had already fixed; 17 changes behaviour §7 had
+  left unstated.
 - **0.1.7** — 2026-09-09 — planning amendment, C3 only, surfaced writing the C3 plan. Pinned three
   interfaces §7 named without fixing: the queue-order seam plus `refine`'s non-mutation
   (decision 13), `crossing_counts` on a wrong-length word (14), and `cell_letters` case precedence
@@ -634,7 +682,7 @@ Room left by C2/C3:
   gaps found in the same pass are **derivations, not amendments**, and live in the plan: the
   state-equality predicate the idempotence and confluence tests compare with (dataclass `==` raises
   on `list[np.ndarray]`), and the scope of the `Autofill._ac3` oracle — `_ac3` returns `False` at
-  `autofill.py:948` the first time a domain empties, so it stops short of a fixed point and its
+  `autofill.py:949` the first time a domain empties, so it stops short of a fixed point and its
   per-slot domains are only comparable on grids where it returns `True`.
 - **0.1.6** — 2026-09-08 — three corrections from an independent review of the C2 plan. C2's
   error contract moves here from the plan (decision 12): it is the same class of underspecified

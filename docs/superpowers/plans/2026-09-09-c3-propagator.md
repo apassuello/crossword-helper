@@ -321,7 +321,7 @@ def _refine(state: DomainState, index, min_score: MinScore, not_equals: bool,
 
 `wiped == (2,)` — not `(1, 2)`.
 
-**The `Autofill._ac3` oracle — scope it.** `Autofill._ac3` returns `False` at `cli/src/fill/autofill.py:948` the first time a domain empties during revision, so it stops short of a fixed point and leaves the domains downstream of a wipe stale. Therefore:
+**The `Autofill._ac3` oracle — scope it.** `Autofill._ac3` returns `False` at `cli/src/fill/autofill.py:949` the first time a domain empties during revision, so it stops short of a fixed point and leaves the domains downstream of a wipe stale. Therefore:
 
 - **Per-slot domain equality holds only when `_ac3()` returns `True`.** On such a grid, for every open slot `s`: `set(w for w, _ in index.words(L_s, mask_s)) == Autofill.domains[slot_id_map[model.slot_key(s)]]`. Verified: on `FIX-A` blank, `_ac3()` is `True` and all ten slots agree.
 - **On any grid, wiped-or-not agrees:** `bool(wiped) == (not _ac3() or has_empty_domain())`. Verified on `FIX-A` blank (`_ac3()=True`, `wiped=()`), on `FIX-A` with `EAR` at cells 0–2 (`_ac3()=False`, `wiped` non-empty) and on `FIX-A` with `X` at cell 0 (`_ac3()=False`, `wiped` non-empty). Assert only this on a wiping fixture — the per-slot sets genuinely differ there, and that is `_ac3`'s early return, not a defect on either side.
