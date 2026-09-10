@@ -431,6 +431,88 @@ class TestDomainStateFields:
         assert state.fixed == EMPTY_FIXED
 
 
+class TestDomainStateEquality:
+    """Decision 16 (spec 0.1.8, section 7): DomainState.__eq__ replaces the
+    dataclass-generated one, which raises ValueError the moment it reaches a
+    field whose array holds more than one element. Every test below is one
+    row of the task-1 brief's normative table. States that must differ in
+    exactly one field are built directly through the DomainState
+    constructor -- initial_state's four fields always move together, so it
+    cannot isolate a single field the way these tests need to."""
+
+    def test_declares_eq_false(self):
+        assert DomainState.__dataclass_params__.eq is False
+
+    def test_two_states_from_the_same_inputs_are_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        b = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        assert a == b
+
+    def test_differing_only_in_model_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        other_model = dataclasses.replace(model, size=model.size + 1)
+        b = DomainState(model=other_model, word_masks=a.word_masks, cell_letters=a.cell_letters, fixed=a.fixed)
+        assert a != b
+
+    def test_differing_only_in_fixed_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        other_fixed = _fixed_with({0: "Z"})
+        b = DomainState(model=a.model, word_masks=a.word_masks, cell_letters=a.cell_letters, fixed=other_fixed)
+        assert a != b
+
+    def test_differing_only_in_cell_letters_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        other_cell_letters = a.cell_letters.copy()
+        other_cell_letters[0] ^= np.uint64(1)
+        b = DomainState(model=a.model, word_masks=a.word_masks, cell_letters=other_cell_letters, fixed=a.fixed)
+        assert a != b
+
+    def test_differing_only_in_word_masks_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        other_masks = list(a.word_masks)
+        assert other_masks[0] is not None  # slot 0 is open under EMPTY_FIXED
+        other_masks[0] = other_masks[0] ^ np.uint64(1)
+        b = DomainState(model=a.model, word_masks=other_masks, cell_letters=a.cell_letters, fixed=a.fixed)
+        assert a != b
+
+    def test_one_word_masks_entry_none_other_an_array_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        other_masks = list(a.word_masks)
+        assert other_masks[0] is not None  # slot 0 is open under EMPTY_FIXED
+        other_masks[0] = None
+        b = DomainState(model=a.model, word_masks=other_masks, cell_letters=a.cell_letters, fixed=a.fixed)
+        assert a != b
+
+    def test_both_word_masks_none_at_the_same_slot_all_else_equal_is_equal(self, model, bitset_index):
+        """Built via two separate initial_state calls, not by sharing one
+        closed slot's None by reference, so this genuinely exercises the
+        pairwise both-None branch rather than short-circuiting on identity."""
+        fixed = _fixed_with({0: "P", 1: "E", 2: "T"})  # closes slot 0: no wildcard left
+        a = initial_state(model, bitset_index, fixed, min_score=0)
+        b = initial_state(model, bitset_index, fixed, min_score=0)
+        assert a.word_masks[0] is None and b.word_masks[0] is None
+        assert a == b
+
+    def test_word_masks_of_different_length_is_not_equal(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        b = DomainState(model=a.model, word_masks=a.word_masks[:-1], cell_letters=a.cell_letters, fixed=a.fixed)
+        assert a != b
+
+    def test_not_equal_to_a_non_domain_state(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        assert a.__eq__(object()) is NotImplemented
+        assert (a == object()) is False
+        assert (a != object()) is True
+
+    def test_hash_is_none(self):
+        assert DomainState.__hash__ is None
+
+    def test_hash_raises_type_error_naming_domain_state(self, model, bitset_index):
+        a = initial_state(model, bitset_index, EMPTY_FIXED, min_score=0)
+        with pytest.raises(TypeError, match="DomainState"):
+            hash(a)
+
+
 def _states_equal(a: DomainState, b: DomainState) -> bool:
     """Task-2 brief's state-equality predicate: DomainState holds NumPy
     arrays, so plain == raises -- model and fixed compare by ==, word_masks
@@ -1039,6 +1121,38 @@ class TestRealWordListAgainstAc3:
         assert {r.slot for r in phase_revisions} == set(target_slots)
         assert all(r.source_slot == 0 for r in phase_revisions)
         assert not any(r.source_crossing == -1 for r in off.revisions)
+
+
+@pytest.mark.slow
+class TestDomainStateEqualityRealWordList:
+    """The task-1 brief's mask-width criterion: DomainState.__eq__ must not
+    raise regardless of how many uint64 chunks a mask spans.
+    data/wordlists/comprehensive.txt on FIX-A produces open-slot masks wider
+    than the single chunk FIXTURE_WORDS' 14 words fit in, unlike every other
+    equality test in this file. Run explicitly: pytest
+    cli/tests/unit/test_propagator.py -m slow -v -- pytest.ini deselects
+    `slow` by default."""
+
+    def test_two_states_from_the_same_real_wordlist_inputs_are_equal(self, model):
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+
+        a = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        b = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        assert any(
+            mask is not None and mask.shape[0] > 1 for mask in a.word_masks
+        ), "fixture must actually exercise a multi-chunk mask"
+        assert a == b
+
+    def test_a_real_wordlist_state_is_not_equal_to_a_differently_fixed_one(self, model):
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+
+        a = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        b = initial_state(model, real_index, _fixed_with({0: "C", 1: "A", 2: "T"}), min_score=0)
+        assert a != b
 
 
 class TestRevisionFieldsAreConsistent:

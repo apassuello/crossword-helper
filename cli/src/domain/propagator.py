@@ -47,12 +47,45 @@ from src.domain.slot_model import SlotModel, pattern
 MinScore = Union[int, Callable[[int], int]]
 
 
-@dataclass
+@dataclass(eq=False)
 class DomainState:
     model: SlotModel
     word_masks: list[np.ndarray | None]  # parallel to slots; None for a fixed slot
     cell_letters: np.ndarray  # uint64, len size*size; alphabet bitmask per cell
     fixed: tuple[str, ...]
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Decision 16 (spec 0.1.8, section 7): the dataclass-generated __eq__
+        raises ValueError the moment it reaches a field whose array holds
+        more than one element -- cell_letters always does (one entry per
+        cell), and a wide enough word list makes word_masks do too. Equal
+        iff model and fixed compare ==, cell_letters compares
+        np.array_equal, and word_masks compares elementwise, pairwise both
+        None or np.array_equal. The None case is checked explicitly rather
+        than folded into a bare np.array_equal(a, b): that form only
+        answers correctly for None by NumPy's incidental coercion of None
+        to a 0-d object array, not by contract.
+
+        Defining __eq__ in the class body is also what nulls __hash__ here:
+        Python itself sets a class's __hash__ to None whenever __eq__ is
+        defined without also defining __hash__, independent of dataclass
+        machinery.
+        """
+        if not isinstance(other, DomainState):
+            return NotImplemented
+        if self.model != other.model:
+            return False
+        if self.fixed != other.fixed:
+            return False
+        if len(self.word_masks) != len(other.word_masks):
+            return False
+        for mine, theirs in zip(self.word_masks, other.word_masks):
+            if (mine is None) != (theirs is None):
+                return False
+            if mine is not None and not np.array_equal(mine, theirs):
+                return False
+        return np.array_equal(self.cell_letters, other.cell_letters)
 
 
 @dataclass(frozen=True)
