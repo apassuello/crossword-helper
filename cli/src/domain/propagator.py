@@ -338,6 +338,12 @@ def _refine(
     natural order and a test's permuted order run through the identical
     algorithm.
 
+    min_score is accepted here only for signature stability with refine
+    (decision 13) -- this function's body never reads it. The caller must
+    already have narrowed every open slot's mask by the resolved policy,
+    exactly as refine does before building queue (decision 17); _refine
+    itself applies no floor of its own.
+
     Per popped crossing (cell, a, i, b, j): allowed is the intersection of
     what each side's mask admits at the shared cell; each side is narrowed
     to allowed via index.restrict, and a side that changed gets a Revision,
