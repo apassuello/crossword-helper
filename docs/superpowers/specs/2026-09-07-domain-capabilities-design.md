@@ -390,6 +390,15 @@ this needs nothing the caller does not already hand it. It is idempotent when th
 `propagate` may pass the same `min_score` through both `initial_state` and `refine` without
 double-counting. A slot the floor empties is reported in `wiped` like any other empty slot.
 
+The floor-narrowing records **no `Revision`**. It happens before the queue is built, and `revisions`
+documents what the fixed-point loop removed; `initial_state` applies the identical floor and records
+nothing either. `Revision.source_crossing` also has no encoding for "a score policy" — it is a
+crossing index or `-1` for the not-equals rule — and inventing a second sentinel would be new
+design. The consequence worth stating, because it is what a test will compare: for a blank grid and
+`not_equals=False`, `refine(initial_state(model, index, fixed, 0), index, min_score=X)` and
+`propagate(model, index, fixed, X, not_equals=False)` reach the **same `DomainState`**, while their
+`revisions` tuples may differ — compare `.state`, not the whole `Result`.
+
 Algorithm, pinned:
 1. Open and fixed slots per §3. A fixed slot gets `word_masks[s] = None`, is never in `wiped`, and
    constrains its crossers only through `fixed` (its letters are already in their patterns).
