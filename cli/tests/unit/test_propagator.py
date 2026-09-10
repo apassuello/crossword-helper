@@ -851,12 +851,6 @@ class TestSoundnessAgainstBruteForce:
         for slot_id, words in FIXED_POINT_WORDS.items():
             assert per_slot[slot_id] == set(words)
 
-    def test_fixa_nonempty_wiped_would_imply_zero_solutions(self, model, bitset_index):
-        result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
-        fills = _brute_force_fills(model, EMPTY_FIXED, bitset_index)
-        if result.wiped:
-            assert fills == []
-
     def test_enumerator_rejects_a_fill_that_reuses_a_word(self, model, bitset_index):
         """The distinctness requirement itself: every fill the enumerator
         returns on FIX-A uses each word at most once."""
@@ -976,6 +970,76 @@ class TestRealWordListAgainstAc3:
             actual = {text for text, _ in real_index.words(slot.length, result.state.word_masks[slot.id])}
             assert actual == expected
 
+    def test_fixed_letters_drive_real_removals_on_multi_chunk_masks(self, model):
+        """The test above is a genuine C1 equivalence check at scale, but it
+        propagates nothing: on a blank FIX-A the real list is already arc
+        consistent, so both sides are no-ops and restrict/Revision/re-enqueue
+        never run once on a multi-chunk mask. Fixing three letters makes them
+        run. The same Autofill oracle still applies here only because _ac3()
+        returns True -- it is a valid fixed-point oracle nowhere else."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+
+        grid = _new_fix_a_grid()
+        grid.set_letter(0, 0, "X")
+        grid.set_letter(0, 1, "Y")
+        grid.set_letter(0, 2, "L")
+        af = Autofill(grid, real_word_list, min_score=0)
+        af._initialize_csp(grid.get_empty_slots())
+        assert af._ac3() is True
+
+        fixed = _fixed_with({0: "X", 1: "Y", 2: "L"})
+        result = propagate(model, real_index, fixed, min_score=0, not_equals=False)
+
+        # The point of the test: revisions that actually narrowed masks wider
+        # than one uint64 chunk, which the blank-grid case never produces.
+        assert result.revisions
+        assert all(result.state.word_masks[r.slot].shape[0] > 1 for r in result.revisions)
+        assert all(real_index.count(r.removed) >= 1 for r in result.revisions)
+
+        # Slot 0 is fixed by XYL, so it is closed and carries no mask; Autofill
+        # was likewise seeded from get_empty_slots(), so neither side holds it.
+        assert result.state.word_masks[0] is None
+        for slot in model.slots:
+            mask = result.state.word_masks[slot.id]
+            if mask is None:
+                continue
+            expected = af.domains[af.slot_id_map[model.slot_key(slot.id)]]
+            actual = {text for text, _ in real_index.words(slot.length, mask)}
+            assert actual == expected
+
+    def test_fixed_word_removal_clears_a_real_list_word_from_its_same_length_slots(self, model):
+        """not_equals=True has no multi-chunk coverage anywhere else on this
+        branch. CAT fixed at cells 0-2 closes slot 0 on a word that is on the
+        real list, so step 2's fixed-word removal must strike CAT from every
+        open same-length slot -- an exact, falsifiable claim about which word
+        leaves which slots, on masks many chunks wide. This is step 2, not
+        step 5: slot 0 is closed, so it is never a singleton source."""
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+        fixed = _fixed_with({0: "C", 1: "A", 2: "T"})
+
+        def words_at(result, slot_id):
+            slot = model.slots[slot_id]
+            return {text for text, _ in real_index.words(slot.length, result.state.word_masks[slot_id])}
+
+        off = propagate(model, real_index, fixed, min_score=0, not_equals=False)
+        on = propagate(model, real_index, fixed, min_score=0, not_equals=True)
+
+        assert on.state.word_masks[0] is None, "slot 0 is closed by CAT, so it holds no mask"
+        target_slots = [1, 4, 5, 8]
+        for slot_id in target_slots:
+            assert on.state.word_masks[slot_id].shape[0] > 1
+            assert "CAT" in words_at(off, slot_id)
+            assert words_at(off, slot_id) - words_at(on, slot_id) == {"CAT"}
+
+        phase_revisions = [r for r in on.revisions if r.source_crossing == -1]
+        assert {r.slot for r in phase_revisions} == set(target_slots)
+        assert all(r.source_slot == 0 for r in phase_revisions)
+        assert not any(r.source_crossing == -1 for r in off.revisions)
+
 
 class TestRevisionFieldsAreConsistent:
     """No normative table pins individual Revision values (only masks,
@@ -989,6 +1053,10 @@ class TestRevisionFieldsAreConsistent:
         result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
         assert result.revisions, "expected at least one revision propagating FIX-A to its fixed point"
         for revision in result.revisions:
+            # not_equals=False runs no phase, so every revision must name a real arc.
+            # Without this, source_crossing == -1 would index the LAST crossing and
+            # compare against the wrong one instead of failing.
+            assert revision.source_crossing >= 0
             crossing = model.crossings[revision.source_crossing]
             assert {crossing.across_id, crossing.down_id} == {revision.slot, revision.source_slot}
             assert revision.slot != revision.source_slot
@@ -1352,9 +1420,11 @@ class TestConfluenceWithNotEqualsCascade:
       and slot 4 -- never a direct target of the phase, no Revision on it
       ever carries source_crossing=-1 -- loses a candidate through that
       real arc, ending at a different fixed point than not_equals=False
-      leaves it at. Slot 5 crosses slot 2 too but is never touched by
-      either mechanism, a control showing the cascade is scoped to the
-      crossing that actually changed.
+      leaves it at. Slot 5 crosses slot 2 too, and ordinary arc consistency
+      does reduce it -- through a real crossing revision, under both
+      settings alike -- so slot 5's fixed point is identical with the rule
+      on and off. That is what makes it a control for the phase's cascade
+      specifically; it is not a claim that nothing touches slot 5.
 
     - Slots 3, 6, 7 are a second, independent trio: slot 3 starts at
       {DEN, FEZ} and crosses slot 6 (a singleton, FOX) at one cell and
@@ -1405,8 +1475,10 @@ class TestConfluenceWithNotEqualsCascade:
         source_crossing is a real arc index, produced only because the
         phase's own removal on slot 2 re-enqueued slot 2's crossing with
         this slot -- and that Revision does not appear at all under
-        not_equals=False, confirming propagator.py:295's re-enqueue branch
-        (dead in every other test in this file) is what produces it."""
+        not_equals=False, confirming _refine's post-phase re-enqueue branch
+        (dead in every other test in this file) is what produces it. Named
+        by symbol, not by line: the previous citation here was a line
+        number that the very next commit invalidated."""
         result_true = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=True)
         result_false = propagate(cascade_model, cascade_index, cascade_fixed, min_score=0, not_equals=False)
         assert any(r.slot == self.DOWNSTREAM and r.source_crossing != -1 for r in result_true.revisions)
@@ -1543,12 +1615,6 @@ class TestSoundnessAgainstBruteForceWithNotEquals:
                 mask = result.state.word_masks[slot_id]
                 words_in_mask = {text for text, _ in bitset_index.words(slot.length, mask)}
                 assert word in words_in_mask
-
-    def test_fixa_nonempty_wiped_would_imply_zero_solutions(self, model, bitset_index):
-        result = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=True)
-        fills = _brute_force_fills(model, EMPTY_FIXED, bitset_index)
-        if result.wiped:
-            assert fills == []
 
     def test_fix_b_has_zero_brute_force_solutions_matching_its_nonempty_wiped(self, fix_b_model, bitset_index):
         fixed = _fixed_with({1: "P", 2: "Y", 11: "P", 12: "Y"})
