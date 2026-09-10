@@ -514,9 +514,11 @@ class TestDomainStateEquality:
 
 
 def _states_equal(a: DomainState, b: DomainState) -> bool:
-    """Task-2 brief's state-equality predicate: DomainState holds NumPy
-    arrays, so plain == raises -- model and fixed compare by ==, word_masks
-    pairwise both-None or np.array_equal, cell_letters by np.array_equal."""
+    """Confluence/idempotence predicate, written independently of
+    DomainState.__eq__ (decision 16) so these tests do not check the
+    propagator's fixed point with the propagator's own equality:
+    model and fixed by ==, word_masks pairwise both-None or
+    np.array_equal, cell_letters by np.array_equal."""
     if a.model != b.model or a.fixed != b.fixed:
         return False
     if len(a.word_masks) != len(b.word_masks):
