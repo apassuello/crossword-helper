@@ -88,19 +88,60 @@ class DomainState:
         return np.array_equal(self.cell_letters, other.cell_letters)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Revision:
     source_crossing: int  # crossing index, or -1 for the not-equals rule
     source_slot: int  # the slot whose domain caused the removal
     slot: int  # the slot revised
     removed: np.ndarray  # uint64 mask of the word ids removed
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Decision 16 (spec 0.1.8, section 7): mirrors DomainState.__eq__ for
+        the same reason -- the dataclass-generated tuple __eq__ raises
+        ValueError once source_crossing, source_slot and slot all compare
+        equal and it reaches `removed`, if that mask spans more than one
+        uint64 chunk. Equal iff source_crossing, source_slot and slot all
+        compare ==, and removed compares np.array_equal.
 
-@dataclass(frozen=True)
+        Defining __eq__ in the class body is also what nulls __hash__ here
+        -- see DomainState.__eq__'s docstring.
+        """
+        if not isinstance(other, Revision):
+            return NotImplemented
+        if self.source_crossing != other.source_crossing:
+            return False
+        if self.source_slot != other.source_slot:
+            return False
+        if self.slot != other.slot:
+            return False
+        return np.array_equal(self.removed, other.removed)
+
+
+@dataclass(frozen=True, eq=False)
 class Result:
     state: DomainState
     wiped: tuple[int, ...]  # open slots with an empty mask at the fixed point, by id
     revisions: tuple[Revision, ...]
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Decision 16 (spec 0.1.8, section 7): mirrors DomainState.__eq__.
+        Equal iff state, wiped and revisions all compare == -- state via
+        DomainState.__eq__ (decision 16 again, one level down) and
+        revisions via plain tuple comparison, which delegates each element
+        to Revision.__eq__ above.
+
+        Defining __eq__ in the class body is also what nulls __hash__ here
+        -- see DomainState.__eq__'s docstring.
+        """
+        if not isinstance(other, Result):
+            return NotImplemented
+        if self.state != other.state:
+            return False
+        if self.wiped != other.wiped:
+            return False
+        return self.revisions == other.revisions
 
 
 def initial_state(

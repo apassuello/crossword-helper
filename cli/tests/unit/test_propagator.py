@@ -26,11 +26,17 @@ off-list variant of FIX-H's own geometry) -- each built with
 SlotModel.from_blacks per the task-3 brief, and reuses Task 2's
 _brute_force_fills/_states_equal/_natural_queue harnesses rather than
 duplicating them. Every Revision comparison in this file's Task-3 tests is
-a field-by-field predicate over the integer fields, never `in`, `==`, or
-`set()` against a Revision or a Result: both are frozen dataclasses over a
-NumPy array, so those operators raise once a mask spans more than one
-uint64 chunk -- FIXTURE_WORDS never produces that, but the predicate form
-is written to hold regardless.
+a field-by-field predicate over the integer fields (source_crossing,
+source_slot, slot), never `==` against a whole Revision: decision 16
+(spec 0.1.8) gives Revision and Result an explicit __eq__, so `==` and
+`in` no longer raise at any mask width, but the predicate form is kept
+anyway because these tests ask a different question than `==` answers --
+whether some revision matching those three fields exists anywhere in
+result.revisions (presence), not whether a specific Revision object
+equals one at a specific position (position), and pinning the exact
+`removed` mask a rule produces is not these tests' concern. `set()` still
+raises: Revision.__hash__ and Result.__hash__ are both None per that same
+decision, untouched by the explicit __eq__.
 
 TestConfluenceWithNotEqualsCascade below adds one more geometry and its
 own small word list (CASCADE_WORDS): FIXTURE_WORDS' 14 words over a
@@ -1155,6 +1161,165 @@ class TestDomainStateEqualityRealWordList:
         a = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
         b = initial_state(model, real_index, _fixed_with({0: "C", 1: "A", 2: "T"}), min_score=0)
         assert a != b
+
+
+def _revision(source_crossing: int = 0, source_slot: int = 1, slot: int = 2, removed: np.ndarray | None = None) -> Revision:
+    """A Revision with every field pinned to a fixed default so a test that
+    overrides exactly one keyword genuinely isolates that field -- the
+    Revision-equivalent of _fixed_with. `removed` defaults to a freshly
+    built single-chunk array on every call (never a shared mutable
+    default), so two calls with the same arguments produce content-equal,
+    non-identical arrays -- equality tests exercise np.array_equal, not
+    object identity."""
+    if removed is None:
+        removed = np.array([5], dtype=np.uint64)
+    return Revision(source_crossing=source_crossing, source_slot=source_slot, slot=slot, removed=removed)
+
+
+class TestRevisionEquality:
+    """Decision 16 (spec 0.1.8, section 7): Revision.__eq__ replaces the
+    dataclass-generated one, which raises ValueError once every field
+    before `removed` compares equal and `removed` itself spans more than
+    one uint64 chunk (tuple comparison walks fields in declaration order
+    and only reaches `removed` once source_crossing/source_slot/slot all
+    matched). Task 1's DomainState.__eq__ is the immediate precedent;
+    unlike DomainState, every field but `removed` is a plain int, so only
+    `removed` needs np.array_equal. Every test below is one row of the
+    task-2 brief's normative table."""
+
+    def test_declares_eq_false(self):
+        assert Revision.__dataclass_params__.eq is False
+
+    def test_two_revisions_with_identical_field_values_are_equal(self):
+        assert _revision() == _revision()
+
+    def test_differing_only_in_source_crossing_is_not_equal(self):
+        assert _revision() != _revision(source_crossing=99)
+
+    def test_differing_only_in_source_slot_is_not_equal(self):
+        assert _revision() != _revision(source_slot=99)
+
+    def test_differing_only_in_slot_is_not_equal(self):
+        assert _revision() != _revision(slot=99)
+
+    def test_differing_only_in_removed_is_not_equal(self):
+        a = _revision(removed=np.array([5], dtype=np.uint64))
+        b = _revision(removed=np.array([7], dtype=np.uint64))
+        assert a != b
+
+    def test_not_equal_to_a_non_revision(self):
+        a = _revision()
+        assert a.__eq__(object()) is NotImplemented
+        assert (a == object()) is False
+        assert (a != object()) is True
+
+    def test_hash_is_none(self):
+        assert Revision.__hash__ is None
+
+    def test_hash_raises_type_error_naming_revision(self):
+        with pytest.raises(TypeError, match="Revision"):
+            hash(_revision())
+
+
+@pytest.mark.slow
+class TestRevisionEqualityRealWordList:
+    """The task-2 brief's mask-width criterion: Revision.__eq__ must not
+    raise regardless of how many uint64 chunks `removed` spans, matching
+    TestDomainStateEqualityRealWordList's fixture (data/wordlists/
+    comprehensive.txt on FIX-A produces open-slot masks wider than the
+    single chunk FIXTURE_WORDS' 14 words fit in). Run explicitly: pytest
+    cli/tests/unit/test_propagator.py -m slow -v -- pytest.ini deselects
+    `slow` by default."""
+
+    @staticmethod
+    def _multi_chunk_removed_mask(model) -> np.ndarray:
+        assert COMPREHENSIVE_WORDLIST.is_file()
+        real_word_list = WordList.from_file(str(COMPREHENSIVE_WORDLIST))
+        real_index = LetterBitsetIndex.from_word_list(real_word_list)
+        state = initial_state(model, real_index, EMPTY_FIXED, min_score=0)
+        mask = next(m for m in state.word_masks if m is not None and m.shape[0] > 1)
+        return mask
+
+    def test_identical_multi_chunk_removed_values_are_equal_and_raise_nothing(self, model):
+        mask = self._multi_chunk_removed_mask(model)
+        a = _revision(removed=mask.copy())
+        b = _revision(removed=mask.copy())
+        assert a == b
+
+    def test_multi_chunk_removed_masks_differing_in_one_bit_are_not_equal_and_raise_nothing(self, model):
+        mask = self._multi_chunk_removed_mask(model)
+        other = mask.copy()
+        other[0] ^= np.uint64(1)
+        a = _revision(removed=mask)
+        b = _revision(removed=other)
+        assert a != b
+
+
+class TestResultEquality:
+    """Decision 16 (spec 0.1.8, section 7): Result.__eq__ replaces the
+    dataclass-generated one. state delegates to DomainState.__eq__
+    (Task 1) and revisions delegates to Revision.__eq__ (above) via plain
+    tuple comparison. Every test below is one row of the task-2 brief's
+    normative table."""
+
+    def test_declares_eq_false(self):
+        assert Result.__dataclass_params__.eq is False
+
+    def test_two_results_from_the_same_propagate_inputs_are_equal(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        b = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert a == b
+
+    def test_differing_only_in_wiped_is_not_equal(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert a.wiped == ()  # FIX-A's normative fixed point (task-2 brief)
+        b = Result(state=a.state, wiped=(0,), revisions=a.revisions)
+        assert a != b
+
+    def test_differing_only_in_revisions_is_not_equal(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert a.revisions, "FIX-A must produce at least one revision to drop"
+        b = Result(state=a.state, wiped=a.wiped, revisions=a.revisions[:-1])
+        assert a != b
+
+    def test_differing_only_in_state_is_not_equal(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        other_cell_letters = a.state.cell_letters.copy()
+        other_cell_letters[0] ^= np.uint64(1)
+        other_state = DomainState(
+            model=a.state.model,
+            word_masks=a.state.word_masks,
+            cell_letters=other_cell_letters,
+            fixed=a.state.fixed,
+        )
+        b = Result(state=other_state, wiped=a.wiped, revisions=a.revisions)
+        assert a != b
+
+    def test_not_equal_to_a_non_result(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert a.__eq__(object()) is NotImplemented
+        assert (a == object()) is False
+        assert (a != object()) is True
+
+    def test_hash_is_none(self):
+        assert Result.__hash__ is None
+
+    def test_hash_raises_type_error_naming_result(self, model, bitset_index):
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        with pytest.raises(TypeError, match="Result"):
+            hash(a)
+
+    def test_revisions_field_is_not_equal_to_the_empty_tuple_when_non_empty(self, model, bitset_index):
+        """Behavioral criterion that must not regress (task-2 brief):
+        CPython's tuple comparison walks only to min(len(a), len(b)) --
+        0 against the empty tuple -- so this must keep returning False
+        without ever reaching element equality, regardless of how
+        Result.__eq__ or Revision.__eq__ are implemented. Pre-existing
+        tests (e.g. TestIdempotence) already assert this in several
+        places; this pins it directly against Task 2's own fixture."""
+        a = propagate(model, bitset_index, EMPTY_FIXED, min_score=0, not_equals=False)
+        assert a.revisions, "FIX-A must produce at least one revision"
+        assert a.revisions != ()
 
 
 class TestRevisionFieldsAreConsistent:
