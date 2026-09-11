@@ -6,6 +6,11 @@ it closes a review finding by *adding a test*, to turn "test added" into
 evidence. It assumes the mutation has already been made by hand in the working
 tree and reverts it when done.
 
+Precondition: the mutation must be the *only* uncommitted change in each
+--mutate file. The gate reverts the whole diff for those paths, so anything
+else uncommitted in them is reverted with it. The working-tree patch it saves
+first is the recovery path, not a substitute for committing.
+
 Each check below exists because the claim it guards was false at least once on
 the decisions-16-17 branch (2026-09-10). See the module's tests.
 """
@@ -296,7 +301,12 @@ def main(argv=None, repo_root=None):
 
     # Saved before anything is touched, so every revert below is recoverable.
     patch_path.write_text(_git(repo, "diff"))
-    header = [f"recovery patch  {patch_path}"]
+    header = [
+        f"recovery patch  {patch_path}",
+        "precondition    the whole --mutate diff is reverted, so any other "
+        "uncommitted work in those files is reverted too. Commit first; the "
+        "patch above is the way back, not a licence to skip that.",
+    ]
 
     # The gate reads pytest's output through its own parse_tb_line, so mutating
     # this file breaks the instrument along with its subject: a real failure

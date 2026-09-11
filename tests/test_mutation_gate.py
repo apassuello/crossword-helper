@@ -414,3 +414,15 @@ class TestRunIsolation:
         assert code == mg.EXIT_USAGE
         report = max(mg.PATCH_DIR.glob("**/*.report"), key=lambda p: p.stat().st_mtime)
         assert "simulated" in report.read_text()
+
+    def test_warns_that_other_uncommitted_work_in_the_file_is_reverted(self, repo):
+        # The gate reverts the whole --mutate diff, so uncommitted work in that
+        # file goes with the mutation. Cost one commit on 2026-09-11.
+        (repo / "src.py").write_text("def value():\n    return 999\n")
+        mg.main(
+            ["--test", "test_src.py::test_value", "--mutate", "src.py"],
+            repo_root=str(repo),
+        )
+        report = max(mg.PATCH_DIR.glob("**/*.report"), key=lambda p: p.stat().st_mtime)
+        text = report.read_text().lower()
+        assert "uncommitted" in text and "revert" in text
