@@ -21,6 +21,7 @@ pytest                         # default suite; slow tests deselected
 pytest -m slow                 # slow suite
 npx vitest run                 # frontend tests
 python -m cli.src.cli --help   # 14 CLI commands; --help per command is authoritative
+python scripts/mutation_gate.py --help   # prove a post-GREEN test is load-bearing
 ```
 
 ---
