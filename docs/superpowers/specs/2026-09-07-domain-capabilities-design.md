@@ -45,6 +45,8 @@ plain-text extracts of those sections were used to write this document.
 | 15 | *(2026-09-09)* in `cell_letters`, an unslotted cell is `0` whatever `fixed` holds — it is a grid defect, so no letter may legally sit there | letting the fixed letter show through — it would report content for a cell that should not be white, and make `0` mean "outside the puzzle" when empty but "here is a letter" when filled |
 | 16 | *(2026-09-10)* a domain struct holding an `np.ndarray`, directly or transitively, is declared `eq=False`, defines its own `__eq__`, and has `__hash__ is None` | leaving `==` unused by convention — no test, linter or CI job in this repo can enforce it, and the failure is size-dependent, so it is silent on the fixture and raises on the real list. Also rejected: bare `eq=False` with no `__eq__`, which yields identity equality *and* a working identity `__hash__` — a silent wrong answer where the generated one at least raises |
 | 17 | *(2026-09-10)* `refine` applies `min_score` to every open slot's mask before running the fixed point | accepting it and ignoring it — the signature §7 pinned then promises a filter it never performs, and `refine` is the re-propagation entry point (§7 step 8), so a caller that changes score policy gets silently unfiltered masks. Also rejected: dropping the parameter, which is honest but leaves `refine` unable to express the one thing its own consumer needs |
+| 18 | *(2026-09-11)* `FillabilityReport` does **not** carry `unslotted_cells`; the grid-defect label is applied where the report is rendered, from `model.unslotted` | carrying a copy of `model.unslotted` on the report. The case for it was that `cell_letters == 0` is overloaded between "grid defect" and "cell of a wiped slot" — but `wiped_slots` and `domain_sizes` are already slot-index-parallel and meaningless without the model, so the report is not standalone either way. The field buys convenience, not capability, at the cost of a second source for one list |
+| 19 | *(2026-09-11)* `FillabilityReport` carries `off_list_fixed: tuple[int, ...]` — fixed slots whose completed word is absent from the index, decided by **membership alone** | deferring the whole `[?]` to C6, which leaves `refuted=False` on a grid reading `QZX` with no field naming it. Also rejected: naming only the slots the *crossings* completed — the intuitive reading of the `[?]`, but it requires knowing who asserted each letter, which is C6 provenance, and would block C4 on C6. Membership is separable from provenance: a fixed slot's pattern has no `?`, so one index lookup per fixed slot answers it |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
@@ -542,15 +544,18 @@ Two went against the proposal: 14 on its answer, 15 on its reasoning.
 **[SPEC]**
 Option: propagate to a fixed point before any guess, Qxw [R-S7] — the only attested option; in
 its interactive-assist mode Qxw stops after the first fixed point and never guesses. Module
-`cli/src/domain/fillability.py`. Built in the same session as C3.
+`cli/src/domain/fillability.py`, built on the merged C3 propagator (`cli/src/domain/propagator.py`).
+An earlier draft said "built in the same session as C3"; C3 merged on 2026-09-10, so C4 is its own
+piece of work.
 
 ```python
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)   # decision 16's family rule; __eq__ below
 class FillabilityReport:
     refuted: bool                      # True: no fill exists under min_score. False: not refuted.
     wiped_slots: tuple[int, ...]
     domain_sizes: tuple[int, ...]      # parallel to slots; -1 for a fixed slot
     cell_letters: np.ndarray           # uint64 per cell — what Qxw's assist mode shows
+    off_list_fixed: tuple[int, ...]    # decision 19; fixed slots whose word is not in the index
 
 def assess(model, index, fixed, min_score: MinScore = 0) -> FillabilityReport: ...
 ```
@@ -567,26 +572,45 @@ def assess(model, index, fixed, min_score: MinScore = 0) -> FillabilityReport: .
   (`cli/src/fill/beam_search/evaluation/state_evaluator.py`) go past what any source licenses; the
   fillability research section records that a surviving domain "certifies nothing".
 
-**[NOTE] Labelling unslotted cells as a defect — decide with the `[?]` below**
+**[NOTE] Labelling unslotted cells as a defect — settled, decision 18: the report does not name them**
 The owner asked on 2026-09-09 that a white cell belonging to no entry be surfaced as a **grid
 defect** rather than a neutral cell — that reframing is what ratified decision 15, where such a
 cell's `cell_letters` is `0` because no letter may legally sit there. C3 needs nothing for this:
 `SlotModel.unslotted` already is the list, and it is derivable from `cell_across`/`cell_down` being
 `-1` in both directions, so no ownership model is involved and this is not C6 provenance. What is
-missing is only the label. The proposed field is `unslotted_cells: tuple[int, ...]`, copied from
-`model.unslotted`; decide it alongside the `[?]` below when the C4 plan is written, since both ask
-what `FillabilityReport` names. A second, weaker grade — a cell in exactly one entry, "unchecked" —
+missing is only the label — and **decision 18 (2026-09-11) puts that label at the rendering layer,
+not on the report.** `unslotted_cells` would have been `model.unslotted` copied verbatim. The case
+made for copying it was that `cell_letters == 0` is overloaded between a grid defect and a cell of a
+wiped slot, so a report-only consumer cannot tell them apart; that case does not survive, because
+`wiped_slots` and `domain_sizes` are slot-index-parallel and already meaningless without the model.
+The report is not standalone either way, so the field bought convenience at the price of a second
+source for one list. Whoever renders the report holds the model; read `model.unslotted` there. A second, weaker grade — a cell in exactly one entry, "unchecked" —
 is equally derivable from the same two arrays, but no `applied.html` option attests it, so §2 puts
 it out of scope; recorded here, not licensed.
 
-**[?] Open, owner's call — an off-list slot completed by its crossings**
+**[SPEC] An off-list slot completed by its crossings — settled, decision 19**
 By §3 a slot is fixed the moment its pattern has no `?`, whoever filled the cells. Two down entries
 can complete a three-letter across as `QZX`: the slot is then fixed, off-list, never in `wiped`, and
-`assess` returns `refuted=False` with no field naming it. The §7 `[NOTE]` calls a completed entry
-"the user's assertion", which holds when the user typed it and not when the crossings did. Qxw's
-assist mode does surface completed non-words. The question: does `FillabilityReport` carry an
-`off_list_fixed: tuple[int, ...]`, or is "who asserted this letter" C6 provenance? It decides two of
-C3's fixtures. Nothing before C3 depends on the answer.
+`assess` would return `refuted=False` with no field naming it. The §7 `[NOTE]` calls a completed
+entry "the user's assertion", which holds when the user typed it and not when the crossings did.
+Qxw's assist mode does surface completed non-words [R-S7].
+
+The `[?]` this replaces offered `off_list_fixed` **or** C6 provenance as alternatives. They are two
+questions, and decision 19 (2026-09-11) separates them:
+
+- **"This fixed slot's word is not in the index"** is *membership*, and it ships here. A fixed
+  slot's pattern contains no `?`, so the existing lookup path returns either that one word or
+  nothing; an empty result is the answer. One lookup per fixed slot, no new primitive. Unlike
+  `refuted`, this field is **two-sided**: a slot's absence from `off_list_fixed` is the positive
+  fact that its word *is* in the index, where `refuted=False` certifies nothing. It carries no
+  threshold and no confidence, and membership is decided **independently of `min_score`** — a fixed
+  on-list word scoring below the floor is on-list.
+- **"Did the user type `QZX`, or did the crossings force it"** is *provenance*, and it stays C6.
+  Naming only the crossing-completed slots was rejected for exactly this reason: it is the intuitive
+  reading of the old `[?]`, but it would block C4 on C6.
+
+So `off_list_fixed` names every off-list fixed slot, deliberately without distinguishing a user's
+theme entry from an accident of the crossings. That discrimination arrives with C6.
 
 ---
 
