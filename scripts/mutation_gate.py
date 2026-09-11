@@ -247,6 +247,26 @@ def failed_test_ids(output):
     return [line.split(" ", 1)[1].split(" - ")[0].strip() for line in output.splitlines() if line.startswith("FAILED ")]
 
 
+@dataclass(frozen=True)
+class RunPaths:
+    """The three files one invocation writes, in a directory of its own."""
+
+    patch: Path
+    mutation: Path
+    report: Path
+
+
+def run_paths():
+    """Allocate a fresh run directory. Never reuses a name within a second."""
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    root = Path(tempfile.mkdtemp(prefix=f"{stamp}-", dir=str(PATCH_DIR)))
+    return RunPaths(
+        patch=root / "working-tree.patch",
+        mutation=root / "mutation.patch",
+        report=root / "gate.report",
+    )
+
+
 def _report(lines, out_path):
     text = "\n".join(lines) + "\n"
     sys.stdout.write(text)
@@ -271,9 +291,8 @@ def main(argv=None, repo_root=None):
     test_file, _, test_name = node_id.partition("::")
 
     PATCH_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    patch_path = PATCH_DIR / f"mutation-gate-{stamp}.patch"
-    report_path = PATCH_DIR / f"mutation-gate-{stamp}.report"
+    paths = run_paths()
+    patch_path, report_path = paths.patch, paths.report
 
     # Saved before anything is touched, so every revert below is recoverable.
     patch_path.write_text(_git(repo, "diff"))
@@ -356,7 +375,7 @@ def main(argv=None, repo_root=None):
         _report(header + [f"GATE FAIL ({EXIT_NO_MUTATION}): {reason}"], report_path)
         return EXIT_NO_MUTATION
 
-    diff_path = PATCH_DIR / f"mutation-gate-{stamp}.mutation.patch"
+    diff_path = paths.mutation
     diff_path.write_text(mutation_diff)
 
     try:
@@ -365,6 +384,9 @@ def main(argv=None, repo_root=None):
         _git(repo, "apply", str(diff_path))
         mutated, mutated_out = run_pytest(repo, node_id)
         neighbours, neighbour_out = run_pytest(repo, test_file)
+    except GateError as exc:
+        _report(header + [f"GATE FAIL ({EXIT_USAGE}): {exc}"], report_path)
+        return EXIT_USAGE
     finally:
         _git(repo, "checkout", "--", *args.mutate, check=False)
 

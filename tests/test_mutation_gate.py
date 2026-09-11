@@ -297,7 +297,7 @@ class TestEndToEnd:
     def test_saves_the_working_diff_before_touching_anything(self, repo):
         (repo / "src.py").write_text("def value():\n    return 999\n")
         gate(repo)
-        saved = list(mg.PATCH_DIR.glob("mutation-gate-*.patch"))
+        saved = list(mg.PATCH_DIR.glob("**/working-tree.patch"))
         assert saved, "no recovery patch was written"
         assert "return 999" in max(saved, key=lambda p: p.stat().st_mtime).read_text()
 
@@ -321,7 +321,7 @@ class TestSelfMutationGuard:
             ["--test", "test_src.py::test_value", "--mutate", str(gate_src)],
             repo_root=str(repo),
         )
-        report = max(mg.PATCH_DIR.glob("*.report"), key=lambda p: p.stat().st_mtime)
+        report = max(mg.PATCH_DIR.glob("**/*.report"), key=lambda p: p.stat().st_mtime)
         assert "copy" in report.read_text().lower()
 
 
@@ -354,7 +354,7 @@ class TestFollowUps:
             repo_root=str(repo),
         )
         assert code == mg.EXIT_NO_MUTATION
-        report = max(mg.PATCH_DIR.glob("*.report"), key=lambda p: p.stat().st_mtime)
+        report = max(mg.PATCH_DIR.glob("**/*.report"), key=lambda p: p.stat().st_mtime)
         assert "staged" in report.read_text().lower()
 
     def test_refuses_to_mutate_a_test_file(self, repo):
@@ -381,3 +381,36 @@ class TestFollowUps:
             repo_root=str(repo),
         )
         assert code == mg.EXIT_OK
+
+
+class TestRunIsolation:
+    def test_two_runs_in_the_same_second_do_not_share_paths(self):
+        # The gate's own suite invokes the gate recursively, so an outer and an
+        # inner run collide on a second-resolution stamp: the inner overwrites
+        # the outer's mutation patch, and the outer then applies the wrong
+        # diff. Observed 2026-09-11 as "git apply ... error: src.py: No such
+        # file or directory".
+        first = mg.run_paths()
+        second = mg.run_paths()
+        assert first.patch != second.patch
+        assert first.mutation != second.mutation
+        assert first.report != second.report
+
+    def test_a_git_failure_is_reported_not_raised(self, repo, monkeypatch):
+        (repo / "src.py").write_text("def value():\n    return 999\n")
+
+        real_git = mg._git
+
+        def explode(repo_arg, *args, **kwargs):
+            if args[:1] == ("apply",):
+                raise mg.GateError("git apply failed: simulated")
+            return real_git(repo_arg, *args, **kwargs)
+
+        monkeypatch.setattr(mg, "_git", explode)
+        code = mg.main(
+            ["--test", "test_src.py::test_value", "--mutate", "src.py"],
+            repo_root=str(repo),
+        )
+        assert code == mg.EXIT_USAGE
+        report = max(mg.PATCH_DIR.glob("**/*.report"), key=lambda p: p.stat().st_mtime)
+        assert "simulated" in report.read_text()
