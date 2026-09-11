@@ -216,7 +216,13 @@ def dirty_paths(repo):
 
 
 def run_pytest(repo, node_id):
-    """Run one pytest selection, neutralising addopts so markers cannot hide it."""
+    """Run one pytest selection, neutralising addopts so markers cannot hide it.
+
+    Neutralising addopts also drops pytest.ini's `-m "not slow"`, so the
+    neighbour run over a whole module executes its slow tests too. That is
+    intentional for the target -- a deselected test reads as "did not fail" --
+    but it can make the neighbour run over a large module take minutes.
+    """
     result = subprocess.run(
         [sys.executable, "-m", "pytest", node_id, "-q", "--tb=line", "-o", "addopts=", "-p", "no:cacheprovider"],
         cwd=str(repo),
@@ -225,6 +231,15 @@ def run_pytest(repo, node_id):
     )
     output = result.stdout + result.stderr
     return RunResult(selected=parse_counts(output), failures=parse_tb_line(output)), output
+
+
+def other_failures(output, test_name):
+    """Failing node ids other than the target's.
+
+    Anchored on "::" -- plain endswith would drop a sibling named
+    `test_myvalue` when the target is `test_value`.
+    """
+    return [t for t in failed_test_ids(output) if not t.endswith("::" + test_name)]
 
 
 def failed_test_ids(output):
@@ -283,6 +298,20 @@ def main(argv=None, repo_root=None):
         )
         return EXIT_USAGE
 
+    test_targets = [m for m in args.mutate if is_test_path(m)]
+    if test_targets:
+        _report(
+            header
+            + [
+                f"GATE FAIL ({EXIT_USAGE}): --mutate names test code "
+                f"({', '.join(test_targets)}). The gate reverts each --mutate path "
+                f"before reading the target's assert lines, so they would not match "
+                f"the run they are checked against. Mutate the code under test.",
+            ],
+            report_path,
+        )
+        return EXIT_USAGE
+
     dirty = dirty_paths(repo)
     missing = [p for p in args.mutate if p not in dirty]
     if missing:
@@ -310,16 +339,21 @@ def main(argv=None, repo_root=None):
         )
         return EXIT_NO_MUTATION
 
+    # Worktree-vs-index. Staged edits are a *legitimate* baseline -- the revert
+    # below restores from the index -- so consult the index only when there is
+    # no worktree change at all, to tell "staged mutation" from "untracked".
     mutation_diff = _git(repo, "diff", "--", *args.mutate)
     if not mutation_diff.strip():
-        _report(
-            header
-            + [
-                f"GATE FAIL ({EXIT_NO_MUTATION}): {', '.join(args.mutate)} is "
-                f"untracked, so there is no baseline to compare against.",
-            ],
-            report_path,
-        )
+        staged = _git(repo, "diff", "--cached", "--", *args.mutate)
+        if staged.strip():
+            reason = (
+                f"your mutation to {', '.join(args.mutate)} is staged, so there "
+                f"is nothing left in the worktree to revert and re-apply. "
+                f"Unstage it: git restore --staged {' '.join(args.mutate)}"
+            )
+        else:
+            reason = f"{', '.join(args.mutate)} is untracked, so there is no " f"baseline to compare against."
+        _report(header + [f"GATE FAIL ({EXIT_NO_MUTATION}): {reason}"], report_path)
         return EXIT_NO_MUTATION
 
     diff_path = PATCH_DIR / f"mutation-gate-{stamp}.mutation.patch"
@@ -352,7 +386,7 @@ def main(argv=None, repo_root=None):
         return EXIT_USAGE
 
     outcome = verdict(baseline, mutated, str(repo / test_file), linenos)
-    others = [t for t in failed_test_ids(neighbour_out) if not t.endswith(test_name)]
+    others = other_failures(neighbour_out, test_name)
 
     body = header + [
         f"target      {node_id}",

@@ -323,3 +323,61 @@ class TestSelfMutationGuard:
         )
         report = max(mg.PATCH_DIR.glob("*.report"), key=lambda p: p.stat().st_mtime)
         assert "copy" in report.read_text().lower()
+
+
+class TestFollowUps:
+    def test_accepts_a_target_that_is_itself_uncommitted(self, repo):
+        # The primary use case: the finding is closed by *adding* a test, so
+        # the target lives in an untracked file while the mutation is in
+        # committed source.
+        (repo / "test_new.py").write_text("from src import value\n\n\ndef test_new():\n    assert value() == 1\n")
+        (repo / "src.py").write_text("def value():\n    return 999\n")
+        code = mg.main(
+            ["--test", "test_new.py::test_new", "--mutate", "src.py"],
+            repo_root=str(repo),
+        )
+        assert code == mg.EXIT_OK
+
+    def test_neighbour_list_keeps_a_sibling_whose_name_ends_with_the_target(self):
+        out = "FAILED test_src.py::test_value - assert 1 == 2\n" "FAILED test_src.py::test_myvalue - assert 1 == 2\n"
+        assert mg.other_failures(out, "test_value") == ["test_src.py::test_myvalue"]
+
+    def test_says_so_when_the_mutation_is_staged(self, repo):
+        # `git diff -- path` is empty for a staged-only change, which would
+        # otherwise be reported as "untracked, so there is no baseline".
+        import subprocess
+
+        (repo / "src.py").write_text("def value():\n    return 999\n")
+        subprocess.run(["git", "-C", str(repo), "add", "src.py"], check=True, capture_output=True)
+        code = mg.main(
+            ["--test", "test_src.py::test_value", "--mutate", "src.py"],
+            repo_root=str(repo),
+        )
+        assert code == mg.EXIT_NO_MUTATION
+        report = max(mg.PATCH_DIR.glob("*.report"), key=lambda p: p.stat().st_mtime)
+        assert "staged" in report.read_text().lower()
+
+    def test_refuses_to_mutate_a_test_file(self, repo):
+        # A mutated test file is reverted before assert_linenos reads it, so
+        # the linenos would not match the run they are checked against.
+        (repo / "test_src.py").write_text("from src import value\n\n\ndef test_value():\n    assert value() == 2\n")
+        code = mg.main(
+            ["--test", "test_src.py::test_value", "--mutate", "test_src.py"],
+            repo_root=str(repo),
+        )
+        assert code == mg.EXIT_USAGE
+
+    def test_allows_staged_work_when_the_mutation_is_in_the_worktree(self, repo):
+        # Staged legitimate edits are a correct baseline: `git checkout --`
+        # restores from the index, so the gate compares against the staged
+        # version. Only a mutation that is *itself* staged is a problem.
+        import subprocess
+
+        (repo / "src.py").write_text("def value():\n    return 1\n\n\nSTAGED = True\n")
+        subprocess.run(["git", "-C", str(repo), "add", "src.py"], check=True, capture_output=True)
+        (repo / "src.py").write_text("def value():\n    return 999\n\n\nSTAGED = True\n")
+        code = mg.main(
+            ["--test", "test_src.py::test_value", "--mutate", "src.py"],
+            repo_root=str(repo),
+        )
+        assert code == mg.EXIT_OK
