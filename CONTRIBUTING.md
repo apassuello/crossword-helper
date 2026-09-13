@@ -244,6 +244,35 @@ git checkout HEAD -- <the source files under test>         # restore, then re-ru
 Evidence must carry the received value (`expected 'HTTP_500' to be ''`, `Number of calls: 1`), not
 just "it failed".
 
+**[SPEC] A test written *after* GREEN proves nothing until you introduce the defect it claims to
+catch.** The recipe above restores source from a base sha, which works when the defect existed in
+history. It does not cover the commoner case: a reviewer says "this needs a test", you add one, and
+it passes on the first run. Six tests in this repo were written that way and were worthless as
+written — three in the C1 session (a `KeyError` test that passed against a `defaultdict`; a
+`restrict` oracle that only ever saw singleton masks; a 64-letter cap tested only from above, so a
+`>= 64` guard would have stayed green while rejecting every legal alphabet) and three more in
+decisions 16-17.
+
+Introduce the exact defect the reviewer named — not a generic break — and watch the target fail:
+
+```bash
+cp <target-source>.py /tmp/target.orig          # bytes, not git: the file may be untracked,
+                                                # and checkout would discard other work in it
+# edit <target-source>.py to introduce the specific defect
+pytest '<path>::<Class>::<test>' -x --tb=line -o addopts=
+cp /tmp/target.orig <target-source>.py && rm /tmp/target.orig
+```
+
+**The acceptance criterion is narrow, and three failures in one session did not meet it:** the
+output must be an `AssertionError` reported at the target assertion's *own line* — not an exception
+raised upstream before the assertion ran (a mutation that deletes a `None` guard crashes on
+`None & ndarray` first), and not a different test. `-o addopts=` is required because a `slow`-marked
+target selected by node id is otherwise silently deselected, which reads as "did not fail".
+
+Prefer not needing this at all: write the test first and watch it fail, which observes the same
+property for free at the moment it is cheapest. This recipe is the remedy for a skipped RED, not a
+substitute for one.
+
 **[SPEC] Sweep the channel a change *widens*, not only the one it narrows.** A fix that empties
 `ApiError.message` was swept thoroughly for `.message` consumers — but it also broadened `.details`,
 where a pre-existing consumer could silently start receiving a value it used to get `undefined` for.
