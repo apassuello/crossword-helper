@@ -103,12 +103,14 @@ Why: four instances, all silent. `PatternMatcher.find` defaults `max_results=100
 both call `find(pattern, min_score=0)` bare — pass the wrong matcher and every count caps at 100
 with no error. `get_empty_slots`, `analyze_constraints`, `analyze_placement_impact` and
 `get_slot_crossings` all call `get_word_slots()` with no argument, so each is valid **only** at
-`min_length=3`. And `Autofill._ac3` returns `False` at the first domain it empties
-(`autofill.py`'s early return in `_ac3`), leaving downstream domains stale — it is not a
-fixed-point oracle after a wipe. **Never gate recovery on its return value**: run it for its
-pruning side effect and then inspect the domains directly, which is what `_unwind_dead_ends`
-does and why. Its earlier form broke on `if self._ac3(): break` before looking, and that is
-the bug #17 fixed — at exactly the position where the grid is most dead.
+`min_length=3`. And `Autofill._ac3` is unsound in **both** directions, which is why neither
+branch of its return value may be gated on. `False` comes at the first domain it empties
+(`autofill.py`'s early return in `_ac3`), leaving downstream domains stale — so it is not a
+fixed-point oracle after a wipe. `True` is not a solvability signal either: a domain that is
+*already* empty at initialisation offers nothing to revise, so the queue drains and `_ac3`
+returns `True` on a position where every domain is empty — the most dead a position can be
+(#17, measured). Run it for its pruning side effect and inspect `self.domains` directly, the
+way `_unwind_dead_ends` does.
 
 ❌ Trusting a fixture because the suite is green → ✅ confirm the fixture can express the
 distinction you are pinning
