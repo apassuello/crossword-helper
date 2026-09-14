@@ -105,7 +105,10 @@ with no error. `get_empty_slots`, `analyze_constraints`, `analyze_placement_impa
 `get_slot_crossings` all call `get_word_slots()` with no argument, so each is valid **only** at
 `min_length=3`. And `Autofill._ac3` returns `False` at the first domain it empties
 (`autofill.py`'s early return in `_ac3`), leaving downstream domains stale — it is not a
-fixed-point oracle after a wipe, though it is a sound one where it returns `True`.
+fixed-point oracle after a wipe. **Never gate recovery on its return value**: run it for its
+pruning side effect and then inspect the domains directly, which is what `_unwind_dead_ends`
+does and why. Its earlier form broke on `if self._ac3(): break` before looking, and that is
+the bug #17 fixed — at exactly the position where the grid is most dead.
 
 ❌ Trusting a fixture because the suite is green → ✅ confirm the fixture can express the
 distinction you are pinning
