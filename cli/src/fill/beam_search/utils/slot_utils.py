@@ -181,3 +181,21 @@ class SlotIntersectionHelper:
                 intersecting.append(slot)
 
         return intersecting
+
+    @staticmethod
+    def get_slot_by_id(slot_id: Tuple, slots: List[Dict]) -> Optional[Dict]:
+        """
+        Get slot dictionary by its ID tuple (row, col, direction).
+
+        Args:
+            slot_id: Tuple of (row, col, direction)
+            slots: List of all slots
+
+        Returns:
+            Slot dictionary or None if not found
+        """
+        row, col, direction = slot_id
+        for slot in slots:
+            if slot["row"] == row and slot["col"] == col and slot["direction"] == direction:
+                return slot
+        return None
