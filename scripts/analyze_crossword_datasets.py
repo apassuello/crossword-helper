@@ -18,11 +18,8 @@ Expects files in data/analysis/:
 
 import argparse
 import collections
-import csv
 import glob
-import json
 import os
-import sys
 import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -147,7 +144,7 @@ def wordlist_stats(entries, name):
     has_lower = sum(1 for w in words if any(c.islower() for c in w))
     has_numbers = sum(1 for w in words if any(c.isdigit() for c in w))
     non_alpha = sum(1 for w in words if not w.isalpha())
-    print(f"\nFormat observations:")
+    print("\nFormat observations:")
     print(f"  Entries with spaces: {has_spaces:,}")
     print(f"  Entries with lowercase: {has_lower:,}")
     print(f"  Entries with digits: {has_numbers:,}")
@@ -165,12 +162,10 @@ def analyze_xd_clues(analysis_dir):
 
     # Look for extracted clue files
     clue_zip = os.path.join(analysis_dir, "xd-clues.zip")
-    clue_dir = os.path.join(analysis_dir, "xd-clues")
 
     # Try to find TSV/CSV files from extraction
     clue_files = []
-    for pattern in ["xd-clues*/*.tsv", "xd-clues*/*.csv", "xd-clues*/*.txt",
-                     "*.tsv", "clues.*"]:
+    for pattern in ["xd-clues*/*.tsv", "xd-clues*/*.csv", "xd-clues*/*.txt", "*.tsv", "clues.*"]:
         clue_files.extend(glob.glob(os.path.join(analysis_dir, pattern)))
 
     if clue_zip and os.path.isfile(clue_zip):
@@ -279,8 +274,7 @@ def analyze_xword_benchmark(analysis_dir):
 
     # Check for data files
     data_dir = os.path.join(repo_dir, "data")
-    splits = ["train.source", "train.target", "val.source", "val.target",
-              "test.source", "test.target"]
+    splits = ["train.source", "train.target", "val.source", "val.target", "test.source", "test.target"]
 
     found_data = False
     for split in splits:
@@ -314,7 +308,7 @@ def analyze_xword_benchmark(analysis_dir):
     # Check for convert.py
     convert_py = os.path.join(repo_dir, "convert.py")
     if os.path.isfile(convert_py):
-        print(f"\n  convert.py found — converts .puz → .json")
+        print("\n  convert.py found — converts .puz → .json")
 
 
 def cross_list_comparison(wordlists, app_words):
@@ -325,32 +319,30 @@ def cross_list_comparison(wordlists, app_words):
 
     names = list(wordlists.keys())
 
-    print(f"\nWord counts (alpha-normalized, unique):")
+    print("\nWord counts (alpha-normalized, unique):")
     for name in names:
         print(f"  {name}: {len(wordlists[name]):,}")
     if app_words:
         print(f"  Our App (comprehensive): {len(app_words):,}")
 
     # Pairwise overlap
-    print(f"\nPairwise overlap:")
+    print("\nPairwise overlap:")
     for i, name_a in enumerate(names):
-        for name_b in names[i + 1:]:
+        for name_b in names[i + 1 :]:
             overlap = wordlists[name_a] & wordlists[name_b]
             pct_a = len(overlap) / len(wordlists[name_a]) * 100 if wordlists[name_a] else 0
             pct_b = len(overlap) / len(wordlists[name_b]) * 100 if wordlists[name_b] else 0
-            print(f"  {name_a} ∩ {name_b}: {len(overlap):,} "
-                  f"({pct_a:.1f}% of {name_a}, {pct_b:.1f}% of {name_b})")
+            print(f"  {name_a} ∩ {name_b}: {len(overlap):,} " f"({pct_a:.1f}% of {name_a}, {pct_b:.1f}% of {name_b})")
 
     # Overlap with our app
     if app_words:
-        print(f"\nOverlap with our app's wordlist:")
+        print("\nOverlap with our app's wordlist:")
         for name in names:
             overlap = wordlists[name] & app_words
             pct_ext = len(overlap) / len(wordlists[name]) * 100 if wordlists[name] else 0
             pct_app = len(overlap) / len(app_words) * 100 if app_words else 0
             new = len(wordlists[name] - app_words)
-            print(f"  {name} ∩ App: {len(overlap):,} "
-                  f"({pct_ext:.1f}% of {name}, {pct_app:.1f}% of App)")
+            print(f"  {name} ∩ App: {len(overlap):,} " f"({pct_ext:.1f}% of {name}, {pct_app:.1f}% of App)")
             print(f"    New words not in our app: {new:,}")
 
         all_external = set()
@@ -363,8 +355,7 @@ def cross_list_comparison(wordlists, app_words):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze crossword data sources")
-    parser.add_argument("--output-dir", default=DEFAULT_ANALYSIS_DIR,
-                        help="Directory containing downloaded data")
+    parser.add_argument("--output-dir", default=DEFAULT_ANALYSIS_DIR, help="Directory containing downloaded data")
     args = parser.parse_args()
 
     analysis_dir = args.output_dir

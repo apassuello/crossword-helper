@@ -20,30 +20,29 @@ def load_grid(file_path):
     """Load grid from JSON file."""
     with open(file_path) as f:
         data = json.load(f)
-    return data['grid'], data.get('title', 'Untitled Grid')
+    return data["grid"], data.get("title", "Untitled Grid")
 
 
 def analyze_grid(grid):
     """Analyze grid and return statistics."""
     size = len(grid)
     total_cells = size * size
-    black_squares = sum(1 for row in grid for cell in row if cell == '#')
+    black_squares = sum(1 for row in grid for cell in row if cell == "#")
     fillable_cells = total_cells - black_squares
 
-    filled_cells = sum(1 for row in grid for cell in row
-                      if cell not in ['.', '#', '?'])
+    filled_cells = sum(1 for row in grid for cell in row if cell not in [".", "#", "?"])
     empty_cells = fillable_cells - filled_cells
 
     fill_percentage = (filled_cells / fillable_cells * 100) if fillable_cells > 0 else 0
 
     return {
-        'size': size,
-        'total_cells': total_cells,
-        'black_squares': black_squares,
-        'fillable_cells': fillable_cells,
-        'filled_cells': filled_cells,
-        'empty_cells': empty_cells,
-        'fill_percentage': fill_percentage
+        "size": size,
+        "total_cells": total_cells,
+        "black_squares": black_squares,
+        "fillable_cells": fillable_cells,
+        "filled_cells": filled_cells,
+        "empty_cells": empty_cells,
+        "fill_percentage": fill_percentage,
     }
 
 
@@ -56,11 +55,11 @@ def get_words_from_grid(grid):
     for row in grid:
         word = ""
         for cell in row:
-            if cell == '#':
+            if cell == "#":
                 if len(word) >= 3:  # Only words 3+ letters
                     words.append(word)
                 word = ""
-            elif cell not in ['.', '?']:
+            elif cell not in [".", "?"]:
                 word += cell
             else:
                 if len(word) >= 3:
@@ -74,11 +73,11 @@ def get_words_from_grid(grid):
         word = ""
         for row in range(size):
             cell = grid[row][col]
-            if cell == '#':
+            if cell == "#":
                 if len(word) >= 3:
                     words.append(word)
                 word = ""
-            elif cell not in ['.', '?']:
+            elif cell not in [".", "?"]:
                 word += cell
             else:
                 if len(word) >= 3:
@@ -96,7 +95,7 @@ def print_compact(grid, title="Grid"):
 
     print(f"\n{'='*60}")
     print(f" {title} ({size}×{size}) - COMPACT VIEW")
-    print('='*60)
+    print("=" * 60)
 
     # Column numbers
     print("   ", end="")
@@ -111,9 +110,9 @@ def print_compact(grid, title="Grid"):
     for row_idx, row in enumerate(grid):
         print(f"{row_idx:2d} │", end="")
         for cell in row:
-            if cell == '#':
+            if cell == "#":
                 print(" ██", end="")
-            elif cell == '.' or cell == '?':
+            elif cell == "." or cell == "?":
                 print("  ·", end="")
             else:
                 print(f"  {cell}", end="")
@@ -129,7 +128,7 @@ def print_detailed(grid, title="Grid"):
 
     print(f"\n{'='*60}")
     print(f" {title} ({size}×{size}) - DETAILED VIEW")
-    print('='*60)
+    print("=" * 60)
 
     # Top border with column numbers
     print("    ", end="")
@@ -149,9 +148,9 @@ def print_detailed(grid, title="Grid"):
         # Row number + cells
         print(f"{row_idx:2d} │", end="")
         for cell in row:
-            if cell == '#':
+            if cell == "#":
                 print(" ██ ", end="")
-            elif cell == '.' or cell == '?':
+            elif cell == "." or cell == "?":
                 print("  · ", end="")
             else:
                 print(f"  {cell} ", end="")
@@ -186,7 +185,7 @@ def print_statistics(grid, title="Grid"):
 
     print(f"\n{'='*60}")
     print(f" {title} - STATISTICS")
-    print('='*60)
+    print("=" * 60)
     print(f"Grid size:        {stats['size']}×{stats['size']}")
     print(f"Total cells:      {stats['total_cells']}")
     print(f"Black squares:    {stats['black_squares']}")
@@ -198,7 +197,7 @@ def print_statistics(grid, title="Grid"):
     print(f"Unique words:     {len(words_sorted)}")
 
     if words_sorted:
-        print(f"\nSample words (10 longest):")
+        print("\nSample words (10 longest):")
         for i, word in enumerate(words_sorted[:10], 1):
             print(f"  {i:2d}. {word} ({len(word)} letters)")
 
@@ -240,5 +239,5 @@ def main():
     print()  # Final newline
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -7,7 +7,8 @@ import traceback
 
 try:
     from src.cli import cli
+
     cli()
-except Exception as e:
+except Exception:
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)

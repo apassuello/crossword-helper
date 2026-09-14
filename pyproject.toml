@@ -5,6 +5,12 @@ target-version = ["py39"]
 [tool.isort]
 profile = "black"
 line_length = 127
+# ruff and black honour .gitignore; isort does not unless told to. Without this,
+# a full-tree run drowns in the gitignored research bundle and .handoff/archive
+# and cannot be used as a gate at all. An explicit skip_glob list would go stale
+# the next time a gitignored tree appears -- see CLAUDE.md on filters that
+# enumerate. This one cannot.
+skip_gitignore = true
 
 [tool.ruff]
 line-length = 127
