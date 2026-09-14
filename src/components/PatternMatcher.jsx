@@ -195,7 +195,7 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
             </select>
             {algorithm === 'trie' && (
               <span className="algorithm-badge" style={{marginLeft: '8px', color: '#4caf50', fontSize: '12px'}}>
-                ⚡ 4-10x faster
+                ⚡ Indexed
               </span>
             )}
           </div>

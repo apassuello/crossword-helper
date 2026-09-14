@@ -26,7 +26,35 @@ live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 # figure ("454k words") in cli/ docstrings as in the docs, which is why checking
 # docs against code silently failed - see docs/dev/FABRICATION-LOG.md. Only the
 # banned-claim check runs over these; the link check stays markdown-only.
-live_code() { git ls-files '*.py' | grep -E '^(cli|backend)/'; }
+#
+# Defined by EXCLUSION, deliberately. This function used to read
+#   git ls-files '*.py' | grep -E '^(cli|backend)/'
+# and that shape is the repo's third recorded instance of a filter that
+# enumerates what it covers and so goes stale in silence - after pytest.ini's
+# testpaths and the pre-commit ruff hook. It cost two real misses: scripts/ and
+# src/ were never scanned at all (src/components/PatternMatcher.jsx asserted a
+# speedup that matches a BANNED pattern exactly and was never fed to it), and
+# globbing '*.py' missed cli/crossword and cli/cli/crossword, which are tracked
+# Python scripts with no extension - found only because pre-commit detects them
+# by shebang. An exclusion cannot orphan a new file; an include list always can.
+#
+# .handoff/ is out of scope BY DESIGN, not by oversight: it is gitignored, so
+# git ls-files cannot reach it either way, and its entries are dated records
+# whose Build: fields assert test counts as their whole purpose. See
+# CONTRIBUTING.md section 4.
+CODE_EXCLUDE='^(docs/archive/|\.archive/|data/research/)'
+live_code() {
+  git ls-files | grep -vE "$CODE_EXCLUDE" | while IFS= read -r f; do
+    case "$f" in
+      *.py|*.js|*.jsx) echo "$f" ;;
+      # Known non-source extensions: skipped without opening the file.
+      *.md|*.json|*.yaml|*.yml|*.txt|*.pdf|*.png|*.jpg|*.jpeg|*.svg|*.ico|*.css|*.scss|\
+      *.html|*.lock|*.cfg|*.ini|*.toml|*.sh|*.pkl|*.csv|*.tsv) ;;
+      # Anything else may still be a Python script without an extension.
+      *) [ -f "$f" ] && head -1 "$f" 2>/dev/null | grep -qE '^#!.*python' && echo "$f" ;;
+    esac
+  done
+}
 
 echo "==> Checking relative links"
 while IFS= read -r f; do
@@ -54,6 +82,13 @@ BANNED=(
   '[0-9]+k\+? words'
   '[0-9]+[x×] faster'
   '[0-9]+[-–][0-9]+[x×] (faster|speedup)'
+  # Coverage percentages, both orders. Anchored on the vocabulary rather than on
+  # '%' alone: a bare percent pattern fires on black-square density, fill
+  # thresholds, timeout ratios and URL-encoded badge links, none of which go
+  # stale, and a guard with that many false positives just teaches everyone to
+  # reach for the escape hatch.
+  '(coverage|covered|pass rate)[^0-9]{0,40}[0-9]+(\.[0-9]+)?[[:space:]]*%'
+  '[0-9]+(\.[0-9]+)?[[:space:]]*%[^0-9]{0,40}(coverage|covered|pass rate)'
 )
 # Escape hatch: a line containing "docs-check: allow" is exempt. Needed for lines
 # that legitimately quote a banned string - the contributing guide documenting the

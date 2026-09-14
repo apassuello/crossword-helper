@@ -99,8 +99,11 @@ uniform across the phases a test budgets separately**
   `COV_CORE_*` before anything spawns, so new tests need nothing. It is done through the
   environment rather than `env=` per call site because product code spawns the CLI too
   (`backend/core/cli_adapter.py`, `backend/api/routes.py`). Cost, accepted deliberately: lines
-  executed only inside a spawned CLI stop counting (integration step 38.43% -> 34.40%, a strict
-  upper bound on the loss to the combined total), and the step runs 746s -> 74s.
+  executed only inside a spawned CLI stop counting, and the step runs roughly ten times faster.
+  The figures behind that, measured once when the fixture landed, were 38.43% -> 34.40% coverage on <!-- docs-check: allow -->
+  the integration step -- a strict upper bound on the loss to the combined total -- and 746s -> 74s.
+  Reproduce with `pytest backend/tests/integration --cov=cli --cov=backend` against a tree with and
+  without the fixture; they are recorded as the basis of a decision, not as current state.
 - Do not diagnose this as "slow CI runners". That misdiagnosis cost three CI attempts, then two
   more after this block was written to prevent it.
 
@@ -331,6 +334,11 @@ thing under test.
 - **Archiving a doc needs `git add -f`.** `.gitignore` carries a bare `archive/` pattern, so
   `docs/archive/` content is tracked only by grandfathering. A new file moved there is ignored,
   and the move lands as a plain deletion — the archive silently becomes a delete.
+- **`.handoff/` is outside the documentation guard, by design.** `.gitignore` lists it, so
+  `git ls-files` cannot reach it and `docs-check.sh` never sees it. That is deliberate twice over:
+  handoff entries are dated records, which section 4 already exempts from correction, and their
+  `Build:` fields assert test counts and pass rates as their entire purpose -- the thing the guard
+  bans everywhere else. Do not bring it into scope; do not treat a handoff entry as a living doc.
 - **`.gitignore` unanchored directory patterns match at every depth.** `.gitignore:13` is a bare
   `lib/`, meant for Python build output, and it also swallows `src/lib/`. Nothing under such a
   path can be committed until a negation (`!src/lib/`) is added. There is no `src/lib/` on this
