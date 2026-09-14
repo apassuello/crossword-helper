@@ -153,9 +153,14 @@ decision 16's family rule.
 
 ❌ Passing a numpy-sourced `blacks` or `size` to `SlotModel.from_blacks` → ✅ coerce to `int` at
 the construction site
-Why: `from_blacks` never coerces, so `numpy.int64` leaks into the model and breaks `to_dict`'s
-no-NumPy contract with a `TypeError`. Unreachable through `from_grid`, which is why it has not
-fired yet.
+Why: `from_blacks` never coerces, so `numpy.int64` reaches the model. `to_dict`'s docstring
+promises "ints and strings only -- no ... NumPy scalars" and **enforces nothing**: it returns
+normally with `size` and every element of `blacks` still `numpy.int64` (`slots[*].row/col/length`
+survive as plain `int`, being products of Python arithmetic). The contract breaks *silently*; the
+`TypeError` — `Object of type int64 is not JSON serializable` — surfaces a layer later, in
+`json.dumps`, at whatever call site serialises the model. A silent breach is the worse failure, so
+do not expect `to_dict` to raise and tell you. Unreachable through `from_grid`, which is why it has
+not fired yet. Measured on `from_blacks(np.int64(5), np.array([3,8,15,21]))`.
 
 ❌ Sweeping for references with `git grep` or recursive `grep` and reading a null as "unreferenced"
 → ✅ search `data/research/` and `.handoff/` by explicit path as well; `scripts/check-guards.sh`

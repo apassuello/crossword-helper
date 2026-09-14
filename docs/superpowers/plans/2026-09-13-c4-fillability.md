@@ -46,7 +46,9 @@ Every task's requirements implicitly include this section.
   `False` certifies nothing. No threshold, no penalty ladder, no confidence score — `analyze_constraints`'
   "critical" threshold and `StateEvaluator`'s penalty ladder both go past what any source licenses.
 - **Fixtures pass Python `int` only** into `SlotModel.from_blacks`. It never coerces, so a
-  NumPy-sourced `blacks` or `size` leaks `numpy.int64` and breaks `to_dict`'s no-NumPy contract.
+  NumPy-sourced `blacks` or `size` leaks `numpy.int64` past `to_dict`'s no-NumPy contract — which
+  `to_dict` states and does not enforce, returning normally with the NumPy scalars in place. The
+  `TypeError` comes later, from `json.dumps`.
 - **Every `SlotModel` in a test is built at `min_length=3`** — every oracle in this repo is valid
   only there.
 - **No count, timing or pass rate in any docstring, comment or doc.** Name the command instead.
