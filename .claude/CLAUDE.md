@@ -157,6 +157,29 @@ Why: `from_blacks` never coerces, so `numpy.int64` leaks into the model and brea
 no-NumPy contract with a `TypeError`. Unreachable through `from_grid`, which is why it has not
 fired yet.
 
+❌ Sweeping for references with `git grep` or recursive `grep` and reading a null as "unreferenced"
+→ ✅ search `data/research/` and `.handoff/` by explicit path as well; `scripts/check-guards.sh`
+Guard 3 blocks the one case it can decide
+Why: fourth instance of the null-result trap, and the first whose mechanism the global CLAUDE.md
+does not cover. That note describes two mechanisms — recursive `grep` is a ugrep wrapper honouring
+`.gitignore`, and zsh aborts a command on an unmatched unquoted glob. This is a third: **both**
+`.gitignore:106` (`data/research/`) and `:123` (`.handoff/`) ignore whole trees, so `git grep`
+(tracked files only) and recursive `grep` (gitignore-honouring) return the *same* clean null — and
+`applied.html`, inside the first of them, is this repo's canonical design artifact and quotes live
+code by symbol. `7b0060c` deleted `SlotIntersectionHelper.get_slot_by_id` on a re-verified
+zero-reference count across all tracked files; it was `applied.html`'s cp-model evidence that this
+codebase links its two views by a bare `(row, col, direction)` lookup rather than a declared
+channelling constraint — the premise of an open Beacham-m3-vs-Botea decision. `applied_gate` went
+red on `code-symbol` and `code-verbatim`; `b4253fd` restored it.
+Guard 3 **blocks on name extinction only**: the deleted name has no surviving `def`/`class` in
+`cli/` or `backend/` and the bundle cites it. Measured against `7b0060c`'s eighteen removed names it
+fires on exactly one — `get_slot_by_id`, the one that had to come back. Matching the bare identifier
+instead fires on three: six classes define `order_values` in a single file, so a citation of a
+*surviving* same-named method reads exactly like a true hit. Two cases stay a non-blocking NOTE
+because the name still resolves and no grep can tell which definition was meant: deleting a
+same-named method from a cited class, and changing a quoted function's signature. Those remain the
+re-pin gate's job — a silent Guard 3 is not proof the page is intact.
+
 ---
 
 ## Extensibility
