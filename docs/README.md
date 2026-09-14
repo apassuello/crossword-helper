@@ -17,7 +17,13 @@ docs/
 ├── dev/
 │   ├── DEVELOPMENT.md       # Developer setup and workflow
 │   └── FABRICATION-LOG.md   # Claims found false against code; unaudited backlog
+├── superpowers/
+│   ├── specs/               # Design specs for in-flight capability families
+│   └── plans/               # Per-task implementation plans behind those specs
+├── screenshots/             # UI captures referenced from other docs
 └── resources/
+    ├── SOURCES.md           # Index of the research reports below, cited by row id
+    ├── research/            # Verbatim run-A/B/C/R reports: claims, evidence, manifests
     └── art-of-construction.pdf  # Reference: The Art of Crossword Construction
 ```
 
@@ -31,6 +37,10 @@ docs/
 - **Write tests**: [ops/TESTING.md](./ops/TESTING.md)
 - **Contribute**: [../CONTRIBUTING.md](../CONTRIBUTING.md)
 - **Check what documentation to trust**: [dev/FABRICATION-LOG.md](./dev/FABRICATION-LOG.md)
+- **Follow in-flight design work**: [superpowers/specs/](./superpowers/specs/) for the specs,
+  [superpowers/plans/](./superpowers/plans/) for the plans that implement them
+- **Cite the research**: [resources/SOURCES.md](./resources/SOURCES.md) is the index; cite its row
+  ids rather than the reports directly
 - **Reference**: [resources/art-of-construction.pdf](./resources/art-of-construction.pdf)
 
 ## Archived Documentation

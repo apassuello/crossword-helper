@@ -137,7 +137,8 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 | **Forward Checking** | After placement, verify no crossing slot has 0 remaining candidates. |
 | **Letter Frequency Table** | Pre-computed `{length → {position → {letter → count}}}` for O(1) LCV estimates |
 
-**Performance:** <30s for 11×11. Guaranteed to find solution if one exists.
+**Performance:** guaranteed to find a solution if one exists; the search is exhaustive, so the
+cost is a function of grid size and word list, not a fixed figure.
 
 ### B. Beam Search (`cli/src/fill/beam_search/`)
 
@@ -167,12 +168,12 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 
 **Diverse Beam Search** (Vijayakumar et al. 2016): Partitions beam into diversity groups, selects top-K from each group to prevent all beams converging on similar solutions.
 
-**Performance:** 1–5min for 15×15. Better word quality than CSP.
+**Performance:** better word quality than CSP, at the cost of no completeness guarantee.
 
 ### C. Hybrid (`cli/src/fill/hybrid_autofill.py`)
 
 Two-phase strategy:
-1. **Phase 1 — Beam Search** (20% of timeout, max 60s): Global exploration for high-quality partial fill
+1. **Phase 1 — Beam Search** (20% of the budget, floored at 10s and capped by grid size): Global exploration for high-quality partial fill
 2. **Phase 2 — Iterative Repair** (80% of remaining): Fixes crossing mismatches via targeted word swaps
 
 **Iterative Repair** (`cli/src/fill/iterative_repair.py`):
@@ -181,7 +182,8 @@ Two-phase strategy:
 - Tries alternative words that reduce conflict count
 - Repeats until converged or timeout
 
-**Performance:** Best all-around. 1–5min for 15×15, 5–30min for 21×21.
+**Performance:** best all-around. Bounded by the `--timeout` budget you give it rather than by a
+characteristic runtime.
 
 ---
 
@@ -251,7 +253,7 @@ Standard crossword entry normalization:
 
 **File:** `cli/src/fill/autofill.py`
 
-### Recursion Structure (`_backtrack_with_mac()`, lines 853–999)
+### Recursion Structure (`_backtrack_with_mac()`)
 1. **Base case**: All slots filled → return True
 2. **Skip filled**: If slot already has a word, recurse to next
 3. **Two-tier LCV scoring**:
@@ -280,7 +282,7 @@ nothing to revise, so the queue drains without a wipeout and `_ac3()` reports co
 on a 22-slot position with every domain empty: `_ac3()` → `True`.
 
 Any recovery path that gates on that return will therefore do nothing at exactly the position where
-the grid is most dead. `_unwind_dead_ends` (`cli/src/fill/autofill.py:375`) is written against this:
+the grid is most dead. `_unwind_dead_ends` (`cli/src/fill/autofill.py`) is written against this:
 it runs `_ac3()` purely for its pruning side effect and then inspects the domains directly, with the
 reasoning recorded in the code. Its earlier form broke `if self._ac3(): break` before looking, and
 that form is still what ships on `main`.
@@ -353,8 +355,9 @@ Four escalating strategies:
 
 ## 13. Hybrid & Iterative Repair — Details
 
-### Hybrid (`cli/src/fill/hybrid_autofill.py`, lines 75–191)
-- Phase 1: Beam Search — `min(60s, 20% of timeout)`
+### Hybrid (`cli/src/fill/hybrid_autofill.py`)
+- Phase 1: Beam Search — `min(beam_cap, max(10, 20% of timeout))`, where `beam_cap` is
+  size-scaled: 30s at 11×11, +9s per size step, 120s maximum (`_compute_beam_cap`)
 - Phase 2: Iterative Repair — remaining time
 - Handoff: passes beam's grid to repair (no algorithm state preserved)
 - Returns better of beam vs. repair result

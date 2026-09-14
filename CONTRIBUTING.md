@@ -1,6 +1,6 @@
 # Contributing
 
-**Version 1.0.0** · 2026-08-15
+**Version 1.2.0** · 2026-08-17
 
 ---
 
@@ -313,7 +313,8 @@ thing under test.
   number. Banned in living docs: test counts, pass rates, coverage %, wordlist sizes, `Status:
   Complete`, `✅ FIXED`. CI enforces this. <!-- docs-check: allow -->
 - Living docs in `docs/` follow HADS (`[SPEC]` / `[NOTE]` / `[BUG]` / `[?]` blocks + AI manifest).
-- `.claude/CLAUDE.md` follows the claude-meta template instead, and stays under 80 lines.
+- `.claude/CLAUDE.md` follows the claude-meta template instead. Keep it terse -- it is loaded
+  into every session -- but do not assert its length here; `wc -l .claude/CLAUDE.md` is the number.
 - Unverified claims go in a `[?]` block. Never assert them as fact.
 - Timing or size figures in **code comments** need the command that reproduces them, or state
   complexity instead. See `docs/dev/FABRICATION-LOG.md` for why this rule exists.

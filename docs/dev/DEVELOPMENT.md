@@ -122,7 +122,8 @@ business logic belongs.** `backend/api/*.py` routes should stay thin — validat
 ```bash
 pytest backend/tests/unit/ -v          # fast, isolated — run this constantly
 pytest -m "not slow"                   # default suite (this is pytest.ini's addopts)
-pytest                                  # everything, including slow-marked tests
+pytest -m slow                         # the slow layer only
+pytest -o addopts= -m ""                # genuinely everything, overriding addopts
 pytest path/to/test_file.py::test_name -vv   # single test, verbose
 ```
 `pytest.ini` sets `testpaths = backend/tests cli/tests tests` and `addopts = -v -m "not slow"` —
@@ -183,8 +184,9 @@ nothing crossword-helper-specific about how to set a breakpoint, so it isn't rep
 ## Adding a New Feature
 
 **[NOTE]** The standard shape — CLI command → `CLIAdapter` method → Flask route → React component
-— is already spelled out with a worked (hypothetical) example in the project root `CLAUDE.md`
-under "Adding a New API Endpoint." This document previously carried a second, much longer version
+— is already spelled out in `.claude/CLAUDE.md` under "Code Patterns". (There is no `CLAUDE.md`
+at the repository root, and no "Adding a New API Endpoint" heading; this citation named both until
+2026-09-14.) This document previously carried a second, much longer version
 of the same walkthrough (~600 lines, building a hypothetical "black square suggestions" feature)
 that duplicated it almost line-for-line. It's been removed rather than kept in parallel — two
 copies of the same tutorial drift, and one already had gone stale. If you extend that CLAUDE.md

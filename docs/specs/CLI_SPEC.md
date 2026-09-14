@@ -24,7 +24,7 @@ ground truth, this document is a curated summary of it.
 The CLI (`cli/src/cli.py`) is the single source of truth for all crossword
 construction logic. It exposes 14 commands via a Click group. The Flask
 backend calls these commands via subprocess; it adds no business logic of
-its own. See `docs/specs/BACKEND_SPEC.md` for the subprocess integration
+its own. See `.archive/docs/BACKEND_SPEC.md` (archived) for the subprocess integration
 layer and `docs/ARCHITECTURE.md` for the full system diagram — neither is
 duplicated here.
 
@@ -730,7 +730,7 @@ each entry's length must match its slot exactly, or `fill` errors and exits `1`.
 **[?]** Whether `pause`/`list-states`/`resume` behave correctly for tasks
 started via the *backend* (as opposed to a bare `crossword fill --task-id`
 invocation) was not re-verified for this rewrite — see
-`docs/specs/BACKEND_SPEC.md` for the backend's own pause/resume contract.
+`.archive/docs/BACKEND_SPEC.md` (archived) for the backend's own pause/resume contract.
 
 ---
 

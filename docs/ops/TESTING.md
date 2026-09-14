@@ -40,7 +40,8 @@ pytest -m "not slow" --collect-only -q
 **[NOTE]** The project follows a test-driven approach: unit tests for
 isolated logic, integration tests for API/CLI subprocess boundaries, and a
 `slow`-marked layer for realistic 11×11/15×15/21×21 grids and full
-pause/resume workflows. There is no committed frontend test suite yet.
+pause/resume workflows. The frontend suite is committed under `src/__tests__/`
+and runs with `npx vitest run`.
 
 ---
 
@@ -314,8 +315,12 @@ pytest --log-cli-level=DEBUG
   asked to measure coverage *inside* that child. Measured on one machine:
   the affected test took roughly 4x longer with `--cov` than without it,
   which on a loaded CI runner was enough to blow through the test's timeout.
-- **Fix:** scrub `COV_CORE_*` from the child's environment before spawning it
-  (or, per-test, via `monkeypatch.delenv` for the duration of the test). The
+- **Fix:** the root `conftest.py` now scrubs `COV_CORE_*` (and
+  `COVERAGE_PROCESS_START`) for the whole session, in a session-scoped autouse
+  fixture, because product code spawns children too -- not only tests. **A new
+  test does not need to do anything.** The per-test `monkeypatch.delenv` loop
+  below predates that fixture and is now redundant; it is kept here only as the
+  narrower form, for a case that needs the variables restored mid-session. The
   parent process's own coverage collection is unaffected — the plugin
   collects in-process, and these environment variables only arm *new*
   interpreters.
@@ -324,8 +329,7 @@ pytest --log-cli-level=DEBUG
       monkeypatch.delenv(key, raising=False)
   ```
   Applied in `backend/tests/integration/test_cli_integration.py`
-  (`test_pause_then_fill_with_resume`). Any new test that spawns a CLI child
-  and cares about wall-clock timing should do the same.
+  (`test_pause_then_fill_with_resume`), which predates the session fixture.
 
 **[NOTE]** Common non-project-specific failure modes (import errors from an
 unconfigured `PYTHONPATH`, missing `conftest.py` fixtures, mutable default
