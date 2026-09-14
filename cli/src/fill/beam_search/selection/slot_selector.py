@@ -222,35 +222,6 @@ class MRVSlotSelector(SlotSelectionStrategy):
         sorted_slots = sorted(slots, key=constraint_key)
         return sorted_slots
 
-    def order_by_secondary_constraint(self, slots: List[Dict], grid: Grid) -> List[Dict]:
-        """
-        Secondary ordering by crossing constraints.
-
-        Prioritizes slots that cross with many other unfilled slots,
-        as filling these provides more constraint propagation.
-
-        Args:
-            slots: List of slots to order
-            grid: Current grid state
-
-        Returns:
-            Ordered list of slots
-        """
-
-        def crossing_key(slot: Dict):
-            # Count number of crossing slots that are still unfilled
-            crossing_count = 0
-            for other_slot in slots:
-                if slot != other_slot and self._slots_intersect(slot, other_slot):
-                    other_pattern = grid.get_pattern_for_slot(other_slot)
-                    if "?" in other_pattern:
-                        crossing_count += 1
-
-            # Higher crossing count = fill first (more constraint propagation)
-            return -crossing_count
-
-        return sorted(slots, key=crossing_key)
-
     def prioritize_theme_entries(self, slots: List[Dict]) -> Tuple[List[Dict], Set[str]]:
         """
         Separate and prioritize theme entry slots.

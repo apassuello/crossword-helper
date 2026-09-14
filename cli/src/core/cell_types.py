@@ -151,16 +151,6 @@ def validate_pattern_char(char: str) -> bool:
     return char == WILDCARD or is_letter(char)
 
 
-def count_empty_cells(row: list) -> int:
-    """Count the number of empty cells in a grid row."""
-    return sum(1 for cell in row if is_empty(cell))
-
-
-def count_filled_cells(row: list) -> int:
-    """Count the number of filled cells (letters) in a grid row."""
-    return sum(1 for cell in row if is_filled(cell))
-
-
 # ============================================================================
 # ASSERTIONS FOR DEBUGGING
 # ============================================================================

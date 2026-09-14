@@ -200,36 +200,6 @@ class TriePatternMatcher:
         """
         return self.trie.get_stats()
 
-    def get_performance_report(self) -> str:
-        """
-        Get formatted performance report.
-
-        Returns:
-            Multi-line string with cache and trie statistics
-        """
-        cache_stats = self.get_cache_stats()
-        trie_stats = self.get_trie_stats()
-
-        report = []
-        report.append("=== TriePatternMatcher Performance Report ===")
-        report.append("")
-        report.append("Cache Statistics:")
-        report.append(f"  Total queries: {cache_stats['total_queries']}")
-        report.append(f"  Cache hits: {cache_stats['hits']}")
-        report.append(f"  Cache misses: {cache_stats['misses']}")
-        report.append(f"  Hit rate: {cache_stats['hit_rate']}")
-        report.append(f"  Cache size: {cache_stats['cache_size']} patterns")
-        report.append("")
-        report.append("Trie Statistics:")
-        report.append(f"  Total words: {trie_stats['total_words']}")
-        report.append(f"  Total nodes: {trie_stats['total_nodes']}")
-        report.append(f"  Length tries: {trie_stats['num_length_tries']}")
-        report.append(f"  Avg nodes/word: {trie_stats['avg_nodes_per_word']:.1f}")
-        report.append(f"  Length ranges: {trie_stats['length_ranges']}")
-        report.append("")
-
-        return "\n".join(report)
-
     def __repr__(self) -> str:
         """String representation."""
         cache_stats = self.get_cache_stats()

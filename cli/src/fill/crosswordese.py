@@ -245,27 +245,3 @@ def filter_crosswordese(candidates: list, slot_length: int) -> list:
             filtered.append((word, adjusted_score))
 
     return filtered
-
-
-def get_crosswordese_stats(words: list) -> dict:
-    """
-    Get statistics about crosswordese usage in word list.
-
-    Args:
-        words: List of words to analyze
-
-    Returns:
-        Dictionary with statistics:
-        - total_words: Total word count
-        - crosswordese_count: Number of crosswordese words
-        - crosswordese_percentage: Percentage of crosswordese
-        - examples: List of crosswordese words found
-    """
-    crosswordese_found = [w for w in words if is_crosswordese(w)]
-
-    return {
-        "total_words": len(words),
-        "crosswordese_count": len(crosswordese_found),
-        "crosswordese_percentage": (len(crosswordese_found) / len(words) * 100 if words else 0),
-        "examples": crosswordese_found[:10],  # First 10 examples
-    }

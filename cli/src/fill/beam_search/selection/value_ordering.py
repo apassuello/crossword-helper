@@ -301,42 +301,6 @@ class CompositeValueOrdering(ValueOrderingStrategy):
                 strategy.track_word_usage(word)
 
 
-class QualityValueOrdering(ValueOrderingStrategy):
-    """
-    Simple quality-based ordering strategy.
-
-    Orders candidates by their quality scores, with optional
-    filtering of low-quality words.
-    """
-
-    def __init__(self, min_quality: int = 0):
-        """
-        Initialize quality ordering.
-
-        Args:
-            min_quality: Minimum quality threshold
-        """
-        self.min_quality = min_quality
-
-    def order_values(self, slot: Dict, candidates: List[Tuple[str, int]], state: BeamState) -> List[Tuple[str, int]]:
-        """
-        Order candidates by quality score.
-
-        Args:
-            slot: Slot being filled
-            candidates: List of (word, score) tuples
-            state: Current beam state
-
-        Returns:
-            Candidates ordered by quality (highest first)
-        """
-        # Filter by minimum quality
-        filtered = [(w, s) for w, s in candidates if s >= self.min_quality]
-
-        # Sort by quality score (descending)
-        return sorted(filtered, key=lambda x: -x[1])
-
-
 class ThresholdDiverseOrdering(ValueOrderingStrategy):
     """
     Threshold-and-temperature ordering: filters candidates by a quality

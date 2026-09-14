@@ -52,47 +52,6 @@ class SlotIntersectionHelper:
         return bool(pos1 & pos2)
 
     @staticmethod
-    def get_slot_intersection(slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
-        """
-        Get intersection positions between two slots.
-
-        Args:
-            slot1: First slot
-            slot2: Second slot
-
-        Returns:
-            (slot1_position, slot2_position) if they intersect, None otherwise
-        """
-        if slot1["direction"] == slot2["direction"]:
-            return None  # Parallel slots don't intersect
-
-        # Get cell coordinates for each slot
-        cells1 = set()
-        cells2 = set()
-
-        if slot1["direction"] == "across":
-            for i in range(slot1["length"]):
-                cells1.add((slot1["row"], slot1["col"] + i, i))
-        else:  # down
-            for i in range(slot1["length"]):
-                cells1.add((slot1["row"] + i, slot1["col"], i))
-
-        if slot2["direction"] == "across":
-            for i in range(slot2["length"]):
-                cells2.add((slot2["row"], slot2["col"] + i, i))
-        else:  # down
-            for i in range(slot2["length"]):
-                cells2.add((slot2["row"] + i, slot2["col"], i))
-
-        # Find intersection
-        for r1, c1, pos1 in cells1:
-            for r2, c2, pos2 in cells2:
-                if r1 == r2 and c1 == c2:
-                    return (pos1, pos2)
-
-        return None
-
-    @staticmethod
     def get_crossing_position(slot1: Dict, slot2: Dict) -> Optional[Tuple[int, int]]:
         """
         Get the position where two slots cross.
@@ -222,21 +181,3 @@ class SlotIntersectionHelper:
                 intersecting.append(slot)
 
         return intersecting
-
-    @staticmethod
-    def get_slot_by_id(slot_id: Tuple, slots: List[Dict]) -> Optional[Dict]:
-        """
-        Get slot dictionary by its ID tuple (row, col, direction).
-
-        Args:
-            slot_id: Tuple of (row, col, direction)
-            slots: List of all slots
-
-        Returns:
-            Slot dictionary or None if not found
-        """
-        row, col, direction = slot_id
-        for slot in slots:
-            if slot["row"] == row and slot["col"] == col and slot["direction"] == direction:
-                return slot
-        return None
