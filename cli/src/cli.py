@@ -337,6 +337,20 @@ def _execute_resume(
                 pause_controller.clear_pause()
 
     # --- 5. Save + report ---------------------------------------------------
+    # An engine may return None: IterativeRepair.fill() breaks out of its restart
+    # loop on a pause request with `best_result` still None. Unreachable today
+    # only because #28 leaves this path building IterativeRepair without a
+    # pause_controller, so its pause hook cannot fire -- fixing #28 opens it, and
+    # `result.grid` below would raise AttributeError. That is the failure
+    # hybrid_autofill.py records as CI run 32241543802.
+    if result is None:
+        _fail_fill(
+            "the fill engine returned no result",
+            json_output,
+            hint="This happens when a pause is requested before the first restart "
+            "completes. Nothing was written; re-run resume to try again.",
+        )
+
     # Never silently overwrite the state file with a grid: default output is a
     # sibling file named after the task id.
     output_file = output or f"resumed_{task_id}.json"

@@ -5,8 +5,8 @@ DomainState holds a SlotModel alongside two views derived from one `fixed`
 tuple: word_masks, one eligibility mask per slot (None for a fixed slot),
 and cell_letters, an alphabet bitmask per cell combining the locked-in fixed
 letters with the per-position AND of every open slot's own mask.
-initial_state (spec 2026-09-09-c3-propagator, section 7 steps 1-2's first
-half) builds both from scratch -- no cross-slot arc-consistency pass and no
+initial_state (spec 2026-09-07-domain-capabilities-design, section 7 step 1
+and step 2's first half) builds both from scratch -- no cross-slot arc-consistency pass and no
 not-equals removal.
 
 refine/_refine/propagate (section 7 steps 3, 4, 6, 7) revise those masks to

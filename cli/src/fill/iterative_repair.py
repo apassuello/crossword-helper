@@ -163,7 +163,7 @@ class IterativeRepair:
         grid_data = self.grid.to_dict()["grid"]
         self.progress_reporter.update(progress, message, data={"grid": grid_data})
 
-    def fill(self, timeout: int = 300) -> FillResult:
+    def fill(self, timeout: int = 300) -> Optional[FillResult]:
         """
         Fill grid using region-based backtracking with multi-restart.
 
@@ -178,7 +178,13 @@ class IterativeRepair:
             timeout: Maximum seconds to spend
 
         Returns:
-            FillResult with filled grid
+            FillResult with the filled grid, or None if a pause was requested
+            before restart 0 populated a result. The pause hook breaks out of the
+            restart loop, and `best_result` is still None at that point, so the
+            caller must guard before dereferencing. `hybrid_autofill.py` guards
+            explicitly for this reason -- dereferencing it there once raised
+            AttributeError in CI and never reproduced locally, being
+            machine-speed dependent.
 
         Raises:
             ValueError: If timeout < 10 seconds
