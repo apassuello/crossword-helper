@@ -284,8 +284,10 @@ on a 22-slot position with every domain empty: `_ac3()` → `True`.
 Any recovery path that gates on that return will therefore do nothing at exactly the position where
 the grid is most dead. `_unwind_dead_ends` (`cli/src/fill/autofill.py`) is written against this:
 it runs `_ac3()` purely for its pruning side effect and then inspects the domains directly, with the
-reasoning recorded in the code. Its earlier form broke `if self._ac3(): break` before looking, and
-that form is still what ships on `main`.
+reasoning recorded in the code. An earlier form gated on `if self._ac3(): break` before looking;
+that form no longer ships anywhere. Both `HEAD` and `origin/main` carry the corrected version, and
+the comment above `dead_slots` states the reason in place:
+`git grep -n 'if self._ac3()' -- cli` returns nothing on either ref.
 
 **When testing arc consistency for *satisfiability* rather than for *propagation*, check the
 domains directly and treat the return value as a propagation signal only.**
@@ -343,7 +345,9 @@ Four escalating strategies:
 ### Diversity Management (`beam_search/beam/diversity.py`)
 - Partitions expanded beam into groups (default 4)
 - Each group selects top states using diversity-augmented scores
-- Diversity metric: Hamming distance at crossing positions between candidate states
+- Diversity metric: `state_diversity_score` — the fraction of slots whose assigned word differs,
+  normalised over the union of both states' assigned slots. Whole-word comparison; there is no
+  crossing-level or letter-level distance in this path
 - Based on Vijayakumar et al. 2016 (Diverse Beam Search)
 
 ### State Evaluation (`beam_search/evaluation/state_evaluator.py`)
