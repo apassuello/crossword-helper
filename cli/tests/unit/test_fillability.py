@@ -5,12 +5,18 @@ on the merged C3 propagator (src.domain.propagator).
 Fixture is FIX-A, the same 5x5 grid and 14-word FIXTURE_WORDS as
 test_propagator.py (blacks at cell indices 3, 8, 15, 21; one unslotted
 cell, 20). There is no conftest.py under cli/tests and this file does not
-add one -- test_propagator.py's own docstring notes this repo duplicates
-fixtures per test module rather than sharing one, and fixture_word_list/
-bitset_index/model already exist in both test_propagator.py and
-test_letter_bitset.py. This file follows the same convention: every
-constant and fixture below is transcribed from test_propagator.py, not
-imported from it.
+add one: every constant and fixture below is transcribed from
+test_propagator.py rather than imported from it.
+
+No docstring in this suite declares that as a convention -- it is what the
+neighbouring modules already do. fixture_word_list and bitset_index are
+each defined independently in test_propagator.py and test_letter_bitset.py,
+and model in test_propagator.py; none is shared. Note the practice is not
+uniform, and test_propagator.py is explicit about the other direction where
+it applies: its Task 3 "reuses Task 2's _brute_force_fills/_states_equal/
+_natural_queue harnesses rather than duplicating them". Harnesses are
+shared within a module; fixture constants are transcribed across modules,
+because there is no module to share them from.
 
 FIX-C (three isolated length-4 across slots, no crossings) and the FIX-G
 geometry (three isolated length-3 across slots, no crossings) are copied
