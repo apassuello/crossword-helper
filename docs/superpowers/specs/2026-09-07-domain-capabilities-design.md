@@ -1,6 +1,6 @@
 # Domain Capability Family — Design
-**Version 0.1.8** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
-(amended 2026-09-10; this line is not checked by anything — verify it against §13 before citing it)
+**Version 0.1.10** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+(amended 2026-09-14; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
 
@@ -34,7 +34,7 @@ plain-text extracts of those sections were used to write this document.
 | 4 | placement: new package `cli/src/domain/` | `cli/src/fill/letter_bitset.py` beside the retiring matchers |
 | 5 | bitsets as NumPy `uint64` rows | Python bigints — no direct Rust analogue |
 | 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html` attests no ranking option | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
-| 7 | singleton not-equals propagation is implemented, cited `[?]` to A-S3 | leaving it out — a false "not refuted" on two same-length singletons |
+| 7 | singleton not-equals propagation is implemented, cited to A-S3 model m2 (`[?]` resolved 2026-09-14) | leaving it out — a false "not refuted" on two same-length singletons |
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
 | 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
 | 10 | *(2026-09-08)* `direction` serialises as its string | 0/1 ints — honours §6's "ints and lists only" literally, but the dump then matches no existing slot dict |
@@ -69,7 +69,7 @@ ranking rule as if one were attested; none is.
   search.
 - Only options attested in `applied.html` are built. An option that is not attested is out of scope
   by construction, however sensible.
-- `min_score` is a per-length policy everywhere: `MinScore = int | Callable[[int], int]`. An `int`
+- `min_score` is a per-length policy everywhere: `MinScore = Union[int, Callable[[int], int]]`. An `int`
   is a constant policy. The callers this family eventually replaces use `get_min_score(length)`.
 
 ---
@@ -337,7 +337,7 @@ Option: AC-3 to a fixed point, ingrid_core [C-46]. Module `cli/src/domain/propag
 Both views are maintained: word masks per slot (m2) and letter sets per cell (m1).
 
 ```python
-MinScore = int | Callable[[int], int]
+MinScore = Union[int, Callable[[int], int]]
 
 @dataclass
 class DomainState:
@@ -404,9 +404,13 @@ design. The consequence worth stating, because it is what a test will compare: f
 Algorithm, pinned:
 1. Open and fixed slots per §3. A fixed slot gets `word_masks[s] = None`, is never in `wiped`, and
    constrains its crossers only through `fixed` (its letters are already in their patterns).
-2. `initial_state`: `word_masks[s] = index.mask(pattern(model, s, fixed), min_score(L_s))` for every
-   open slot. Then, if `not_equals`: every fixed slot whose text is in the index removes that word id
-   from every same-length open mask (`Revision(-1, fixed_slot, t, removed)`).
+2. Initial masks, then fixed-word removal — **two functions, not one**. `initial_state` sets
+   `word_masks[s] = index.mask(pattern(model, s, fixed), min_score(L_s))` for every open slot and
+   stops there; it takes no `not_equals` (see its signature above), so it cannot do the rest. The
+   removal belongs to `propagate`, which applies `_fixed_word_removals` to the state `initial_state`
+   returned: if `not_equals`, every fixed slot whose text is in the index removes that word id from
+   every same-length open mask (`Revision(-1, fixed_slot, t, removed)`). Step 8 states the same
+   split from the other side, and the decision-17 note below states it correctly.
 3. Queue: every crossing whose two slots are both open. Arc consistency runs alone — step 5 never
    fires from inside this loop.
 4. Pop `(cell, a, i, b, j)`: `allowed = letters_at(L_a, i, mask_a) & letters_at(L_b, j, mask_b)`;
@@ -481,12 +485,18 @@ Chosen over two alternatives: narrowing the uniqueness claim to `refuted` only, 
 `FillabilityReport` irreproducible on any refuted grid; and suppressing the rule once some slot has
 wiped, which is order-dependent in its own right.
 
-**[?]**
+**[SPEC] The A-S3 citation is model m2, not m1 — settled 2026-09-14 against the PDF**
 Beacham et al. [A-S3] describe model m1 as having "word constraints and not-equals constraints".
-Run-A's OCR quote stops before saying what the not-equals constraints bind. The singleton rule in
-step 5 is cited to A-S3 on that basis until `corpus/A1` (Beacham, p. 4) is read; the rule itself is
-kept regardless (decision 7), because without it two same-length singletons on one word report
-"not refuted" for a state that has no fill.
+Run-A's OCR quote stopped before saying what those not-equals constraints bind, so step 5's
+singleton rule was cited to m1 provisionally. `corpus/A1` has now been read, and **the rule is m2**:
+m1's not-equals is a 9-/10-ary constraint over *letter* variables, while m2 has "a not-equals
+constraint over a pair of distinct variables if their corresponding words are of the same
+length... All of the constraints in model m2 are binary" (PDF p. 4 / printed p. 81). Step 5 clears a
+word-id bit from same-length open masks, which is the m2 constraint, and this document already
+labels the word masks m2 in §6 and at the head of §7. PAC propagators "enforce arc consistency for each of the
+constraints in models m1, m2, and m3" (PDF p. 6 / printed p. 83), so citing m2 does not narrow what
+[A-S3] supports. Decision 7 is unaffected — the rule is kept either way, because without it two
+same-length singletons on one word report "not refuted" for a state that has no fill.
 
 **[NOTE]**
 The codebase already contains AC-3: `Autofill._ac3` and `_revise` in
@@ -688,6 +698,24 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.10** — 2026-09-14 — editorial amendment, **no decisions**, from the 2026-09-13 housekeeping
+  assessment. Three self-contradictions, each a drift of this document from itself rather than from
+  the code: §7's step 2 headed `initial_state` while the not-equals removal it describes is
+  `propagate`'s (`_fixed_word_removals`), which §7's own signature block and step 8 both already
+  implied; the pinned `MinScore` alias written `int | Callable[[int], int]` at two sites, the form
+  that raises on this project's Python 3.9 floor because a module-level alias is a runtime
+  expression `from __future__ import annotations` does not defer — the C3 plan caught it at
+  authoring and this document was never amended; and the missing 0.1.9 entry below. §7's `[?]` on
+  the [A-S3] not-equals citation is also resolved here, against the PDF rather than the OCR quote:
+  the rule is model **m2**, not m1. Decision 7 stands either way.
+- **0.1.9** — 2026-09-11 — implementation amendment for C4, surfaced writing the C4 plan.
+  Two decisions, **both ratified by the owner 2026-09-11**, recorded in §1 and §8 when they were
+  taken but never entered here. Decision 18 keeps `unslotted_cells` off `FillabilityReport`, putting
+  the grid-defect label at the rendering layer, on the ground that the report is not standalone
+  either way — `wiped_slots` and `domain_sizes` are already meaningless without the model. Decision
+  19 adds `off_list_fixed`, decided by **membership alone**, which is what makes it separable from
+  C6 provenance: a fixed slot's pattern has no `?`, so one index lookup per fixed slot answers it
+  without knowing who asserted each letter. Neither changes behaviour §7 or §8 had already fixed.
 - **0.1.8** — 2026-09-10 — implementation amendment, surfaced by the C3 whole-branch review.
   Two decisions, **both ratified by the owner 2026-09-10**. Decision 16 promotes the value
   semantics of the §7 structs from the plan into this document, and **0.1.7 was wrong to classify
