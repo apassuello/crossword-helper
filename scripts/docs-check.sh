@@ -23,7 +23,7 @@ EXCLUDE='^(docs/archive/|\.archive/|docs/resources/research/|docs/dev/FABRICATIO
 live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 
 # Source comments are documentation too. The 2026-08 audit found the SAME false
-# figure ("454k words") in cli/ docstrings as in the docs, which is why checking
+# figure ("454k words") in cli/ docstrings as in the docs, which is why checking  # docs-check: allow (names the banned figure to explain the rule)
 # docs against code silently failed - see docs/dev/FABRICATION-LOG.md. Only the
 # banned-claim check runs over these; the link check stays markdown-only.
 #
@@ -42,16 +42,29 @@ live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 # git ls-files cannot reach it either way, and its entries are dated records
 # whose Build: fields assert test counts as their whole purpose. See
 # CONTRIBUTING.md section 4.
-CODE_EXCLUDE='^(docs/archive/|\.archive/|data/research/)'
+# docs/resources/research/ is excluded here for the same reason EXCLUDE carries
+# it: those files are imported verbatim from external papers, so a banned string
+# inside one is a quotation nobody may edit. 786d369 added it to EXCLUDE and not
+# to CODE_EXCLUDE, and the gap stayed invisible only because live_code() then
+# scanned three extensions, none of which it matched.
+CODE_EXCLUDE='^(docs/archive/|\.archive/|data/research/|docs/resources/research/)'
 live_code() {
   git ls-files | grep -vE "$CODE_EXCLUDE" | while IFS= read -r f; do
     case "$f" in
-      *.py|*.js|*.jsx) echo "$f" ;;
-      # Known non-source extensions: skipped without opening the file.
-      *.md|*.json|*.yaml|*.yml|*.txt|*.pdf|*.png|*.jpg|*.jpeg|*.svg|*.ico|*.css|*.scss|\
-      *.html|*.lock|*.cfg|*.ini|*.toml|*.sh|*.pkl|*.csv|*.tsv) ;;
-      # Anything else may still be a Python script without an extension.
-      *) [ -f "$f" ] && head -1 "$f" 2>/dev/null | grep -qE '^#!.*python' && echo "$f" ;;
+      # The ONLY filter is this skip list, and it holds formats with no prose to
+      # check: rendered/binary assets, lockfiles, and *.md (live_docs already
+      # yields those). Everything else is scanned.
+      #
+      # This case statement used to read `*.py|*.js|*.jsx) echo` first, with a
+      # `*)` arm that echoed a file only if its first line was a python shebang.
+      # That made the whole function an include list one layer below the one this
+      # comment claims to have abolished: a .sh, .ts or .rs file matched neither
+      # arm, failed the shebang test, and was never scanned. Measured cost: the
+      # guard's own source violated it -- scripts/docs-check.sh:26 quotes the
+      # "454k words" figure, matches BANNED, and passed for as long as the include  # docs-check: allow (names the banned figure to explain the rule)
+      # list existed. Inverting is a strict superset, 209 files -> 326.
+      *.md|*.pdf|*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pkl|*.lock|*.woff|*.woff2|*.ttf) ;;
+      *) [ -f "$f" ] && echo "$f" ;;
     esac
   done
 }
@@ -93,11 +106,14 @@ BANNED=(
 # Escape hatch: a line containing "docs-check: allow" is exempt. Needed for lines
 # that legitimately quote a banned string - the contributing guide documenting the
 # rule, or a complexity discussion citing a capacity rather than a stale count.
-# Deliberately per-line and greppable, so every exemption stays auditable:
-#   grep -rn "docs-check: allow" -- '*.md' '*.py'
+# Deliberately per-line and greppable, so every exemption stays auditable. Use a
+# pathspec-free enumeration -- the guard no longer scans only .md and .py, and an
+# audit command that names extensions is the same include list this file just
+# stopped using:
+#   git ls-files | xargs grep -n "docs-check: allow\" 
 for pat in "${BANNED[@]}"; do
   while IFS= read -r f; do
-    if out=$(grep -nE "$pat" "$f" 2>/dev/null | grep -v 'docs-check: allow'); then
+    if out=$(grep -InE "$pat" "$f" 2>/dev/null | grep -v 'docs-check: allow'); then
       echo "  BANNED     $f"
       echo "$out" | sed 's/^/               /'
       echo "banned" >> "$MARKER"
