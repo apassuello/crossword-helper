@@ -3,30 +3,60 @@
 Filter obvious gibberish from wordlist.
 
 Conservative approach:
-- Remove slam-dunk gibberish only (AAAAA, NNN, BRNNN)
+- Remove slam-dunk gibberish only (NNNN, BRNNGSNSTN, GOGOGO)
 - Keep known abbreviations (AAA, NBA, FBI, etc.)
+- Keep short no-vowel forms (NNN, BRNNN, LGBTQ) -- below both rules' thresholds
 - Keep valid words that happen to have patterns (BOOK, ZOO)
 
 Usage:
     python3 scripts/filter_gibberish.py
 """
 
-import re
-from pathlib import Path
 from collections import defaultdict
-
+from pathlib import Path
 
 # Known abbreviations to preserve (even if they match gibberish patterns)
 KNOWN_ABBREVIATIONS = {
-    'AAA',  # American Automobile Association
-    'AAAA', # Quad-A (minor league baseball)
-    'NBA', 'NFL', 'MLB', 'NHL', 'MLS',  # Sports
-    'FBI', 'CIA', 'NSA', 'DEA',  # Government
-    'USA', 'UK', 'EU',  # Countries
-    'IBM', 'ATT', 'GE',  # Companies
-    'DVD', 'CD', 'TV', 'PC',  # Technology
-    'PhD', 'MD', 'RN', 'CEO', 'CFO',  # Titles
-    'III', 'II', 'IV', 'VI', 'VII', 'VIII', 'IX',  # Roman numerals (common in names)
+    "AAA",  # American Automobile Association
+    "AAAA",  # Quad-A (minor league baseball)
+    # Sports
+    "NBA",
+    "NFL",
+    "MLB",
+    "NHL",
+    "MLS",
+    # Government
+    "FBI",
+    "CIA",
+    "NSA",
+    "DEA",
+    # Countries
+    "USA",
+    "UK",
+    "EU",
+    # Companies
+    "IBM",
+    "ATT",
+    "GE",
+    # Technology
+    "DVD",
+    "CD",
+    "TV",
+    "PC",
+    # Titles
+    "PhD",
+    "MD",
+    "RN",
+    "CEO",
+    "CFO",
+    # Roman numerals (common in names)
+    "III",
+    "II",
+    "IV",
+    "VI",
+    "VII",
+    "VIII",
+    "IX",
 }
 
 
@@ -35,8 +65,10 @@ def is_slam_dunk_gibberish(word: str) -> bool:
     Detect obvious gibberish patterns.
 
     ULTRA-CONSERVATIVE rules (only remove absolute gibberish):
-    - All same letter (AAAAA, NNN, but NOT AAA if it's an abbreviation)
-    - No vowels in word >= 5 letters (BRNNN, LGBTQ)
+    - All same letter, 4 or more (NNNN; NNN and AAA are kept as too short, and
+      AAAA is kept because KNOWN_ABBREVIATIONS is checked before every rule)
+    - No vowels in word >= 6 letters (BRNNGSNSTN; BRNNN and LGBTQ are kept,
+      which is the point of the threshold -- see Rule 2's comment)
     - Alternating repeated pattern (GOGOGO, HAHAHA, XOXOXO)
 
     REMOVED RULES (too many false positives):
@@ -54,7 +86,7 @@ def is_slam_dunk_gibberish(word: str) -> bool:
     # Rule 2: No vowels in word >= 6 letters (excluding Y as vowel)
     # Threshold set to 6 to keep 5-letter onomatopoeia (SHHHH, BRRRR) and abbreviations
     if len(word) >= 6:
-        vowels = set('AEIOUY')
+        vowels = set("AEIOUY")
         if not any(c in vowels for c in word):
             return True  # BRNNGSNSTN, THNKSFRTHMMRS (compressed phrases), etc.
 
@@ -82,7 +114,7 @@ def count_pattern_score(word: str) -> int:
         score -= 30
 
     # Bonus for having vowels
-    vowels = sum(1 for c in word if c in 'AEIOUY')
+    vowels = sum(1 for c in word if c in "AEIOUY")
     if vowels == 0 and len(word) > 2:
         score -= 40
 
@@ -98,7 +130,7 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
     """Filter gibberish from wordlist and generate report."""
 
     print(f"Reading wordlist from {input_file}...")
-    with open(input_file, 'r') as f:
+    with open(input_file, "r") as f:
         words = [line.strip().upper() for line in f if line.strip()]
 
     print(f"Total words: {len(words)}")
@@ -111,19 +143,19 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
         if is_slam_dunk_gibberish(word):
             # Categorize by reason (matching the 3 rules in is_slam_dunk_gibberish)
             if len(set(word)) == 1:
-                removed['all_same_letter'].append(word)
-            elif len(word) >= 6 and not any(c in 'AEIOUY' for c in word):
-                removed['no_vowels'].append(word)
+                removed["all_same_letter"].append(word)
+            elif len(word) >= 6 and not any(c in "AEIOUY" for c in word):
+                removed["no_vowels"].append(word)
             elif len(word) >= 6 and all(word[i] == word[i % 2] for i in range(len(word))) and len(set(word)) <= 2:
-                removed['alternating_pattern'].append(word)
+                removed["alternating_pattern"].append(word)
             else:
-                removed['other_pattern'].append(word)
+                removed["other_pattern"].append(word)
         else:
             kept.append(word)
 
     # Write filtered wordlist
     print(f"\nWriting filtered wordlist to {output_file}...")
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         for word in sorted(kept):
             f.write(f"{word}\n")
 
@@ -131,16 +163,16 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
     print(f"Writing report to {report_file}...")
     total_removed = sum(len(words) for words in removed.values())
 
-    with open(report_file, 'w') as f:
+    with open(report_file, "w") as f:
         f.write("# Gibberish Filter Report\n\n")
         f.write(f"**Input:** {input_file}\n")
         f.write(f"**Output:** {output_file}\n\n")
-        f.write(f"## Summary\n\n")
+        f.write("## Summary\n\n")
         f.write(f"- **Total words in:** {len(words)}\n")
         f.write(f"- **Words kept:** {len(kept)} ({len(kept)/len(words)*100:.1f}%)\n")
         f.write(f"- **Words removed:** {total_removed} ({total_removed/len(words)*100:.1f}%)\n\n")
 
-        f.write(f"## Removed by Category\n\n")
+        f.write("## Removed by Category\n\n")
         for category, words_list in sorted(removed.items()):
             f.write(f"### {category.replace('_', ' ').title()} ({len(words_list)} words)\n\n")
             # Show first 20 examples
@@ -150,7 +182,7 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
                 f.write(f"... and {len(words_list) - 20} more\n")
             f.write("\n")
 
-        f.write(f"## Known Abbreviations Preserved\n\n")
+        f.write("## Known Abbreviations Preserved\n\n")
         preserved_abbrevs = [word for word in kept if word in KNOWN_ABBREVIATIONS]
         if preserved_abbrevs:
             f.write(f"The following {len(preserved_abbrevs)} abbreviations were kept:\n")
@@ -160,12 +192,12 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
 
     # Print summary
     print(f"\n{'='*60}")
-    print(f"FILTERING COMPLETE")
+    print("FILTERING COMPLETE")
     print(f"{'='*60}")
     print(f"Words in:      {len(words):,}")
     print(f"Words kept:    {len(kept):,} ({len(kept)/len(words)*100:.1f}%)")
     print(f"Words removed: {total_removed:,} ({total_removed/len(words)*100:.1f}%)")
-    print(f"\nRemoved by category:")
+    print("\nRemoved by category:")
     for category, words_list in sorted(removed.items(), key=lambda x: -len(x[1])):
         print(f"  {category.replace('_', ' ').title():30s} {len(words_list):5,} words")
     print(f"\nOutput: {output_file}")
@@ -173,12 +205,12 @@ def filter_wordlist(input_file: Path, output_file: Path, report_file: Path):
     print(f"{'='*60}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Paths
     project_root = Path(__file__).parent.parent
-    input_file = project_root / 'data/wordlists/comprehensive.txt'
-    output_file = project_root / 'data/wordlists/comprehensive_filtered.txt'
-    report_file = project_root / 'data/wordlists/filter_report.md'
+    input_file = project_root / "data/wordlists/comprehensive.txt"
+    output_file = project_root / "data/wordlists/comprehensive_filtered.txt"
+    report_file = project_root / "data/wordlists/filter_report.md"
 
     # Check input exists
     if not input_file.exists():
