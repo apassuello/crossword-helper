@@ -185,6 +185,65 @@ because the name still resolves and no grep can tell which definition was meant:
 same-named method from a cited class, and changing a quoted function's signature. Those remain the
 re-pin gate's job — a silent Guard 3 is not proof the page is intact.
 
+❌ Asserting provenance from a doc that paraphrases the issue → ✅ open the issue
+Why: `4cd4fe3` claimed a gating form "is the bug #17 fixed", taken from `ALGORITHM_DEEP_DIVE.md`.
+#17 says the opposite branch. Corrected in `1178679` — and the *source* sentence was still false
+three sections away at `ALGORITHM_DEEP_DIVE.md:287-288`, where `8220500` had edited the same
+paragraph the same day without touching it. Fixing the paraphrase does not fix what it paraphrased,
+so the claim comes back. Sibling of the docstring-as-testable-claim entry: same failure, different
+artifact.
+
+❌ Adopting a guard pattern because it reads right → ✅ run it over the tree and count true vs
+false before it lands
+Why: three instances. A bare decimal-`%` rule fired on black-square density, fill thresholds,
+timeout ratios and a URL-encoded badge link — four false to one true. Guard 3's bare-identifier
+form fires on three of `7b0060c`'s eighteen removed names where only one is real, because six
+classes define `order_values` in one file and a citation of a *surviving* same-named symbol reads
+exactly like a true hit; adding "no definition survives" gives 1 true, 0 false. And the `docs-check`
+extension inversion was measured over its 117 newly reachable files before landing: one hit, the
+true positive, zero false. A guard noisy enough to distrust only teaches everyone to reach for the
+escape hatch.
+
+❌ Treating a guard's own source as out of its own scope → ✅ the guard must pass the guard
+Why: `scripts/docs-check.sh:26` quotes the "454k words" figure to explain the rule it enforces. It <!-- docs-check: allow (names the banned figure to describe the violation) -->
+matched BANNED `[0-9]+k\+? words` with no allow marker and passed for as long as `live_code()`'s
+skip list hid `.sh` — the one file in the repo that must not violate the rule, violating it, hidden
+by the include list `1abbf61` claimed to have abolished. Fixed in `ff8e561`; the inverted guard
+immediately caught the comment written to explain the inversion. Prove such a fix **red then green
+on the tracked file**: `live_code()` enumerates via `git ls-files`, so running a `/tmp` copy of the
+script scans the real tree and tests nothing.
+
+❌ Composing `dest / user_supplied_path` without checking for an absolute path → ✅ `isabs` plus an
+`_is_inside(resolved, root)` check before anything is copied or written
+Why: `Path("/a/b") / "/abs/c"` evaluates to `/abs/c` — the left operand is discarded silently. Found
+in a tool whose entire purpose was to stop writing the real tree, after 67 of its own tests were
+green. Relevant here because pause/resume is file-based IPC over caller-supplied paths.
+
+❌ Running anything alongside a suite whose result you intend to cite → ✅ run it alone
+Why: `cli/tests/unit/test_hybrid_integration.py::test_fill_simple_grid` asserts
+`result.time_elapsed < 30.0` on wall clock. A second pytest run concurrently with a full suite took
+628s against 302s idle; the test failed at 307s and the failure was read as a regression in new
+code, then as a different regression. Both wrong — the suite is green run alone.
+
+❌ Comparing a pytest-reported path against a path your own tool built → ✅ `realpath` both sides
+Why: macOS resolves `/tmp` → `/private/tmp` and pytest reports the realpath, so
+`reported.startswith(run_root)` is `False` while
+`realpath(reported).startswith(realpath(run_root))` is `True`. Every run misfires, on a comparison
+that looks obviously correct.
+
+❌ Deleting an unreferenced override whose base declares it `@abstractmethod` → ✅ delete the
+abstract declaration with it, or not at all
+Why: leaving the abstract half makes the subclass uninstantiable at import. `7b0060c` had to remove
+`DiversityStrategy.apply_diversity_bonus` together with `DiversityManager`'s implementation, or two
+live `diverse_beam_prune` call sites in `orchestrator.py` would have broken. Zero callers on the
+override says nothing about the base.
+
+❌ Reading a closed issue as evidence the work is done → ✅ check the items against the code
+Why: #21 auto-closed on a rebase-merge via unreworded `Closes #21 item N` trailers while items 2b
+and 3 were never implemented; `.handoff/post-m1-decisions.md`'s D12 had warned about exactly that
+and the reword did not happen. Reopened 2026-09-13. Conversely #9-#17 and #22-#25 were all verified
+genuinely resolved — the state field carries no information either way.
+
 ---
 
 ## Extensibility

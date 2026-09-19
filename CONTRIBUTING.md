@@ -267,9 +267,16 @@ cp /tmp/target.orig <target-source>.py && rm /tmp/target.orig
 ```
 
 **The acceptance criterion is narrow, and three failures in one session did not meet it:** the
-output must be an `AssertionError` reported at the target assertion's *own line* — not an exception
-raised upstream before the assertion ran (a mutation that deletes a `None` guard crashes on
-`None & ndarray` first), and not a different test. `-o addopts=` is required because a `slow`-marked
+output must be a failure of the target assertion at its *own line* — not an exception raised
+upstream before the assertion ran (a mutation that deletes a `None` guard crashes on
+`None & ndarray` first, and a test whose first statement is a tuple-unpack `(x,) = f()` raises
+`ValueError` before any assertion runs), and not a different test.
+
+**Do not match on the literal string `AssertionError`.** Under `--tb=line` a *message-less* assert
+prints the rewritten expression alone — `some_test.py:5: assert 999 == 1` — with no exception type
+at all; only an assert carrying a message prints `AssertionError:`. Read the line number and the
+expression, not the type name. A checker that grepped for the type reported "survived" for every
+bare assert it was given. `-o addopts=` is required because a `slow`-marked
 target selected by node id is otherwise silently deselected, which reads as "did not fail".
 
 Prefer not needing this at all: write the test first and watch it fail, which observes the same
