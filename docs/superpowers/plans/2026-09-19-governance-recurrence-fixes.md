@@ -371,11 +371,29 @@ Independent of the gate. T4 and T5 can run at any time; **T6 runs last, once.**
 
 **Do not** use a whole-tree `git diff` between the two shas as the test — it fires on any commit touching a file the page never quotes. Scope it: `git diff --stat <old> <new> -- cli backend src`.
 
-- [ ] **Step 1:** Confirm all Phase 2 commits are landed and the tree is clean.
-- [ ] **Step 2:** Set `PIN` to the new HEAD; sweep the 96 reader-facing occurrences.
-- [ ] **Step 3:** Run the five gates from the bundle README. Redirect output, read `$?` on its own line.
-- [ ] **Step 4:** Run the old-sha sweep with an explicit file list, stderr visible.
-- [ ] **Step 5:** No commit — the bundle is gitignored, which is what makes `HEAD == PIN` satisfiable at all.
+- [x] **Step 1:** Done — tree clean, HEAD `4cd9fcf`.
+- [x] **Step 2:** Done — `PIN = "4cd9fcf"`; 99 occurrences swept across 11 files, fixtures excluded.
+- [x] **Step 3:** Done — all five green, each rc read on its own line from a redirect, never off a pipe.
+  `selftest` every check fired (delta-chips · delta-digits · research-verbatim · structural · coverage) ·
+  `applied` PASS 79 blocks / 135 chips / 6 sections · `page_gate` PASS ×5 · `attribution` PASS · `render` OK ×6.
+  Matches the README's recorded landing baseline exactly. `code-verbatim` refetches each block at `PIN`,
+  so green here proves every quoted block against the code at `4cd9fcf`.
+- [x] **Step 4:** Done — zero `4b3cbf0` outside `_build/applied/fixtures/`.
+  **Run with `find … -exec grep`, deliberately not `grep -rl`:** the bundle is gitignored, and the
+  recursive `grep` here is a ugrep wrapper honouring `.gitignore`, so the prescribed form would return
+  a clean null proving nothing. The fixture keeps its original sha on purpose and stays excluded.
+- [x] **Step 5:** Confirmed — no commit; `git ls-files data/research` is empty, which is what makes
+  `head != PIN or dirty` satisfiable at `applied_gate.py:395`.
+
+**A termination note, because recording a re-pin is itself a commit.** Writing this section moved the
+tree off `4cd9fcf`, so committing it moves HEAD again and the pin goes red again — the standing note's
+"red on every commit, by design" applied to the bookkeeping about the re-pin. The regress terminates
+because the gate's requirement is `HEAD == PIN` **at gate-run time**, not "PIN names the newest commit
+forever". The sequence is therefore: land the last commit, then re-pin to it, then run the gates once.
+The shas named in Steps 1–4 above record where the gates were **first** proven green; the final pin is
+whatever the last commit of this session is, and is recorded in the gitignored ledger, which can be
+updated without producing another commit. Do not read a later HEAD as evidence this step was skipped —
+check `PIN` against `git rev-parse --short HEAD` and re-run the five gates.
 
 ---
 
