@@ -154,8 +154,9 @@ if [ "$mode" = "staged" ]; then
   # Both remain the re-pin gate's job. Do not read a silent Guard 3 as proof the
   # page is intact.
   #
-  # Measured against 7b0060c, the only real instance available: of its 18
-  # removed def/class names, this rule fires on exactly one -- get_slot_by_id,
+  # Measured against 7b0060c, the only real instance available: of its 17
+  # removed def/class names (dunders excluded; recount 2026-09-20 -- an
+  # earlier form of this comment said 18), this rule fires on exactly one -- get_slot_by_id,
   # the symbol that actually had to be restored. Matching the bare identifier
   # instead fires on three: order_values (a surviving LCVValueOrdering method of
   # the same name) and __init__ are false positives, and a citation of a

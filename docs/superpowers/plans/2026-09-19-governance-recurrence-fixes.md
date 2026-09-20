@@ -56,7 +56,7 @@
 | `plugins/context-tools/skills/catchup/SKILL.md` | claude-dotfiles | Consumer; step 6 already compares a header sha to HEAD |
 | `plugins/context-tools/handoff-grammar.md` | claude-dotfiles | Shared field grammar — must stay in sync with both skills |
 
-**No test harness exists for `check-guards.sh`.** Verified: the only tracked files naming it are the script itself and `.github/workflows/test.yml`. T2's RED/GREEN is therefore a staged-fixture cycle, not a test file.
+**No test harness exists for `check-guards.sh`.** Verified: no tracked file *executes* it against fixtures. (An earlier form of this sentence said only the script and `.github/workflows/test.yml` name it; `git grep -l check-guards` returns ten files, including `.pre-commit-config.yaml` and `CONTRIBUTING.md`, which invoke or describe it but do not test it.) T2's RED/GREEN is therefore a staged-fixture cycle, not a test file.
 
 ---
 
@@ -106,14 +106,14 @@ Both tasks are reading-sized. Run them **inline**, not via subagent: each return
 **Interfaces:**
 - Produces: the false-positive counts that decide whether T2 exists, and in which of three forms.
 
-**Why this task exists.** Guard 3 matches with `grep -rnw` — bare word-match. That is safe against the research bundle because its citations are distinctive names inside `data-symbol=` attributes. Tracked `.md` is prose, and `cli/src/domain/` defines `refine`, `assess`, `mask`, `restrict` and `pattern`. Deleting `refine` makes it genuinely extinct, and every sentence reading "refine the estimate" would fire. Replaying `7b0060c`'s eighteen removed names **understates** this, because those names are distinctive — so the replay is the second control, not the first.
+**Why this task exists.** Guard 3 matches with `grep -rnw` — bare word-match. That is safe against the research bundle because its citations are distinctive names inside `data-symbol=` attributes. Tracked `.md` is prose, and `cli/src/domain/` defines `refine`, `assess`, `mask`, `restrict` and `pattern`. Deleting `refine` makes it genuinely extinct, and every sentence reading "refine the estimate" would fire. Replaying `7b0060c`'s seventeen removed names **understates** this, because those names are distinctive — so the replay is the second control, not the first.
 
 **Two corpora, both required:**
 
 | Corpus | Definition | What it measures |
 |---|---|---|
 | **A — saturation control** | Every current `def`/`class` name in `cli/` + `backend/`, dunders excluded, treated as if deleted | The true false-positive baseline |
-| **B — historical replay** | The 18 names removed by `7b0060c` | Comparability with Guard 3's published 1-true/0-false figure |
+| **B — historical replay** | The 17 names removed by `7b0060c` | Comparability with Guard 3's published 1-true/0-false figure |
 
 **Two matchers, both required:**
 
@@ -174,7 +174,7 @@ Do not proceed to Phase 2 until all four hold:
 **Per the plan, this blocks T3 as specified.** See *T3 re-proposal* below.
 
 **Q4 · What does a new field require?** *Four-column declaration.*
-`handoff-grammar.md:189` §Consumers is a table whose columns are `prepare-handoff` · `catchup` · `handoff-distill` · `resolve-cursor-citations.sh`, one row per grammar element. Adding an element means adding its row **and** editing each skill the row marks. That table is the sync contract.
+`handoff-grammar.md` §Consumers is a table whose columns are `prepare-handoff` · `catchup` · `handoff-distill` · `resolve-cursor-citations.sh`, one row per grammar element. Adding an element means adding its row **and** editing each skill the row marks. That table is the sync contract.
 
 **Q5 · Test harness.** `scripts/test-resolve-cursor-citations.sh` (445 lines) — hand-rolled shell: `ok()`/`fail()`/`expect()`/`reject()` helpers at `:18-29`, a fixture log at `:39`, invoked directly. Cases are `# ---` banner-delimited. This is the RED/GREEN precedent for anything touching the resolver.
 
@@ -282,7 +282,7 @@ Applying the repo's own rules: *"adopting a guard pattern because it reads right
 
 **Behavioral criteria:**
 - The rule lives in **both** files and says the same thing in each: `handoff-grammar.md` states it as the Cursor block's writer's contract; `prepare-handoff/SKILL.md:51` states it as an instruction, extending the existing *"embed the actual output — never paraphrase"* sentence rather than duplicating it.
-- `handoff-grammar.md`'s §Consumers table (`:189`) gains no new row — this constrains an existing element (cursor block), it does not add one. **Do not invent a new grammar element.**
+- `handoff-grammar.md`'s §Consumers table gains no new row — this constrains an existing element (cursor block), it does not add one. **Do not invent a new grammar element.**
 - No change to `resolve-cursor-citations.sh`, `catchup/SKILL.md`, or `handoff-distill/SKILL.md`. The rule binds the writer; nothing machine-verifies it.
 - The worked example is the real one, named as such: the 2026-09-19 10:29Z crossword-helper entry claimed *"still off `2bfc2fa` … this session made no commits so the drift is unchanged"* while `PIN` already read `4b3cbf0`. The inference was sound and the conclusion false, because `PIN` is gitignored and "no commits" does not constrain it.
 - **Do not** add a project-specific `PIN` command anywhere. The rule is generic by construction.
@@ -291,7 +291,7 @@ Applying the repo's own rules: *"adopting a guard pattern because it reads right
 
 - [x] **Complete** — `95a2a08` on claude-dotfiles `chore/cursor-value-claims`, *"docs(context-tools): require output for cursor value-claims"*. Two files, +11/−2. `test-resolve-cursor-citations.sh` 78 passed / 0 failed.
 
-**As built, verified against the diff rather than the report:** `handoff-grammar.md` extends the Cursor-block writer's contract in the grammar's descriptive register (*"carries the command output that establishes it … Inference from an adjacent fact is not output"*); `prepare-handoff/SKILL.md:51` extends the existing never-paraphrase sentence in the instruction register, and generalises the motivating case (*"a gitignored file (a `PIN`, for instance) can drift with no commit at all"*) without naming a project-specific command. `§Consumers` intact at 10 rows, no new element. `resolve-cursor-citations.sh`, `catchup/SKILL.md` and `handoff-distill/SKILL.md` untouched. No AI attribution trailers.
+**As built, verified against the diff rather than the report:** `handoff-grammar.md` extends the Cursor-block writer's contract in the grammar's descriptive register (*"carries the command output that establishes it … Inference from an adjacent fact is not output"*); `prepare-handoff/SKILL.md:51` extends the existing never-paraphrase sentence in the instruction register, and generalises the motivating case (*"a gitignored file (a `PIN`, for instance) can drift with no commit at all"*) without naming a project-specific command. `§Consumers` intact at 8 data rows, no new element. `resolve-cursor-citations.sh`, `catchup/SKILL.md` and `handoff-distill/SKILL.md` untouched. No AI attribution trailers.
 
 **Review deviation, recorded deliberately:** no task-reviewer subagent was dispatched. The diff is 11 lines of prose, read end to end by the controller and checked against every criterion above. `superpowers:subagent-driven-development` says never skip task review; the user-scope Deliberation Budget says *"already know the answer from reading → don't spawn"* and *"meta-work must cost less than the work it guards."* The Budget governs, per "user instructions take precedence over skills". Flagged to Arthur at the time, not applied silently.
 

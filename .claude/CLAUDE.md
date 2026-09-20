@@ -183,7 +183,7 @@ artifact.
 false before it lands
 Why: three instances. A bare decimal-`%` rule fired on black-square density, fill thresholds,
 timeout ratios and a URL-encoded badge link — four false to one true. Guard 3's bare-identifier
-form fires on three of `7b0060c`'s eighteen removed names where only one is real, because six
+form fires on three of `7b0060c`'s seventeen removed names where only one is real, because six
 classes define `order_values` in one file and a citation of a *surviving* same-named symbol reads
 exactly like a true hit; adding "no definition survives" gives 1 true, 0 false. And the `docs-check`
 extension inversion was measured over its 117 newly reachable files before landing: one hit, the
