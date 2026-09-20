@@ -1,5 +1,5 @@
 # Domain Capability Family — Design
-**Version 0.1.12** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.13** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
 (this header carries no amendment date, deliberately: §13 is the amendment record and the only
 place a date is maintained. Nothing checks this line — cite §13, never this header.)
 
@@ -39,7 +39,7 @@ plain-text extracts of those sections were used to write this document.
 | 3 | library module + tests only | a CLI subcommand at the first layer |
 | 4 | placement: new package `cli/src/domain/` | `cli/src/fill/letter_bitset.py` beside the retiring matchers |
 | 5 | bitsets as NumPy `uint64` rows | Python bigints — no direct Rust analogue |
-| 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html`'s ranking findings attest no *option to choose among*: once domains are maintained, P05's product-of-crossing-counts and P06's minimal-cost rule are a formula over domain sizes, not a re-place-and-re-match loop. Ranking falls out of C3's propagator. | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
+| 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html`'s ranking findings attest no *option to choose among*: once domains are maintained, P05's product-of-crossing-counts and P06's minimal-cost rule are a formula over domain sizes, not a re-place-and-re-match loop. Ranking falls out of C3's propagator. Premise attested by decision 22. | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
 | 7 | singleton not-equals propagation is implemented, cited to A-S3 model m2 (`[?]` resolved 2026-09-14) | leaving it out — a false "not refuted" on two same-length singletons |
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
 | 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
@@ -53,16 +53,19 @@ plain-text extracts of those sections were used to write this document.
 | 17 | *(2026-09-10)* `refine` applies `min_score` to every open slot's mask before running the fixed point | accepting it and ignoring it — the signature §7 pinned then promises a filter it never performs, and `refine` is the re-propagation entry point (§7 step 8), so a caller that changes score policy gets silently unfiltered masks. Also rejected: dropping the parameter, which is honest but leaves `refine` unable to express the one thing its own consumer needs |
 | 18 | *(2026-09-11)* `FillabilityReport` does **not** carry `unslotted_cells`; the grid-defect label is applied where the report is rendered, from `model.unslotted` | carrying a copy of `model.unslotted` on the report. The case for it was that `cell_letters == 0` is overloaded between "grid defect" and "cell of a wiped slot" — but `wiped_slots` and `domain_sizes` are already slot-index-parallel and meaningless without the model, so the report is not standalone either way. The field buys convenience, not capability, at the cost of a second source for one list |
 | 19 | *(2026-09-11)* `FillabilityReport` carries `off_list_fixed: tuple[int, ...]` — fixed slots whose completed word is absent from the index, decided by **membership alone** | deferring the whole `[?]` to C6, which leaves `refuted=False` on a grid reading `QZX` with no field naming it. Also rejected: naming only the slots the *crossings* completed — the intuitive reading of the `[?]`, but it requires knowing who asserted each letter, which is C6 provenance, and would block C4 on C6. Membership is separable from provenance: a fixed slot's pattern has no `?`, so one index lookup per fixed slot answers it |
+| 20 | *(2026-09-20)* C6 ownership is **deferred with a trigger**: the mechanism is chosen when the first provenance consumer is specified, not before. §9's original trigger — "decided after C3 exists" — fired when C3 merged 2026-09-10 and went unanswered; this replaces it rather than leaving it fired. | picking one of §9's three attested mechanisms now (A-S39's justification table, R-S5's per-cell provenance, R-S3's entry identity) with no consumer to constrain the choice — C3 already left room for all three, so nothing is lost by waiting. Also rejected: recording "a fired trigger with no decision" as the standing state, which is exactly the expiry-less no-op the 2026-09-19 archaeology names. Nothing is blocked either way: C4 and C1b were both built with no provenance dependency |
 | 21 | *(2026-09-20)* the capability family stays **unwired until all six land** (C1b and C6 remain); decision 8's "no consumer, no date and no tracked item" is intentional, not an oversight — silence on it is a ratified state, not a pending item | scheduling a dated wiring pass now, which would commit `analyze` to C4 before C1b and C6 exist and create a tracked item whose trigger no one can yet state. Revisit when the sixth capability lands, not before |
+| 22 | *(2026-09-20)* `LCVValueOrdering` is **not ported** out of the retiring beam search: C3's propagator makes it redundant, which attests decision 6's premise. `value_ordering.py`'s `order_values` places the candidate, re-patterns each crossing, matches, then unplaces — decision 6's "re-place-and-re-match loop" literally, and its own comment concedes the cost scales with the number of crossings and grid openness, which is why it carries a deadline bail-out. `propagator.py`'s `crossing_counts` returns the same quantity as a popcount over the crossing slot's current mask, reading state alone. | porting it into `cli/src/domain/` before deletion, which re-implements a loop the propagator replaces; and accepting its loss silently, which leaves decision 6's premise asserted but uncited. The retiring implementation is also weaker than its replacement: it calls `find(pattern, min_score=...)` without `max_results`, so under the regex `PatternMatcher` (whose default caps results) two candidates that both leave more options than the cap compare equal. The matcher is injected at `orchestrator.py`'s constructor, so whether the cap bites is caller-dependent |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
 command → adapter → route → React, never skip a layer". The exception is for this pass only.
 Decision 6 followed a five-agent red-team of the first draft (2026-09-07): the draft had written a
 ranking rule as if one were attested; none is.
-Decision 20 is deliberately unused. It is reserved for C6 ownership — §9's trigger fired when C3 merged
-2026-09-10 — which remains unratified: the owner's answer on 2026-09-19 was "I don't know", which is not a
-ratification. Numbering continues at 21 so the reserved number is not silently reused.
+Decision 20 is **ratified as a deferral** (2026-09-20), not unused — see its row above. The number was
+held in reserve from 2026-09-13, while the owner's answer stood at "I don't know", which is correctly
+not a ratification. What is ratified now is the *deferral and its trigger*, not a mechanism. Numbering
+had already run on to 21 during the reservation, so the register is not in numeric order.
 
 ---
 
@@ -637,7 +640,10 @@ theme entry from an accident of the crossings. That discrimination arrives with 
 ## 9. C6 — ownership (deferred)
 
 **[SPEC]**
-Second capability. Three attested options, decided after C3 exists:
+Second capability. Three attested options. **Trigger (decision 20, 2026-09-20): the mechanism is
+chosen when the first provenance consumer is specified.** The original trigger — "decided after
+C3 exists" — fired when C3 merged 2026-09-10 with nothing recorded; decision 20 replaces it rather
+than leaving a fired trigger standing. The options:
 - a justification table — every removed value keeps the constraint that removed it, Bessière's
   DnAC-4 [A-S39];
 - a per-cell provenance field — CrossHatch's `ContentType` [R-S5], whose own removal path has a
@@ -710,6 +716,18 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.13** — 2026-09-20 — **two decisions** (20 and 22), ratified by the owner 2026-09-20,
+  closing Q7 and Q2 of the 2026-09-19 decision archaeology. **20** ratifies C6 ownership as a
+  *deferral with a trigger*: the mechanism is chosen when the first provenance consumer is
+  specified. The number had been reserved for exactly this since 0.1.12, so it is consumed rather
+  than skipped — a ratified deferral is a decision about C6's state, not an absence of one. The
+  register is consequently not in numeric order, 20 having been written after 21. §9's original
+  trigger is replaced there rather than left fired-and-unanswered. **22** records that C3's
+  propagator makes `LCVValueOrdering` redundant, so it is not ported out of the retiring beam
+  search. This attests decision 6's premise, which 0.1.11 restated but could not yet cite an
+  implementation for: the two functions were read against each other for this amendment rather than
+  taken from their docstrings. Decision 6's row gains one sentence pointing at 22; no other ratified
+  text changed.
 - **0.1.12** — 2026-09-20 — **one decision** (21), ratified by the owner 2026-09-20. Decision 8's
   "no consumer, no date and no tracked item" state is ratified as *intentional*: the family stays
   unwired until all six capabilities land (C1b and C6 remain). This answers the wiring-trigger
