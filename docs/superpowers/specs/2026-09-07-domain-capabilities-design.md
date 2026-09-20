@@ -1,5 +1,5 @@
 # Domain Capability Family — Design
-**Version 0.1.11** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.12** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
 (amended 2026-09-14; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
@@ -47,12 +47,16 @@ plain-text extracts of those sections were used to write this document.
 | 17 | *(2026-09-10)* `refine` applies `min_score` to every open slot's mask before running the fixed point | accepting it and ignoring it — the signature §7 pinned then promises a filter it never performs, and `refine` is the re-propagation entry point (§7 step 8), so a caller that changes score policy gets silently unfiltered masks. Also rejected: dropping the parameter, which is honest but leaves `refine` unable to express the one thing its own consumer needs |
 | 18 | *(2026-09-11)* `FillabilityReport` does **not** carry `unslotted_cells`; the grid-defect label is applied where the report is rendered, from `model.unslotted` | carrying a copy of `model.unslotted` on the report. The case for it was that `cell_letters == 0` is overloaded between "grid defect" and "cell of a wiped slot" — but `wiped_slots` and `domain_sizes` are already slot-index-parallel and meaningless without the model, so the report is not standalone either way. The field buys convenience, not capability, at the cost of a second source for one list |
 | 19 | *(2026-09-11)* `FillabilityReport` carries `off_list_fixed: tuple[int, ...]` — fixed slots whose completed word is absent from the index, decided by **membership alone** | deferring the whole `[?]` to C6, which leaves `refuted=False` on a grid reading `QZX` with no field naming it. Also rejected: naming only the slots the *crossings* completed — the intuitive reading of the `[?]`, but it requires knowing who asserted each letter, which is C6 provenance, and would block C4 on C6. Membership is separable from provenance: a fixed slot's pattern has no `?`, so one index lookup per fixed slot answers it |
+| 21 | *(2026-09-20)* the capability family stays **unwired until all six land** (C1b and C6 remain); decision 8's "no consumer, no date and no tracked item" is intentional, not an oversight — silence on it is a ratified state, not a pending item | scheduling a dated wiring pass now, which would commit `analyze` to C4 before C1b and C6 exist and create a tracked item whose trigger no one can yet state. Revisit when the sixth capability lands, not before |
 
 **[NOTE]**
 Decision 3 is a deliberate, owner-approved exception to the project rule "new capability: CLI
 command → adapter → route → React, never skip a layer". The exception is for this pass only.
 Decision 6 followed a five-agent red-team of the first draft (2026-09-07): the draft had written a
 ranking rule as if one were attested; none is.
+Decision 20 is deliberately unused. It is reserved for C6 ownership — §9's trigger fired when C3 merged
+2026-09-10 — which remains unratified: the owner's answer on 2026-09-19 was "I don't know", which is not a
+ratification. Numbering continues at 21 so the reserved number is not silently reused.
 
 ---
 
@@ -686,7 +690,9 @@ Room left by C2/C3:
 - The live `analyze` CLI command (`cli/src/cli.py`) calls `analyze_constraints` and
   `analyze_placement_impact`; it keeps its current "critical" threshold and the beam evaluator's
   penalty ladder for as long as nothing consumes C4. Under decision 3 that is the state after this
-  family lands, with no consumer, no date and no tracked item (decision 8).
+  family lands, with no consumer, no date and no tracked item (decision 8). **Ratified 2026-09-20
+  (decision 21): this is intentional. The family stays unwired until all six capabilities land; this cost is
+  accepted for that duration and is not a pending item.**
 - Crossing logic is implemented independently in seven files under `cli/src/fill/` (all in the
   retiring autofill family, `SlotIntersectionHelper` among them) and once more inline in the live
   `cli/src/core/constraint_analyzer.py`. `SlotModel` is positioned against all of them and replaces
@@ -698,6 +704,13 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.12** — 2026-09-20 — **one decision** (21), ratified by the owner 2026-09-20. Decision 8's
+  "no consumer, no date and no tracked item" state is ratified as *intentional*: the family stays
+  unwired until all six capabilities land (C1b and C6 remain). This answers the wiring-trigger
+  question raised as Q1 by the 2026-09-19 decision archaeology, and converts a row that read as an
+  open item into a stated outcome — the "awaiting owner is an expiry-less no-op" failure that audit
+  names. Recorded in §12 beside the cost it governs. Decision 20 remains reserved and unratified;
+  see the [NOTE] under §1.
 - **0.1.11** — 2026-09-20 — editorial amendment, **no decisions**. Decision 6's evidentiary clause
   read "`applied.html` attests no ranking option", which is a compression rather than an accurate
   sentence: the page's ranking section carries four `finding` blocks. It is restated here with the
