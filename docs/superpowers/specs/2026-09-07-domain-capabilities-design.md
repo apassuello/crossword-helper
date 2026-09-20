@@ -63,9 +63,10 @@ command → adapter → route → React, never skip a layer". The exception is f
 Decision 6 followed a five-agent red-team of the first draft (2026-09-07): the draft had written a
 ranking rule as if one were attested; none is.
 Decision 20 is **ratified as a deferral** (2026-09-20), not unused — see its row above. The number was
-held in reserve from 2026-09-13, while the owner's answer stood at "I don't know", which is correctly
-not a ratification. What is ratified now is the *deferral and its trigger*, not a mechanism. Numbering
-had already run on to 21 during the reservation, so the register is not in numeric order.
+reserved in 0.1.12, the same day, when 21 was written past it; the question had surfaced 2026-09-13
+and the owner's answer on 2026-09-19 was "I don't know", which is correctly not a ratification. What
+is ratified now is the *deferral and its trigger*, not a mechanism. 20 was therefore ratified after
+21: ratification order and numeric order differ. The table itself reads in numeric order.
 
 ---
 
@@ -720,8 +721,9 @@ Room left by C2/C3:
   closing Q7 and Q2 of the 2026-09-19 decision archaeology. **20** ratifies C6 ownership as a
   *deferral with a trigger*: the mechanism is chosen when the first provenance consumer is
   specified. The number had been reserved for exactly this since 0.1.12, so it is consumed rather
-  than skipped — a ratified deferral is a decision about C6's state, not an absence of one. The
-  register is consequently not in numeric order, 20 having been written after 21. §9's original
+  than skipped — a ratified deferral is a decision about C6's state, not an absence of one. 20 was
+  ratified after 21, so ratification order and numeric order differ; the table itself reads in
+  numeric order. §9's original
   trigger is replaced there rather than left fired-and-unanswered. **22** records that C3's
   propagator makes `LCVValueOrdering` redundant, so it is not ported out of the retiring beam
   search. This attests decision 6's premise, which 0.1.11 restated but could not yet cite an
@@ -734,7 +736,7 @@ Room left by C2/C3:
   question raised as Q1 by the 2026-09-19 decision archaeology, and converts a row that read as an
   open item into a stated outcome — the "awaiting owner is an expiry-less no-op" failure that audit
   names. Recorded in §12 beside the cost it governs. Decision 20 remains reserved and unratified;
-  see the [NOTE] under §1.
+  see the [NOTE] under §1. *(Superseded in 0.1.13: ratified as a deferral with a trigger.)*
 - **0.1.11** — 2026-09-20 — editorial amendment, **no decisions**. Decision 6's evidentiary clause
   read "`applied.html` attests no ranking option", which is a compression rather than an accurate
   sentence: the page's ranking section carries four `finding` blocks. It is restated here with the
