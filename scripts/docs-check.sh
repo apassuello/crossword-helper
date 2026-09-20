@@ -22,6 +22,108 @@ EXCLUDE='^(docs/archive/|\.archive/|docs/resources/research/|docs/dev/FABRICATIO
 
 live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 
+# Exclusions for the "does this citation resolve" predicates (Task 3/4 of
+# docs/superpowers/plans/2026-09-20-doc-truth-guards.md). Shared by both
+# predicates, defined once:
+#   E2: a plan under docs/superpowers/plans/ names files it is about to
+#       create -- forward reference is what a plan *is*.
+#   E3: docs/resources/SOURCES.md is a bibliography indexing *other*
+#       codebases; its filenames/identifiers belong to those repos, not this
+#       one.
+PREDICATE_EXCLUDE='^(docs/superpowers/plans/|docs/resources/SOURCES\.md)'
+
+# Fenced code blocks are stripped before extraction for the citation
+# predicates -- a line-based toggle on ``` and ~~~, because grep alone
+# cannot track fence state across lines.
+strip_fences() {
+  awk '
+    /^[[:space:]]*(```|~~~)/ { infence = !infence; next }
+    !infence { print }
+  ' "$1"
+}
+
+# Predicate 1: a `backtick-spanned` path-shaped citation must resolve to a
+# tracked file. Resolution is git ls-files, never a filesystem check -- see
+# the plan's "Implementation requirement" section. A basename living only in
+# a sibling worktree, node_modules, or build output must NOT resolve here.
+#
+# Input is arguments, never an internal enumeration ($@ = paths to scan), so
+# --selftest can feed it a fixture invisible to live_docs()'s git ls-files.
+check_cited_paths() {
+  local exts='py|sh|js|jsx|mjs|ts|tsx|yml|yaml|ini|cfg|toml'
+  local anchor="^[A-Za-z0-9_./-]+\\.($exts)\$"
+  local f line span inner base
+  for f in "$@"; do
+    if [[ "$f" =~ $PREDICATE_EXCLUDE ]]; then continue; fi
+    while IFS= read -r line; do
+      case "$line" in *'docs-check: allow'*) continue ;; esac
+      while IFS= read -r span; do
+        [ -z "$span" ] && continue
+        inner="${span#\`}"; inner="${inner%\`}"
+        if [[ "$inner" =~ $anchor ]]; then
+          base=$(basename -- "$inner")
+          if ! git ls-files -- "*/$base" "$base" | grep -q .; then
+            echo "  DEAD PATH  $f: $inner"
+            echo "deadpath" >> "$MARKER"
+          fi
+        fi
+      done < <(grep -oE '`[^`]+`' <<<"$line")
+    done < <(strip_fences "$f")
+  done
+}
+
+# --selftest: exercises check_cited_paths against a fixture the normal run
+# never sees (live_docs() is git ls-files, blind to a temp file). Covers the
+# normative cases from the plan: dead path flags, live path passes, the
+# docs-check: allow hatch suppresses, a fenced span is never examined, a glob
+# and a shell command are rejected by the anchored charset, and -- the case
+# a filesystem-based check would get wrong -- a path that exists on disk but
+# is untracked by git still flags.
+run_selftest() {
+  local tmpdir fixture ghost rc=0 flagged
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/docs-check-selftest.XXXXXXXX")
+  ghost="cli/src/fill/__selftest_ghost_$$.py"
+
+  cleanup_selftest() { rm -rf "$tmpdir"; rm -f "$ghost"; }
+  trap cleanup_selftest RETURN
+
+  : > "$ghost"   # exists on disk, untracked -- must still flag as dead
+
+  fixture="$tmpdir/fixture.md"
+  cat > "$fixture" <<EOF
+Live path: \`cli/src/fill/autofill.py\`
+Dead path: \`cli/src/fill/inverted_index.py\`
+Allowed dead path: \`cli/src/fill/inverted_index.py\` <!-- docs-check: allow (selftest) -->
+Glob, not a path: \`*.py\`
+A command, not a path: \`grep -n 'id:' .pre-commit-config.yaml\`
+Untracked-on-disk path: \`$ghost\`
+
+\`\`\`
+Fenced dead path, must not be examined: \`cli/src/fill/inverted_index.py\`
+\`\`\`
+EOF
+
+  : > "$MARKER"
+  check_cited_paths "$fixture" > "$tmpdir/out.log" 2>&1
+  flagged=$(grep -c '^deadpath$' "$MARKER" 2>/dev/null)
+  flagged=${flagged:-0}
+
+  if [ "$flagged" -ne 2 ]; then
+    echo "SELFTEST FAILED: expected 2 flags (dead path + untracked-on-disk path), got $flagged"
+    echo "--- output ---"
+    cat "$tmpdir/out.log"
+    rc=1
+  else
+    echo "SELFTEST OK: check_cited_paths flags dead/untracked-on-disk paths; passes live/glob/command/allowed/fenced"
+  fi
+  return $rc
+}
+
+if [ "${1:-}" = "--selftest" ]; then
+  run_selftest
+  exit $?
+fi
+
 # Source comments are documentation too. The 2026-08 audit found the SAME false
 # figure ("454k words") in cli/ docstrings as in the docs, which is why checking  # docs-check: allow (names the banned figure to explain the rule)
 # docs against code silently failed - see docs/dev/FABRICATION-LOG.md. Only the
@@ -83,6 +185,13 @@ while IFS= read -r f; do
     fi
   done
 done < <(live_docs)
+
+echo "==> Checking cited paths resolve"
+# git ls-files output has no spaces in this repo; check_cited_paths takes
+# paths as $@ by contract (plan Task 3), not a list it enumerates itself, so
+# this is the pinned call shape.
+# shellcheck disable=SC2046
+check_cited_paths $(live_docs)
 
 echo "==> Checking for banned derivable-state claims"
 # Each pattern is a way of asserting state that goes stale silently.

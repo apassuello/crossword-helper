@@ -63,7 +63,7 @@ pip install -r requirements.txt   # backend + CLI deps. NOTE: cli/requirements.t
 npm install                       # frontend deps
 ```
 
-**[?]** No `setup.py`/`pyproject.toml` `[project]` table or console-script entry point exists
+**[?]** No `setup.py`/`pyproject.toml` `[project]` table or console-script entry point exists <!-- docs-check: allow (negative assertion: the point is that this file is absent) -->
 for the CLI — `pip install -e .` does **not** produce a global `crossword` command. Invoke the
 CLI directly instead:
 ```bash
@@ -267,7 +267,7 @@ there was nothing project-specific to correct it into.
   narrative referencing a test file that doesn't exist, and a ~600-line duplicated "adding a
   feature" tutorial. Corrected stale counts (7 API blueprints not 6, 14 CLI commands not 8),
   wrong filenames (`trie_pattern_matcher.py`, `WordListPanel.jsx`, `ThemeWordsPanel.jsx`,
-  `BlackSquareSuggestions.jsx`, `ProgressIndicator.jsx`), a fabricated wordlist TSV format, and a
+  `BlackSquareSuggestions.jsx`, `ProgressIndicator.jsx`), a fabricated wordlist TSV format, and a <!-- docs-check: allow (historical record: v3.0.0 changelog entry; file deleted later under task #16) -->
   fabricated `pip install -e .` / `crossword` console-script claim. Removed all embedded test
   counts and pass-rate claims — run `pytest` instead.
 - **2.0.0 / 1.0.0** — Prior versions carried conflicting version numbers in header vs. footer;

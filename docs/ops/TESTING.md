@@ -339,7 +339,7 @@ pip install pre-commit
 pre-commit install
 ```
 
-**[?]** There is no GitLab CI config (`.gitlab-ci.yml`) and no
+**[?]** There is no GitLab CI config (`.gitlab-ci.yml`) and no <!-- docs-check: allow (negative assertion: the point is that this file is absent) -->
 `Dockerfile.test` in this repository. An earlier revision of this document
 described both in detail; neither exists, and there is no evidence either
 was ever wired into this project's actual CI. Not documented here.

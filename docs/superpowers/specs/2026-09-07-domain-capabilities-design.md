@@ -214,7 +214,7 @@ class's own layout changing. Add the key in the commit that first wires a real c
 
 **[SPEC]**
 Option: precomputed one- and two-position inverted index, CrossHatch [R-S5]. Module
-`cli/src/domain/inverted_index.py`. Built after C4, not second (decision 9) — it is a validation
+`cli/src/domain/inverted_index.py`. Built after C4, not second (decision 9) — it is a validation <!-- docs-check: allow (forward reference: not-yet-built module, C1b) -->
 artefact, not a dependency, and nothing in C2–C4 needs it. The equivalence harness of §4 is
 parametrised over both index classes at that point; the deferred C1 Minor "dedup the duplicated
 invariant classes" is done in the same pass. This section keeps its number; only the build
@@ -676,8 +676,8 @@ Room left by C2/C3:
 | C2 | `slot_model.py` | `get_word_slots`; `get_slot_crossings` + `get_crossing_position`; `get_pattern_for_slot`; round trip | never |
 | C3 | `propagator.py` | brute force; `analyze_constraints`; `Autofill._ac3`; `analyze_placement_impact` | real-list runs |
 | C4 | `fillability.py` | C3's, through `assess` | — |
-| C1b | `inverted_index.py` | same harness, parametrised | same |
-| C6 | `ownership.py` | decided with the option | — |
+| C1b | `inverted_index.py` <!-- docs-check: allow (forward reference: not-yet-built module) --> | same harness, parametrised | same |
+| C6 | `ownership.py` <!-- docs-check: allow (forward reference: not-yet-built module) --> | decided with the option | — |
 
 - Every step: `superpowers:test-driven-development` — the differential test is written first and
   is RED against a stub before any implementation.
@@ -685,8 +685,8 @@ Room left by C2/C3:
   are not modified in this family's first pass.
 - The research bundle's `applied_gate` goes red on the first commit that moves `main` off its
   `PIN`; it is re-pinned once at session end, per the standing note in `.handoff/log.md`.
-- No count, timing or pass rate from a run is quoted in this document; `stats()`, the tests and
-  `probe_lookup.py` produce those numbers on demand.
+- No count, timing or pass rate from a run is quoted in this document; `stats()`, the tests and the
+  research bundle's probe-lookup tool produce those numbers on demand.
 
 ---
 

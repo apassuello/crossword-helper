@@ -25,7 +25,7 @@ Read `[NOTE]` only if additional context is needed.
 ## 2. Invocation
 
 **[SPEC]**
-There is no installed `crossword` entrypoint and no `setup.py`. Run as a module
+There is no installed `crossword` entrypoint and no `setup.py`. Run as a module <!-- docs-check: allow (negative assertion: the point is that this file is absent) -->
 from the repository root:
 
 ```bash

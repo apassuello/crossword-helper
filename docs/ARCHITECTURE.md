@@ -163,7 +163,7 @@ on disk holds only a stale `__pycache__`, no source).
 
 **[NOTE]**
 A prior version of this document additionally listed a `MACConstraintEngine`
-(`constraints/engine.py`) and a `memory/domain_manager.py` / `grid_snapshot.py` / `pools.py` trio
+(`constraints/engine.py`) and a `memory/domain_manager.py` / `grid_snapshot.py` / `pools.py` trio <!-- docs-check: allow (negative assertion: the point is that these four files are absent) -->
 as active components of the orchestrator. None of that exists in the shipped tree — it read as
 either leaked refactor-planning notes or stale documentation. Deleted rather than corrected;
 see the changelog.
