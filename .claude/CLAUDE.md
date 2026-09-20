@@ -204,7 +204,7 @@ this entry. The one thing not recorded there: prove such a fix **red then green 
 file** — `live_code()` enumerates via `git ls-files`, so running a `/tmp` copy of the script scans
 the real tree and tests nothing.
 
-❌ Composing `dest / user_supplied_path` without checking for an absolute path → ✅ `isabs` plus an
+❌ Composing `dest / user_supplied_path` without checking for an absolute path → ✅ `isabs` plus an <!-- docs-check: allow (Python stdlib function, not a repo-defined symbol) -->
 `_is_inside(resolved, root)` check before anything is copied or written
 Why: `Path("/a/b") / "/abs/c"` evaluates to `/abs/c` — the left operand is discarded silently. Found
 in a tool whose entire purpose was to stop writing the real tree, after 67 of its own tests were

@@ -300,7 +300,7 @@ deleted rather than carried forward. If you need current numbers:
 - Subprocess/API latency: time a request against a running `python run.py`.
 - Autofill duration by grid size and algorithm: run `crossword fill` with `--json-output` and
   read the reported timing/iteration fields, or use `cli/src/core/progress.py`'s output directly.
-- Memory: profile the running process (e.g. `psutil`) rather than trusting a static figure here —
+- Memory: profile the running process (e.g. `psutil`) rather than trusting a static figure here — <!-- docs-check: allow (third-party profiling tool, not a repo dependency) -->
   memory scales with wordlist size, beam width, and grid size, all of which are runtime choices.
 
 ---

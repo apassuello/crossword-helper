@@ -152,7 +152,7 @@ with the file.
 **[SPEC] `xfail(strict=True)` as a self-removing scaffold.** When a test must wait on an
 incomplete contract, mark it `xfail(strict=True)` rather than skipping or deleting it. Once the
 contract is fixed the test XPASSes, which *fails* the suite under `strict`, forcing someone to
-remove the marker. A plain `xfail` lapses silently and the test never comes back.
+remove the marker. A plain `xfail` lapses silently and the test never comes back. <!-- docs-check: allow (pytest marker, not a repo-defined symbol) -->
 For a known failure inside a **multi-assertion** test, prefer a conditional imperative
 `pytest.xfail()` at the failing assertion over the decorator: it guards that one assertion, leaves
 the rest of the test live, and self-clears when the contract is fixed. The decorator surrenders the
@@ -399,6 +399,6 @@ thing under test.
 - 1.2.0 (2026-08-17) — §2 records that CI now runs the guard over the whole tree, and what
   full-tree mode refuses to treat as a pass.
 - 1.1.0 (2026-08-17) — distilled the bench↔main merge session. §2 gains the staged-file guard rule,
-  §3 four test rules plus an extension to the `xfail` block, §5 the large-merge resolution block.
+  §3 four test rules plus an extension to the `xfail` block, §5 the large-merge resolution block. <!-- docs-check: allow (changelog entry, historical record) -->
 - 1.0.0 (2026-08-15) — written during the docs overhaul. Replaces an 18-line stub that had been
   archived unwritten ("Content will be populated shortly").

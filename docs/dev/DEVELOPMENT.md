@@ -229,7 +229,7 @@ you care about:
 ```bash
 python -m cProfile -o /tmp/profile.out -m cli.src.cli fill puzzle.json -w <wordlist> -t 60
 ```
-and read `/tmp/profile.out` with `pstats`. Don't trust a number in prose that a command could
+and read `/tmp/profile.out` with `pstats`. Don't trust a number in prose that a command could <!-- docs-check: allow (Python stdlib profiling module, not a repo-defined symbol) -->
 have produced instead.
 
 ---

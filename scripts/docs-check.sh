@@ -72,6 +72,38 @@ check_cited_paths() {
   done
 }
 
+# Predicate 2: a `backtick-spanned` identifier-shaped citation must resolve
+# somewhere in the tracked tree (E5 scope: the whole tree except Markdown --
+# not "cli backend"; a name defined in pytest.ini, .pre-commit-config.yaml or
+# src/ is a real reference, not a dead one). Resolution is git grep, never a
+# filesystem grep -- see the plan's "Implementation requirement" section. A
+# symbol surviving only in a stale gitignored .pyc must NOT resolve here.
+#
+# Input is arguments, never an internal enumeration ($@ = paths to scan), same
+# contract as check_cited_paths.
+check_cited_identifiers() {
+  local anchor='^[a-z_][a-z0-9_]{4,}$'
+  local sha_anchor='^[0-9a-f]{7,40}$'
+  local f line span inner
+  for f in "$@"; do
+    if [[ "$f" =~ $PREDICATE_EXCLUDE ]]; then continue; fi
+    while IFS= read -r line; do
+      case "$line" in *'docs-check: allow'*) continue ;; esac
+      while IFS= read -r span; do
+        [ -z "$span" ] && continue
+        inner="${span#\`}"; inner="${inner%\`}"
+        if [[ "$inner" =~ $anchor ]]; then
+          [[ "$inner" =~ $sha_anchor ]] && continue   # E4: commit-SHA-shaped token
+          if ! git grep -F -q -- "$inner" -- ':!*.md'; then
+            echo "  DEAD ID    $f: $inner"
+            echo "deadid" >> "$MARKER"
+          fi
+        fi
+      done < <(grep -oE '`[^`]+`' <<<"$line")
+    done < <(strip_fences "$f")
+  done
+}
+
 # --selftest: exercises check_cited_paths against a fixture the normal run
 # never sees (live_docs() is git ls-files, blind to a temp file). Covers the
 # normative cases from the plan: dead path flags, live path passes, the
@@ -119,9 +151,76 @@ EOF
   return $rc
 }
 
+# --selftest for check_cited_identifiers: covers the normative cases from the
+# plan (Task 4) -- a defined identifier passes, the mandatory positive control
+# (a name that survives only in a stale gitignored .pyc, not in tracked
+# source) flags, a commit-SHA-shaped token is dropped by E4, a config key
+# resolves via git grep's whole-tree scope (E5), the docs-check: allow hatch
+# suppresses, a fenced span is never examined, and a multi-word span is
+# rejected by the anchored single-token regex.
+#
+# The positive-control identifier is assembled from two literals at runtime,
+# never written contiguously in this file: E5's scope is the whole tracked
+# tree EXCEPT Markdown, so this .sh file is itself in-scope, and a literal
+# occurrence here would make git grep find its own fixture text and silently
+# stop the positive control from firing -- the exact failure mode this
+# selftest exists to catch.
+run_selftest_identifiers() {
+  local tmpdir fixture rc=0 flagged ghost_id
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/docs-check-selftest-id.XXXXXXXX")
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  # Same self-reference hazard as ghost_id: this .sh file is in E5's scope, so
+  # the multi-word fixture's fragment word is also assembled at runtime,
+  # never written contiguously.
+  ghost_id="hamming_distance_at_cross""ings"
+  local multiword_frag="undefined_selftest_""phrase"
+  fixture="$tmpdir/fixture.md"
+  cat > "$fixture" <<EOF
+Live identifier: \`canonical_words\`
+Positive control, must flag (removed from source, survives only in a stale
+gitignored .pyc): \`${ghost_id}\`
+SHA-shaped token, dropped by E4: \`cd75876\`
+Config key resolved via whole-tree scope (E5): \`testpaths\`
+Allowed dead identifier: \`${ghost_id}\` <!-- docs-check: allow (selftest) -->
+Multi-word span, rejected by the anchor (the phrase itself is absent verbatim
+from the tracked tree -- only the anchor stops the unanchored substring
+match from being extracted and searched for):
+\`some ${multiword_frag} here\`
+
+\`\`\`
+Fenced dead identifier, must not be examined: \`${ghost_id}\`
+\`\`\`
+EOF
+
+  : > "$MARKER"
+  check_cited_identifiers "$fixture" > "$tmpdir/out.log" 2>&1
+  flagged=$(grep -c '^deadid$' "$MARKER" 2>/dev/null)
+  flagged=${flagged:-0}
+
+  # A bare count is not enough: a mutant that narrows scope (e.g. to "cli
+  # backend" instead of the whole tree) can trade one false negative for
+  # another and still land on flagged==1, passing for the wrong reason. Assert
+  # WHICH identifier flagged, not just how many did.
+  if [ "$flagged" -ne 1 ] \
+     || ! grep -q "DEAD ID.*${ghost_id}\$" "$tmpdir/out.log" \
+     || grep -q "DEAD ID.*testpaths\$" "$tmpdir/out.log" \
+     || grep -q "DEAD ID.*${multiword_frag}" "$tmpdir/out.log"; then
+    echo "SELFTEST FAILED: expected exactly 1 flag, naming the positive control ($ghost_id); got $flagged"
+    echo "--- output ---"
+    cat "$tmpdir/out.log"
+    rc=1
+  else
+    echo "SELFTEST OK: check_cited_identifiers flags the positive control; passes live/sha/config/allowed/fenced/multi-word"
+  fi
+  return $rc
+}
+
 if [ "${1:-}" = "--selftest" ]; then
-  run_selftest
-  exit $?
+  rc=0
+  run_selftest || rc=1
+  run_selftest_identifiers || rc=1
+  exit $rc
 fi
 
 # Source comments are documentation too. The 2026-08 audit found the SAME false
@@ -192,6 +291,11 @@ echo "==> Checking cited paths resolve"
 # this is the pinned call shape.
 # shellcheck disable=SC2046
 check_cited_paths $(live_docs)
+
+echo "==> Checking cited identifiers exist"
+# Same pinned call shape as check_cited_paths (plan Task 4).
+# shellcheck disable=SC2046
+check_cited_identifiers $(live_docs)
 
 echo "==> Checking for banned derivable-state claims"
 # Each pattern is a way of asserting state that goes stale silently.
