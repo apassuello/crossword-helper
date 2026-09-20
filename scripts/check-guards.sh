@@ -131,6 +131,18 @@ if [ "$mode" = "staged" ]; then
   # count; it was applied.html's cp-model evidence, the applied_gate went red on
   # code-symbol and code-verbatim, and b4253fd restored it.
   #
+  # What made it load-bearing rather than merely cited: that bare
+  # (row, col, direction) lookup is applied.html's evidence that this codebase
+  # links its two views WITHOUT a declared channelling constraint -- the premise
+  # of the open Beacham-m3-vs-Botea decision. Deleting the symbol deleted the
+  # evidence for a question that is still undecided.
+  #
+  # Rule family: this is the fourth instance of the null-result trap, and the
+  # first whose mechanism the global ~/.claude/CLAUDE.md does not cover. That
+  # note describes the ugrep-honours-gitignore wrapper and zsh's unmatched-glob
+  # abort; this is a third mechanism -- a whole tree ignored, so both searches a
+  # developer reaches for agree on the same false null.
+  #
   # SCOPE -- read before trusting this guard. It BLOCKS on one condition only:
   # the deleted name has no surviving definition anywhere in cli/ or backend/
   # (name extinction) AND the bundle cites it. Two related breakages are a
