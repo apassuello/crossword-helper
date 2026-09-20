@@ -56,8 +56,10 @@ repos:
       # genesis, the measured true/false counts that chose this pattern over
       # the broader one, and the escape hatch. Amend it, not this comment.
       #
-      # This is a THIRD hook type. Neither `pre-commit install` nor the
-      # --hook-type pre-push line installs it; see CONTRIBUTING.
+      # A third hook type. It is wired by a plain `pre-commit install` only
+      # because default_install_hook_types at the top of this file lists it;
+      # a stage added here and not there is a hook installed for nobody, which
+      # Guard 4 in scripts/check-guards.sh now reports.
       - id: check-commit-msg
         name: reject partial-closure trailers (commit-msg)
         entry: scripts/check-commit-msg.sh
