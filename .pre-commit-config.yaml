@@ -1,7 +1,9 @@
-# Plain `pre-commit install` wires BOTH stages. Without this key it installs
-# only .git/hooks/pre-commit, so the pre-push suites below would be declared
-# and never run -- which was the state until 2026-09-20.
-default_install_hook_types: [pre-commit, pre-push]
+# Plain `pre-commit install` wires ALL THREE stages. Without this key it
+# installs only .git/hooks/pre-commit, so the pre-push suites below would be
+# declared and never run -- which was the state until 2026-09-20. commit-msg
+# joined the list when the partial-closure check landed the same day; a stage
+# added here without being added there is a hook installed for nobody.
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
 
 repos:
   - repo: https://github.com/psf/black
@@ -43,6 +45,24 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # --- commit-msg stage -----------------------------------------------
+      # D12: a trailer naming one item of a multi-item issue still closes the
+      # whole issue, because the closing keyword binds to the issue number and
+      # ignores what follows. #21 auto-closed with two items unimplemented on
+      # the rebase-merge of PR #27, after the register had warned about it.
+      #
+      # scripts/check-commit-msg.sh is the PRIMARY record: it carries the
+      # genesis, the measured true/false counts that chose this pattern over
+      # the broader one, and the escape hatch. Amend it, not this comment.
+      #
+      # This is a THIRD hook type. Neither `pre-commit install` nor the
+      # --hook-type pre-push line installs it; see CONTRIBUTING.
+      - id: check-commit-msg
+        name: reject partial-closure trailers (commit-msg)
+        entry: scripts/check-commit-msg.sh
+        language: system
+        stages: [commit-msg]
 
       # --- pre-push stage -------------------------------------------------
       # These replace an untracked .git/hooks/pre-push whose three defects
