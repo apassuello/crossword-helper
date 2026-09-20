@@ -60,8 +60,13 @@ Why: two implementations diverge; the CLI is the contract.
 ❌ Mocking both sides of the backend↔CLI seam → ✅ one real-subprocess e2e
 Why: a green suite once coexisted with pause/resume broken end to end.
 
-❌ Quoting counts, timings or "FIXED" in docs or docstrings → ✅ name the command that proves it
+❌ Writing any value a command could produce — counts, timings, "FIXED", diff totals — by hand in
+docs or docstrings → ✅ name the command that proves it
 Why: source docstrings claimed a "454k word" list; the file has ~44k. See `docs/dev/FABRICATION-LOG.md`.
+Second instance: commit `cd75876`'s own message states dead cited paths fell "35 -> 19" and, four
+lines later, that "19 of the 35 dead path citations were in these eight files" — which would leave
+16. One commit message, two incompatible numbers, both written by hand where a command could have
+produced one.
 
 ❌ Treating a docstring as prose, not a testable claim about the code beside it → ✅ read them
 together; a contradiction is a bug
