@@ -1,5 +1,5 @@
 # Domain Capability Family — Design
-**Version 0.1.10** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
+**Version 0.1.11** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
 (amended 2026-09-14; this line is not checked by anything — verify it against §13 before citing it)
 
 ---
@@ -33,7 +33,7 @@ plain-text extracts of those sections were used to write this document.
 | 3 | library module + tests only | a CLI subcommand at the first layer |
 | 4 | placement: new package `cli/src/domain/` | `cli/src/fill/letter_bitset.py` beside the retiring matchers |
 | 5 | bitsets as NumPy `uint64` rows | Python bigints — no direct Rust analogue |
-| 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html` attests no ranking option | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
+| 6 | `crossing_counts` is a propagator primitive; **no ranking rule ships** — `applied.html`'s ranking findings attest no *option to choose among*: once domains are maintained, P05's product-of-crossing-counts and P06's minimal-cost rule are a formula over domain sizes, not a re-place-and-re-match loop. Ranking falls out of C3's propagator. | P05 top-k + product [B-P05]; CrossHatch's formula [C-44] |
 | 7 | singleton not-equals propagation is implemented, cited to A-S3 model m2 (`[?]` resolved 2026-09-14) | leaving it out — a false "not refuted" on two same-length singletons |
 | 8 | the live `analyze` command keeps its current scoring; the cost is recorded in §12, no follow-up item | an unfired issue draft; wiring `analyze` to C4 now |
 | 9 | *(2026-09-08)* C1b moves to after C4 — spine first, so C2 → C3 gives C1 its first consumer | C1b at position 2: a second lookup index for the same function, unconsumed, making a fourth pattern matcher in the tree §12 already flags |
@@ -698,6 +698,16 @@ Room left by C2/C3:
 
 ## 13. Changelog
 
+- **0.1.11** — 2026-09-20 — editorial amendment, **no decisions**. Decision 6's evidentiary clause
+  read "`applied.html` attests no ranking option", which is a compression rather than an accurate
+  sentence: the page's ranking section carries four `finding` blocks. It is restated here with the
+  mechanism that makes it true — the research treats crossing-aware ranking as a *consequence* of
+  maintained domains, so P05/P06 reduce to a formula over domain sizes rather than an option to
+  choose among. The clause as written produced the same false reading in four independent readers
+  (2026-09-19 decision archaeology, §05 and U1); its rationale existed only in
+  `project_applied_research_capability.md`, an auto-memory file outside version control. Inlined
+  rather than cited, so a reader holding only this repository can resolve it. Ratified by the owner
+  2026-09-20.
 - **0.1.10** — 2026-09-14 — editorial amendment, **no decisions**, from the 2026-09-13 housekeeping
   assessment. Three self-contradictions, each a drift of this document from itself rather than from
   the code: §7's step 2 headed `initial_state` while the not-equals removal it describes is
