@@ -38,3 +38,34 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # --- pre-push stage -------------------------------------------------
+      # These replace an untracked .git/hooks/pre-push whose three defects
+      # survived precisely because nothing could see the file: an explicit
+      # pytest path list that orphaned 278 tests, a file-type include list
+      # that let config-only pushes run nothing, and 2>/dev/null on vitest
+      # that discarded ~2320 of its 2558 output lines.
+      #
+      # Both gates are EXCLUSIONS, so a file type nobody anticipated runs
+      # both suites rather than neither. The shared extension set mirrors
+      # scripts/docs-check.sh:66 -- change one, change the other.
+      #
+      # No path arguments to pytest: pytest.ini's testpaths and -m "not slow"
+      # describe the intent. -q is deliberate (addopts carries -v; -v -q net
+      # to normal, and without -q collection alone prints 5032 lines). No -x:
+      # across 1978 tests a first failure would mask everything after it.
+      - id: pytest-push
+        name: full pytest suite (pre-push)
+        entry: pytest -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        exclude: '\.(md|pdf|png|jpg|jpeg|gif|ico|pkl|lock|woff|woff2|ttf|js|jsx|ts|tsx|css|scss)$'
+
+      - id: vitest-push
+        name: frontend vitest suite (pre-push)
+        entry: npx vitest run --reporter=verbose
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        exclude: '\.(md|pdf|png|jpg|jpeg|gif|ico|pkl|lock|woff|woff2|ttf|py)$'
