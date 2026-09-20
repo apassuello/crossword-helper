@@ -1235,35 +1235,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /wordlists/{name}/stats:
-    get:
-      tags:
-        - Wordlist Management
-      summary: Get wordlist statistics
-      description: Get detailed statistics for a wordlist
-      operationId: getWordlistStats
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Wordlist statistics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WordlistStats'
-        '404':
-          description: Wordlist not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /wordlists/search:
     post:
       tags:

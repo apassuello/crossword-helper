@@ -332,22 +332,6 @@ export const handlers = [
     });
   }),
 
-  // Wordlist stats
-  http.get(`${API_BASE}/wordlists/:name/stats`, ({ params }) => {
-    return HttpResponse.json({
-      name: params.name,
-      word_count: 454321,
-      avg_length: 7.5,
-      min_length: 3,
-      max_length: 15,
-      by_length: {
-        3: 1000,
-        4: 2000,
-        5: 3000,
-      },
-    });
-  }),
-
   // Search wordlists
   http.post(`${API_BASE}/wordlists/search`, async ({ request }) => {
     const body = await request.json();

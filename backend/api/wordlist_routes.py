@@ -283,21 +283,6 @@ def delete_wordlist(name):
         return jsonify({"error": str(e)}), 500
 
 
-@wordlist_api.route("/wordlists/<path:name>/stats", methods=["GET"])
-def get_wordlist_stats(name):
-    """
-    GET /api/wordlists/<name>/stats - Get detailed statistics for a wordlist.
-    """
-    try:
-        stats = wordlist_manager.analyze_words(name)
-        return jsonify(stats), 200
-
-    except FileNotFoundError:
-        return jsonify({"error": f'Wordlist "{name}" not found'}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @wordlist_api.route("/wordlists/search", methods=["POST"])
 def search_wordlists():
     """
