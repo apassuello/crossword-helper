@@ -22,9 +22,61 @@ EXCLUDE='^(docs/archive/|\.archive/|docs/resources/research/|docs/dev/FABRICATIO
 
 live_docs() { git ls-files '*.md' | grep -vE "$EXCLUDE"; }
 
-# Exclusions for the "does this citation resolve" predicates (Task 3/4 of
-# docs/superpowers/plans/2026-09-20-doc-truth-guards.md). Shared by both
-# predicates, defined once:
+# ---------------------------------------------------------------------------
+# PRIMARY RECORD for the two citation predicates below. Everything needed to
+# judge, amend or delete them is here; the plan that produced them is archived
+# at docs/archive/completed-plans/2026-09-20-doc-truth-guards.md and is a
+# historical record, not a live reference. Amend this block, not that file.
+#
+# WHAT A FLAG MEANS. Measured 2026-09-20 over the live surface: predicate 1
+# extracted 285 spans and flagged 12; predicate 2 extracted 435 and flagged 6.
+# Exactly ONE was a real defect -- a spec cited `probe_lookup.py` in a code
+# span, but that file is untracked, living only in the gitignored research
+# bundle, so the span read as a citation of a tracked file. Fixed in the doc.
+# Every other flag was correct documentation that a regex cannot distinguish
+# from a stale citation, because the difference lives in the surrounding prose.
+# Four such classes, all irreducible:
+#   1. negative assertion   -- the doc's point is that the file is absent
+#                              ("there is no setup.py")
+#   2. forward reference    -- a spec naming a module its own build order
+#                              lists as not yet built
+#   3. historical record    -- a changelog citing a since-deleted file
+#   4. external vocabulary  -- stdlib, pytest markers and third-party tools
+#                              (isabs, xfail, psutil, pstats): real names,
+#                              never defined here, so no scope widening
+#                              absorbs them
+# Class 4 surfaced during implementation, after the first three had already
+# been settled -- so treat this list as open, not closed. If a new flag fits
+# none of the four it is a TRUE POSITIVE: fix the document, do not annotate
+# it. The one real defect above was first misclassified as a forward
+# reference and nearly annotated, so a first classification is a draft.
+#
+# BASELINE. Reaching green needed 17 new `docs-check: allow` annotations, on
+# top of 3 that predated this work. The tripwire is that standing total, not
+# zero: growth beyond it without true positives following is the signal to
+# revisit whether these predicates earn their keep. Count the live-doc total
+# with the same enumeration the predicates use -- NOT a bare
+# `git grep -- '*.md'`, which also counts archived docs and returns a larger,
+# meaningless number:
+#   git ls-files '*.md' | grep -vE "$EXCLUDE" | tr '\n' '\0' \
+#     | xargs -0 grep -h 'docs-check: allow' | wc -l
+# That printed 20 on 2026-09-20, the day the predicates landed.
+#
+# (The first draft of this block asserted "17" beside a command that returns
+# 30. A hand-written value next to a command producing a different one is the
+# exact defect these predicates exist to catch, committed inside their own
+# primary record. Re-run the command; do not trust the number beside it.)
+#
+# SELF-REFERENCE TRAP. Predicate 2 searches the whole tracked tree except
+# Markdown -- which includes this file. The selftest's positive-control
+# identifier therefore found ITS OWN fixture text here and silently never
+# fired; the first green run was a false green. Both fixture identifiers are
+# assembled from split literals so the full token never appears contiguously
+# in this source. Do not "tidy" them back together.
+# ---------------------------------------------------------------------------
+#
+# Exclusions for the "does this citation resolve" predicates. Shared by both,
+# defined once:
 #   E2: a plan under docs/superpowers/plans/ names files it is about to
 #       create -- forward reference is what a plan *is*.
 #   E3: docs/resources/SOURCES.md is a bibliography indexing *other*
@@ -44,7 +96,7 @@ strip_fences() {
 
 # Predicate 1: a `backtick-spanned` path-shaped citation must resolve to a
 # tracked file. Resolution is git ls-files, never a filesystem check -- see
-# the plan's "Implementation requirement" section. A basename living only in
+# the PRIMARY RECORD block above. A basename living only in
 # a sibling worktree, node_modules, or build output must NOT resolve here.
 #
 # Input is arguments, never an internal enumeration ($@ = paths to scan), so
@@ -76,7 +128,7 @@ check_cited_paths() {
 # somewhere in the tracked tree (E5 scope: the whole tree except Markdown --
 # not "cli backend"; a name defined in pytest.ini, .pre-commit-config.yaml or
 # src/ is a real reference, not a dead one). Resolution is git grep, never a
-# filesystem grep -- see the plan's "Implementation requirement" section. A
+# filesystem grep -- see the PRIMARY RECORD block above. A
 # symbol surviving only in a stale gitignored .pyc must NOT resolve here.
 #
 # Input is arguments, never an internal enumeration ($@ = paths to scan), same
@@ -287,13 +339,13 @@ done < <(live_docs)
 
 echo "==> Checking cited paths resolve"
 # git ls-files output has no spaces in this repo; check_cited_paths takes
-# paths as $@ by contract (plan Task 3), not a list it enumerates itself, so
+# paths as $@ by contract, not a list it enumerates itself, so
 # this is the pinned call shape.
 # shellcheck disable=SC2046
 check_cited_paths $(live_docs)
 
 echo "==> Checking cited identifiers exist"
-# Same pinned call shape as check_cited_paths (plan Task 4).
+# Same pinned call shape as check_cited_paths.
 # shellcheck disable=SC2046
 check_cited_identifiers $(live_docs)
 
