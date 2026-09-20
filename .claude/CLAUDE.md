@@ -246,6 +246,30 @@ spec row (`a6d8d85`), not by citing the memory file. Memory is a *delivery* tier
 session; it is not a *durability* tier, and a decision whose only record is there is one disk loss
 from gone.
 
+❌ Citing `file:line` for a target that has a name → ✅ cite the identifier; reserve `file:line` for
+targets with no enclosing symbol
+Why: issue #21 cited `state_manager.py:403` for a function that is in fact `cleanup_old_states`;
+`:403` is `list_states`' docstring. A line number is invalidated by any edit above it; an identifier
+is invalidated only by a rename, which `grep` finds. This is a qualified rule, not "never cite a line
+number" — that unqualified form is false and this file disproves it: most of its own line-number
+citations point at targets with no enclosing symbol to name instead (a comment block, `.gitignore`
+entries, a figure inside a comment, markdown prose), and one pair
+(`backend/tests/unit/test_routes.py`'s two `TestFillWithProgress` classes) is load-bearing precisely
+*because* the line number, not an identifier, is what distinguishes them.
+
+❌ Leaving a fact with two homes, or designating a primary without re-deriving its values → ✅ one
+primary per fact; treat designating one as a verification event
+Why: `scripts/check-guards.sh` was designated Guard 3's primary while asserting that `7b0060c`
+removed 18 names; it removed 17. A primary carrying a false value is worse than two copies, because
+every other site now points at it. This file already uses the phrase "Primary record:" in three
+entries above without ever stating the convention — this entry names it.
+
+❌ Leaving a document that describes finished work on the live surface → ✅ move it under
+`docs/archive/`
+Why: `cd75876` archived eight completed plans and the dead-path citations fell without a word of
+prose being edited. A stale plan is the document class that most reliably contradicts its own
+outcome.
+
 ---
 
 ## Extensibility
