@@ -42,7 +42,7 @@ repos:
       # --- pre-push stage -------------------------------------------------
       # These replace an untracked .git/hooks/pre-push whose three defects
       # survived precisely because nothing could see the file: an explicit
-      # pytest path list that orphaned 278 tests, a file-type include list
+      # pytest path list that orphaned whole directories of tests, a file-type
       # that let config-only pushes run nothing, and 2>/dev/null on vitest
       # that discarded ~2320 of its 2558 output lines.
       #
@@ -53,7 +53,7 @@ repos:
       # No path arguments to pytest: pytest.ini's testpaths and -m "not slow"
       # describe the intent. -q is deliberate (addopts carries -v; -v -q net
       # to normal, and without -q collection alone prints 5032 lines). No -x:
-      # across 1978 tests a first failure would mask everything after it.
+      # across the full suite a first failure would mask everything after it.
       - id: pytest-push
         name: full pytest suite (pre-push)
         entry: pytest -q
