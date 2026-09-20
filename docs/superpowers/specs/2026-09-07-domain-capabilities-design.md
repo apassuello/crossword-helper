@@ -1,6 +1,7 @@
 # Domain Capability Family — Design
 **Version 0.1.12** · Claude with Arthur Passuello · 2026-09-07 · status: design, approved by owner 2026-09-07
-(amended 2026-09-14; this line is not checked by anything — verify it against §13 before citing it)
+(this header carries no amendment date, deliberately: §13 is the amendment record and the only
+place a date is maintained. Nothing checks this line — cite §13, never this header.)
 
 ---
 
