@@ -62,6 +62,69 @@ cd "$(git rev-parse --show-toplevel)"
 
 violations=0
 
+# ---------------------------------------------------------------------------
+# Guard 4 -- a declared hook stage that is not installed locally.
+#
+# PRIMARY RECORD for the hook-installation rule.
+#
+# Genesis: 1ad9907 moved the push gate into tracked config, declaring
+# pytest-push and vitest-push at the pre-push stage. A plain `pre-commit
+# install` wires only .git/hooks/pre-commit, and that was the only command
+# either install doc gave -- so the gate was declared and installed for
+# nobody. e746f0d fixed that case with default_install_hook_types; this guard
+# generalises it, because the next stage added to the config has the same
+# failure available to it.
+#
+# PLACEMENT IS LOAD-BEARING. This sits above the `staged_files` early exit
+# on purpose. Placed after it, the guard never runs on a commit with nothing
+# staged -- which made its own first red fixture pass, proving nothing.
+# Hook installation is not a property of the diff, so it must not sit behind
+# a diff-shaped guard clause.
+#
+# WHAT THIS CANNOT CATCH, stated so nobody reads a silent pass as proof:
+# the guard runs as a pre-commit hook, so if NOTHING is installed it never
+# runs at all. It is non-circular only for the partial case -- pre-commit
+# installed, some other declared stage not -- which is precisely the defect
+# that occurred. A fresh clone with no hooks is unreachable by any hook-based
+# check, by construction.
+#
+# Why NOTE and not a block: CI runs this script directly
+# (.github/workflows/test.yml) with no hooks installed at all, so blocking
+# would red every CI run on a condition meaningless there. It is skipped
+# under CI rather than emitted as noise a reader learns to ignore.
+#
+# Why the hook FILES are not tracked instead, both schemes measured against
+# pre-commit 4.5.1 rather than assumed:
+#   core.hooksPath pointing at a tracked dir -- `pre-commit install` exits 1
+#     with "Cowardly refusing to install hooks with `core.hooksPath` set".
+#     The two are mutually exclusive; adopting it means dropping pre-commit.
+#   a tracked hooks/ dir symlinked into .git/hooks -- `pre-commit install`
+#     replaces the symlink with its own generated file and moves the target
+#     to <stage>.legacy. The scheme is undone by the next install, silently.
+# Neither is needed: .git/hooks/* are generated dispatch shims of about 600
+# bytes carrying no project logic. That logic is already tracked, in
+# .pre-commit-config.yaml and scripts/. What cannot be versioned is whether
+# the shims are installed -- local state git does not carry by design -- so
+# the answer is to detect it, not to track it.
+# ---------------------------------------------------------------------------
+if [ -z "${CI:-}" ] && [ -f .pre-commit-config.yaml ]; then
+  # Hooks live in the COMMON git dir: a linked worktree shares them with the
+  # main checkout, so --git-dir would look in the wrong place from a worktree.
+  hooks_dir="$(git rev-parse --git-common-dir 2>/dev/null)/hooks"
+  declared=$(sed -n 's/^default_install_hook_types:[[:space:]]*\[\(.*\)\].*/\1/p' \
+             .pre-commit-config.yaml | tr -d ' ' | tr ',' '\n')
+  missing=""
+  while IFS= read -r stage; do
+    [ -z "$stage" ] && continue
+    [ -f "$hooks_dir/$stage" ] || missing="$missing $stage"
+  done <<< "$declared"
+  if [ -n "$missing" ]; then
+    echo "check-guards: NOTE — declared hook stage(s) not installed:${missing}." >&2
+    echo "check-guards: NOTE — run 'pre-commit install' to wire them; nothing is blocked." >&2
+  fi
+fi
+
+
 # --- Guard 2 shared definition: exclusion list + forbidden terms ---
 api_url_terms=('axios' 'fetch(' 'new EventSource')
 
