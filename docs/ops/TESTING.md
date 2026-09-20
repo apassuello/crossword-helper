@@ -102,51 +102,25 @@ Key points that differ from what you might expect:
 
 ## Directory Layout
 
-**[SPEC]** Verified against the working tree:
+**[SPEC]** This layout is *generated, not transcribed.* A hand-maintained file list
+goes stale silently, and this one did: an earlier revision asserted it had been
+"verified against the working tree" while omitting fifteen backend test files.
 
-```
-backend/tests/
-├── conftest.py                 # shared fixtures (cli_available, skip_if_no_cli, app, client)
-├── test_api.py                 # core API endpoint tests
-├── test_openapi_contract.py
-├── fixtures/
-│   ├── grid_fixtures.py            # small synthetic grids
-│   └── realistic_grid_fixtures.py  # NYT-style grids for slow/perf tests
-├── unit/
-│   ├── test_validators.py
-│   ├── test_edit_merger.py
-│   ├── test_grid_transformation.py
-│   ├── test_cli_adapter.py
-│   ├── test_routes.py
-│   ├── test_constraint_routes.py
-│   ├── test_pause_resume_routes.py
-│   ├── test_black_square_suggester.py
-│   ├── test_theme_placer.py
-│   └── test_wordlist_manager.py
-└── integration/
-    ├── conftest.py              # Flask client, SSE parser, grid/task helpers
-    ├── test_cli_integration.py
-    ├── test_pause_resume_api.py
-    ├── test_progress_integration.py
-    ├── test_realistic_grids.py
-    ├── test_e2e_pause_resume.py
-    ├── test_adaptive_beam_search_api.py
-    ├── test_adaptive_beam_crash_fix.py
-    ├── test_adaptive_on_backtrack.py
-    ├── test_all_beam_scenarios.py
-    ├── test_beam_search_pause_resume.py
-    ├── test_constraint_integration.py
-    ├── test_theme_placement_conflicts.py
-    ├── test_theme_priority.py
-    ├── test_wordlist_metadata.py
-    ├── sse/
-    └── workflows/
+Produce the current layout:
 
-cli/tests/
-├── unit/
-├── integration/
-└── performance/                 # manual benchmark scripts, not collected by pytest
+```sh
+find backend/tests cli/tests -name 'test_*.py' | sort   # every test file
+find backend/tests cli/tests -type d | sort             # package structure
 ```
+
+What the directories mean — the part that does *not* change per commit:
+
+- `backend/tests/` — `conftest.py` (CLI-availability fixtures), plus `test_api.py`
+  and `test_openapi_contract.py` at the top level. Below it: `fixtures/` (grid
+  builders), `unit/` (route and helper tests), and `integration/` (real-subprocess
+  tests), the last containing `sse/` and `workflows/`.
+- `cli/tests/` — `unit/`, `integration/`, and `performance/`, the last holding
+  manual benchmark scripts that pytest does not collect.
 
 **[NOTE]** `backend/tests/test_api.py` lives at the top of `backend/tests/`,
 not under `integration/` — a previous revision of this doc pointed at
@@ -241,7 +215,9 @@ pytest --pdb
 `backend/tests/conftest.py`:
 - `cli_available` (session-scoped) — pings `CLIAdapter.health_check()`.
 - `skip_if_no_cli` — skips the test if `cli_available` is false.
-- `app`, `client` — Flask app/test client via `create_app(testing=True)`.
+*It does **not** define `app` or `client`* — a previous revision claimed it did.
+The only top-level Flask client fixture is `client` in `backend/tests/test_api.py`;
+the integration package defines its own, below. There is no `app` fixture anywhere.
 
 `backend/tests/integration/conftest.py`:
 - `client` — separate Flask test client for the integration package.
@@ -344,14 +320,14 @@ here.
 **[SPEC]** The real files, read directly — do not keep a copy of their
 contents in this doc, since copies drift. Read the files themselves:
 
-- **`.github/workflows/test.yml`** — `Tests & Coverage` workflow. Runs a
-  `test` job across a Python version matrix (unit tests, then integration
-  tests, coverage collected only on the last matrix entry and uploaded to
-  Codecov), a separate `lint` job (flake8/black/isort), and a `docs` job that
-  runs `scripts/docs-check.sh`.
-- **`.pre-commit-config.yaml`** — formatting/lint hooks only: `black`,
-  `isort`, `ruff`, `flake8`. There are no test-running or coverage
-  pre-commit hooks in this repo.
+- **`.github/workflows/test.yml`** — the `Tests & Coverage` workflow. **List its
+  jobs, do not trust a copy here:** `grep -nE '^  [a-z-]+:$' .github/workflows/test.yml`.
+  A previous revision of this bullet named three jobs and omitted two, including the
+  one that runs the slow suite.
+- **`.pre-commit-config.yaml`** — **list the hooks:** `grep -n 'id:' .pre-commit-config.yaml`.
+  Hooks run at **two** stages: formatting and guards at commit, and the **test suites at
+  `pre-push`**. A previous revision of this bullet called the file lint-only and stated
+  there were no test-running hooks; that stopped being true when the pre-push gate landed.
 - **`scripts/docs-check.sh`** — the guard that keeps *this* document honest:
   fails CI on dead relative links and on banned derivable-state patterns
   (test counts, pass rates, frozen completion-status lines, etc.) in any

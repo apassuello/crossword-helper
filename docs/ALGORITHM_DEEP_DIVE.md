@@ -39,7 +39,10 @@ grep -rn "def <function_name>" cli/src/fill/
 
 - **NumPy int8 array** — Grid is `np.zeros((size, size), dtype=np.int8)`
 - **Cell encoding:** BLACK_SQUARE = -1, EMPTY = 0, A-Z = 1–26
-- **Standard sizes:** 11×11, 13×13, 15×15, 17×17, 21×21
+- **Standard sizes:** 11×11, 15×15, 21×21 — and only these. `Grid.__init__` and
+  `Grid.load` both reject any other size (`size not in [11, 15, 21]`, `grid.py:41` and
+  `:341`), as do `cli_adapter.py` and `routes.py`. Other sizes such as 9×9 or 13×13
+  require `--allow-nonstandard`, whose own help text calls them nonstandard.
 - **180° rotational symmetry** enforced automatically: setting `(r,c)` black also sets `(size-1-r, size-1-c)`
 - **Locked cells** track theme words that survive autofill clearing
 - **Word slot extraction** scans L→R, T→B to find all across/down entries ≥3 letters, returning `{direction, row, col, length, pattern}`
@@ -105,7 +108,9 @@ Crossword patterns use `?` as wildcard: `"C?T"` matches CAT, COT, CUT, etc.
 - Converts `"C?T"` → regex `^C.T$`
 - Filters by length first, then regex match
 - Scans the whole list per query: cost grows linearly with list size
-- LRU cache for repeated patterns
+- Pattern cache for repeated lookups — a plain `dict`, **unbounded, with no eviction
+  policy**. It is not an LRU: `pattern_matcher.py` contains no `lru_cache`, `maxsize`
+  or `OrderedDict`. Treat it as a memory-growth surface on long runs.
 
 ### B. Trie (`cli/src/fill/trie_pattern_matcher.py` + `word_trie.py`)
 - **Length-indexed tries** — separate trie per word length (3–21)
@@ -190,7 +195,8 @@ characteristic runtime.
 ## 7. Pause/Resume System
 
 ### File-Based IPC (`cli/src/fill/pause_controller.py`)
-- Backend writes `pause_{task_id}.flag` file
+- Backend writes a `crossword_pause_{task_id}.flag` file (note the `crossword_` prefix —
+  `pause_controller.py:41`)
 - CLI polls for flag every ~100ms
 - On detection: serialize state → exit gracefully
 
@@ -287,7 +293,9 @@ it runs `_ac3()` purely for its pruning side effect and then inspects the domain
 reasoning recorded in the code. An earlier form gated on `if self._ac3(): break` before looking;
 that form no longer ships anywhere. Both `HEAD` and `origin/main` carry the corrected version, and
 the comment above `dead_slots` states the reason in place:
-`git grep -n 'if self._ac3()' -- cli` returns nothing on either ref.
+`git grep -n 'if self._ac3()' -- cli/src` returns nothing on either ref. Scope it to
+`cli/src`: over all of `cli/` it returns one hit, a docstring in
+`test_pause_resume_regressions.py` that quotes the old line to describe the bug.
 
 **When testing arc consistency for *satisfiability* rather than for *propagation*, check the
 domains directly and treat the return value as a propagation signal only.**
@@ -326,11 +334,18 @@ while filled_slots < total_slots:
 - Beam 0: candidates[0:10], Beam 1: candidates[2:12], etc.
 
 ### Dead End Recovery
-Four escalating strategies:
-1. Double candidates (2× normal)
-2. Quintuple candidates (5× normal)
-3. Remove score filter entirely
-4. Conflict-directed backjumping
+**Seven** escalating strategies, in this order — backjumping is tried **first**, not last
+(`beam_search/orchestrator.py:745-839`):
+1. Conflict-directed backjumping (the intelligent path, tried first)
+2. More candidates (2× normal)
+3. Even more candidates (5× normal)
+4. No score filter (accept any quality words)
+5. Chronological backtracking — undo the last assignment
+6. Deeper chronological backtracking
+7. Very deep backtracking (last resort)
+
+A previous revision of this section listed four steps and placed backjumping last,
+inverting the order the code actually uses.
 
 **Partial fill fallback:**
 - ≥80% filled → accept as success
