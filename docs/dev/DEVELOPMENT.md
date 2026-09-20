@@ -56,7 +56,10 @@ cd crossword-helper
 python3 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 
-pip install -r requirements.txt   # backend + CLI deps (CLI has no separate requirements.txt)
+pip install -r requirements.txt   # backend + CLI deps. NOTE: cli/requirements.txt also
+                                  # exists and is NOT a subset of this file -- it adds
+                                  # pyahocorasick, regex, reportlab, pypuz, Jinja2, mypy.
+                                  # Nothing in CI installs it.
 npm install                       # frontend deps
 ```
 
@@ -137,7 +140,9 @@ enforced by the real `.pre-commit-config.yaml` in the repo root (black, isort, r
 ```bash
 black .
 ruff check --fix .
-pre-commit install        # one-time, wires the above into git commit
+pre-commit install                       # one-time, wires the above into git commit
+pre-commit install --hook-type pre-push  # REQUIRED for the pytest/vitest push gate;
+                                         # the line above does not install it
 ```
 
 **[?]** No ESLint or Prettier config file exists anywhere in the repo despite older drafts of

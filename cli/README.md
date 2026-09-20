@@ -33,8 +33,9 @@ python -m cli.src.cli --help          # list all commands
 python -m cli.src.cli <command> --help # authoritative options for one command
 ```
 
-Dependencies come from the repo-root `requirements.txt`; `cli/requirements.txt`
-lists the CLI-only subset.
+Dependencies come from the repo-root `requirements.txt`. `cli/requirements.txt` is **not** a
+subset of it — it adds `pyahocorasick`, `regex`, `reportlab`, `pypuz`, `Jinja2` and `mypy`, and
+nothing in CI or the documented setup installs it. Treat the root file as authoritative.
 
 ---
 
@@ -47,6 +48,7 @@ lists the CLI-only subset.
 | `src/core/` | grid structure (NumPy), numbering, validation, scoring, entry conventions |
 | `src/fill/` | autofill algorithms, pattern matchers, wordlist handling, pause/resume state |
 | `src/export/` | export (HTML) |
+| `src/domain/` | the capability family — letter bitsets, slot model, propagator, fillability |
 
 `src/cli.py` is a flat module, not a package.
 

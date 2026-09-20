@@ -18,7 +18,8 @@ Read `[NOTE]` only if additional context is needed.
 ```bash
 pip install -r requirements.txt
 npm install
-pre-commit install          # black, isort, ruff, flake8 run on commit
+pre-commit install                       # formatting + guards, on commit
+pre-commit install --hook-type pre-push  # pytest + vitest gate, on push
 ```
 
 Run the app (two terminals):
@@ -121,14 +122,16 @@ uniform across the phases a test budgets separately**
 - Distinct from the pytest-cov block above, which also mentions `communicate(timeout=)`: that one
   bounds *wall* time while `-t` bounds *solver* time — a different budget, not this race.
 
-**[SPEC] A `slow`-marked test runs automatically only if a job names its file.** `pytest.ini`
-sets `addopts = -m "not slow"`, so every ordinary invocation deselects slow tests. One job
-overrides this: `pause-resume-seam` in `.github/workflows/test.yml` runs `pytest -m slow` against
-four explicitly listed seam files. **A slow test in any other file still runs nowhere** — it can
-assert something false indefinitely and nothing will notice. One did:
+**[SPEC] Every `slow`-marked test now runs in CI.** `pytest.ini` sets `addopts = -m "not slow"`,
+so every ordinary invocation deselects slow tests. The **`slow-tests`** job in
+`.github/workflows/test.yml` lifts that with `pytest -m slow -v` and **no path arguments**, so the
+deselection is overridden tree-wide. It was not always so: that job began as `pause-resume-seam`
+and named four seam files, so a slow test in any other file ran nowhere and could assert something
+false indefinitely. `9872e28` ("run the whole slow suite, not four named files") removed the path
+list. One test had already been caught by the old arrangement:
 `test_theme_priority.py::TestThemeEntriesCLICanary` claimed `--theme-entries` was broken, when
-the flag worked and the test's own fixture was wrong. If you slow-mark a test, either add its file
-to that job or you own running it.
+the flag worked and the test's own fixture was wrong. Slow-marking a test no longer hides it from
+CI — but it does still hide it from a bare local `pytest`.
 
 **[SPEC] Path arguments override `testpaths`, silently.** CI does not invoke bare `pytest`; it
 passes explicit directories (`pytest backend/tests/unit cli/tests/unit …`). Those arguments replace
@@ -348,8 +351,10 @@ thing under test.
   bans everywhere else. Do not bring it into scope; do not treat a handoff entry as a living doc.
 - **`.gitignore` unanchored directory patterns match at every depth.** `.gitignore:13` is a bare
   `lib/`, meant for Python build output, and it also swallows `src/lib/`. Nothing under such a
-  path can be committed until a negation (`!src/lib/`) is added. There is no `src/lib/` on this
-  branch, so the trap is latent — it fires the moment frontend work introduces one.
+  path could be committed until a negation was added. **That negation is already present**
+  (`.gitignore:67`, `!src/lib/`), and `src/lib/storage.js` and its test are tracked because of it.
+  The trap is disarmed, not latent — do not remove the negation, or those files silently stop
+  being committable.
 
 ---
 

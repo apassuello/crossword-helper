@@ -117,8 +117,9 @@ to place the 3-letter entry `CAT` at `(0,0,across)`, a 5-letter slot, so the CLI
 entry and the run ended before any locking happened. Fixed by making that slot 3 cells wide.
 Confirmed to discriminate: with the flag the fill preserves `CAT`, without it the solver
 overwrites row 0. The test is `slow`-marked, so `pytest` deselects it by default
-(`pytest.ini:8`) and CI has never run it — that is why a test asserting a false claim about a
-working feature survived.
+(`pytest.ini:8`). CI did not run it when this entry was written, which is why a test asserting a
+false claim about a working feature survived. It runs now: `9872e28` widened the `slow-tests` job
+to the whole tree.
 
 ---
 

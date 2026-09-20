@@ -33,7 +33,9 @@ class StateEvaluationStrategy(ABC):
         Compute quality score for a state.
 
         Returns:
-            Score in range 0.0-100.0
+            Weighted blend of completion_score (0-100) and word_score. NOT
+            clamped: it exceeds 100.0 whenever word_score does. See the
+            concrete implementation below for why that is deliberate.
         """
 
 

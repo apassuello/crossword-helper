@@ -111,7 +111,7 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
 ## Tech Stack
 
 - **Backend:** Python 3.9+, Flask, Click, NumPy, pytest
-- **Frontend:** React 18, Vite 5, SCSS, Axios, vitest
+- **Frontend:** React 18, Vite 5, SCSS, native `fetch`, vitest
 
 ## License
 

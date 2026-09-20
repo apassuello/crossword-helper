@@ -1,7 +1,7 @@
 # Research sources index
 
 Generated 2026-09-02 from the four deep-research runs' own SOURCES tables. Rows are copied, not re-verified; open the run report before citing.
-The four reports, with their evidence and claims files, are in `docs/resources/research/run-{A,B,C,R}/`. The corpus (saved papers, pages, cloned repositories; 47 unique PDFs, about 64 MB) stays in the run directories under `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/` — present in the working tree but excluded by `.gitignore` (`data/research/`), so it is never committed; `saved_path` is relative to the run directory named in each section.
+The four reports, with their evidence and claims files, are in `docs/resources/research/run-{A,B,C,R}/`. The corpus (saved papers, pages, cloned repositories; 47 unique PDFs, about 80 MB) stays in the run directories under `/Users/apa/projects/crossword-helper/data/research/deep-research-2026-09/` — present in the working tree but excluded by `.gitignore` (`data/research/`), so it is never committed; `saved_path` is relative to the run directory named in each section.
 What the runs hold beyond this index, per run directory: the report (findings, 3,236 lines across the four), `evidence.jsonl` (865 machine-verified quotes with locators), `claims.jsonl` (213 claims, A/B/C), and `corpus/` (saved papers, pages, cloned repositories). This file indexes the sources only.
 Retrieval status is the run's own label: FETCHED = full text read from a saved file; ABSTRACT = abstract or landing page only; SNIPPET = search results only.
 

@@ -44,8 +44,10 @@ Our filter keeps only score >= 40 (with exceptions for longer words).
 
 ## Backup
 
-No backup file is kept in-tree. The pre-filtering wordlist is recoverable from git
-history, or by re-deriving it from the upstream source linked above.
+No backup file is kept **in version control**. One does exist on disk at
+`data/wordlists/archive/comprehensive_filtered.txt` — untracked, because `.gitignore` excludes
+`archive/`, so it is absent from a fresh clone. The pre-filtering wordlist is otherwise recoverable
+from git history, or by re-deriving it from the upstream source linked above.
 
 ---
 

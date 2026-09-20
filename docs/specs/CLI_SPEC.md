@@ -166,7 +166,7 @@ crossword fill [GRID_FILE] -w/--wordlists PATH [...] [OPTIONS]
 | Option | Type | Default | Notes |
 |---|---|---|---|
 | `--wordlists`, `-w` | Path, multiple | required unless `--resume` state recorded its own | — |
-| `--timeout`, `-t` | int | `300` | Seconds. `repair` and `hybrid` reject values &lt;10 with an error and exit `1` |
+| `--timeout`, `-t` | int | `300` | Seconds. `repair` rejects values &lt;10; **`hybrid` rejects &lt;30**. Either exits `1` |
 | `--min-score` | int | `30` | 1–100 |
 | `--algorithm`, `-a` | Choice `regex`\|`trie`\|`beam`\|`repair`\|`hybrid` | **`repair`** | See note below |
 | `--beam-width` | int | `5` | Beam search / hybrid |
@@ -202,7 +202,7 @@ in `--state-dir` (or the StateManager default, which is what `resume` always
 uses). `<id>`, `<id>.json` and `<id>.json.gz` are all accepted. `-w` wins for
 wordlists, falling back to the paths recorded in the saved state. The two
 commands do **not** accept the same *state* forms, though: `fill --resume`
-calls `load_csp_state` directly (`cli.py:653`), which rejects a beam-search
+calls `load_csp_state` directly (in `cli.py`'s resume path), which rejects a beam-search
 state with `ValueError: Wrong algorithm: beam (expected 'csp')` — surfaced
 cleanly via `_fail_fill`, not a crash, but `fill --resume` cannot continue a
 beam-search pause at all. `resume` dispatches on the saved algorithm
@@ -251,11 +251,14 @@ state was written). Progress updates are streamed to stderr as
 
       pytest cli/tests/unit/test_fill_command.py
 
-**[SPEC] `--timeout` has a 10-second floor under `repair` and `hybrid`**
-- `iterative_repair.py`'s `fill()` rejects a timeout below 10 seconds. The CLI
-  reports this as a normal error and exits `1`; with `--json-output` the error
-  is returned as `{"success": false, "error": ...}` on stdout.
-- Pass `-t 10` or higher. `beam` and the classic algorithms have no such floor.
+**[SPEC] `--timeout` floors differ by algorithm: 10 seconds for `repair`, 30 for `hybrid`**
+- `iterative_repair.py`'s `fill()` rejects a timeout below 10 seconds.
+- `hybrid_autofill.py` rejects below **30**: `timeout must be ≥30 seconds for hybrid`.
+  A previous revision of this block gave `hybrid` the 10-second floor too; `-t 10 -a hybrid`
+  fails.
+- Either is reported as a normal error, exit `1`; with `--json-output` it is
+  `{"success": false, "error": ...}` on stdout.
+- `beam` and the classic algorithms have no floor.
 
 **[NOTE]** `repair` (and therefore the default run) can report
 `all_slots_filled: true` together with `success: false` — every slot has a
@@ -385,8 +388,12 @@ crossword analyze GRID_FILE -w/--wordlists PATH [...] [--word TEXT --slot "row,c
 Two modes:
 - **No `--word`**: per-cell constraint counts (how many wordlist entries
   fit each open slot).
-- **`--word` + `--slot`** (both required together): impact of placing that
-  word in that slot on every crossing slot's remaining candidate count.
+- **`--word` + `--slot`**: impact of placing that word in that slot on every
+  crossing slot's remaining candidate count. **The pairing is enforced in one
+  direction only.** `--slot` without `--word` errors (`--slot requires --word`),
+  but `--word` without `--slot` is **silently ignored** and the plain
+  constraint-mode output is produced instead — there is no symmetric check
+  beside `cli.py`'s `if slot and not word:`.
 
 ```bash
 python -m cli.src.cli analyze puzzle.json -w data/wordlists/comprehensive.txt --json-output
@@ -673,7 +680,7 @@ implements and has been removed rather than corrected.
    `-w`/`-a`.
 
 **[SPEC]** `fill` takes `--state-dir` and `--pause-flag-dir` options (verified
-in `python -m cli.src.cli fill --help` and `cli.py:553-562`), which override
+in `python -m cli.src.cli fill --help` and `the `--state-dir` / `--pause-flag-dir` option declarations in `cli.py``), which override
 `StateManager`'s default (`/tmp/crossword_states`) and `PauseController`'s
 default (`/tmp`) for that invocation. `grep -rn "environ\|getenv" cli/src/`
 still returns no matches — the CLI itself has no environment-variable
@@ -682,7 +689,7 @@ backend-spawned `fill` passes `--state-dir` / `--pause-flag-dir` sourced from
 `backend/core/state_paths.py:21-22`, which reads `CROSSWORD_STATE_DIR` /
 `CROSSWORD_PAUSE_FLAG_DIR` (falling back to the same `/tmp` defaults). Both
 flags are load-bearing on every backend-spawned fill
-(`backend/api/routes.py:598-602`, `backend/core/cli_adapter.py:492-495`) —
+(`backend/api/routes.py`'s `--state-dir` argv construction, `backend/core/cli_adapter.py:492-495`) —
 the backend and a CLI invocation without the flags only agree on where state
 lives because the env vars are usually unset, not because the paths are
 hardcoded to match.
