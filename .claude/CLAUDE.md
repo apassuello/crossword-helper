@@ -103,14 +103,12 @@ Why: four instances, all silent. `PatternMatcher.find` defaults `max_results=100
 both call `find(pattern, min_score=0)` bare — pass the wrong matcher and every count caps at 100
 with no error. `get_empty_slots`, `analyze_constraints`, `analyze_placement_impact` and
 `get_slot_crossings` all call `get_word_slots()` with no argument, so each is valid **only** at
-`min_length=3`. And `Autofill._ac3` is unsound in **both** directions, which is why neither
-branch of its return value may be gated on. `False` comes at the first domain it empties
-(`autofill.py`'s early return in `_ac3`), leaving downstream domains stale — so it is not a
-fixed-point oracle after a wipe. `True` is not a solvability signal either: a domain that is
-*already* empty at initialisation offers nothing to revise, so the queue drains and `_ac3`
-returns `True` on a position where every domain is empty — the most dead a position can be
-(#17, measured). Run it for its pruning side effect and inspect `self.domains` directly, the
-way `_unwind_dead_ends` does.
+`min_length=3`. And `Autofill._ac3` is unsound in **both** directions, so
+neither branch of its return value may be gated on: run it for its pruning side effect and
+inspect `self.domains` directly. **Primary record: `cli/src/fill/autofill.py:437`** (the
+`_unwind_dead_ends` call site, stating why `True` must not be early-exited on) and **`:901`**
+(what the return value is not, cited to #17). Both state the mechanism in place, beside the code
+it governs — do not restate them here.
 
 ❌ Trusting a fixture because the suite is green → ✅ confirm the fixture can express the
 distinction you are pinning
@@ -193,13 +191,13 @@ true positive, zero false. A guard noisy enough to distrust only teaches everyon
 escape hatch.
 
 ❌ Treating a guard's own source as out of its own scope → ✅ the guard must pass the guard
-Why: `scripts/docs-check.sh:26` quotes the "454k words" figure to explain the rule it enforces. It <!-- docs-check: allow (names the banned figure to describe the violation) -->
-matched BANNED `[0-9]+k\+? words` with no allow marker and passed for as long as `live_code()`'s
-skip list hid `.sh` — the one file in the repo that must not violate the rule, violating it, hidden
-by the include list `1abbf61` claimed to have abolished. Fixed in `ff8e561`; the inverted guard
-immediately caught the comment written to explain the inversion. Prove such a fix **red then green
-on the tracked file**: `live_code()` enumerates via `git ls-files`, so running a `/tmp` copy of the
-script scans the real tree and tests nothing.
+Why: the guard that enforces a rule is the one file most likely to quote what it bans. <!-- docs-check: allow (the primary names the banned figure) -->
+**Primary record: `scripts/docs-check.sh`** — its header and `live_code()` comment blocks carry the
+genesis (the banned figure quoted at `:26`, the include list `1abbf61` claimed to abolish, the
+extension-layer inversion in `ff8e561`) and the measured true/false counts. Amend the script, not
+this entry. The one thing not recorded there: prove such a fix **red then green on the tracked
+file** — `live_code()` enumerates via `git ls-files`, so running a `/tmp` copy of the script scans
+the real tree and tests nothing.
 
 ❌ Composing `dest / user_supplied_path` without checking for an absolute path → ✅ `isabs` plus an
 `_is_inside(resolved, root)` check before anything is copied or written
@@ -231,6 +229,17 @@ Why: #21 auto-closed on a rebase-merge via unreworded `Closes #21 item N` traile
 and 3 were never implemented; `.handoff/post-m1-decisions.md`'s D12 had warned about exactly that
 and the reword did not happen. Reopened 2026-09-13. Conversely #9-#17 and #22-#25 were all verified
 genuinely resolved — the state field carries no information either way.
+
+❌ Recording a decision only in auto-memory → ✅ the tracked repo holds the primary; memory is a
+pointer to it, never the record itself
+Why: `~/.claude/projects/*/memory/` is outside version control and invisible to `git grep`, the
+gitignore-honouring recursive `grep`, `check-guards.sh` and `docs-check.sh` alike. Spec decision 6's
+evidentiary clause was unintelligible without `project_applied_research_capability.md`, which lives
+only there — **four independent readers each concluded the clause was false**, and every one of them
+had checked correctly against an incomplete source set. Fixed by inlining the mechanism into the
+spec row (`a6d8d85`), not by citing the memory file. Memory is a *delivery* tier, auto-loaded per
+session; it is not a *durability* tier, and a decision whose only record is there is one disk loss
+from gone.
 
 ---
 
