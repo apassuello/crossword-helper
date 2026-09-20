@@ -18,8 +18,8 @@ Read `[NOTE]` only if additional context is needed.
 ```bash
 pip install -r requirements.txt
 npm install
-pre-commit install                       # formatting + guards, on commit
-pre-commit install --hook-type pre-push  # pytest + vitest gate, on push
+pre-commit install          # wires BOTH stages: formatting + guards on
+                            # commit, pytest + vitest on push
 ```
 
 Run the app (two terminals):

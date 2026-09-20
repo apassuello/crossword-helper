@@ -1,3 +1,8 @@
+# Plain `pre-commit install` wires BOTH stages. Without this key it installs
+# only .git/hooks/pre-commit, so the pre-push suites below would be declared
+# and never run -- which was the state until 2026-09-20.
+default_install_hook_types: [pre-commit, pre-push]
+
 repos:
   - repo: https://github.com/psf/black
     rev: 25.1.0

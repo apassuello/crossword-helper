@@ -140,9 +140,9 @@ enforced by the real `.pre-commit-config.yaml` in the repo root (black, isort, r
 ```bash
 black .
 ruff check --fix .
-pre-commit install                       # one-time, wires the above into git commit
-pre-commit install --hook-type pre-push  # REQUIRED for the pytest/vitest push gate;
-                                         # the line above does not install it
+pre-commit install        # one-time. Wires both stages -- formatting and guards
+                          # at commit, the pytest/vitest gate at push -- because
+                          # the config sets default_install_hook_types.
 ```
 
 **[?]** No ESLint or Prettier config file exists anywhere in the repo despite older drafts of
