@@ -15,17 +15,22 @@
 #      research bundle still cites it. Staged mode only. BLOCKS on name
 #      extinction only — same-named-method deletion and signature drift are a
 #      non-blocking NOTE and remain the re-pin gate's job. See the guard body.
+#   4. Hook-installation guard: a stage declared in .pre-commit-config.yaml
+#      (top-level default_install_hook_types, or a per-hook stages:) with no
+#      file in the common git dir's hooks/. Non-blocking NOTE, skipped under
+#      CI, runs in BOTH modes and before the nothing-staged exit -- hook
+#      installation is not a property of the diff. See the guard body.
 #
 # Two modes:
 #   (no arguments)  Staged mode. Operates on STAGED blob content
 #                   (git show :<file>), never the working tree, so
 #                   partially-staged files are checked exactly as they will
 #                   be committed. This is what the pre-commit hook runs.
-#                   Runs all three guards. Exits 0 immediately if nothing is
-#                   staged.
+#                   Runs all four guards. Exits 0 once Guard 4 has run if
+#                   nothing is staged.
 #   --full-tree     Full-tree mode. Enumerates every tracked file under src/
 #                   (git ls-files 'src/*') and reads it from the working
-#                   tree. Covers Guard 2 only — Guard 1 is a diff property
+#                   tree. Covers Guards 2 and 4 — Guard 1 is a diff property
 #                   and has no full-tree equivalent. This is what CI runs,
 #                   to catch a Guard-2 violation sitting in a file nobody
 #                   staged this commit.
@@ -75,6 +80,23 @@ violations=0
 # generalises it, because the next stage added to the config has the same
 # failure available to it.
 #
+# WHAT COUNTS AS DECLARED: the union of the top-level
+# default_install_hook_types list, every per-hook `stages:` value, and
+# pre-commit itself (a hook with no stages: key runs there). Both the flow
+# form `[a, b]` and the block form (`- a` on following lines) are read, and
+# quotes are stripped. The first draft read only the top-level key, flow
+# form only, quotes kept -- and was measured SILENT on the 1ad9907 shape
+# (stages: [pre-push] on two hooks, no top-level key), which is the config
+# that had the defect. A guard that needs the key whose absence it exists
+# to catch is not a guard. Review then showed the block form was silently
+# unparsed and a quoted entry looked for a file literally named
+# "pre-commit". A block-list item is taken only when it carries no colon,
+# so the `- id:` line that opens the next hook is not read as a stage.
+#
+# CI detection is by value, not by presence: CI=false and CI=0 are the
+# not-CI conventions some tools emit, and `-z` would have skipped the guard
+# for them exactly as for CI=true.
+#
 # PLACEMENT IS LOAD-BEARING. This sits above the `staged_files` early exit
 # on purpose. Placed after it, the guard never runs on a commit with nothing
 # staged -- which made its own first red fixture pass, proving nothing.
@@ -107,12 +129,30 @@ violations=0
 # the shims are installed -- local state git does not carry by design -- so
 # the answer is to detect it, not to track it.
 # ---------------------------------------------------------------------------
-if [ -z "${CI:-}" ] && [ -f .pre-commit-config.yaml ]; then
+case "${CI:-}" in
+  ''|0|[Ff]alse|[Nn]o) in_ci=0 ;;
+  *) in_ci=1 ;;
+esac
+if [ "$in_ci" -eq 0 ] && [ -f .pre-commit-config.yaml ]; then
   # Hooks live in the COMMON git dir: a linked worktree shares them with the
   # main checkout, so --git-dir would look in the wrong place from a worktree.
   hooks_dir="$(git rev-parse --git-common-dir 2>/dev/null)/hooks"
-  declared=$(sed -n 's/^default_install_hook_types:[[:space:]]*\[\(.*\)\].*/\1/p' \
-             .pre-commit-config.yaml | tr -d ' ' | tr ',' '\n')
+  declared=$(awk '
+      # flow form on the key line: strip up to "[" and from "]" on
+      /^default_install_hook_types:[[:space:]]*\[/ || /^[[:space:]]*stages:[[:space:]]*\[/ {
+        s = $0; sub(/^[^[]*\[/, "", s); sub(/\].*/, "", s); print s; blk = 0; next
+      }
+      # block form: key with nothing (or a comment) after the colon
+      /^default_install_hook_types:[[:space:]]*(#.*)?$/ || /^[[:space:]]*stages:[[:space:]]*(#.*)?$/ {
+        blk = 1; next
+      }
+      # a block item is "- word" with no colon; "- id: x" opens the next hook
+      blk && /^[[:space:]]*-[[:space:]]*[^:#]+[[:space:]]*(#.*)?$/ {
+        s = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", s); sub(/[[:space:]]*#.*/, "", s); print s; next
+      }
+      { blk = 0 }
+      END { print "pre-commit" }
+    ' .pre-commit-config.yaml | tr -d " \"'" | tr ',' '\n' | sed '/^$/d' | sort -u)
   missing=""
   while IFS= read -r stage; do
     [ -z "$stage" ] && continue
