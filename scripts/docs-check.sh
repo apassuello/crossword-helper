@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Documentation guard. Fails on the two ways this repo's docs rotted before:
+# Documentation guard. Fails on four ways this repo's docs rot:
 #   1. dead relative links
 #   2. derivable state asserted in prose (counts, pass rates, "FIXED")
+#   3. a backtick-cited code path that resolves to no tracked file
+#   4. a backtick-cited identifier that appears nowhere in the tracked tree
+# Checks 1-2 are the 2026-08 originals. Checks 3-4 landed 2026-09-20; their
+# primary record is the PRIMARY RECORD block above PREDICATE_EXCLUDE below.
 #
 # Scope note: archives, the fabrication log and imported research reports are
 # EXCLUDED. Archived docs are historical records and are allowed to be stale
@@ -395,4 +399,4 @@ if [ -s "$MARKER" ]; then
 fi
 
 echo ""
-echo "OK: links resolve, no derivable state asserted in prose."
+echo "OK: links resolve, cited paths and identifiers exist, no derivable state asserted in prose."

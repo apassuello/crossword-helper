@@ -328,10 +328,10 @@ contents in this doc, since copies drift. Read the files themselves:
   Hooks run at **two** stages: formatting and guards at commit, and the **test suites at
   `pre-push`**. A previous revision of this bullet called the file lint-only and stated
   there were no test-running hooks; that stopped being true when the pre-push gate landed.
-- **`scripts/docs-check.sh`** — the guard that keeps *this* document honest:
-  fails CI on dead relative links and on banned derivable-state patterns
-  (test counts, pass rates, frozen completion-status lines, etc.) in any
-  live doc.
+- **`scripts/docs-check.sh`** — the guard that keeps *this* document honest.
+  Its header lists what it checks; do not paraphrase the list here, because a
+  previous revision of this bullet named two checks for weeks after the script
+  grew to four. Run `./scripts/docs-check.sh --selftest` to see every check fire.
 
 ```bash
 # Install pre-commit hooks locally
