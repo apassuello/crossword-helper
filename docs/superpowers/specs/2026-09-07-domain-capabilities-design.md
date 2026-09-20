@@ -25,6 +25,11 @@ plain-text extracts of those sections were used to write this document.
   backed by per-(length, position, letter) letter bitsets.
 - Built as capabilities, one at a time, each a library module under `cli/src/domain/` with its own
   tests. Nothing is wired to the CLI, the adapter, a route or the UI in this pass.
+  *Ratified by Arthur 2026-09-06: build capabilities, not an end-feature — "step by step", "no
+  end-to-end feature in scope for now". **What it beat:** the prior handoff's framing, which held
+  `ranking` and `fillability` blocked on whether the retiring beam-search autofill stays in scope.
+  That is a feature-scope argument and does not bind when the unit of work is a capability. This
+  is why an unconsumed library is the plan executing rather than drift — see §12 and decision 21.*
 - Build order: C1 → C2 → C3 → C4 → C1b → C6. There is no C5.
 
 | # | Decision (Arthur, 2026-09-07) | What it beat |
