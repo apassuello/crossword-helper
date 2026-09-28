@@ -403,7 +403,7 @@ These need Arthur, not an implementer.
 
 - ~~**Q1 — wiring trigger for the capability family.**~~ **RULED 2026-09-20 → decision 21 (`df4787e`): intentional, unwired until all six capabilities land.** Spec §12: *"no consumer, no date and no tracked item (decision 8)."* The question is whether that is intentional indefinitely. **Ruling this collapses six of regime B's nine stale rows**, which is why fix 4 waits behind it rather than leading.
 - ~~**Fix 4 — default-if-unruled clause on every register row.**~~ **RATIFIED by the owner 2026-09-20 in `.handoff/post-m1-decisions.md`; every open row carries a default and the review date 2026-10-20.** Drafted *after* Q1, against whatever survives. A row with no expiry is a no-op; nine have proven it for a month.
-- ~~**Q2**~~ **RULED 2026-09-20 → decision 22 (`d3be632`): the propagator makes `LCVValueOrdering` redundant; it is not ported.** Was coupled to Q1, not adjacent: report §07 gives its third option as *"record that the propagator makes `LCVValueOrdering` redundant, which is decision 6's premise and would settle it."*
+- ~~**Q2**~~ **RULED 2026-09-20 → decision 22 (`20df13c`): the propagator makes `LCVValueOrdering` redundant; it is not ported.** Was coupled to Q1, not adjacent: report §07 gives its third option as *"record that the propagator makes `LCVValueOrdering` redundant, which is decision 6's premise and would settle it."*
 
 ---
 
