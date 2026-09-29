@@ -49,6 +49,11 @@ Add capability CLI-first, then adapter, then route, then UI.
   edits as locked cells and continues from that position.
 - **Seam tests**: the backend↔CLI boundary needs a contract test on argv acceptance plus one real
   subprocess e2e. Mocks on both sides hide breakage — that is how pause/resume shipped broken.
+- **Spec decisions in code**: when code implements a spec decision, the docstring cites it by
+  number — the `Decision 16 (spec 0.1.8, section 7)` form in `cli/src/domain/`, enumerable with
+  `git grep -E 'Decision [0-9]+' -- cli`. The 2026-09-19 audit found the decision family cited this
+  way survived intact and the one with zero code citations rotted; citation density predicts
+  durability better than document quality.
 
 ---
 
@@ -193,7 +198,11 @@ classes define `order_values` in one file and a citation of a *surviving* same-n
 exactly like a true hit; adding "no definition survives" gives 1 true, 0 false. And the `docs-check`
 extension inversion was measured over its 117 newly reachable files before landing: one hit, the
 true positive, zero false. A guard noisy enough to distrust only teaches everyone to reach for the
-escape hatch.
+escape hatch. Measure it against the defect that motivated it as well as the tree: the 2026-09-19
+doc-reference guard scored 0 true / 1 false where Guard 3 scored 1 / 0 on the same commit, and its
+motivating defect — a paragraph in `ALGORITHM_DEEP_DIVE.md` describing a since-deleted function's
+behaviour without ever naming it, before `3a40b28` — was undetectable by any symbol predicate. Closed at the gate; T1 of the archived governance-recurrence plan holds the
+measurement.
 
 ❌ Treating a guard's own source as out of its own scope → ✅ the guard must pass the guard
 Why: the guard that enforces a rule is the one file most likely to quote what it bans. <!-- docs-check: allow (the primary names the banned figure) -->
@@ -229,6 +238,16 @@ Why: leaving the abstract half makes the subclass uninstantiable at import. `7b0
 live `diverse_beam_prune` call sites in `orchestrator.py` would have broken. Zero callers on the
 override says nothing about the base.
 
+❌ Reading zero call sites on a decorator-registered route as "dead" → ✅ check
+`docs/api/openapi.yaml`, the documented single source of truth for endpoints, before deleting
+Why: a Flask route handler has no Python caller by construction, so a reference sweep returns the
+same null for a live endpoint as for a dead one. The 2026-09-20 dead-code pass proposed deleting
+three `wordlist_routes.py` handlers on that null; all three were in `openapi.yaml` and two are
+documented in `API_REFERENCE.md` as an intentional pair, so the ruling shrank to one (`7af0ebf`,
+whose body says why). The check that would replace this entry is an openapi↔route parity
+predicate in `docs-check.sh` — not built; measure true/false over the tree first, per the guard
+entry above.
+
 ❌ Reading a closed issue as evidence the work is done → ✅ check the items against the code
 Why: #21 auto-closed on a rebase-merge via unreworded `Closes #21 item N` trailers while items 2b
 and 3 were never implemented; `.handoff/post-m1-decisions.md`'s D12 had warned about exactly that
@@ -244,7 +263,9 @@ only there — **four independent readers each concluded the clause was false**,
 had checked correctly against an incomplete source set. Fixed by inlining the mechanism into the
 spec row (`a6d8d85`), not by citing the memory file. Memory is a *delivery* tier, auto-loaded per
 session; it is not a *durability* tier, and a decision whose only record is there is one disk loss
-from gone.
+from gone. Q11 of the same audit asked whether those six memory decisions needed a register of
+their own; resolved 2026-09-20 — they map onto spec decisions 1, 2, 3, 6, 7 and 8, so no separate
+decisions directory was built. The spec's §1 table is the register.
 
 ❌ Citing `file:line` for a target that has a name → ✅ cite the identifier; reserve `file:line` for
 targets with no enclosing symbol
@@ -262,7 +283,9 @@ primary per fact; treat designating one as a verification event
 Why: `scripts/check-guards.sh` was designated Guard 3's primary while asserting that `7b0060c`
 removed 18 names; it removed 17. A primary carrying a false value is worse than two copies, because
 every other site now points at it. This file already uses the phrase "Primary record:" in three
-entries above without ever stating the convention — this entry names it.
+entries above without ever stating the convention — this entry names it. The two homes can be one
+file: the doc-truth plan carried "18" in its summary while its own Gate Findings said 17. Grep a
+changed quantity across the whole file, not just the section you edited.
 
 ❌ Leaving a document that describes finished work on the live surface → ✅ move it under
 `docs/archive/`
@@ -287,3 +310,7 @@ outcome.
 - Before pushing: `pytest`, `npm run build`, let pre-commit run (never `--no-verify`).
 - `docs/README.md` is the navigation index; `CONTRIBUTING.md` holds setup and full conventions.
 - Living docs under `docs/` use HADS blocks; unverified claims go in `[?]`, never asserted as fact.
+- An owner-decision row carries a default-if-unruled outcome and a review date. "Awaiting owner"
+  with no expiry is a no-op: nine post-M1 rows sat that way from 2026-08-19 until the register's
+  defaults were ratified on 2026-09-20 (review date 2026-10-20). That register is gitignored, so
+  this line is the rule's tracked home.
