@@ -383,3 +383,137 @@ localhost:5000     inner [2400,1389] outer [1800,1042] screen [1800,1169] dpr 1.
  "scroll_container":{"selector":".sidebar","rect":{"x":677,"y":170,"w":315,"h":244},"scrollHeight":1794,"clientHeight":244,"overflowY":"auto"},
  "panel":{"selector":".wordlist-panel","rect":{"x":645,"y":54,"w":379,"h":648},"scrollHeight":672,"clientHeight":648,"overflowY":"hidden"},"uploadBtnVisible":true}
 ```
+
+### L5 — Upload F1 (plain, LF)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f1`, choose F1-plain-lf.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: "File Format: Plain text file with one word per line" (UI label in the upload form)
+- Observed: POST /api/wordlists/import returns 201; the new list appears under the custom category with its three words, one per line, matching the file.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /api/wordlists/custom/qa-f1 -> word_count=3 words=["APPLE", "BERRY", "CHERRY"]
+POST /api/wordlists/import 201
+```
+
+### L6 — Upload F2 (APPLE;50 semicolon-scored)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f2`, choose F2-scored-semicolon.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: UNSPECIFIED (format behaviour is not documented; the form says one word per line)
+- Observed: Accepted with 201, but each line is stored as one literal word including the `;50` suffix; the score is not parsed. The shipped scored list uses this very form, so a user uploading a list like it gets words that can never match a grid slot.
+- Evidence: —
+- Verdict: UNSPECIFIED · Severity: — · Known: I3
+
+```
+GET /api/wordlists/custom/qa-f2 -> word_count=3 words=["APPLE;50", "BERRY;40", "CHERRY;30"]
+POST /api/wordlists/import 201
+```
+
+### L7 — Upload F3 (apple,50 comma-scored)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f3`, choose F3-scored-comma.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: UNSPECIFIED
+- Observed: Accepted with 201; lowercase input is uppercased and the `,50` suffix is kept inside the word. The comma form is the one the CLI word-list loader (I4) splits but the web import does not.
+- Evidence: —
+- Verdict: UNSPECIFIED · Severity: — · Known: I3
+
+```
+GET /api/wordlists/custom/qa-f3 -> word_count=3 words=["APPLE,50", "BERRY,40", "CHERRY,30"]
+POST /api/wordlists/import 201
+```
+
+### L8 — Upload F4 (.csv with header)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f4`, choose F4-csv-header.csv. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: "Select File (.txt)" (UI label)
+- Observed: The form refuses the file client-side: the red message "Please select a .txt file" appears, the Upload button stays disabled, and no request is sent to the server (a fetch wrapper recorded none; the network tool listed none).
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+UI message: Please select a .txt file
+no POST /api/wordlists/import issued
+```
+
+### L9 — Upload F5 (CRLF)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f5`, choose F5-crlf.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: "File Format: Plain text file with one word per line" (UI label in the upload form)
+- Observed: Accepted with 201; the three words are stored clean, with no carriage return left on any word.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /api/wordlists/custom/qa-f5 -> word_count=3 words=["APPLE", "BERRY", "CHERRY"]
+POST /api/wordlists/import 201
+```
+
+### L10 — Upload F6 (.dict)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f6`, choose F6-dict.dict. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: "Select File (.txt)" (UI label)
+- Observed: Refused client-side with "Please select a .txt file"; no request sent. Note the repository itself ships `.dict` lists, so the one dictionary format the project uses cannot be uploaded through the UI.
+- Evidence: —
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+UI message: Please select a .txt file
+no POST /api/wordlists/import issued
+```
+
+### L11 — Upload F7 (non-ASCII)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f7`, choose F7-nonascii.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: UNSPECIFIED
+- Observed: Accepted with 201; the accented words are stored with their accents (CAFÉ, NAÏVE, ÜBER). Whether a solver can ever place them is not stated anywhere in the README.
+- Evidence: —
+- Verdict: UNSPECIFIED · Severity: — · Known: —
+
+```
+GET /api/wordlists/custom/qa-f7 -> word_count=3 words=["CAF\u00c9", "NA\u00cfVE", "\u00dcBER"]
+POST /api/wordlists/import 201
+```
+
+### L12 — Upload F8 (empty file)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f8`, choose F8-empty.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: "Bad request (validation error)" as the 400 response of POST /wordlists/import (docs/api/openapi.yaml:2218); the operation requires a `name` and takes `content`, "Newline-separated words" (docs/api/openapi.yaml:1312)
+- Observed: The UI submits the empty file and the server answers 201, creating a list with zero words that then appears in the list. The API does the same for `"content": ""`; only a request with no `content` and no `url` gets 400. An empty upload is accepted silently instead of being rejected.
+- Evidence: evidence/L12-L13-curl.log
+- Verdict: FAIL · Severity: S3 · Known: —
+
+```
+--- F8 readback
+{
+  "metadata": {
+    "category": "custom",
+    "description": "Uploaded from F8-empty.txt",
+    "key": "custom/qa-f8",
+    "name": "Qa-F8",
+    "source": "direct_import",
+    "tags": [
+      "custom",
+      "uploaded"
+    ],
+    "word_count": 0
+  },
+  "words": []
+}
+POST /api/wordlists/import 201 (UI)
+```
+
+### L13 — Upload F9 (scored list, large)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Reload, open Lists, click "Upload Wordlist". 2. Name `qa-f9`, choose F9-large.txt. 3. Click "Upload". 4. Read the network entry and `curl` the readback.
+- Expected: UNSPECIFIED
+- Observed: Accepted with 201 within a few seconds and the list appears; every stored word still carries its `;score` suffix, so the upload of the project's own scored list yields a list of words that cannot match a slot. The list also renders in the browser without error.
+- Evidence: evidence/L12-L13-curl.log
+- Verdict: UNSPECIFIED · Severity: — · Known: I3
+
+```
+{"category": "custom", "description": "Uploaded from F9-large.txt", "key": "custom/qa-f9", "name": "Qa-F9", "source": "direct_import", "tags": ["custom", "uploaded"], "word_count": 453988}
+['AAA;50', 'AAAADVISOR;11', 'AAAAH;7']
+semicolon-bearing words: 453988 of 453988
+POST /api/wordlists/import 201 (browser-measured upload to list shown: 2.8 s)
+```
