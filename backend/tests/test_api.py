@@ -5,6 +5,7 @@ Tests all API endpoints for correct behavior, validation, and error handling.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -466,8 +467,8 @@ class TestVerifyWordsWordlistSelection:
         assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
         # Selected list only: must be crosswordese's size, not the full merge
-        # of every non-archive/non-custom list under data/wordlists/ (see
-        # backend/api/routes.py verify_words(), wordlist_dir.rglob('*.txt'))
+        # of every list under data/wordlists/ (the omitted-selection fallback
+        # is the default list; see test_verify_words_default_is_comprehensive)
         assert data["wordlist_size"] < 1000
 
     def test_verify_words_unknown_wordlist_returns_400(self, client):
@@ -479,7 +480,7 @@ class TestVerifyWordsWordlistSelection:
         assert response.status_code == 400, resp_diag(response)
         assert json.loads(response.data)["error"]["code"] == "UNKNOWN_WORDLIST"
 
-    def test_verify_words_default_is_merged(self, client):
+    def test_verify_words_default_is_comprehensive(self, client):
         grid = self._grid_with_word("CAT")
         response = client.post(
             "/api/grid/verify-words",
@@ -487,9 +488,18 @@ class TestVerifyWordsWordlistSelection:
         )
         assert response.status_code == 200, resp_diag(response)
         data = json.loads(response.data)
-        # No selection: falls back to the merged dictionary (see assertion
-        # below for the size threshold this enforces)
-        assert data["wordlist_size"] > 40000
+        # No selection: only `comprehensive`, never every list under the dir.
+        # Expected size is computed from the file with the route's own rule.
+        comp = Path(__file__).resolve().parents[2] / "data" / "wordlists" / "comprehensive.txt"
+        expected = set()
+        for line in comp.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            w = line.split(";")[0].strip().upper()
+            if w and w.isalpha() and 3 <= len(w) <= 21:
+                expected.add(w)
+        assert data["wordlist_size"] == len(expected)
 
     def test_clean_honors_selection(self, client):
         # ETUI is classic crosswordese (present in core/crosswordese).

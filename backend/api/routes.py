@@ -9,7 +9,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 from backend.api.errors import handle_error
 from backend.api.progress_routes import cleanup_process, create_progress_tracker, send_progress
@@ -23,6 +23,7 @@ from backend.api.validators import (
 from backend.core.cli_adapter import get_adapter
 from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR, is_valid_task_id
 from backend.core.wordlist_resolver import (
+    get_default_wordlist_paths,
     resolve_wordlist_paths,
     resolve_wordlist_paths_strict,
 )
@@ -719,9 +720,7 @@ def verify_words():
         wordlist_names = data.get("wordlists")
 
         # Honor the requested wordlist selection. Only when the client sends
-        # no selection do we fall back to validating against every installed
-        # (non-custom) list merged together.
-        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
+        # no selection do we fall back to the default list (`comprehensive`).
         if wordlist_names:
             wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
             if missing:
@@ -733,9 +732,7 @@ def verify_words():
                 )
             all_wl_paths = [Path(wp) for wp in wordlist_paths]
         else:
-            all_wl_paths = list(wordlist_dir.rglob("*.txt"))
-            # Filter out archive and custom
-            all_wl_paths = [p for p in all_wl_paths if "archive" not in p.parts and "custom" not in p.parts]
+            all_wl_paths = [Path(wp) for wp in get_default_wordlist_paths()]
 
         words_set = set()
         words_by_length = {}  # length -> set of words
@@ -918,9 +915,8 @@ def clean_grid():
         size = data.get("size", len(grid_data))
         wordlist_names = data.get("wordlists")
 
-        # Honor the requested wordlist selection; fall back to every
-        # installed list merged only when no selection was given.
-        wordlist_dir = Path(current_app.root_path).parent / "data" / "wordlists"
+        # Honor the requested wordlist selection; fall back to the default
+        # list (`comprehensive`) only when no selection was given.
         if wordlist_names:
             wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
             if missing:
@@ -932,7 +928,7 @@ def clean_grid():
                 )
             wl_paths = [Path(wp) for wp in wordlist_paths]
         else:
-            wl_paths = [p for p in wordlist_dir.rglob("*.txt") if "archive" not in p.parts]
+            wl_paths = [Path(wp) for wp in get_default_wordlist_paths()]
 
         # Load selected wordlists
         words_set = set()
