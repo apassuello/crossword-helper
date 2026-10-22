@@ -603,3 +603,83 @@ UI still shows running state + Cancel button; click Cancel -> "Cancelled by user
 ```
 button: text="Suggest Black Square" title="lands in Task 20" disabled=true
 ```
+
+### A3 — Cancel a run on the 15x15 grid
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 15x15 example, open Autofill, start with the defaults. 2. Click Cancel 3 s later. 3. Check the panel, the network and the process list.
+- Expected: UI label "Cancel"; the UI returns to idle and progress events stop (plan Task 7 criteria)
+- Observed: The panel returns to idle ("Cancelled by user" with a Reset button) and the Autofill button is back; the cancel route returns 200 and the solver process is gone. The event stream is not shown closed by the browser tool; the server log shows no further progress requests. Separately, Cancel on an already-finished run (the one in A2) calls the same route and gets 404, yet the UI still announces "Cancelled by user".
+- Evidence: evidence/A3.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+A3 repair on example_15x15 (defaults), Cancel clicked 3 s after Start
+status at 3 s: "Stripped 0 blocking words | 30%"
+POST /api/fill/with-progress 202 -> POST /api/fill/cancel/<id> 200 -> UI "Cancelled by user / Reset"
+server log: CLI process failed with return code -15 (SIGTERM from cancel); no cli/crossword process left afterwards
+GET /api/progress/<id> is reported 503 by the browser tool but 200 in the server log (tool artefact for an event stream)
+```
+
+### A4 — Autofill, option "Repair (Recommended)"
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 11x11 example, open Autofill. 2. Select the algorithm option and the panel's 2 min timeout (a panel option, chosen so the run ends on its own inside the cap; every other setting is the panel default). 3. Start and let the page sample the grid and status every 5 s.
+- Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
+- Observed: The run ends on its own at its timeout with the terminal message "Partial: 20/44 slots (45%) - Lower minimum score (currently 50)" and the grid still has empty white cells. The UI reaches its idle state this time. The progress bar sits at 90 from about 20 s on while only the message changes.
+- Evidence: evidence/A4.log
+- Verdict: FAIL · Severity: S1 · Known: —
+
+```
+A4 repair, timeout 2 min (panel option), Comprehensive Dictionary, min score 50
+s=5    empty=79  Filling: 3/44 slots (1500 steps) | 30%
+s=20   empty=64  Filling: 4/44 slots (2500 steps) | 90%
+s=65   empty=64  Filling: 4/44 slots (4000 steps) | 90%
+s=110  empty=64  Filling: 4/44 slots (6000 steps) | 90%
+s=120  empty=101 Repairing 5 invalid words | 90%
+s=125  empty=24  Partial: 20/44 slots (45%) - Lower minimum score (currently 50) | Reset   (run ended, UI idle)
+```
+
+### A5 — Autofill, option "Hybrid (Beam + Repair)"
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 11x11 example, open Autofill. 2. Select the algorithm option and the panel's 2 min timeout (a panel option, chosen so the run ends on its own inside the cap; every other setting is the panel default). 3. Start and let the page sample the grid and status every 5 s.
+- Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
+- Observed: Same outcome as Repair: it ends at its timeout with "Partial: 20/44 slots (45%)" and 24 white cells left empty. The two algorithms land on the identical partial result.
+- Evidence: evidence/A5.log
+- Verdict: FAIL · Severity: S1 · Known: —
+
+```
+A5 hybrid, timeout 2 min
+s=5    empty=101 Beam search: slot 1/44 | 30%
+s=25   empty=68  Stripped 7 blocking words | 70%
+s=45   empty=64  Filling: 4/44 slots (5500 steps) | 90%
+s=85   empty=58  Filling: 5/44 slots (15500 steps) | 90%
+s=120  empty=24  Partial: 20/44 slots (45%) - Lower minimum score (currently 50) | Reset
+```
+
+### A6 — Autofill, option "Beam Search"
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 11x11 example, open Autofill. 2. Select the algorithm option and the panel's 2 min timeout (a panel option, chosen so the run ends on its own inside the cap; every other setting is the panel default). 3. Start and let the page sample the grid and status every 5 s.
+- Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
+- Observed: Fills every white cell in well under the cap and ends with "Filled 44/44 slots - 5 entries may be invalid (use Verify Words to check)". The README criterion holds; the status itself warns that some placed words are not valid list words.
+- Evidence: evidence/A6.log
+- Verdict: PASS · Severity: S3 · Known: —
+
+```
+A6 beam, timeout 2 min
+s=5    empty=101 Beam search: slot 1/44 | 30%
+s=25   empty=56  Beam search: slot 18/44 | 46%
+s=30   empty=4   Beam search: slot 40/44 | 91%
+s=35   empty=0   Filled 44/44 slots - 5 entries may be invalid (use Verify Words to check) | Reset
+```
+
+### A7 — Autofill, option "Classic CSP"
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 11x11 example, open Autofill. 2. Select the algorithm option and the panel's 2 min timeout (a panel option, chosen so the run ends on its own inside the cap; every other setting is the panel default). 3. Start and let the page sample the grid and status every 5 s.
+- Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
+- Observed: Gives up almost immediately with "Partial: 0/44 slots (0%) - Lower minimum score (currently 50)": the first poll, within about 5 s, already shows the finished state with an untouched grid.
+- Evidence: evidence/A7.log
+- Verdict: FAIL · Severity: S1 · Known: —
+
+```
+A7 trie (label "Classic CSP"), timeout 2 min
+s=5    empty=101 Partial: 0/44 slots (0%) - Lower minimum score (currently 50) | Reset   (run already ended)
+```
