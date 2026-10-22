@@ -39,7 +39,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | |
 | R13 | 89–91 | `npm run test:coverage` | Task 13 | |
 | R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
-| R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | |
+| R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | PASS |
 | R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | |
 | R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | |
 | R18 | 39 | "Export -- HTML format" | Task 9 | |
@@ -869,4 +869,89 @@ rows with letters or black squares after reload: none
 
 ```
 data-theme: light -> dark ; after reload: dark ; stored value follows
+```
+
+### SR1 — Pattern search C?T in Comprehensive Dictionary
+- Phase: P3-search · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Open Search with its default list. 2. Enter C?T. 3. Click Search. (State of the clone: shipped caches restored, see CACHE-2.)
+- Expected: "find words matching a pattern like C?T (gives CAT, COT, CUT, etc.)" (README.md:33-34)
+- Observed: The results include CAT, COT and CUT, together with other three-letter strings (abbreviations such as CIT, CRT, CST) because the list behind it is large. The README claim holds.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+request: {"pattern":"C?T","wordlists":["comprehensive"],"max_results":50,"algorithm":"regex"}
+results heading: Results (11)
+first rows: CAT 31 · CIT 31 · COT 31 · CRT 31 · CST 31 · CET 31 · CDT 26 · CUT 26 · CWT 26 · CMT
+```
+
+### SR2 — Results list is reachable by scrolling
+- Phase: P3-search · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. After SR1, measure the results container and its scrolling ancestor. 2. Wheel-scroll 10 ticks over the panel.
+- Expected: §2.4 of the spec (box visible and scrollable)
+- Observed: After a search the results sit far below the long wordlist checklist and outside the viewport; nothing scrolls them into view. The wheel over the panel scrolls it and the results come into view, and the results list has a scrollbar of its own. So the list scrolls, but a user sees no results until they scroll down.
+- Evidence: evidence/SR2.json
+- Verdict: PASS · Severity: S3 · Known: —
+
+```
+viewport [1800,986]
+results container ".results-section": rect [1373,1190,387,439] visibleInViewport=false (after a search)
+scroll container ".xw-inspector": overflowY=auto scrollHeight=1607 clientHeight=932
+wheel 10 ticks over the panel -> scrollTop 674.5 ; results top 515, bottom 954 (inside viewport)
+```
+
+### SR3 — No-match pattern
+- Phase: P3-search · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Enter ZZQ?X, Search.
+- Expected: UI (an empty-result state, no error)
+- Observed: The panel shows "No matching words found"; no error toast and no uncaught error in the page.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+pattern ZZQ?X -> "No matching words found"
+```
+
+### SR4 — Search with no wordlist selected
+- Phase: P3-search · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Untick every list. 2. Enter C?T, Search.
+- Expected: UNSPECIFIED
+- Observed: The search still runs and returns a single result, CAT, tagged with a source called "builtin". No documentation or label explains a built-in source, and the button is not disabled with nothing selected.
+- Evidence: —
+- Verdict: UNSPECIFIED · Severity: — · Known: —
+
+```
+lists ticked: none
+result: Results (1) | CAT | 31 | builtin | 3 letters
+```
+
+### CACHE-2 — A cache rebuilt by build-cache makes Pattern search on that list return nothing
+- Phase: P3-search · Env: E1 · Viewport: —
+- Steps: 1. After A10 (cache rebuilt with the CLI), run Pattern search C?T on Comprehensive Dictionary in the UI; read the final event of the progress stream. 2. Repeat the request through the API for that list and for a list with no rebuilt cache. 3. Restore the shipped caches and repeat.
+- Expected: "find words matching a pattern like C?T (gives CAT, COT, CUT, etc.)" (README.md:33-34)
+- Observed: With the rebuilt cache in place the UI shows "No matching words found" and the final event reports zero sources searched; the API gives the same for that list while other lists answer normally. There is no error message anywhere: the list silently drops out. With the shipped caches restored the same search returns results (SR1). The cache that the project's own build-cache command writes is the one that cannot be loaded back (see CACHE-1), and the backend does not report it.
+- Evidence: evidence/CACHE-2.log
+- Verdict: FAIL · Severity: S2 · Known: I7
+
+```
+with the cache rebuilt by build-cache in place:
+  comprehensive: sources_searched [] total_found 0
+  top_100k: sources_searched ['top_100k'] total_found 5
+UI request body: {"pattern":"C?T","wordlists":["comprehensive"],"max_results":50,"algorithm":"regex"}
+UI final event: Search complete: 0 results returned ; UI text: No matching words found
+```
+
+### SETUP-3 — setup leaves tracked files modified in a fresh clone
+- Phase: P1-setup · Env: E1 · Viewport: —
+- Steps: 1. After setup and the walkthrough so far, run `git diff --stat` in the E1 clone. (Cases run in the clone since; the lock-file change comes from setup itself.)
+- Expected: UNSPECIFIED
+- Observed: The lock file the repository tracks is rewritten by the install step (platform-specific fields dropped), so a clone that was clean is dirty right after the README's setup command. The word-list metadata file is also rewritten by uploads through the UI. A later `git pull` or checkout can collide with either.
+- Evidence: evidence/SETUP-3.log
+- Verdict: UNSPECIFIED · Severity: S4 · Known: —
+
+```
+git -C clone diff --stat after setup.sh and the walkthrough uploads (tracked files modified; the clone was clean before setup):
+ data/wordlists/metadata.json | (changed by the UI list uploads)
+ package-lock.json            | 51 lines removed ("libc" fields dropped by npm install)
+ data/wordlists/top_100k.pkl  | (deleted for A9 and restored afterwards; not product behaviour)
 ```
