@@ -170,7 +170,7 @@ post-M1 rows D1/D2/D3 are folded in.
 
 ## 5. Artefacts and hand-off
 
-The plan is `docs/superpowers/plans/2026-10-22-fresh-install-reproduction.md`, written with
+The plan is `docs/archive/completed-plans/2026-10-22-fresh-install-reproduction.md`, written with
 `superpowers:writing-plans`, on branch `qa/fresh-install-2026-10-22` checked out at
 `.claude/worktrees/qa-fresh-install-2026-10-22`. Arthur opens a second Claude Code session in that
 worktree on Sonnet and runs `superpowers:executing-plans` on the plan.
