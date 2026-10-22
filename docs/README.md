@@ -37,8 +37,9 @@ docs/
 - **Write tests**: [ops/TESTING.md](./ops/TESTING.md)
 - **Contribute**: [../CONTRIBUTING.md](../CONTRIBUTING.md)
 - **Check what documentation to trust**: [dev/FABRICATION-LOG.md](./dev/FABRICATION-LOG.md)
-- **Follow in-flight design work**: [superpowers/specs/](./superpowers/specs/) for the specs,
-  [superpowers/plans/](./superpowers/plans/) for the plans that implement them
+- **Follow in-flight design work**: [superpowers/specs/](./superpowers/specs/) for the specs;
+  finished plans are in [archive/completed-plans/](./archive/completed-plans/), and a plans
+  directory beside the specs exists only while one is in flight
 - **Cite the research**: [resources/SOURCES.md](./resources/SOURCES.md) is the index; cite its row
   ids rather than the reports directly
 - **Reference**: [resources/art-of-construction.pdf](./resources/art-of-construction.pdf)
