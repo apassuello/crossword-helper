@@ -38,7 +38,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | |
 | R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | |
 | R13 | 89–91 | `npm run test:coverage` | Task 13 | |
-| R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | |
+| R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
 | R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | |
 | R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | |
 | R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | |
@@ -747,4 +747,126 @@ pkl rebuilt by "python -m cli.src.cli build-cache data/wordlists/comprehensive.t
 comprehensive.pkl FAILED ModuleNotFoundError No module named 'cli.src'
 sizes: shipped 19822703 bytes ; rebuilt 1780138 bytes
 build-cache output tail: cache written, size reported as 1.7 MB
+```
+
+### G1 — Create a new 15×15 grid from the Grid tool
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Open the app and the Grid tool; look for a control that creates a new grid or sets its size.
+- Expected: UI (no label found)
+- Observed: The app opens on a blank 15x15 grid, and the Grid panel offers only "Select a cell to search, or pick a tool from the rail." There is no control to create a new grid or choose another size; other sizes arrive only through the Import tool.
+- Evidence: —
+- Verdict: NOT-IMPLEMENTED · Severity: S3 · Known: —
+
+### G2 — Type letters, move with arrows, clear with Backspace
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Click a cell. 2. Type CAT. 3. Press ArrowLeft twice, then Backspace. 4. Type A. Read the row from the SVG after each step.
+- Expected: "interactive editing with keyboard shortcuts" (README.md:31-32)
+- Observed: Typing fills three consecutive cells and the cursor advances; after two ArrowLefts and Backspace only the middle letter is cleared; typing A restores it.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+row after typing CAT, arrows, Backspace: ....C.T........
+row after typing A:                       ....CAT........
+```
+
+### G3 — Place a black square
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Look for a control, tooltip, hint or help text for black squares. 2. Try the period key, the hash key, right-click and double-click on a selected cell.
+- Expected: UI (a placement method discoverable from the page)
+- Observed: The period key places a black square. Nothing in the page names it: no button, tooltip, help panel or shortcut list (the only mention is the violations text "Try adding black squares"). The hash key, right-click and double-click do nothing. The key was found by trying keys, so there is no discoverable way for a user.
+- Evidence: —
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```
+black squares after "." on (2,2): row 2 col 2, and mirror row 12 col 12
+```
+
+### G4 — Symmetry toggle ON vs OFF
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. With Symmetry on, place a black square at (2,2). 2. Switch Symmetry off, place one at (4,10).
+- Expected: "symmetry enforcement" (README.md:31-32)
+- Observed: ON: the black square at (2,2) also appears at (12,12), the 180-degree mirror. OFF: only (4,10) is added. The toggle button carries its on-state class accordingly.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+symmetry ON : (2,2) -> also (12,12)
+symmetry OFF: (4,10) only
+black cells after both: 3
+```
+
+### G5 — Numbering updates after black squares
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Collect the clue-number labels from the SVG before and after the (4,10) black square. 2. Check the numbering request.
+- Expected: "auto-numbering" (README.md:31-32)
+- Observed: The label sequence grows when a black square is added, and the numbering route is called after each edit (server log shows the POSTs return 200).
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+labels before: 1..33   labels after: 1..35
+```
+
+### G6 — Top-bar Verify
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Click "Verify words" with one filled word (CAT) on the grid.
+- Expected: UI label "Verify words"
+- Observed: POST /api/grid/verify-words returns 200 and a toast reads "All 4 words valid!". The grid holds one filled word, so the count in the message does not match what is on the grid (not specified anywhere).
+- Evidence: —
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+toast: All 4 words valid!
+```
+
+### G7 — Top-bar Clean
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Click "Clean grid".
+- Expected: UI label "Clean grid"
+- Observed: POST /api/grid/clean returns 200, the toast says "Grid is clean — all words are valid!", and the grid is unchanged.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+toast: Grid is clean — all words are valid!
+```
+
+### G8 — Heatmap toggle changes cell rendering
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Compute the fill of every cell, toggle Heatmap on, wait, compare. 2. Check the server log for a constraints request. 3. Toggle off and compare again.
+- Expected: UI label "Heatmap"
+- Observed: The button switches to its on state, but no cell fill changes, the SVG gains no overlay, and the server never receives a constraints request during the session. The toggle has no visible effect.
+- Evidence: —
+- Verdict: FAIL · Severity: S3 · Known: I8
+
+```
+cells whose fill changed with heatmap on: 0
+requests to /api/constraints in the server log: 0
+```
+
+### G9 — Save, reload, grid persists
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Click "Save grid" (label then reads "saved locally"). 2. Reload the page. 3. Read the grid and local storage.
+- Expected: UI label "Save grid"; the page itself says "saved locally"
+- Observed: The save is written (a stored grid record exists and holds the typed letters), but after a reload the editor shows a blank grid; there is no restore or load control, and the "saved" label is gone. Saved work is not reachable from the UI after a reload.
+- Evidence: —
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```
+saved record keys: id, size, grid, numbering, symmetryEnabled, savedAt
+saved row 6: ....CAT........
+rows with letters or black squares after reload: none
+```
+
+### G10 — Health indicator and theme toggle
+- Phase: P3-grid · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Read the status text. 2. Click the theme toggle, then reload.
+- Expected: UI (status "online"; theme toggle)
+- Observed: The indicator reads "online" while Flask is up. The toggle flips the theme attribute light to dark and the choice survives a reload.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+data-theme: light -> dark ; after reload: dark ; stored value follows
 ```
