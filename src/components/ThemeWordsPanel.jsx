@@ -17,12 +17,6 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
 
-    // Validate file type
-    if (!selectedFile.name.endsWith('.txt')) {
-      toast.error('Please select a .txt file');
-      return;
-    }
-
     // Validate file size (max 1MB)
     if (selectedFile.size > 1024 * 1024) {
       toast.error('File too large (max 1MB)');
@@ -259,14 +253,13 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
         <div className="upload-section">
           <h3>Upload Theme Words</h3>
           <p className="help-text">
-            Upload a .txt file with one word per line (e.g., partner's name, special dates)
+            Upload a text file with one word per line (e.g., partner's name, special dates)
           </p>
 
           <div className="file-upload">
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt"
               onChange={handleFileSelect}
               style={{ display: 'none' }}
             />
