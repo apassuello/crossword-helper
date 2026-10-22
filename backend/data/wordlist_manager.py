@@ -98,8 +98,8 @@ class WordListManager:
 
         # Walk through directory structure
         for root, dirs, files in os.walk(self.wordlist_dir):
-            # Skip archive and external directories
-            dirs[:] = [d for d in dirs if d not in ("archive", "external")]
+            # Skip archive, external and raw (unfiltered) directories
+            dirs[:] = [d for d in dirs if d not in ("archive", "external", "raw")]
             root_path = Path(root)
 
             txt_files = [f for f in files if f.endswith(".txt")]

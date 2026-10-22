@@ -252,3 +252,20 @@ class TestWordlistMetadataPersistence:
             f"metadata.json has wordlists missing 'name' field: {missing_names}\n"
             f"This is the bug from commit 9976d3b - all wordlists MUST have 'name' field!"
         )
+
+
+class TestWordlistMetadataTruth:
+    """metadata.json must describe files that exist (spec section 2)."""
+
+    @staticmethod
+    def _load():
+        with open("data/wordlists/metadata.json") as f:
+            return json.load(f)["wordlists"]
+
+    def test_every_key_names_an_existing_file(self):
+        missing = [k for k in self._load() if not Path("data/wordlists", k + ".txt").is_file()]
+        assert missing == [], f"metadata.json keys with no file: {missing}"
+
+    def test_comprehensive_description_has_no_digits(self):
+        desc = self._load()["comprehensive"]["description"]
+        assert not any(c.isdigit() for c in desc), desc

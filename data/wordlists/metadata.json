@@ -1,23 +1,5 @@
 {
   "wordlists": {
-    "core/common_3_letter": {
-      "name": "Common 3-Letter Words",
-      "category": "core",
-      "description": "High-frequency 3-letter English words and crossword fill",
-      "difficulty": "easy",
-      "tags": [
-        "common",
-        "3-letter",
-        "basic",
-        "essential"
-      ],
-      "created": "2024-12-21",
-      "last_modified": "2024-12-21",
-      "auto_generated": false,
-      "key": "core/common_3_letter",
-      "filepath": "data/wordlists/core/common_3_letter.txt",
-      "word_count": null
-    },
     "core/crosswordese": {
       "name": "Classic Crosswordese",
       "category": "core",
@@ -33,23 +15,6 @@
       "auto_generated": false,
       "key": "core/crosswordese",
       "filepath": "data/wordlists/core/crosswordese.txt",
-      "word_count": null
-    },
-    "core/standard": {
-      "name": "Standard Words",
-      "category": "core",
-      "description": "Standard English words for general fill",
-      "difficulty": "easy",
-      "tags": [
-        "standard",
-        "general",
-        "english"
-      ],
-      "created": "2024-12-21",
-      "last_modified": "2024-12-21",
-      "auto_generated": false,
-      "key": "core/standard",
-      "filepath": "data/wordlists/core/standard.txt",
       "word_count": null
     },
     "themed/expressions_and_slang": {
@@ -114,7 +79,7 @@
     "comprehensive": {
       "name": "Comprehensive Dictionary",
       "category": "core",
-      "description": "Complete crossword dictionary with 453,992 words from Matt Abate, Chris Jones, and custom expressions",
+      "description": "Curated crossword dictionary from Matt Abate, Chris Jones, and custom expressions",
       "difficulty": "all",
       "tags": [
         "comprehensive",
@@ -128,24 +93,6 @@
       "key": "comprehensive",
       "filepath": "data/wordlists/comprehensive.txt",
       "word_count": 44024
-    },
-    "comprehensive_scored": {
-      "name": "Comprehensive Dictionary (Scored)",
-      "category": "core",
-      "description": "Complete crossword dictionary with scoring - 453,992 words with quality scores",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "complete",
-        "scored",
-        "master"
-      ],
-      "created": "2024-12-21",
-      "last_modified": "2024-12-21",
-      "auto_generated": false,
-      "key": "comprehensive_scored",
-      "filepath": "data/wordlists/comprehensive_scored.txt",
-      "word_count": null
     },
     "custom/personal": {
       "name": "Personal Theme Words",
@@ -164,187 +111,6 @@
       "filepath": "data/wordlists/custom/personal.txt",
       "word_count": 24
     },
-    "external/normalized/peter_broda": {
-      "name": "Peter Broda Wordlist",
-      "category": "external",
-      "description": "Peter Broda's comprehensive crossword wordlist with 483,499 scored words. One of the most respected wordlists in crossword construction.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "scored",
-        "professional",
-        "broda"
-      ],
-      "source": "https://peterbroda.me/crosswords/wordlist/",
-      "license": "Free for personal use",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/peter_broda",
-      "filepath": "data/wordlists/external/normalized/peter_broda.txt"
-    },
-    "external/normalized/crosshatch": {
-      "name": "Crosshatch/Diehl Wordlist",
-      "category": "external",
-      "description": "Mark Diehl's trimmed version of Peter Broda's list with 250,901 scored words. Curated for quality crossword construction.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "scored",
-        "curated",
-        "crosshatch"
-      ],
-      "source": "https://github.com/ben4808/crosshatch",
-      "license": "MIT",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/crosshatch",
-      "filepath": "data/wordlists/external/normalized/crosshatch.txt"
-    },
-    "external/normalized/christophsjones": {
-      "name": "Chris Jones Wordlist",
-      "category": "external",
-      "description": "173,320 scored words curated from NYT, WSJ, WaPo, UKACD, Peter Broda's list, and Peter Norvig's frequency counts.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "scored",
-        "newspaper",
-        "curated"
-      ],
-      "source": "https://github.com/christophsjones/crossword-wordlist",
-      "license": "Public Domain",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/christophsjones",
-      "filepath": "data/wordlists/external/normalized/christophsjones.txt"
-    },
-    "external/normalized/enable": {
-      "name": "ENABLE Dictionary",
-      "category": "external",
-      "description": "Enhanced North American Benchmark Lexicon with 172,669 words. Public domain Scrabble dictionary used by Words with Friends.",
-      "difficulty": "medium",
-      "tags": [
-        "scrabble",
-        "dictionary",
-        "enable",
-        "public-domain"
-      ],
-      "source": "https://github.com/dolph/dictionary",
-      "license": "Public Domain",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/enable",
-      "filepath": "data/wordlists/external/normalized/enable.txt"
-    },
-    "external/normalized/ospd": {
-      "name": "OSPD (Official Scrabble Players Dictionary)",
-      "category": "external",
-      "description": "79,244 words from the Official Scrabble Players Dictionary. Good for Scrabble-valid crossword fill.",
-      "difficulty": "medium",
-      "tags": [
-        "scrabble",
-        "ospd",
-        "official",
-        "tournament"
-      ],
-      "source": "https://github.com/stmorse/IP-crossword",
-      "license": "Educational Use",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/ospd",
-      "filepath": "data/wordlists/external/normalized/ospd.txt"
-    },
-    "external/normalized/rifkin_300k": {
-      "name": "Rifkin 300K Dictionary",
-      "category": "external",
-      "description": "307,337 English words aggregated from multiple sources including rosettacode.org, umich.edu, SIL.org, and mieliestronk.com.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "dictionary",
-        "aggregated"
-      ],
-      "source": "https://github.com/jeremy-rifkin/Wordlist",
-      "license": "MIT",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/rifkin_300k",
-      "filepath": "data/wordlists/external/normalized/rifkin_300k.txt"
-    },
-    "external/normalized/common_5k": {
-      "name": "Common 5K Words",
-      "category": "external",
-      "description": "4,996 common English words from Michael Wehar's public domain word list. Good for easy crossword fill.",
-      "difficulty": "easy",
-      "tags": [
-        "common",
-        "easy",
-        "basic",
-        "public-domain"
-      ],
-      "source": "https://github.com/MichaelWehar/Public-Domain-Word-Lists",
-      "license": "Public Domain",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/common_5k",
-      "filepath": "data/wordlists/external/normalized/common_5k.txt"
-    },
-    "external/normalized/crossword_nexus": {
-      "name": "Crossword Nexus Collaborative Wordlist",
-      "category": "external",
-      "description": "The largest open-source crossword wordlist with 557,877 scored words. Community-maintained by Crossword Nexus with contributions from constructors worldwide.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "scored",
-        "collaborative",
-        "community",
-        "crossword-nexus"
-      ],
-      "source": "https://github.com/Crossword-Nexus/collaborative-word-list",
-      "license": "MIT",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/crossword_nexus",
-      "filepath": "data/wordlists/external/normalized/crossword_nexus.txt"
-    },
-    "external/normalized/spreadthewordlist": {
-      "name": "Spread the Word(list)",
-      "category": "external",
-      "description": "308,687 scored words compiled by Brooke Husic & Enrique Henestroza Anguiano. Data-driven from USA Today, Universal, Modern crosswords, Wikipedia, Jeopardy, and Scrabble words.",
-      "difficulty": "all",
-      "tags": [
-        "comprehensive",
-        "scored",
-        "modern",
-        "data-driven",
-        "spreadthewordlist"
-      ],
-      "source": "https://www.spreadthewordlist.com/",
-      "license": "CC-BY-NC-SA",
-      "word_count": null,
-      "created": "2025-12-25",
-      "last_modified": "2025-12-25",
-      "auto_generated": true,
-      "key": "external/normalized/spreadthewordlist",
-      "filepath": "data/wordlists/external/normalized/spreadthewordlist.txt"
-    },
     "custom/theme_list": {
       "category": "custom",
       "description": "Uploaded from theme_list.txt",
@@ -354,16 +120,6 @@
       ],
       "source": "direct_import",
       "name": "Theme List"
-    },
-    "custom/comprehensive_scored": {
-      "category": "custom",
-      "description": "Uploaded from comprehensive_scored.txt",
-      "tags": [
-        "custom",
-        "uploaded"
-      ],
-      "source": "direct_import",
-      "name": "Comprehensive Scored"
     }
   },
   "categories": {

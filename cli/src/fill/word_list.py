@@ -232,7 +232,7 @@ class WordList:
 
         Supported formats:
         - Plain: "WORD"
-        - Semicolon-scored: "WORD;50" (comprehensive_scored.txt, *.dict files)
+        - Semicolon-scored: "WORD;50" (raw/comprehensive_scored.txt, *.dict files)
         - Comma-scored: "word,50" (broda.owl style CSV)
 
         Args:

@@ -233,7 +233,7 @@ class TestScoredWordlistFormats:
             Path(temp_path).unlink()
 
     def test_semicolon_scored_format(self):
-        """WORD;SCORE lines (comprehensive_scored.txt, *.dict) parse with scores."""
+        """WORD;SCORE lines (raw/comprehensive_scored.txt, *.dict) parse with scores."""
         wl = self._load("CAT;50\nCOT;42\nCUT;77\n")
 
         assert len(wl) == 3
@@ -262,7 +262,7 @@ class TestScoredWordlistFormats:
         assert {w.text for w in wl.words} == {"CAT", "DOG"}
 
     def test_comment_lines_skipped(self):
-        """'#' comment headers (as in comprehensive_scored.txt) are ignored."""
+        """'#' comment headers (as in raw/comprehensive_scored.txt) are ignored."""
         wl = self._load("# Format: WORD;SCORE\n#\nCAT;50\n")
 
         assert len(wl) == 1
