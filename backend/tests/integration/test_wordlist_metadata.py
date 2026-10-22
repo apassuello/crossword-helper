@@ -257,13 +257,16 @@ class TestWordlistMetadataPersistence:
 class TestWordlistMetadataTruth:
     """metadata.json must describe files that exist (spec section 2)."""
 
-    @staticmethod
-    def _load():
-        with open("data/wordlists/metadata.json") as f:
+    # Resolve against the repo root, not the cwd (this file is backend/tests/integration/)
+    WORDLIST_DIR = Path(__file__).resolve().parents[3] / "data" / "wordlists"
+
+    @classmethod
+    def _load(cls):
+        with open(cls.WORDLIST_DIR / "metadata.json") as f:
             return json.load(f)["wordlists"]
 
     def test_every_key_names_an_existing_file(self):
-        missing = [k for k in self._load() if not Path("data/wordlists", k + ".txt").is_file()]
+        missing = [k for k in self._load() if not (self.WORDLIST_DIR / (k + ".txt")).is_file()]
         assert missing == [], f"metadata.json keys with no file: {missing}"
 
     def test_comprehensive_description_has_no_digits(self):
