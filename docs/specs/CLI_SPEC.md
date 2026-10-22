@@ -296,9 +296,15 @@ python -m cli.src.cli pattern "C?T" -w data/wordlists/comprehensive.txt --max-re
      "letter_quality": {"common": 2, "uncommon": 0, "regular": 1}}
   ],
   "meta": {"pattern": "C?T", "total_found": 3, "results_returned": 3,
-           "sources_searched": ["comprehensive"]}
+           "sources_searched": ["comprehensive"]},
+  "errors": []
 }
 ```
+
+`errors` lists each `--wordlists` file that could not be loaded, as
+`{"wordlist": <path>, "message": <str>}`; the other lists are still searched and the
+exit code is unchanged. Text output prints one `Warning: Could not load <path>: ...`
+line per such list on stderr.
 
 ---
 

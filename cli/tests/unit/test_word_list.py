@@ -328,6 +328,14 @@ class TestFromFileCacheFallback:
         assert [w.text for w in wl.words] == ["ZEBRA"]
         assert capsys.readouterr().err == ""
 
+    def test_equal_mtimes_read_the_text_not_the_cache(self, tmp_path, capsys):
+        """Spec O2 (#42): freshness is strict, cache_mtime > source_mtime."""
+        txt, cache = self._make(tmp_path)
+        WordList(["ZEBRA"]).to_cache(str(cache))
+        os.utime(cache, (1_000_000, 1_000_000))
+        wl = WordList.from_file(str(txt))
+        assert sorted(w.text for w in wl.words) == ["BIRD", "CAT", "DOG"]
+
     def test_cache_naming_missing_module_falls_back(self, tmp_path, capsys):
         txt, cache = self._make(tmp_path, b"cno_such_module_xyz\nThing\n.")
         with pytest.raises(ModuleNotFoundError):

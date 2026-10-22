@@ -1597,6 +1597,7 @@ def pattern(
     # Load word lists if specified
     all_words = []
     sources = []
+    load_errors = []  # spec O1 (#44): lists that could not be loaded
 
     if wordlists:
         total_wordlists = len(wordlists)
@@ -1631,6 +1632,7 @@ def pattern(
                     all_words.append((word.text, word.score, Path(wordlist_file).stem))
                 sources.append(Path(wordlist_file).stem)
             except Exception as e:
+                load_errors.append({"wordlist": wordlist_file, "message": str(e)})
                 click.echo(f"Warning: Could not load {wordlist_file}: {e}", err=True)
 
         progress.update(30, f"Loaded {len(all_words)} words from {total_wordlists} wordlist(s)")
@@ -1703,6 +1705,7 @@ def pattern(
                 "results_returned": min(len(matches), max_results),
                 "sources_searched": sources,
             },
+            "errors": load_errors,
         }
         progress.complete(f"Search complete: {len(results)} results returned")
         click.echo(json.dumps(output, indent=2))

@@ -1685,6 +1685,19 @@ components:
               type: integer
             query_time_ms:
               type: integer
+        errors:
+          type: array
+          description: >-
+            Word lists that could not be loaded. They were skipped; the other
+            lists were still searched.
+          items:
+            type: object
+            properties:
+              wordlist:
+                type: string
+                description: Path of the list that failed to load
+              message:
+                type: string
 
     GridRequest:
       type: object
