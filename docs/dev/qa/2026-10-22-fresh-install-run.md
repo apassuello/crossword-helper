@@ -1463,3 +1463,393 @@ min score 30: success=True empty_cells=0 slots=44/44 solver_elapsed=0.15s
 min score 50: success=False empty_cells=24 slots=20/44 solver_elapsed=15.02s
 wall time of the min-score-50 run: about 60 s (timing wrapper)
 ```
+
+### API-health — GET /health
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "API healthy" (GET /health, docs/api/openapi.yaml:61); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /health -> 200 (0.07 s)
+{"architecture": "cli-backend", "components": {"api_server": "ok", "cli_adapter": "ok"}, "status": "healthy", "version": "2.0.0"}
+```
+
+### API-normalize — POST /normalize
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Successfully normalized entry" (POST /normalize, docs/api/openapi.yaml:165); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /normalize -> 200 (0.05 s)
+{"alternatives": [], "normalized": "HELLO,WORLD!", "original": "Hello, World!", "rule": {"confidence": "medium", "description": "Default: remove spaces, uppercase", "examples": [], "explanation": "No specific pattern matched - applying default normalization", 
+```
+
+### API-pattern — POST /pattern
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Successful pattern search" (POST /pattern, docs/api/openapi.yaml:95); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON. Returns the requested matches from the comprehensive list (as-cloned caches in place).
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /pattern -> 200 (1.98 s)
+{"meta": {"pattern": "C?T", "results_returned": 5, "sources_searched": ["comprehensive"], "total_found": 5}, "results": [{"length": 3, "letter_quality": {"common": 2, "regular": 1, "uncommon": 0}, "score": 31, "source": "comprehensive", "word": "CAT"}, {"lengt
+```
+
+### API-fill — POST /fill
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Grid filled successfully" (POST /fill, docs/api/openapi.yaml:200); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill -> 200 (0.66 s)
+{"black_squares": 20, "grid": [["A", "E", "R", "#", "R", "C", "A", "#", "S", "A", "P"], ["O", "A", "K", "#", "I", "R", "S", "#", "P", "E", "A"], ["K", "N", "O", "W", "B", "Y", "H", "E", "A", "R", "T"], ["#", "#", "#", "A", "B", "I", "E", "#", "R", "A", "E"], [
+```
+
+### API-constraints — POST /constraints
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Constraint data" (POST /constraints, docs/api/openapi.yaml:1382); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /constraints -> 200 (4.53 s)
+{"constraints": {"0,0": {"across_options": 14, "down_options": 1, "min_options": 1}, "0,1": {"across_options": 14, "down_options": 1, "min_options": 1}, "0,10": {"across_options": 1, "down_options": 3, "min_options": 1}, "0,11": {"across_options": 1, "down_opt
+```
+
+### API-constraints-impact — POST /constraints/impact
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Placement impact data" (POST /constraints/impact, docs/api/openapi.yaml:1454); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /constraints/impact -> 200 (4.56 s)
+{"impacts": {"0,0,down": {"after": 1, "before": 1, "delta": 0, "length": 3}, "0,1,down": {"after": 1, "before": 1, "delta": 0, "length": 3}, "0,2,down": {"after": 0, "before": 1, "delta": -1, "length": 5}}, "success": true, "summary": {"crossings_eliminated": 
+```
+
+### API-theme-validate — POST /theme/validate
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Validation result" (POST /theme/validate, docs/api/openapi.yaml:587); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /theme/validate -> 200 (0.0 s)
+{"errors": [], "valid": true, "warnings": []}
+```
+
+### API-wordlists-search — POST /wordlists/search
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Search results grouped by word" (POST /wordlists/search, docs/api/openapi.yaml:1265); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /wordlists/search -> 200 (0.0 s)
+{"pattern": "C?T", "results": [{"sources": ["comprehensive"], "word": "CAT"}, {"sources": ["comprehensive"], "word": "CDT"}, {"sources": ["comprehensive"], "word": "CIT"}, {"sources": ["comprehensive"], "word": "COT"}, {"sources": ["comprehensive"], "word": "C
+```
+
+### API-wordlists-get-comprehensive — GET /wordlists/comprehensive
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Wordlist content and metadata" (GET /wordlists/{name}, docs/api/openapi.yaml:1093); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /wordlists/comprehensive -> 200 (0.0 s)
+{"metadata": {"auto_generated": false, "category": "core", "created": "2024-12-21", "description": "Complete crossword dictionary with 453,992 words from Matt Abate, Chris Jones, and custom expressions", "difficulty": "all", "filepath": "data/wordlists/compreh
+```
+
+### API-wordlists-post-create — POST /wordlists/qa-put
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Wordlist created" (POST /wordlists/{name}, docs/api/openapi.yaml:1136); success code 201
+- Observed: Status 403 (differs from the documented 201); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: FAIL · Severity: — · Known: —
+
+```
+POST /wordlists/qa-put -> 403 (0.0 s)
+{"builtin": true, "category": ".", "error": "Wordlist \"qa-put\" is a built-in list and cannot be overwritten. Built-in lists are read-only; create or import a custom list instead."}
+```
+
+### API-wordlists-put — PUT /wordlists/qa-put
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Wordlist updated" (PUT /wordlists/{name}, docs/api/openapi.yaml:1189); success code 200
+- Observed: Status 403 (differs from the documented 200); content type application/json; valid JSON. The list created one call earlier by the documented POST (201) is refused by the documented PUT: 403 "is a built-in list and cannot be modified". The list is a top-level file, which the backend classes as built-in, so a list created through the documented create route can be neither edited nor deleted through the documented routes.
+- Evidence: evidence/API-all.json
+- Verdict: FAIL · Severity: S3 · Known: —
+
+```
+PUT /wordlists/qa-put -> 403 (0.0 s)
+{"builtin": true, "category": ".", "error": "Wordlist \"qa-put\" is a built-in list and cannot be modified. Built-in lists are read-only; create or import a custom list instead."}
+```
+
+### API-wordlists-delete — DELETE /wordlists/qa-put
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Wordlist deleted" (DELETE /wordlists/{name}, docs/api/openapi.yaml:1220); success code 200
+- Observed: Status 403 (differs from the documented 200); content type application/json; valid JSON. Same refusal as the PUT: 403, built-in. The created file stays on disk in the sandbox word-list directory.
+- Evidence: evidence/API-all.json
+- Verdict: FAIL · Severity: S3 · Known: —
+
+```
+DELETE /wordlists/qa-put -> 403 (0.0 s)
+{"builtin": true, "category": ".", "error": "Wordlist \"qa-put\" is a built-in list and cannot be deleted. Built-in lists are read-only; create or import a custom list instead."}
+```
+
+### API-wordlists-import-url — POST /wordlists/import
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "URL import not implemented" (POST /wordlists/import, docs/api/openapi.yaml:1338); success code 501
+- Observed: Status 501 (matches the documented 501); content type application/json; valid JSON. The documented 501 is returned. The UI never offers a URL import; the client method for it has no caller.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: I5
+
+```
+POST /wordlists/import -> 501 (0.0 s)
+{"error": "URL import not yet implemented"}
+```
+
+### API-wordlists-import-route-precedence — POST /wordlists/import
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Wordlist imported" (POST /wordlists/import, docs/api/openapi.yaml:1323); success code 201
+- Observed: Status 201 (matches the documented 201); content type application/json; valid JSON. POST /wordlists/import is handled by the import route (201 with the imports/ key), not by the create-by-name route that shares its shape; no list named "import" or "search" exists afterwards (see the note). names containing "import" or "search": []
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: I6
+
+```
+POST /wordlists/import -> 201 (0.0 s) note: I6: shares POST with the name route
+{"message": "Wordlist imported successfully", "name": "imports/qa-i6", "word_count": 2}
+```
+
+### API-grid-validate — POST /grid/validate
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Grid validation results" (POST /grid/validate, docs/api/openapi.yaml:376); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /grid/validate -> 200 (0.0 s)
+{"black_square_count": 36, "black_square_percentage": 16.0, "suggestions": [], "valid": true, "warnings": [], "word_count": 78, "word_count_range": [72, 78]}
+```
+
+### API-grid-suggest-black-square — POST /grid/suggest-black-square
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Suggestions generated" (POST /grid/suggest-black-square, docs/api/openapi.yaml:294); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /grid/suggest-black-square -> 200 (0.0 s)
+{"message": "No viable black square positions found for this slot", "slot_info": {"col": 0, "direction": "across", "length": 5, "row": 0}, "suggestions": []}
+```
+
+### API-grid-apply-black-squares — POST /grid/apply-black-squares
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Black squares applied" (POST /grid/apply-black-squares, docs/api/openapi.yaml:332); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /grid/apply-black-squares -> 200 (0.0 s)
+{"applied": true, "grid": [[".", ".", ".", ".", ".", "#", ".", ".", ".", ".", "#", ".", ".", ".", "."], [".", ".", ".", ".", ".", "#", ".", ".", ".", ".", "#", ".", ".", ".", "."], [".", ".", ".", ".", ".", "#", ".", ".", ".", ".", "#", ".", ".", ".", "."], ["
+```
+
+### API-progress-start — POST /progress/start
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Tracker created" (POST /progress/start, docs/api/openapi.yaml:982); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /progress/start -> 200 (0.0 s)
+{"task_id": "3f3da127-dadf-404b-a5bb-33bb9410e9e5"}
+```
+
+### API-progress-update — POST /progress/3f3da127-dadf-404b-a5bb-33bb9410e9e5/update
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Update accepted (not proof it was delivered — see note above)" (POST /progress/{task_id}/update, docs/api/openapi.yaml:1033); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /progress/3f3da127-dadf-404b-a5bb-33bb9410e9e5/update -> 200 (0.0 s)
+{"success": true}
+```
+
+### API-progress-get — GET /progress/<id>
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "SSE stream of progress events" (GET /progress/{task_id}, docs/api/openapi.yaml:958); success code 200
+- Observed: Status 200 (matches the documented 200); content type text/event-stream; not JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /progress/<id> -> 200 (2 s) note: first event read with curl -m 2
+data: {"progress": 50, "message": "qa", "status": "running", "timestamp": 1792665650.270645}  
+```
+
+### API-fill-with-progress — POST /fill/with-progress
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Autofill task started" (POST /fill/with-progress, docs/api/openapi.yaml:234); success code 202
+- Observed: Status 202 (matches the documented 202); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/with-progress -> 202 (0.01 s)
+{"progress_url": "/api/progress/373a5065-9c53-4749-b5c1-9872483d0de7", "task_id": "373a5065-9c53-4749-b5c1-9872483d0de7"}
+```
+
+### API-fill-pause — POST /fill/pause/373a5065-9c53-4749-b5c1-9872483d0de7
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Pause requested" (POST /fill/pause/{task_id}, docs/api/openapi.yaml:659); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON. 200 at once; the state file appears only after the solver reaches its next checkpoint (see the note for how long), and the response carries no hint of that delay.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/pause/373a5065-9c53-4749-b5c1-9872483d0de7 -> 200 (0.0 s) note: state file appeared 5.6 s after the pause request (polled every 0.5 s, 20 s cap)
+{"message": "Pause requested for task 373a5065-9c53-4749-b5c1-9872483d0de7", "success": true, "task_id": "373a5065-9c53-4749-b5c1-9872483d0de7"}
+```
+
+### API-fill-state — GET /fill/state/373a5065-9c53-4749-b5c1-9872483d0de7
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "State info retrieved" (GET /fill/state/{task_id}, docs/api/openapi.yaml:781); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+GET /fill/state/373a5065-9c53-4749-b5c1-9872483d0de7 -> 200 (0.0 s)
+{"algorithm": "csp", "grid_preview": [["S", "A", "T", "O", "R", "I", "#", "P", "A", "Y", "U", "P", "#", "R", "A", "C", "#", "E", "A", "S", "T"], ["A", "R", "N", "I", "E", "S", "#", "L", "I", "A", "B", "O", "#", "E", "E", "R", "#", "R", "S", "T", "U"], ["N", "E
+```
+
+### API-fill-states-get — GET /fill/states
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "List of saved states" (GET /fill/states, docs/api/openapi.yaml:843); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON. Lists every state in the default state directory, which is outside the sandbox tree (the host temp directory); files left by earlier runs and by the resume route are still listed, and nothing removes them (the cleanup route is the only remover and takes an age in days).
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: #21
+
+```
+GET /fill/states -> 200 (0.0 s)
+{"count": 2, "states": [{"algorithm": "csp", "grid_size": [21, 21], "iteration_count": 0, "slots_filled": 137, "task_id": "373a5065-9c53-4749-b5c1-9872483d0de7", "timestamp": "2026-10-22T12:41:05.647050", "total_slots": 140, "version": "1.0"}, {"algorithm": "c
+```
+
+### API-fill-states-post-plan-listing — POST /fill/states
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: UNSPECIFIED
+- Observed: Status 405 (differs from the documented 200); content type application/json; valid JSON. The plan listed this route as POST; the spec documents GET (checked in fill-states-get). POST returns 405. This is a plan-versus-spec difference, not an app defect.
+- Evidence: evidence/API-all.json
+- Verdict: UNSPECIFIED · Severity: — · Known: —
+
+```
+POST /fill/states -> 405 (0.0 s) note: the plan lists this as POST; the spec documents GET
+{"error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}
+```
+
+### API-fill-edit-summary — POST /fill/edit-summary
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Edit summary" (POST /fill/edit-summary, docs/api/openapi.yaml:916); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/edit-summary -> 200 (0.0 s)
+{"cells_changed": 0, "cells_emptied": 366, "cells_filled": 0, "emptied_count": 0, "filled_count": 0, "modified_count": 0, "new_words": [], "partial_count": 0, "removed_words": []}
+```
+
+### API-fill-resume — POST /fill/resume
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Resume state prepared" (POST /fill/resume, docs/api/openapi.yaml:739); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON. 200 "Resume completed" with a result that reports the fill as not complete (percentage below 100, all_slots_filled false). Bad inputs (unknown wordlist, malformed edited grid) are rejected before the CLI runs, with 400 and 409, so #38 was not reproduced through them.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/resume -> 200 (20.65 s)
+{"message": "Resume completed", "new_task_id": "resume_c893eb1a", "original_task_id": "373a5065-9c53-4749-b5c1-9872483d0de7", "result": {"all_slots_filled": false, "fill_percentage": 97, "grid": [["S", "A", "T", "O", "R", "I", "#", "P", "A", "Y", "U", "P", "#"
+```
+
+### API-fill-cancel — POST /fill/cancel/373a5065-9c53-4749-b5c1-9872483d0de7
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Cancel request processed" (POST /fill/cancel/{task_id}, docs/api/openapi.yaml:698); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/cancel/373a5065-9c53-4749-b5c1-9872483d0de7 -> 200 (0.0 s) note: run against a live task started 3 s earlier; in the sequenced run the task had already stopped and the same call returned 404 TASK_NOT_FOUND
+{"message": "Autofill cancelled", "state_saved": false, "success": true, "task_id": "..."}
+```
+
+### API-fill-state-delete — DELETE /fill/state/373a5065-9c53-4749-b5c1-9872483d0de7
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "State deleted" (DELETE /fill/state/{task_id}, docs/api/openapi.yaml:809); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+DELETE /fill/state/373a5065-9c53-4749-b5c1-9872483d0de7 -> 200 (0.0 s)
+{"message": "State deleted for task 373a5065-9c53-4749-b5c1-9872483d0de7", "success": true}
+```
+
+### API-fill-states-cleanup — POST /fill/states/cleanup
+- Phase: P5-api · Env: E1 · Viewport: —
+- Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
+- Expected: "Cleanup completed" (POST /fill/states/cleanup, docs/api/openapi.yaml:876); success code 200
+- Observed: Status 200 (matches the documented 200); content type application/json; valid JSON.
+- Evidence: evidence/API-all.json
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /fill/states/cleanup -> 200 (0.0 s)
+{"deleted_count": 0, "message": "Deleted 0 old state files", "success": true}
+```
