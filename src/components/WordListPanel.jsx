@@ -18,6 +18,8 @@ const WordListPanel = () => {
   const [uploadName, setUploadName] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [uploadReasons, setUploadReasons] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [operationStatus, setOperationStatus] = useState(null);
 
@@ -117,12 +119,6 @@ const WordListPanel = () => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.name.endsWith('.txt')) {
-      setUploadError('Please select a .txt file');
-      return;
-    }
-
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       setUploadError('File size must be less than 10MB');
@@ -132,12 +128,35 @@ const WordListPanel = () => {
     setUploadFile(file);
     setUploadError('');
 
-    // Auto-populate name from filename (without .txt extension)
+    setPreview(null);
+
+    // Auto-populate name from filename (without its final extension)
     if (!uploadName) {
-      setUploadName(file.name.replace('.txt', ''));
+      setUploadName(file.name.replace(/\.[^.]*$/, ''));
     }
   };
 
+  const resetUpload = () => {
+    setShowUpload(false);
+    setUploadFile(null);
+    setUploadName('');
+    setUploadError('');
+    setUploadReasons(null);
+    setPreview(null);
+  };
+
+  const buildImport = (content, extra) => ({
+    name: uploadName.trim(),
+    content,
+    category: 'custom',
+    metadata: {
+      description: `Uploaded from ${uploadFile.name}`,
+      tags: ['custom', 'uploaded']
+    },
+    ...extra
+  });
+
+  // Step 1: dry run. Nothing is stored; the server parses and we show the result.
   const handleUpload = async () => {
     if (!uploadFile || !uploadName.trim()) {
       setUploadError('Please provide a name and select a file');
@@ -147,39 +166,44 @@ const WordListPanel = () => {
     try {
       setLoading(true);
       setUploadError('');
+      setUploadReasons(null);
+      setPreview(null);
 
-      // Read file content
       const content = await uploadFile.text();
-
-      // Send to backend
-      const response = await api.importWordlist({
-        name: uploadName.trim(),
-        content: content,
-        category: 'custom',
-        metadata: {
-          description: `Uploaded from ${uploadFile.name}`,
-          tags: ['custom', 'uploaded']
-        }
-      });
-
-      // Refresh wordlists
-      await loadWordlists();
-
-      // Reset form
-      setUploadFile(null);
-      setUploadName('');
-      setShowUpload(false);
+      const response = await api.importWordlist(buildImport(content, { dryRun: true }));
+      setPreview({ content, words: response.words || [], skipped: response.skipped || [] });
+    } catch (error) {
+      console.error('Failed to preview wordlist:', error);
+      setUploadError(error.message || 'Failed to upload wordlist');
+      const d = error.details;
+      if (d && d.reasons) setUploadReasons({ skipped: d.skipped, reasons: d.reasons });
+    } finally {
       setLoading(false);
+    }
+  };
 
-      // Auto-select the new wordlist
-      const newKey = response.name;
-      await loadWordlist(newKey);
-
+  // Step 2: Confirm sends the real import.
+  const handleConfirm = async () => {
+    if (!preview) return;
+    try {
+      setLoading(true);
+      setUploadError('');
+      const response = await api.importWordlist(buildImport(preview.content, { dryRun: false }));
+      await loadWordlists();
+      resetUpload();
+      setLoading(false);
+      await loadWordlist(response.name);
     } catch (error) {
       console.error('Failed to upload wordlist:', error);
       setUploadError(error.message || 'Failed to upload wordlist');
       setLoading(false);
     }
+  };
+
+  const skippedReasonCounts = (skipped) => {
+    const counts = {};
+    for (const s of skipped) counts[s.reason] = (counts[s.reason] || 0) + 1;
+    return counts;
   };
 
   return (
@@ -222,10 +246,9 @@ const WordListPanel = () => {
             </div>
 
             <div className="form-group">
-              <label>Select File (.txt):</label>
+              <label>Select File:</label>
               <input
                 type="file"
-                accept=".txt"
                 onChange={handleFileSelect}
               />
               {uploadFile && (
@@ -239,22 +262,61 @@ const WordListPanel = () => {
               <div className="upload-error">{uploadError}</div>
             )}
 
+            {uploadReasons && (
+              <div className="upload-error upload-reasons">
+                <p>{uploadReasons.skipped} skipped</p>
+                <ul>
+                  {Object.entries(uploadReasons.reasons).map(([reason, count]) => (
+                    <li key={reason}>{reason}: {count}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {preview && (
+              <div className="upload-preview" data-testid="upload-preview">
+                <h4>Preview</h4>
+                <p>{preview.words.length} valid words</p>
+                <p>{preview.skipped.length} skipped</p>
+                {preview.skipped.length > 0 && (
+                  <ul>
+                    {Object.entries(skippedReasonCounts(preview.skipped)).map(([reason, count]) => (
+                      <li key={reason}>{reason}: {count}</li>
+                    ))}
+                  </ul>
+                )}
+                <table>
+                  <tbody>
+                    {preview.words.slice(0, 20).map((w, i) => (
+                      <tr key={i} data-testid="preview-word">
+                        <td>{w.word}</td>
+                        <td>{w.score}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="upload-actions">
+                  <button className="upload-btn" onClick={handleConfirm} disabled={loading}>
+                    Confirm
+                  </button>
+                  <button className="cancel-btn" onClick={() => setPreview(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="upload-actions">
               <button
                 className="upload-btn"
                 onClick={handleUpload}
                 disabled={!uploadFile || !uploadName.trim() || loading}
               >
-                {loading ? 'Uploading...' : 'Upload'}
+                {loading ? 'Working...' : 'Upload'}
               </button>
               <button
                 className="cancel-btn"
-                onClick={() => {
-                  setShowUpload(false);
-                  setUploadFile(null);
-                  setUploadName('');
-                  setUploadError('');
-                }}
+                onClick={resetUpload}
               >
                 Cancel
               </button>

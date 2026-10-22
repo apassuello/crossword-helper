@@ -240,4 +240,20 @@ describe('ThemeWordsPanel Component', () => {
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('symmetric black square'));
     });
   });
+
+  it('does not gate on extension: a .dict file is read and uploaded', async () => {
+    const user = userEvent.setup();
+    mockApiEndpoint('post', '/theme/upload', {
+      words: ['BIRTHDAY'],
+      count: 1,
+      validation: { valid: true, errors: [], warnings: [] },
+    });
+    mockApiEndpoint('post', '/theme/suggest-placements', { suggestions: [] });
+    render(<ThemeWordsPanel {...defaultProps} />);
+    const input = document.querySelector('input[type="file"]');
+    expect(input.hasAttribute('accept')).toBe(false);
+    await user.upload(input, new File(['BIRTHDAY'], 'theme.dict'), { applyAccept: false });
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/\.txt/));
+    await waitFor(() => expect(screen.getByText('BIRTHDAY')).toBeInTheDocument());
+  });
 });

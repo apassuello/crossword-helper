@@ -191,4 +191,29 @@ describe('api client', () => {
       'Boundary black square at (7, 4) requires a symmetric black square',
     ]);
   });
+
+  it('importWordlist sends dry_run (true and false) and omits it when undefined', async () => {
+    fetchMock.mockResolvedValue(res({ words: [], skipped: [] }));
+    await api.importWordlist({ name: 'n', content: 'A', dryRun: true });
+    await api.importWordlist({ name: 'n', content: 'A', dryRun: false });
+    await api.importWordlist({ name: 'n', content: 'A' });
+    const bodies = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body));
+    expect(bodies[0].dry_run).toBe(true);
+    expect(bodies[1].dry_run).toBe(false);
+    expect('dry_run' in bodies[2]).toBe(false);
+  });
+
+  it('import 400 "No valid words found" surfaces skipped count and reasons as details', async () => {
+    fetchMock.mockResolvedValue(
+      res({ error: 'No valid words found', skipped: 3, reasons: { 'too short': 3 } }, 400)
+    );
+    let caught;
+    try {
+      await api.importWordlist({ name: 'n', content: 'x', dryRun: true });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught.message).toBe('No valid words found');
+    expect(caught.details).toEqual({ skipped: 3, reasons: { 'too short': 3 } });
+  });
 });

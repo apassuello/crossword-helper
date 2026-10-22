@@ -64,6 +64,12 @@ function normalizeError(status, data) {
 
   if (details === undefined) details = body.conflicts; // conflicts channel (rule 5)
 
+  // Import "No valid words found" 400: skipped count + per-reason counts have no
+  // `details` key of their own either.
+  if (details === undefined && body.reasons !== undefined) {
+    details = { skipped: body.skipped, reasons: body.reasons };
+  }
+
   if (!code) {
     code = status === 409 ? 'UNSOLVABLE_EDITS' : `HTTP_${status}`; // rule 4
   }
@@ -259,8 +265,11 @@ export const api = {
     return del('/api/wordlists/' + name);
   },
 
-  importWordlist({ name, content, category, metadata }) {
-    return post('/api/wordlists/import', clean({ name, content, category, metadata }));
+  importWordlist({ name, content, category, metadata, dryRun }) {
+    return post(
+      '/api/wordlists/import',
+      clean({ name, content, category, metadata, dry_run: dryRun })
+    );
   },
 
   searchWordlists({ pattern, wordlists }) {
