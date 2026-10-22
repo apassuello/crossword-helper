@@ -2268,6 +2268,55 @@ def list_states(json_output: bool, sort_by: str, max_age_days: Optional[int], st
         sys.exit(1)
 
 
+@cli.command("parse-wordlist")
+@click.argument("wordlist_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--json-output", is_flag=True, default=False, help="Machine-readable JSON output")
+def parse_wordlist(wordlist_file: str, json_output: bool):
+    """
+    Parse a word list file and report accepted words and skipped lines.
+
+    A line is accepted iff WordList.parse_line parses it and the uppercased
+    word passes WordList._is_valid_word. Blank and '#' lines are ignored.
+    Duplicates (after uppercasing) keep the first occurrence. A missing file
+    is a click usage error (exit 2), as for import-nyt.
+
+    Examples:
+        crossword parse-wordlist words.txt --json-output
+    """
+    validator = WordList()
+    words = []
+    skipped = []
+    seen = set()
+
+    with open(wordlist_file, "r", encoding="utf-8", errors="replace") as f:
+        for lineno, raw in enumerate(f, start=1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parsed = WordList.parse_line(line)
+            if parsed is None:
+                skipped.append({"line": lineno, "text": line, "reason": "malformed score"})
+                continue
+            word, score = parsed
+            word = word.upper()
+            if not validator._is_valid_word(word):
+                reason = "length outside 3-21" if not 3 <= len(word) <= 21 else "not letters only"
+                skipped.append({"line": lineno, "text": line, "reason": reason})
+                continue
+            if word in seen:
+                continue
+            seen.add(word)
+            words.append({"word": word, "score": score})
+
+    result = {"words": words, "skipped": skipped}
+    if json_output:
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(f"{len(words)} words, {len(skipped)} skipped")
+        for s in skipped:
+            click.echo(f"  line {s['line']}: {s['text']!r} ({s['reason']})")
+
+
 @cli.command("import-nyt")
 @click.argument("nyt_file", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), help="Output file for grid (.json)")

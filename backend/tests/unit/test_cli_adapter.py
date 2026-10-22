@@ -662,3 +662,31 @@ class TestCachedNormalize:
         cached_normalize("bbb")
 
         assert mock_adapter.normalize.call_count == 2
+
+
+# ===========================================================================
+# parse_wordlist()
+# ===========================================================================
+
+
+class TestParseWordlist:
+    @patch("subprocess.run")
+    def test_argv_contract(self, mock_run, adapter):
+        payload = {"words": [{"word": "CAT", "score": None}], "skipped": []}
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(payload))
+
+        result = adapter.parse_wordlist("/tmp/x.txt")
+
+        args = mock_run.call_args[0][0]
+        assert args[1:] == ["parse-wordlist", "/tmp/x.txt", "--json-output"]
+        assert result == payload
+
+    @patch("subprocess.run")
+    def test_invalid_json_raises(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout="NOT JSON")
+        with pytest.raises(ValueError, match="parse"):
+            adapter.parse_wordlist("/tmp/x.txt")
+
+    def test_empty_path_raises(self, adapter):
+        with pytest.raises(ValueError, match="empty"):
+            adapter.parse_wordlist("  ")
