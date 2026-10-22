@@ -35,7 +35,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R8 | 70 | `validate puzzle.json` | Task 10 | PASS |
 | R9 | 73 | `new --size 15 -o puzzle.json` | Task 10 | PASS |
 | R10 | 76 | `export filled.json --format html -o puzzle.html` | Task 10 | PASS |
-| R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | FAIL (3 tests; cause below) |
+| R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | PASS (corrected from FAIL by the second review: the 3 failures are #48, see R11) |
 | R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | PASS (watch mode, does not exit) |
 | R13 | 89–91 | `npm run test:coverage` | Task 13 | PASS (watch mode, does not exit) |
 | R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
@@ -578,7 +578,8 @@ svg cell groups: 121 ; black cells: 20 ; white cells: 101
 - Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
 - Observed: The run does not finish within 3 minutes and the grid is not filled: after the cap the grid still has empty white cells, the status reads "Filling" with a progress bar pinned at 90 from the first second, and the grid flickers between partial and cleared states. The server-side run ends at about its 5-minute timeout with conflicts left; the browser never notices: the panel keeps the running state and the Cancel button, with the last message "Repairing: 4 conflicts left", until the user clicks Cancel ("Cancelled by user"). The grid keeps a partial fill.
 - Evidence: evidence/A2.log · evidence/SERVE-run.log
-- Verdict: FAIL · Severity: S1 · Known: —
+- Correction (second review, 2026-10-22): severity S1 → S2. The spec defines S1 as "cannot install or run"; the app installs and runs, so autofill failing at panel defaults is S2, matching CLI-fill-minscore for the same cause (#40).
+- Verdict: FAIL · Severity: S2 · Known: —
 
 ```
 A2 timeline (fill id c65ddc8d-..., repair, timeout 300 s, min score 50, list Comprehensive Dictionary, grid example_11x11)
@@ -626,7 +627,8 @@ GET /api/progress/<id> is reported 503 by the browser tool but 200 in the server
 - Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
 - Observed: The run ends on its own at its timeout with the terminal message "Partial: 20/44 slots (45%) - Lower minimum score (currently 50)" and the grid still has empty white cells. The UI reaches its idle state this time. The progress bar sits at 90 from about 20 s on while only the message changes.
 - Evidence: evidence/A4.log
-- Verdict: FAIL · Severity: S1 · Known: —
+- Correction (second review, 2026-10-22): severity S1 → S2. The spec defines S1 as "cannot install or run"; the app installs and runs, so autofill failing at panel defaults is S2, matching CLI-fill-minscore for the same cause (#40).
+- Verdict: FAIL · Severity: S2 · Known: —
 
 ```
 A4 repair, timeout 2 min (panel option), Comprehensive Dictionary, min score 50
@@ -644,7 +646,8 @@ s=125  empty=24  Partial: 20/44 slots (45%) - Lower minimum score (currently 50)
 - Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
 - Observed: Same outcome as Repair: it ends at its timeout with "Partial: 20/44 slots (45%)" and 24 white cells left empty. The two algorithms land on the identical partial result.
 - Evidence: evidence/A5.log
-- Verdict: FAIL · Severity: S1 · Known: —
+- Correction (second review, 2026-10-22): severity S1 → S2. The spec defines S1 as "cannot install or run"; the app installs and runs, so autofill failing at panel defaults is S2, matching CLI-fill-minscore for the same cause (#40).
+- Verdict: FAIL · Severity: S2 · Known: —
 
 ```
 A5 hybrid, timeout 2 min
@@ -677,7 +680,8 @@ s=35   empty=0   Filled 44/44 slots - 5 entries may be invalid (use Verify Words
 - Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = the run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
 - Observed: Gives up almost immediately with "Partial: 0/44 slots (0%) - Lower minimum score (currently 50)": the first poll, within about 5 s, already shows the finished state with an untouched grid.
 - Evidence: evidence/A7.log
-- Verdict: FAIL · Severity: S1 · Known: —
+- Correction (second review, 2026-10-22): severity S1 → S2. The spec defines S1 as "cannot install or run"; the app installs and runs, so autofill failing at panel defaults is S2, matching CLI-fill-minscore for the same cause (#40).
+- Verdict: FAIL · Severity: S2 · Known: —
 
 ```
 A7 trie (label "Classic CSP"), timeout 2 min
@@ -708,7 +712,8 @@ s=20  empty=0   col5=OBSERVATION  Filled 43/43 slots - 6 entries may be invalid 
 - Expected: as A4/A6 (README.md:35-36)
 - Observed: Repair ends with the same "Partial: 20/44" as with the caches present (A4). Beam still fills the grid but takes noticeably longer than in A6 and stalls at one slot for tens of seconds first; the count of flagged entries differs from A6. The cache is not what makes Repair fail.
 - Evidence: evidence/A9.log
-- Verdict: FAIL · Severity: S1 · Known: I7
+- Correction (second review, 2026-10-22): severity S1 → S2. The spec defines S1 as "cannot install or run"; the app installs and runs, so autofill failing at panel defaults is S2, matching CLI-fill-minscore for the same cause (#40).
+- Verdict: FAIL · Severity: S2 · Known: I7
 
 ```
 A9 .pkl files removed (comprehensive.pkl, top_100k.pkl), server restarted, 11x11, timeout 2 min
@@ -1308,7 +1313,8 @@ cells in output: class="cell" 189 ; class="cell black" 36 ; class="cell-number" 
 - Expected: UNSPECIFIED (help: "Analyze grid constraints and placement impact.")
 - Observed: On a genuine clone (E2 as cloned) the command exits 0 and prints the grid analysis. With the cache mtime equal to or newer than the text list (E1 after my restore; a ZIP extract) it exits 1: the unloadable-cache warning as in R5, then "Error: no words loaded from wordlists" (I7-MATRIX).
 - Evidence: evidence/CLI-analyze.log
-- Verdict: PASS · Severity: — · Known: I7
+- Correction (second review, 2026-10-22): verdict PASS → FAIL S2. The PASS rested on E2-analyze; this case's own evidence is the exit-1 failure below, the same cause and severity as I7-MATRIX (#42, #43, #44).
+- Verdict: FAIL · Severity: S2 · Known: I7
 
 ```
 Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'
@@ -1860,7 +1866,8 @@ POST /fill/states/cleanup -> 200 (0.0 s)
 - Expected: "pytest" runs backend + CLI tests (README.md:82-84)
 - Observed: The suite runs to the end; all but three tests pass. The three failures are in the word-list metadata test file and are caused by entries my earlier API import calls wrote into the tracked metadata file, which have no "name" field (see API-import-metadata-name). With that file restored the metadata test file passes, so on an untouched clone the failures would not appear; they show that using the documented import route breaks the repository's own invariant test. The setup step had already installed the test tools, so there is no missing-tool finding.
 - Evidence: evidence/R11.log · evidence/R11-metadata-clean.log
-- Verdict: FAIL · Severity: S3 · Known: —
+- Correction (second review, 2026-10-22): verdict FAIL S3 → PASS. The README claim (pytest runs the suites) holds on an untouched clone, as the Observed text says; the three failures are the import-route defect recorded in API-import-metadata-name (#48), not a README failure.
+- Verdict: PASS · Severity: — · Known: #48
 
 ```
 ========== 3 failed, 1893 passed, 82 deselected in 342.57s (0:05:42) ===========
@@ -2059,12 +2066,11 @@ Not run by design: the Docker control (plan Task 15) is conditional on a setup f
 
 ## Summary
 
-Output of the plan's command over the verdict lines (the case-format comment at the top of the Cases section is excluded):
+Output of the plan's command over the verdict lines (the case-format comment at the top of the Cases section is excluded), regenerated after the second-review corrections of 2026-10-22 (each corrected case carries a "Correction (second review" line; `grep -n "^- Correction (second review" docs/dev/qa/2026-10-22-fresh-install-run.md` lists them; the original close-out count is in this file's history at `34b6d14`):
 
 ```
-   5 FAIL S1
-   9 FAIL S2
-  10 FAIL S3
+  15 FAIL S2
+   9 FAIL S3
    4 NOT-IMPLEMENTED S3
    2 NOT-TESTABLE —
   77 PASS —
