@@ -41,7 +41,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
 | R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | PASS |
 | R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | FAIL (A2, A4, A5, A7; A6 passes) |
-| R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | FAIL (CACHE-1) |
+| R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | PASS (44k list; CACHE-1 is conditional) |
 | R18 | 39 | "Export -- HTML format" | Task 9 | PASS |
 | R19 | setup.sh:67 | "Frontend built to frontend/dist/" | Task 4 | PASS |
 | R20 | 105 | the Resources PDF link resolves | Task 2 | PASS |
@@ -737,7 +737,7 @@ server log: no cache warning, no traceback
 - Expected: "ships with 44k curated words" (README.md:37-38)
 - Observed: The shipped cache holds the large scored list, a list far larger than the text list it sits beside (line counts in the fence). The loader uses a cache whenever its mtime is not older than the text list's; that is not the case in a git clone but is the case after a ZIP extract or after build-cache (I7-MATRIX). The cache rebuilt by the CLI's own build-cache command cannot be loaded back through the runtime import path (module `cli.src` not found) and the loader's fallback only catches ValueError/FileNotFoundError, so that error is not turned into a text-list reload at that call.
 - Evidence: evidence/CACHE-1.log
-- Verdict: FAIL · Severity: S2 · Known: I7
+- Verdict: FAIL · Severity: S3 · Known: I7
 
 ```
 shipped comprehensive.pkl (copy of the tracked file) loaded through the runtime import path (sys.path has cli/ so the module is "src.fill.word_list"):
@@ -1585,13 +1585,13 @@ GET /wordlists/comprehensive -> 200 (0.0 s)
 - Phase: P5-api · Env: E1 · Viewport: —
 - Steps: 1. Build the request body from the operation's schema in docs/api/openapi.yaml. 2. Call it with curl-equivalent JSON and record status and a body excerpt.
 - Expected: "Wordlist created" (POST /wordlists/{name}, docs/api/openapi.yaml:1136); success code 201
-- Observed: Status 403 (differs from the documented 201); content type application/json; valid JSON.
+- Observed: First run: status 201 as documented, with the created-successfully message and the word count. A second create with the same name (the probe was run twice) returns 403 "is a built-in list and cannot be overwritten": a list made by this route is classed as built-in and cannot be recreated, edited or deleted afterwards (see the PUT and DELETE cases).
 - Evidence: evidence/API-all.json
-- Verdict: FAIL · Severity: — · Known: —
+- Verdict: PASS · Severity: — · Known: —
 
 ```
-POST /wordlists/qa-put -> 403 (0.0 s)
-{"builtin": true, "category": ".", "error": "Wordlist \"qa-put\" is a built-in list and cannot be overwritten. Built-in lists are read-only; create or import a custom list instead."}
+first run : POST /wordlists/qa-put -> 201 {"message": "Wordlist \"qa-put\" created successfully", "word_count": 2}
+second run: POST /wordlists/qa-put -> 403 {"builtin": true, "category": ".", "error": "Wordlist \"qa-put\" is a built-in list and cannot be overwritten. ..."}
 ```
 
 ### API-wordlists-put — PUT /wordlists/qa-put
@@ -2024,3 +2024,54 @@ success=True empty_cells=0 slots=44/44
 {"type": "progress", "progress": 30, "message": "Loaded 44024 words from 1 wordlist(s)", "status": "running"}
 Grid analysis: 192 cells
 ```
+
+### A-PAUSE-UI — No pause or resume control in the Autofill panel
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Open Autofill; list every button in the panel before, during and after a run (read_page and the DOM).
+- Expected: UI (the backend and CLI both offer pause and resume, P4 and P5)
+- Observed: While a run is going the panel offers "Cancel" only; before and after it offers "Start Autofill", "Reset" and the disabled "Suggest Black Square". Nothing in the UI calls the pause, state or resume routes, so the paused-state feature that exists in the CLI and API cannot be reached from the app.
+- Evidence: —
+- Verdict: NOT-IMPLEMENTED · Severity: S3 · Known: I1
+
+```
+buttons during a run: Autofill | Cancel
+buttons idle/after: Start Autofill | Reset | Suggest Black Square (disabled)
+```
+
+## Declared findings not observed
+
+Declared in the plan (spec §2.9) and not reproduced by this run. "Not exercised" means no case here drove the code path; "not reproduced" means a case tried and did not see it.
+
+- #18 (symmetry rule has four implementations): not exercised. The UI symmetry toggle behaved correctly (G4); a backend-versus-CLI comparison was not run.
+- #21 (state-store and pause-flag lifecycle): partly observed. State files accumulate in the default state directory and nothing but the cleanup route removes them (API-fill-states-get). Task ids shaped like path traversal returned 404; not reproduced.
+- #26 (beam search never observes a pause): not exercised. The UI has no pause control (A-PAUSE-UI) and the CLI pause was driven only on repair.
+- #29 (resume dereferences a result behind a None check): not exercised.
+- #36 (beam exact-resume only via a legacy state file): not exercised.
+- #37 (adaptive stuck-slot detection dead for repair, beam, hybrid): not exercised; adaptive mode was not run.
+- #38 (resume route reports 200 when the CLI failed): not reproduced. An unknown wordlist and a malformed edited grid were rejected before the CLI ran (400 and 409).
+- #39 (fill dereferences a field before the None guard, non-JSON path): not exercised.
+- I4 (the two CLI loaders disagree on the comma form): not exercised.
+- I8 (client methods with no caller): only the constraints method was observed, through the inert Heatmap toggle (G8); the others were not tested.
+
+Observed and tagged: #19 (TH2b), #20 (TH3), #28 (CLI-pause-3), I1 (A-PAUSE-UI), I2 (CL1), I3 (L6, L7, L13), I5 (API-wordlists-import-url), I6 (API-wordlists-import-route-precedence: the import route wins, no shadowing observed), I7 (CLONE-3, CACHE-1, CACHE-2, I7-MATRIX; conditional on the cache mtime), I8 (G8).
+
+Not run by design: the Docker control (plan Task 15) is conditional on a setup failure, and neither E1 nor E2 setup failed, so it was not needed.
+
+## Summary
+
+Output of the plan's command over the verdict lines (the case-format comment at the top of the Cases section is excluded):
+
+```
+   5 FAIL S1
+   9 FAIL S2
+  10 FAIL S3
+   4 NOT-IMPLEMENTED S3
+   2 NOT-TESTABLE —
+  77 PASS —
+   2 PASS S3
+   8 PASS S4
+   9 UNSPECIFIED —
+   1 UNSPECIFIED S4
+```
+
+Method deviations, each recorded in its case: browser viewport (ENV-3), the 2-minute autofill timeout for per-algorithm runs (A4-A7), the 21x21 input for the pause and resume run (CLI-pause-2), the stubbed confirm dialog (L15), and the intercepted export download (EX1).
