@@ -40,9 +40,9 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R13 | 89–91 | `npm run test:coverage` | Task 13 | |
 | R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
 | R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | PASS |
-| R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | |
-| R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | |
-| R18 | 39 | "Export -- HTML format" | Task 9 | |
+| R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | FAIL (A2, A4, A5, A7; A6 passes) |
+| R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | FAIL (CACHE-1) |
+| R18 | 39 | "Export -- HTML format" | Task 9 | PASS |
 | R19 | setup.sh:67 | "Frontend built to frontend/dist/" | Task 4 | PASS |
 | R20 | 105 | the Resources PDF link resolves | Task 2 | PASS |
 
@@ -955,3 +955,126 @@ git -C clone diff --stat after setup.sh and the walkthrough uploads (tracked fil
  package-lock.json            | 51 lines removed ("libc" fields dropped by npm install)
  data/wordlists/top_100k.pkl  | (deleted for A9 and restored afterwards; not product behaviour)
 ```
+
+### TH1 — Theme tool: upload a word file
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Import the 15x15 example. 2. Theme tool, choose a file containing APPLE, BERRY, CHERRY.
+- Expected: UI label "Upload Theme Words" ("Upload a .txt file with one word per line")
+- Observed: The three words are listed as chips with their lengths under "Loaded Words".
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /api/theme/upload 200
+```
+
+### TH2 — Suggest placements on the 15x15 grid
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. After TH1, read the suggestions. 2. Check every suggestion against the example grid with the API.
+- Expected: UI label "Placement Suggestions"
+- Observed: POST /api/theme/suggest-placements returns 200 with a non-empty list per word (CHERRY, APPLE, BERRY). Checked against the real grid, none of the returned placements crosses a black square or the border.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+POST /api/theme/suggest-placements 200
+request: {"theme_words":["APPLE","BERRY","CHERRY"],"grid_size":15,"existing_grid":[... 15 rows ...]}
+suggestions checked against grid blacks: 9 ; crossing a black or out of bounds: 0
+```
+
+### TH2b — Suggestions after the grid changes
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. With suggestions showing, place a black square (period key) at row 5, col 10 on the grid. 2. Re-read the list. 3. Click "Apply This Placement" on the APPLE placement at row 3, col 10 (down), which passes through that cell.
+- Expected: UI text "Hover over suggestions to preview on grid. Click "Apply" to lock the word."
+- Observed: The suggestion list does not change after the grid edit; the placement that now runs through a black square is still offered. Applying it is refused by the server with the toast "Cannot place 'P' at (5, 10): cell is black" and the grid stays unchanged.
+- Evidence: —
+- Verdict: FAIL · Severity: S3 · Known: #19
+
+```
+toast: Cannot place 'P' at (5, 10): cell is black
+column 10 before and after: ###..#..#......
+```
+
+### TH3 — Apply one placement, then Apply All Best Placements
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Apply the CHERRY placement at row 7, col 8 (across). 2. Click "Apply All Best Placements". 3. Read the toasts, the three apply-placement responses, and the console.
+- Expected: UI label "Apply All Best Placements" ("Automatically place all theme words with their best non-conflicting positions")
+- Observed: Single apply works: CHERRY appears in the row and a success toast shows. Apply All sends one request per word; the second returns 400 with the precise reason ("Cannot place 'P' at (5, 10): cell is black"), but the user sees only "Applied 2 theme words successfully! (1 skipped due to conflicts)". The reason appears only in the browser console ("Error applying placement: ApiError: Placement conflicts detected"). The message also counts the word applied a moment earlier.
+- Evidence: —
+- Verdict: FAIL · Severity: S3 · Known: #20
+
+```
+toasts: Applied 2 theme words successfully! (1 skipped due to conflicts)
+POST /api/theme/apply-placement -> 200, 400, 200
+400 body: {"applied":false,"conflicts":["Cannot place 'P' at (5, 10): cell is black"],"error":"Placement conflicts detected"}
+console: Error applying placement: ApiError: Placement conflicts detected
+```
+
+### TH4 — Theme words with no suggestion on the 11x11 grid
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. On the 11x11 example, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE (all 11 letters). 2. Read the suggestions.
+- Expected: UNSPECIFIED
+- Observed: OBSERVATION gets three placements, while the other two report "No valid placements found for this word" although the grid has other open full-width rows (OBSERVATION is offered one of them). Not specified anywhere which is right.
+- Evidence: evidence/A8.log
+- Verdict: UNSPECIFIED · Severity: — · Known: —
+
+### TH5 — Theme panel covers the top bar
+- Phase: P3-theme · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Open the Theme tool at this viewport. 2. Look at the top bar.
+- Expected: UI (top bar controls reachable)
+- Observed: The Theme panel is drawn over the right end of the top bar: the theme toggle and parts of the Verify/Clean/Save controls are hidden while the panel is open, so the theme could not be toggled until the panel was closed.
+- Evidence: —
+- Verdict: FAIL · Severity: S3 · Known: —
+
+### IM1 — Import example_15x15
+- Phase: P3-import · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Import tool, choose the 15x15 example, "Import Grid".
+- Expected: UI label "Import Grid"
+- Observed: The 15x15 grid renders with its black squares (done repeatedly as the setup for other cases).
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+### IM2 — Import a non-JSON file
+- Phase: P3-import · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Import tool, choose the plain text fixture. 2. Read the message and the console.
+- Expected: UI text "Select a .json file exported from this tool"
+- Observed: A red panel reads "Error: Invalid file type. Please select a .json file."; the grid and app are unaffected and the console shows no uncaught error.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Error: Invalid file type. Please select a .json file.
+```
+
+### IM3 — Import the NYT template
+- Phase: P3-import · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Import tool, choose the NYT template, preview, "Import Grid".
+- Expected: UI label "Import Grid"
+- Observed: The preview reads 15x15 with 225 cells; after import the grid renders with its black squares.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+preview: Size 15x15 | Cells 225 | Filled 0
+black cells after import: 30
+```
+
+### EX1 — Export to HTML
+- Phase: P3-export · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Import the NYT template. 2. Export tool, format "HTML (printable)", Export. The download hook was intercepted so no file was saved; the generated blob was read in the page and rendered in a sandboxed frame.
+- Expected: "Export -- HTML format" (README.md:39)
+- Observed: The app generates a text/html document named crossword.html; its table has the same cell and black-cell counts as the grid, and rendered in a frame it shows a numbered 15x15 grid under a "Crossword Puzzle" heading. PDF and .puz are listed as "coming soon", which the README does not promise.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+blob type text/html ; table cells 225 ; black cells 30 ; rendered table 15 rows x 15 columns
+```
+
+### CL1 — Clues tool
+- Phase: P3-clues · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Open the Clues tool.
+- Expected: UI
+- Observed: The panel shows a "Clue list" heading and the text "Arrives in a later task."
+- Evidence: —
+- Verdict: NOT-IMPLEMENTED · Severity: S3 · Known: I2
