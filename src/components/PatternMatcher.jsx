@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import './PatternMatcher.scss';
 import ProgressIndicator from './ProgressIndicator';
@@ -77,6 +78,13 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
   useEffect(() => {
     if (searchProgress.status === 'complete' && loading) {
       let searchResults = [...(searchProgress.data?.results || [])];
+
+      // Spec O1 (#44): lists the CLI could not load were skipped, not searched.
+      const loadErrors = searchProgress.data?.errors || [];
+      if (loadErrors.length > 0) {
+        const names = loadErrors.map(e => e.wordlist.split(/[\\/]/).pop()).join(', ');
+        toast(`Could not load word list: ${names}. Results exclude it.`, { icon: '⚠️', duration: 6000 });
+      }
 
       // Sort results
       if (sortBy === 'score') {

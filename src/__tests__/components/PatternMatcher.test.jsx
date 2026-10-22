@@ -14,6 +14,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PatternMatcher from '../../components/PatternMatcher';
 import { mockApiEndpoint, mockApiError } from '../fixtures/apiMocks';
+import toast from 'react-hot-toast';
+
+vi.mock('react-hot-toast', () => ({ default: vi.fn() }));
 
 // Mock useSSEProgress hook — allow tests to control status and final data payload
 let mockSSEStatus = 'idle';
@@ -353,6 +356,48 @@ describe('PatternMatcher Component', () => {
       expect(initPosts).toHaveLength(1);
 
       fetchSpy.mockRestore();
+    });
+
+    it('shows a warning toast naming each list that failed to load (spec O1)', async () => {
+      const user = userEvent.setup();
+      toast.mockClear();
+      const { rerender } = render(<PatternMatcher {...defaultProps} />);
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+      await user.click(screen.getByRole('button', { name: /search/i }));
+      await waitFor(() => expect(mockSSEConnect).toHaveBeenCalled());
+
+      mockSSEStatus = 'complete';
+      mockSSEData = {
+        results: [{ word: 'CAT', score: 95, source: 'comprehensive' }],
+        meta: { total_found: 1 },
+        errors: [{ wordlist: '/lists/broken.txt', message: 'boom' }],
+      };
+      rerender(<PatternMatcher {...defaultProps} />);
+
+      await waitFor(() => expect(screen.getByText(/results \(1\)/i)).toBeInTheDocument());
+      expect(toast).toHaveBeenCalledTimes(1);
+      expect(toast.mock.calls[0][0]).toMatch(/broken\.txt/);
+      expect(toast.mock.calls[0][1]).toMatchObject({ icon: expect.any(String) });
+    });
+
+    it('shows no toast when errors is empty or absent', async () => {
+      const user = userEvent.setup();
+      toast.mockClear();
+      const { rerender } = render(<PatternMatcher {...defaultProps} />);
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+      await user.click(screen.getByRole('button', { name: /search/i }));
+      await waitFor(() => expect(mockSSEConnect).toHaveBeenCalled());
+
+      mockSSEStatus = 'complete';
+      mockSSEData = {
+        results: [{ word: 'CAT', score: 95, source: 'comprehensive' }],
+        meta: { total_found: 1 },
+        errors: [],
+      };
+      rerender(<PatternMatcher {...defaultProps} />);
+
+      await waitFor(() => expect(screen.getByText(/results \(1\)/i)).toBeInTheDocument());
+      expect(toast).not.toHaveBeenCalled();
     });
 
     it('re-enables search button when SSE completes with no results', async () => {

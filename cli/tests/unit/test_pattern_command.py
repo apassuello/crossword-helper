@@ -111,3 +111,30 @@ class TestInvalidPatterns:
         assert rc == 0, f"Command failed (rc={rc}): {stderr}"
         data = json.loads(stdout.strip())
         assert data["meta"]["total_found"] == 3
+
+
+class TestUnloadableWordlist:
+    """Spec O1 (#44): a list that cannot load is reported, the others still searched."""
+
+    def test_json_output_lists_errors_and_searches_other_lists(self, scored_semicolon_wordlist, tmp_path):
+        missing = str(tmp_path / "nope.txt")
+        out, _err, rc = run_pattern(["C?T", "-w", scored_semicolon_wordlist, "-w", missing, "--json-output"])
+        assert rc == 0
+        data = json.loads(out)
+        assert {r["word"] for r in data["results"]} == {"CAT", "COT", "CUT"}
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["wordlist"] == missing
+        assert isinstance(data["errors"][0]["message"], str) and data["errors"][0]["message"]
+
+    def test_json_output_errors_empty_when_all_load(self, scored_semicolon_wordlist):
+        out, _err, rc = run_pattern(["C?T", "-w", scored_semicolon_wordlist, "--json-output"])
+        assert rc == 0
+        assert json.loads(out)["errors"] == []
+
+    def test_text_output_prints_one_warning_line_per_list(self, scored_semicolon_wordlist, tmp_path):
+        missing = str(tmp_path / "nope.txt")
+        out, err, rc = run_pattern(["C?T", "-w", scored_semicolon_wordlist, "-w", missing])
+        assert rc == 0
+        warnings = [ln for ln in (out + err).splitlines() if ln.startswith("Warning:") and missing in ln]
+        assert len(warnings) == 1
+        assert "CAT" in out

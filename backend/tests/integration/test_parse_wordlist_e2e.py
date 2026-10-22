@@ -22,3 +22,17 @@ def test_parse_wordlist_through_real_cli(tmp_path):
             {"line": 7, "text": "foo,x", "reason": "malformed score"},
         ],
     }
+
+
+def test_pattern_reports_unloadable_list_through_real_cli(tmp_path):
+    """Spec O1 (#44): errors survive the adapter; other lists are still searched."""
+    good = tmp_path / "good.txt"
+    good.write_text("CAT;50\nCOT;42\n", encoding="utf-8")
+    missing = str(tmp_path / "missing.txt")
+
+    adapter = CLIAdapter(cli_path=str(PROJECT_ROOT / "cli" / "crossword"))
+    result = adapter.pattern("C?T", wordlist_paths=[str(good), missing])
+
+    assert {r["word"] for r in result["results"]} == {"CAT", "COT"}
+    assert [e["wordlist"] for e in result["errors"]] == [missing]
+    assert result["errors"][0]["message"]

@@ -293,11 +293,11 @@ class WordList:
                 cache_path = resolved_path.with_suffix(".pkl")
 
                 if cache_path.exists():
-                    # Check if cache is newer than source file
+                    # Strict (spec O2, #42): an equal mtime reads the source file
                     source_mtime = resolved_path.stat().st_mtime
                     cache_mtime = cache_path.stat().st_mtime
 
-                    if cache_mtime >= source_mtime:
+                    if cache_mtime > source_mtime:
                         # Cache is up-to-date, use it
                         try:
                             return cls.from_cache(str(cache_path))
