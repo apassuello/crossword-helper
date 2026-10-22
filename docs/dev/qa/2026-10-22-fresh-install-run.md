@@ -26,9 +26,9 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | # | README line | Claim (quoted) | Verified by | Verdict |
 |---|---|---|---|---|
 | R1 | 19–21 | `chmod +x setup.sh` / `./setup.sh` is the one-time setup | Task 4 | PASS |
-| R2 | 23–25 | `source venv/bin/activate` then `python3 run.py` runs the app | Task 5 | |
-| R3 | 26 | "Open http://localhost:5000" | Task 5 | |
-| R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | |
+| R2 | 23–25 | `source venv/bin/activate` then `python3 run.py` runs the app | Task 5 | PASS |
+| R3 | 26 | "Open http://localhost:5000" | Task 5 | PASS |
+| R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | PASS |
 | R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | |
 | R6 | 64 | "11x11, 15x15, and 21x21 templates included" | Task 2 | PASS |
 | R7 | 65–67 | the `fill data/grids/example_15x15.json … -t 180 --min-score 30 -o filled.json` command | Task 10 | |
@@ -274,4 +274,52 @@ crossword-helper@1.0.0 /private/tmp/crossword-fresh/crossword-helper
 └── vitest@1.6.1
 
 -rw-r--r--  1 apa  wheel  1107 Oct 22 11:07 frontend/dist/index.html
+```
+
+### SERVE-0 — Ports 5000 and 3000 free before start
+- Phase: P2-serve · Env: host · Viewport: —
+- Steps: 1. `lsof -nP -iTCP:5000 -sTCP:LISTEN` and the same for 3000 before starting any server.
+- Expected: UNSPECIFIED (pre-check; a foreign listener on 5000 would be an S1 finding)
+- Observed: Neither port had a listener on this host. This does not exercise the macOS AirPlay-Receiver-on-5000 case; that case is NOT-TESTABLE here because the setting is off.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+### SERVE-1 — Production mode serves the SPA and API (R2, R3)
+- Phase: P2-serve · Env: E1 · Viewport: —
+- Steps: 1. `source venv/bin/activate` then `python3 run.py` under the E1 wrapper, in the background. 2. `GET /` and `GET /api/health` with curl.
+- Expected: "python3 run.py" then "Open http://localhost:5000" (README.md:23-26)
+- Observed: Server healthy within 2 s; `GET /` returns 200 text/html containing `<div id="root">`; `/api/health` returns 200 application/json. The server runs in Flask debug mode (Werkzeug debugger active, with a PIN) and prints the development-server warning.
+- Evidence: evidence/SERVE-run.log
+- Verdict: PASS · Severity: S4 (debug mode on by default in run.py output) · Known: —
+
+```
+$ curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/ ; grep -c "<div id=\"root\">"
+200 / 1 match
+ * Serving Flask app 'backend.app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://localhost:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 832-053-023
+127.0.0.1 - - [22/Oct/2026 11:08:38] "GET /api/health HTTP/1.1" 200 -
+```
+
+### SERVE-2 — Dev mode on :3000 with API proxy (R4)
+- Phase: P2-serve · Env: E1 · Viewport: —
+- Steps: 1. With Flask up, `npm run dev` in the background. 2. curl `http://localhost:3000/` and `http://localhost:3000/api/health`. 3. Stop the dev server, leave Flask up.
+- Expected: "npm run dev" ... "Open http://localhost:3000" (README.md:46-54)
+- Observed: `/` returns 200; `/api/health` through the proxy returns 200 with the health JSON. Vite reports its listen address as 127.0.0.1, not localhost; curl reached it via localhost, the browser case is re-checked in L16.
+- Evidence: evidence/SERVE-dev.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+> vite
+
+
+  VITE v5.4.21  ready in 78 ms
+
+  ➜  Local:   http://127.0.0.1:3000/
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
 ```
