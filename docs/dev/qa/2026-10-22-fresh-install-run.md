@@ -323,3 +323,63 @@ Press CTRL+C to quit
   ➜  Local:   http://127.0.0.1:3000/
 DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
 ```
+
+### ENV-3 — Browser viewport cannot be set to the plan's sizes
+- Phase: P3-lists · Env: host · Viewport: —
+- Steps: 1. the browser tool's window-resize action to 1440x900, twice. 2. Read `innerWidth/innerHeight/outerWidth/devicePixelRatio` from the page on localhost and on 127.0.0.1.
+- Expected: UNSPECIFIED (plan Task 6: window resized to 1440x900)
+- Observed: The resize call reports success but does not change the window. On `localhost` Chrome holds a stored 75% page zoom for that host, so the CSS viewport is far larger than the window; on `127.0.0.1` the zoom is 100% and the viewport equals the window. Neither is 1440x900. Method deviation (test method only, nothing measured differently): functional cases run top-level on `127.0.0.1:5000`; layout cases L3 and L4 are measured inside a same-origin iframe sized exactly 1440x900 and 1024x768 (the iframe's own `innerWidth/innerHeight` are the CSS viewport) and also top-level. The README says to open localhost; the zoom stored for that host is the user's own setting and was not changed.
+- Evidence: —
+- Verdict: NOT-TESTABLE · Severity: — · Known: —
+
+```
+localhost:5000     inner [2400,1389] outer [1800,1042] screen [1800,1169] dpr 1.5
+127.0.0.1:5000     inner [1800,1042] outer [1800,1042] dpr 2
+```
+
+### L1 — Lists tool opens; lists shown equal GET /api/wordlists
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Open `http://127.0.0.1:5000/`. 2. Click the Lists tool-rail button. 3. Compare the list names in the DOM, in order, with `GET /api/wordlists`.
+- Expected: UI label "Lists"; the names from the API
+- Observed: The Lists tool opens ("Word List Management", category buttons, "Upload Wordlist"). The names shown match the API names exactly, in the same order (the heading "All Wordlists" carries the total).
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+### L2 — Opening a list renders entries and a stats control
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042
+- Steps: 1. Click "Top 50K" in the list.
+- Expected: UI (list contents shown; buttons "Show Stats", "Add Words")
+- Observed: A detail card appears with the list's name, a words heading, word chips, and the "Show Stats" / "Add Words" buttons.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+### L3 — Lists box visibility and scrolling at 1440×900
+- Phase: P3-lists · Env: E1 · Viewport: 1440×900 (iframe, see ENV-3)
+- Steps: 1. Load the app in a 1440x900 iframe, open Lists. 2. Measure `.wordlist-list` and its scroll container. 3. Wheel-scroll 5 ticks over the sidebar.
+- Expected: "The box is not visible" is FAIL when visibleInViewport is false (plan Task 6 criteria); "can't scroll" is FAIL when the wheel does not change scrollTop. The expectation that the list be usable is UNSPECIFIED in the README.
+- Observed: On load the `.wordlist-list` box starts below the bottom edge of its scrolling container (`.sidebar`), so none of the list is visible until the user scrolls the sidebar; the category buttons take the container's whole initial view. `.wordlist-list` itself has overflow visible and no scroll of its own. The wheel over the sidebar does scroll it and the list then comes into view, so "can't scroll" does not reproduce here; "box not visible on open" does.
+- Evidence: evidence/L3.json
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```json
+{"case":"L3","method":"same-origin iframe sized 1440x900 on http://127.0.0.1:5000/api/health, app loaded at /","viewport":[1440,900],
+ "list":{"selector":".wordlist-list","rect":{"x":1037,"y":632,"w":339,"h":1234},"scrollHeight":1234,"clientHeight":1234,"overflowY":"visible","visibleInViewport":false},
+ "scroll_container":{"selector":".sidebar","rect":{"x":1013,"y":170,"w":395,"h":372},"scrollHeight":1733,"clientHeight":372,"overflowY":"auto"},
+ "panel":{"selector":".wordlist-panel","rect":{"x":981,"y":54,"w":459,"h":780},"scrollHeight":804,"clientHeight":780,"overflowY":"hidden"},
+ "wheel":{"before_sidebar_scrollTop":0,"after_5_ticks_scrollTop":500,"list_top_after":132,"sidebar_bottom":542}}
+```
+
+### L4 — Lists box visibility at 1024×768
+- Phase: P3-lists · Env: E1 · Viewport: 1024×768 (iframe, see ENV-3)
+- Steps: 1. As L3 at 1024x768.
+- Expected: as L3
+- Observed: Same defect with less room: the scrolling container is shorter than at 1440x900 and the list starts far below its bottom edge, so no list entry is visible on open. The "Upload Wordlist" button is visible.
+- Evidence: evidence/L4.json
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```json
+{"case":"L4","method":"same-origin iframe sized 1024x768","viewport":[1024,768],
+ "list":{"selector":".wordlist-list","rect":{"x":701,"y":632,"w":259,"h":1295},"scrollHeight":1295,"clientHeight":1295,"overflowY":"visible","visibleInViewport":false},
+ "scroll_container":{"selector":".sidebar","rect":{"x":677,"y":170,"w":315,"h":244},"scrollHeight":1794,"clientHeight":244,"overflowY":"auto"},
+ "panel":{"selector":".wordlist-panel","rect":{"x":645,"y":54,"w":379,"h":648},"scrollHeight":672,"clientHeight":648,"overflowY":"hidden"},"uploadBtnVisible":true}
+```
