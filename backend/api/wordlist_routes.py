@@ -43,6 +43,34 @@ def _is_builtin(name: str) -> bool:
     return _get_category(name) not in EDITABLE_CATEGORIES
 
 
+def _bad_path(error: str):
+    """400 response for a name or category that could escape the word-list directory."""
+    return jsonify({"error": error}), 400
+
+
+def _path_problem(name):
+    """Why ``name`` cannot be a word-list path, or None when it is acceptable.
+
+    Rejects non-strings, absolute paths, ``..`` segments and NUL bytes, then
+    requires the resolved target to sit inside the word-list directory. Runs
+    before anything is written.
+    """
+    if not isinstance(name, str) or not name.strip():
+        return "Name and category must be non-empty strings"
+    if "\x00" in name:
+        return "Invalid path"
+    normalised = name.replace("\\", "/")
+    if os.path.isabs(name) or normalised.startswith("/") or (len(name) > 1 and name[1] == ":"):
+        return "Absolute paths are not allowed"
+    if ".." in normalised.split("/"):
+        return "'..' segments are not allowed"
+    root = wordlist_manager.wordlist_dir.resolve()
+    target = (root / f"{name}.txt").resolve()
+    if target != root and root not in target.parents:
+        return "Path escapes the word-list directory"
+    return None
+
+
 def _builtin_refusal(name: str, operation: str):
     """403 response for destructive operations on built-in lists."""
     return (
@@ -149,6 +177,10 @@ def create_wordlist(name):
         if not data or "words" not in data:
             return jsonify({"error": "Words array required"}), 400
 
+        problem = _path_problem(name)
+        if problem:
+            return _bad_path(problem)
+
         # A name with no category prefix goes under custom/ so it stays
         # editable and deletable (spec O10) -- unless it names a shipped
         # root-level list, which stays protected.
@@ -208,6 +240,10 @@ def update_wordlist(name):
         if not data:
             return jsonify({"error": "Request body required"}), 400
 
+        problem = _path_problem(name)
+        if problem:
+            return _bad_path(problem)
+
         # Word-level updates rewrite the underlying file — refuse for
         # built-in lists (metadata-only updates remain allowed).
         touches_words = any(key in data for key in ("words", "add_words", "remove_words"))
@@ -220,32 +256,25 @@ def update_wordlist(name):
             filepath = wordlist_manager.wordlist_dir / f"{name}.txt"
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
+            # An entry may carry ``;N``; strip, uppercase, drop blanks
+            entries = [w.strip().upper() for w in data["words"]]
             with open(filepath, "w", encoding="utf-8") as f:
-                for word in data["words"]:
-                    f.write(f"{word.upper()}\n")
+                for entry in entries:
+                    if entry:
+                        f.write(f"{entry}\n")
 
             # Clear cache
             if name in wordlist_manager._cache:
                 del wordlist_manager._cache[name]
 
         elif "add_words" in data or "remove_words" in data:
-            # Add/remove specific words
-            words = set(wordlist_manager.load(name))
-
+            # Both go through the manager so stored ;N scores survive
+            # (FileNotFoundError -> 404 below when the list doesn't exist).
             if "add_words" in data:
-                words.update(word.upper() for word in data["add_words"])
+                wordlist_manager.add_words(name, data["add_words"])
 
             if "remove_words" in data:
-                words.difference_update(word.upper() for word in data["remove_words"])
-
-            # Write back
-            filepath = wordlist_manager.wordlist_dir / f"{name}.txt"
-            with open(filepath, "w", encoding="utf-8") as f:
-                for word in sorted(words):
-                    f.write(f"{word}\n")
-
-            # Update cache
-            wordlist_manager._cache[name] = sorted(words)
+                wordlist_manager.remove_words(name, data["remove_words"])
 
         # Update metadata if provided
         if "metadata" in data:
@@ -269,6 +298,10 @@ def delete_wordlist(name):
     DELETE /api/wordlists/<name> - Delete wordlist.
     """
     try:
+        problem = _path_problem(name)
+        if problem:
+            return _bad_path(problem)
+
         filepath = wordlist_manager.wordlist_dir / f"{name}.txt"
 
         if not filepath.exists():
@@ -381,6 +414,22 @@ def import_wordlist():
             # URL import would go here
             return jsonify({"error": "URL import not yet implemented"}), 501
 
+        if not isinstance(data["content"], str):
+            return jsonify({"error": "content must be a string"}), 400
+
+        # Validate the destination before parsing or writing anything
+        category = data.get("category", "imports")
+        for part in (category, data["name"]):
+            problem = _path_problem(part)
+            if problem:
+                return _bad_path(problem)
+        name_with_category = f"{category}/{data['name']}"
+        problem = _path_problem(name_with_category)
+        if problem:
+            return _bad_path(problem)
+        if _is_builtin(name_with_category):
+            return _builtin_refusal(name_with_category, "overwritten")
+
         parsed = _parse_content(data["content"])
         words = parsed["words"]
 
@@ -402,10 +451,6 @@ def import_wordlist():
         # Preview: report the parse, store nothing (spec O6)
         if data.get("dry_run") is True:
             return jsonify(parsed), 200
-
-        # Determine category
-        category = data.get("category", "imports")
-        name_with_category = f"{category}/{data['name']}"
 
         # Canonical lines (spec O5): WORD;N when a score was given, else WORD
         lines = [w["word"] if w["score"] is None else f"{w['word']};{w['score']}" for w in words]

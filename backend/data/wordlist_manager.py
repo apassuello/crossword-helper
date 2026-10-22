@@ -272,11 +272,16 @@ class WordListManager:
                     if raw and not raw.startswith("#"):
                         lines[raw.split(";", 1)[0].strip().upper()] = raw.upper()
 
-        # New entries: "WORD" or canonical "WORD;N"; a later entry wins
+        # New entries: "WORD" or canonical "WORD;N". A scored entry replaces
+        # the stored line; a bare entry never erases a stored score.
         for entry in words:
             entry = entry.strip().upper()
-            if entry:
-                lines[entry.split(";", 1)[0].strip()] = entry
+            if not entry:
+                continue
+            word = entry.split(";", 1)[0].strip()
+            if ";" not in entry and word in lines:
+                continue
+            lines[word] = entry
 
         # Write back
         with open(filepath, "w", encoding="utf-8") as f:
@@ -296,3 +301,33 @@ class WordListManager:
             }
         self._metadata["wordlists"][name]["last_modified"] = "now"
         self.save_metadata()
+
+    def remove_words(self, name: str, words: List[str]) -> None:
+        """
+        Remove words from a wordlist, leaving every other line (and its
+        stored ``;N`` score) exactly as written.
+
+        Raises:
+            FileNotFoundError: If the wordlist doesn't exist
+        """
+        filepath = self.wordlist_dir / name
+        if not filepath.suffix:
+            filepath = filepath.with_suffix(".txt")
+        if not filepath.exists():
+            raise FileNotFoundError(f"Wordlist '{name}' not found")
+
+        doomed = {w.strip().upper() for w in words}
+        kept: List[str] = []
+        with open(filepath, "r", encoding="utf-8") as f:
+            for raw in f:
+                stripped = raw.strip()
+                if stripped and not stripped.startswith("#"):
+                    if stripped.split(";", 1)[0].strip().upper() in doomed:
+                        continue
+                kept.append(stripped)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            for line in kept:
+                f.write(f"{line}\n")
+
+        self._cache.pop(name, None)
