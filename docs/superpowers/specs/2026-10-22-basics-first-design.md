@@ -1,5 +1,5 @@
 # Basics First: Word Lists, Pattern Search and Upload — Design
-**Version 0.1.0** · Claude with Arthur Passuello · 2026-10-22 · status: §1–§4 ratified by owner 2026-10-22;
+**Version 0.1.1** · Claude with Arthur Passuello · 2026-10-22 · status: §1–§4 ratified by owner 2026-10-22;
 §6 open points carry defaults that apply if unruled by 2026-10-29
 
 ---
@@ -117,10 +117,14 @@ preview.*
 | O7 | Rejection response | HTTP 400, `{"error": "No valid words found", "skipped": <int>, "reasons": {<reason>: <count>}}`. |
 | O8 | Preview content | Total valid words, total skipped with reasons, and the first 20 parsed words with scores; Confirm and Cancel. |
 | O9 | Theme-words upload (`ThemeWordsPanel.jsx`) | Its `.txt` gate is dropped too; theme parsing is otherwise unchanged. |
-| O10 | #48: where `POST /api/wordlists/<name>` puts a name with no category prefix | Under `custom/<name>`, so it is editable and deletable like an upload. Today it lands at the root with category `"."` and every later PUT and DELETE returns 403. |
+| O10 | #48: where `POST /api/wordlists/<name>` puts a name with no category prefix | Under `custom/<name>`, so it is editable and deletable like an upload — **except** a bare name that matches a shipped root-level list (e.g. `comprehensive`), which is refused with 403 as before, so the panel never shows two lists with the same display name. Today a bare name lands at the root with category `"."` and every later PUT and DELETE returns 403. |
 
 ---
 
 ## 7. Amendment record
 
 - 0.1.0 (2026-10-22): first version, from the owner rulings above.
+- 0.1.1 (2026-10-22): O10 gains the shipped-root-name exception. Implementation (Task 8) kept
+  `test_api.py::test_post_overwrite_builtin_refused`'s 403 for `POST /wordlists/comprehensive`; the literal
+  row would have returned 201 and created a second "Comprehensive" list. **What it beat:** the literal row.
+  Not owner-ruled: applied as the stated default on 2026-10-22; overturnable with the rest of §6 until 2026-10-29.
