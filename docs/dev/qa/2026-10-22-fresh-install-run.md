@@ -1410,3 +1410,56 @@ final: PARTIAL, slots 139/140 ; state file qa2.json.gz timestamp unchanged since
 ```
 {"success": false, "error": "Missing required keys: ['gridnums', 'clues', 'answers']"}
 ```
+
+### CLI-fill-pkl-cloned — fill with the cache cloned
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `fill data/grids/example_11x11.json -w data/wordlists/comprehensive.txt -t 60 --json-output` from the clone root, venv active. State of the cache: as cloned (cache and text list share an mtime).
+- Expected: "fill" (README.md:65-67); I7 cache-preference variable (spec §2.4)
+- Observed: Exit 0 and a complete fill in under a second; the CLI reports the text list's word count as loaded. The fill path reads the text list, so the cache state does not change the outcome here (the cache matters to pattern and analyze, see R5, CLI-analyze, CACHE-1, CACHE-2).
+- Evidence: evidence/CLI-fill-pkl-cloned.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+{"type": "progress", "progress": 30, "message": "Loaded 44024 words, starting autofill", "status": "running"}
+success=True empty_cells=0 slots=44/44 solver_elapsed=0.15s
+```
+
+### CLI-fill-pkl-removed — fill with the cache removed
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `fill data/grids/example_11x11.json -w data/wordlists/comprehensive.txt -t 60 --json-output` from the clone root, venv active. State of the cache: the comprehensive .pkl deleted.
+- Expected: "fill" (README.md:65-67); I7 cache-preference variable (spec §2.4)
+- Observed: Exit 0 and a complete fill in under a second; the CLI reports the text list's word count as loaded. The fill path reads the text list, so the cache state does not change the outcome here (the cache matters to pattern and analyze, see R5, CLI-analyze, CACHE-1, CACHE-2).
+- Evidence: evidence/CLI-fill-pkl-removed.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+{"type": "progress", "progress": 30, "message": "Loaded 44024 words, starting autofill", "status": "running"}
+success=True empty_cells=0 slots=44/44 solver_elapsed=0.15s
+```
+
+### CLI-fill-pkl-rebuilt — fill with the cache rebuilt
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `fill data/grids/example_11x11.json -w data/wordlists/comprehensive.txt -t 60 --json-output` from the clone root, venv active. State of the cache: the .pkl rebuilt by build-cache.
+- Expected: "fill" (README.md:65-67); I7 cache-preference variable (spec §2.4)
+- Observed: Exit 0 and a complete fill in under a second; the CLI reports the text list's word count as loaded. The fill path reads the text list, so the cache state does not change the outcome here (the cache matters to pattern and analyze, see R5, CLI-analyze, CACHE-1, CACHE-2).
+- Evidence: evidence/CLI-fill-pkl-rebuilt.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+{"type": "progress", "progress": 30, "message": "Loaded 44024 words, starting autofill", "status": "running"}
+success=True empty_cells=0 slots=44/44 solver_elapsed=0.15s
+```
+
+### CLI-fill-minscore — The UI autofill failures reproduced on the CLI, and the one flag that changes them
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. The UI's own flags on the 11x11 grid (repair, allow-nonstandard) with min score 30, then 50, 60 s cap each.
+- Expected: "-t 180 --min-score 30" in the README command (README.md:65-67); the autofill panel default is min score 50
+- Observed: With min score 30 the grid fills completely in a fraction of a second. With min score 50, the panel's default, the run ends partial at the same slot count the UI showed in A4 and A5 ("Lower minimum score (currently 50)"). So the UI failures of A2, A4 and A5 come from the panel's default threshold being stricter than the one the README uses; the default threshold fails on the shipped template with the default list, and the progress text calls it "Partial" only after the full timeout. The elapsed time the CLI reports for the partial run is much smaller than its wall time.
+- Evidence: evidence/CLI-fill-ms30.log · evidence/CLI-fill-ms50.log
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```
+min score 30: success=True empty_cells=0 slots=44/44 solver_elapsed=0.15s
+min score 50: success=False empty_cells=24 slots=20/44 solver_elapsed=15.02s
+wall time of the min-score-50 run: about 60 s (timing wrapper)
+```
