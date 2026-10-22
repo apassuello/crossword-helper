@@ -530,7 +530,7 @@ class TestVerifyWords:
         """Fully empty grid should have zero checked slots."""
         c, _ = client
         # Mock wordlist file reading to avoid filesystem dependency
-        mocker.patch("pathlib.Path.rglob", return_value=[])
+        mocker.patch("backend.api.routes.get_default_wordlist_paths", return_value=[])
 
         grid = _make_grid(5, ".")
         resp = _post_json(c, "/api/grid/verify-words", {"grid": grid, "size": 5})
@@ -544,7 +544,7 @@ class TestVerifyWords:
         # Create a temp wordlist file
         wl = tmp_path / "words.txt"
         wl.write_text("CAT\nDOG\nBAT\n")
-        mocker.patch("pathlib.Path.rglob", return_value=[wl])
+        mocker.patch("backend.api.routes.get_default_wordlist_paths", return_value=[str(wl)])
 
         # 3x3 grid: CAT across top row
         grid = [
@@ -564,7 +564,7 @@ class TestVerifyWords:
         c, _ = client
         wl = tmp_path / "words.txt"
         wl.write_text("DOG\nBAT\n")
-        mocker.patch("pathlib.Path.rglob", return_value=[wl])
+        mocker.patch("backend.api.routes.get_default_wordlist_paths", return_value=[str(wl)])
 
         # 3x3 grid: XYZ across top row -- not in wordlist
         grid = [
@@ -595,7 +595,7 @@ class TestCleanGrid:
         c, _ = client
         wl = tmp_path / "words.txt"
         wl.write_text("CAT\nCOB\nATM\nTMX\n")
-        mocker.patch("pathlib.Path.rglob", return_value=[wl])
+        mocker.patch("backend.api.routes.get_default_wordlist_paths", return_value=[str(wl)])
 
         # Blacked out so CAT (across) and COB (down) are the only slots of
         # length >= 3. The open-cell version of this fixture also contained
