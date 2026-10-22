@@ -115,7 +115,7 @@ class IterativeRepair:
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
-            all_valid_words: Set of ALL valid words across all wordlists (for validation only)
+            all_valid_words: Set of valid words from the loaded wordlists (for validation only)
             pause_controller: Optional PauseController for graceful-stop pause support
 
         Raises:
@@ -143,7 +143,7 @@ class IterativeRepair:
         self._pause_requested = False
 
     def _is_valid_word(self, word: str) -> bool:
-        """Check if word is valid against all available wordlists, theme words, and theme entries."""
+        """Check if word is valid against the loaded wordlists, theme words, and theme entries."""
         if self.all_valid_words and word in self.all_valid_words:
             return True
         if self.theme_words and word in self.theme_words:

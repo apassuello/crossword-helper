@@ -57,7 +57,7 @@ class HybridAutofill:
             progress_reporter: Optional progress reporting
             theme_entries: Dict of theme entries {(row, col, direction): word} (optional)
             theme_words: Set of words from theme wordlist to prioritize (optional)
-            all_valid_words: Set of ALL valid words across all wordlists (for validation only)
+            all_valid_words: Set of valid words from the loaded wordlists (for validation only)
             pause_controller: Optional PauseController — forwarded to both phases so a
                 pause in either beam (Phase 1) or repair (Phase 2) stops the hybrid run
         """
