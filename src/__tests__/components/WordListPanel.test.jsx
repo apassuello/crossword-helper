@@ -145,4 +145,24 @@ describe('WordListPanel upload', () => {
     expect(screen.queryByTestId('upload-preview')).not.toBeInTheDocument();
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it('picking another file after a 400 clears the stale skipped-reasons box', async () => {
+    vi.spyOn(api, 'importWordlist').mockRejectedValue(
+      new ApiError({
+        status: 400,
+        code: 'HTTP_400',
+        message: 'No valid words found',
+        details: { skipped: 4, reasons: { 'too short': 4 } },
+      })
+    );
+    const user = userEvent.setup();
+    await openUploadAndPick(user, new File(['a\nb'], 'x.dict'), 'x');
+    await user.click(screen.getByRole('button', { name: /^upload$/i }));
+    expect(await screen.findByText(/4 skipped/i)).toBeInTheDocument();
+    await user.upload(document.querySelector('input[type="file"]'), new File(['CAT'], 'y.dict'), {
+      applyAccept: false,
+    });
+    expect(screen.queryByText(/4 skipped/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/too short/)).not.toBeInTheDocument();
+  });
 });
