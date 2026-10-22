@@ -1,6 +1,6 @@
 # CLI Reference
 
-**Version 3.1.0**
+**Version 3.2.0**
 
 ---
 
@@ -22,7 +22,7 @@ ground truth, this document is a curated summary of it.
 
 **[SPEC]**
 The CLI (`cli/src/cli.py`) is the single source of truth for all crossword
-construction logic. It exposes 14 commands via a Click group. The Flask
+construction logic. It exposes its commands via a Click group (`--help` lists them). The Flask
 backend calls these commands via subprocess; it adds no business logic of
 its own. See `.archive/docs/BACKEND_SPEC.md` (archived) for the subprocess integration
 layer and `docs/ARCHITECTURE.md` for the full system diagram — neither is
@@ -68,7 +68,7 @@ top-level `CLAUDE.md`.
 
 ## Command Reference
 
-**[SPEC]** 14 commands:
+**[SPEC]** Commands:
 
 | Command | Purpose |
 |---|---|
@@ -86,6 +86,7 @@ top-level `CLAUDE.md`.
 | `resume` | Continue a paused fill from saved state |
 | `list-states` | List saved pause/resume states |
 | `import-nyt` | Import an NYT crossword JSON (doshea/nyt_crosswords format) |
+| `parse-wordlist` | Parse a word-list file; report accepted words and skipped lines |
 
 Every command supports `--help`; that is always more current than this table.
 
@@ -612,6 +613,35 @@ here.
 
 ---
 
+### `parse-wordlist`
+
+**[SPEC]**
+```bash
+crossword parse-wordlist WORDLIST_FILE [--json-output]
+```
+
+Parses a word-list file with the one line format (see **Wordlist File
+Format**) and reports what an import would accept. A line is accepted iff
+`WordList.parse_line` parses it and the uppercased word passes
+`WordList._is_valid_word`; every other non-blank, non-`#` line is reported in
+`skipped` with one of three reasons: `malformed score`, `length outside 3-21`,
+`not letters only`. Words are uppercased; a duplicate keeps its first
+occurrence. A missing file is a Click usage error (exit `2`, no JSON). The
+backend reaches this command through `CLIAdapter.parse_wordlist`.
+
+The `--json-output` object (printed indented) for the three lines `APPLE;50`, `grape,40`, `AB`:
+
+```json
+{
+  "words": [{"word": "APPLE", "score": 50}, {"word": "GRAPE", "score": 40}],
+  "skipped": [{"line": 3, "text": "AB", "reason": "length outside 3-21"}]
+}
+```
+
+`score` is `null` for a plain line. `line` is 1-based.
+
+---
+
 ## Grid File Format
 
 **[SPEC]**
@@ -742,6 +772,10 @@ invocation) was not re-verified for this rewrite — see
 ---
 
 ## Changelog
+
+- **3.2.0** — Added `parse-wordlist` (basics-first plan, Task 7). Removed the
+  hand-written command count from the overview and the command table; `--help`
+  lists the commands.
 
 - **3.1.0** — Exit-code contract specified and pinned by
   `cli/tests/unit/test_fill_command.py`: `0` for any completed run including a

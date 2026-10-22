@@ -20,7 +20,7 @@ npm run build                  # must stay clean
 pytest                         # default suite; slow tests deselected
 pytest -m slow                 # slow suite
 npx vitest run                 # frontend tests
-python -m cli.src.cli --help   # 14 CLI commands; --help per command is authoritative
+python -m cli.src.cli --help   # lists the CLI commands; --help per command is authoritative
 ```
 
 ---
