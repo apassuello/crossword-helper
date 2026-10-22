@@ -5,8 +5,12 @@ This module provides endpoints for listing, viewing, creating, updating,
 and analyzing wordlists.
 """
 
+import os
+import tempfile
+
 from flask import Blueprint, jsonify, request
 
+from backend.core.cli_adapter import get_adapter
 from backend.data.wordlist_manager import WordListManager
 
 wordlist_api = Blueprint("wordlist_api", __name__)
@@ -145,6 +149,14 @@ def create_wordlist(name):
         if not data or "words" not in data:
             return jsonify({"error": "Words array required"}), 400
 
+        # A name with no category prefix goes under custom/ so it stays
+        # editable and deletable (spec O10) -- unless it names a shipped
+        # root-level list, which stays protected.
+        if "/" not in name:
+            if (wordlist_manager.wordlist_dir / f"{name}.txt").exists() and _is_builtin(name):
+                return _builtin_refusal(name, "overwritten")
+            name = f"custom/{name}"
+
         # Refuse overwriting/merging into an existing built-in list
         existing = wordlist_manager.wordlist_dir / f"{name}.txt"
         if existing.exists() and _is_builtin(name):
@@ -166,6 +178,7 @@ def create_wordlist(name):
             jsonify(
                 {
                     "message": f'Wordlist "{name}" created successfully',
+                    "name": name,
                     "word_count": len(data["words"]),
                 }
             ),
@@ -324,10 +337,26 @@ def search_wordlists():
         return jsonify({"error": str(e)}), 500
 
 
+def _parse_content(content: str) -> dict:
+    """Parse uploaded text through the CLI (the one definition of a list line)."""
+    fd, path = tempfile.mkstemp(suffix=".txt")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        return get_adapter().parse_wordlist(path)
+    finally:
+        os.unlink(path)
+
+
 @wordlist_api.route("/wordlists/import", methods=["POST"])
 def import_wordlist():
     """
     POST /api/wordlists/import - Import wordlist from text or URL.
+
+    Content is parsed by the CLI (``parse-wordlist``). Zero valid words gives
+    400 ``{"error", "skipped", "reasons"}``; ``dry_run: true`` returns the parse
+    result (200) and stores nothing. Otherwise one canonical line per word is
+    stored and the metadata entry is merged, never replaced.
 
     Body:
     {
@@ -335,6 +364,7 @@ def import_wordlist():
         "content": "WORD1\nWORD2\n...",  // Direct text
         "url": "https://...",              // Or URL to fetch
         "category": "imports",
+        "dry_run": false,                  // true: preview only
         "metadata": {...}
     }
     """
@@ -347,36 +377,51 @@ def import_wordlist():
         if "content" not in data and "url" not in data:
             return jsonify({"error": "Either content or url required"}), 400
 
-        # Parse words from content
-        if "content" in data:
-            lines = data["content"].split("\n")
-        else:
+        if "content" not in data:
             # URL import would go here
             return jsonify({"error": "URL import not yet implemented"}), 501
 
-        # Extract words (skip comments and empty lines)
-        words = []
-        for line in lines:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                words.append(line.upper())
+        parsed = _parse_content(data["content"])
+        words = parsed["words"]
+
+        if not words:
+            reasons: dict = {}
+            for item in parsed["skipped"]:
+                reasons[item["reason"]] = reasons.get(item["reason"], 0) + 1
+            return (
+                jsonify(
+                    {
+                        "error": "No valid words found",
+                        "skipped": len(parsed["skipped"]),
+                        "reasons": reasons,
+                    }
+                ),
+                400,
+            )
+
+        # Preview: report the parse, store nothing (spec O6)
+        if data.get("dry_run") is True:
+            return jsonify(parsed), 200
 
         # Determine category
         category = data.get("category", "imports")
         name_with_category = f"{category}/{data['name']}"
 
-        # Create wordlist
-        wordlist_manager.add_words(name_with_category, words, create=True)
+        # Canonical lines (spec O5): WORD;N when a score was given, else WORD
+        lines = [w["word"] if w["score"] is None else f"{w['word']};{w['score']}" for w in words]
+        wordlist_manager.add_words(name_with_category, lines, create=True)
 
-        # Add metadata
-        metadata = {
-            "category": category,
-            "description": data.get("metadata", {}).get("description", "Imported wordlist"),
-            "tags": data.get("metadata", {}).get("tags", ["imported"]),
-            "source": data.get("url", "direct_import"),
-        }
-
-        wordlist_manager._metadata["wordlists"][name_with_category] = metadata
+        # Merge into the stored entry: keep `name` and anything else already there
+        supplied = data.get("metadata", {})
+        entry = wordlist_manager._metadata["wordlists"].setdefault(name_with_category, {})
+        entry.update(
+            {
+                "category": category,
+                "description": supplied.get("description", entry.get("description", "Imported wordlist")),
+                "tags": supplied.get("tags", entry.get("tags", ["imported"])),
+                "source": data.get("url", "direct_import"),
+            }
+        )
         wordlist_manager.save_metadata()
 
         return (

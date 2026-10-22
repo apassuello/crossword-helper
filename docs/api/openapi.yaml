@@ -1109,7 +1109,10 @@ paths:
       tags:
         - Wordlist Management
       summary: Create wordlist
-      description: Create a new wordlist with words and metadata
+      description: >-
+        Create a new wordlist with words and metadata. A name with no category
+        prefix is created under `custom/<name>`; the response `name` is the key
+        to use for later PUT and DELETE.
       operationId: createWordlist
       parameters:
         - name: name
@@ -1142,6 +1145,9 @@ paths:
                 properties:
                   message:
                     type: string
+                  name:
+                    type: string
+                    description: Stored key, including the category prefix
                   word_count:
                     type: integer
         '400':
@@ -1317,9 +1323,42 @@ paths:
                 category:
                   type: string
                   default: imports
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Preview only. Returns the parse result (200) and stores nothing.
                 metadata:
                   $ref: '#/components/schemas/WordlistMetadata'
       responses:
+        '200':
+          description: Dry-run parse result; nothing stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  words:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        word:
+                          type: string
+                        score:
+                          type: integer
+                          nullable: true
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        line:
+                          type: integer
+                        text:
+                          type: string
+                        reason:
+                          type: string
         '201':
           description: Wordlist imported
           content:
@@ -1334,7 +1373,23 @@ paths:
                   word_count:
                     type: integer
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Missing fields, or the content has no valid words
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: No valid words found
+                  skipped:
+                    type: integer
+                    description: Number of skipped lines
+                  reasons:
+                    type: object
+                    description: Skip reason to count
+                    additionalProperties:
+                      type: integer
         '501':
           description: URL import not implemented
           content:
