@@ -199,6 +199,28 @@ class CLIAdapter:
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
 
+    def parse_wordlist(self, path: str) -> Dict[str, Any]:
+        """
+        Parse a word list file via the CLI.
+
+        Returns:
+            The CLI's JSON object: {"words": [{"word", "score"}],
+            "skipped": [{"line", "text", "reason"}]}
+
+        Raises:
+            ValueError: If path is empty or the output is not JSON
+            subprocess.CalledProcessError: If the CLI fails (e.g. missing file)
+        """
+        if not path or not path.strip():
+            raise ValueError("Path cannot be empty")
+
+        stdout, _, _ = self._run_command(["parse-wordlist", path, "--json-output"], timeout=30)
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
+
     def number(self, grid_data: Dict[str, Any], allow_nonstandard: bool = False) -> Dict[str, Any]:
         """
         Auto-number a crossword grid.
