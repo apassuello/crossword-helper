@@ -35,9 +35,9 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R8 | 70 | `validate puzzle.json` | Task 10 | PASS |
 | R9 | 73 | `new --size 15 -o puzzle.json` | Task 10 | PASS |
 | R10 | 76 | `export filled.json --format html -o puzzle.html` | Task 10 | PASS |
-| R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | |
-| R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | |
-| R13 | 89–91 | `npm run test:coverage` | Task 13 | |
+| R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | FAIL (3 tests; cause below) |
+| R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | PASS (watch mode, does not exit) |
+| R13 | 89–91 | `npm run test:coverage` | Task 13 | PASS (watch mode, does not exit) |
 | R14 | 31–32 | "interactive editing with keyboard shortcuts, symmetry enforcement, and auto-numbering" | Task 8 | PASS |
 | R15 | 33–34 | pattern `C?T` "gives CAT, COT, CUT, etc." | Task 9 | PASS |
 | R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | FAIL (A2, A4, A5, A7; A6 passes) |
@@ -1852,4 +1852,67 @@ DELETE /fill/state/373a5065-9c53-4749-b5c1-9872483d0de7 -> 200 (0.0 s)
 ```
 POST /fill/states/cleanup -> 200 (0.0 s)
 {"deleted_count": 0, "message": "Deleted 0 old state files", "success": true}
+```
+
+### R11 — README pytest run, alone, after the walkthrough
+- Phase: P0-tests · Env: E1 · Viewport: —
+- Steps: 1. With no server running, `pytest` from the clone root, venv active. 2. Read the failures. 3. Restore the tracked word-list metadata file (git checkout in the sandbox clone) and rerun only the failing test file.
+- Expected: "pytest" runs backend + CLI tests (README.md:82-84)
+- Observed: The suite runs to the end; all but three tests pass. The three failures are in the word-list metadata test file and are caused by entries my earlier API import calls wrote into the tracked metadata file, which have no "name" field (see API-import-metadata-name). With that file restored the metadata test file passes, so on an untouched clone the failures would not appear; they show that using the documented import route breaks the repository's own invariant test. The setup step had already installed the test tools, so there is no missing-tool finding.
+- Evidence: evidence/R11.log · evidence/R11-metadata-clean.log
+- Verdict: FAIL · Severity: S3 · Known: —
+
+```
+========== 3 failed, 1893 passed, 82 deselected in 342.57s (0:05:42) ===========
+FAILED backend/tests/integration/test_wordlist_metadata.py::TestWordlistMetadataStructure::test_all_wordlists_have_name_field
+FAILED backend/tests/integration/test_wordlist_metadata.py::TestWordlistMetadataStructure::test_all_wordlists_have_required_fields
+FAILED backend/tests/integration/test_wordlist_metadata.py::TestWordlistMetadataPersistence::test_metadata_json_has_no_missing_names
+--- after restoring the metadata file ---
+============================== 12 passed in 0.08s ==============================
+```
+
+### API-import-metadata-name — POST /wordlists/import writes a metadata entry without a name
+- Phase: P0-tests · Env: E1 · Viewport: —
+- Steps: 1. Import two lists through the documented route (done in P5). 2. Read the entries it added to the tracked metadata file. 3. Run the metadata tests.
+- Expected: docs/api/openapi.yaml `/wordlists/import` returns 201 "Wordlist imported"; the repository's own test requires every metadata entry to have a name field
+- Observed: The two imported lists were added to the metadata file with a category, description, tags and source but no name, which the repository's metadata tests reject. The UI upload path (L5-L13) wrote entries that include a name; only the API import route did not.
+- Evidence: evidence/metadata-polluted.json · evidence/R11.log
+- Verdict: FAIL · Severity: S3 · Known: —
+
+```
+entries added by the import route:
+: {       "category": "imports",       "description": "Imported wordlist",       "tags": [         "imported"       ],       "source": "direct_import"     },     "qa-put": {       "name": "Qa-Put",       "category": ".",       "description": "User-created word
+```
+
+### R12 — README npm test
+- Phase: P0-tests · Env: E1 · Viewport: —
+- Steps: 1. `npm test` from the clone root. 2. After 5 minutes, observe whether it exited; kill it. 3. `npx vitest run` for a result.
+- Expected: "npm test" runs the frontend tests (README.md:86-87)
+- Observed: `npm test` runs every test file, prints the summary, then stays in watch mode ("Waiting for file changes") and never returns to the shell; in a script or CI that blocks forever. The one-shot form returns promptly with the same summary and exit 0. The README does not say the first form is interactive.
+- Evidence: evidence/R12.log · evidence/R12-run.log
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+npm test (killed after the limit):
+Test Files  20 passed (20)
+Tests  229 passed (229)
+PASS  Waiting for file changes...
+npx vitest run:
+Test Files  20 passed (20)
+Tests  229 passed (229)
+```
+
+### R13 — README npm run test:coverage
+- Phase: P0-tests · Env: E1 · Viewport: —
+- Steps: 1. `npm run test:coverage` from the clone root.
+- Expected: "npm run test:coverage" (README.md:89-91)
+- Observed: Runs the tests, prints a coverage table, and, like R12, then waits in watch mode instead of exiting.
+- Evidence: evidence/R13.log
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+Test Files  20 passed (20)
+Tests  229 passed (229)
+All files          |   63.03 |    81.24 |   69.31 |   63.03 |
+PASS  Waiting for file changes...
 ```
