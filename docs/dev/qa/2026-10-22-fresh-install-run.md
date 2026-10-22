@@ -517,3 +517,44 @@ POST /api/wordlists/import 201 (UI)
 semicolon-bearing words: 453988 of 453988
 POST /api/wordlists/import 201 (browser-measured upload to list shown: 2.8 s)
 ```
+
+### L14 — Edit an uploaded list (add a word)
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Open Lists, select the uploaded F1 list. 2. Click "Add Words", type DAMSON in the textarea, click "Add Words to List". 3. Read the network entries and `curl` the list.
+- Expected: UI label "Add Words to List"; the added word is present on readback
+- Observed: PUT returns 200, the detail card shows the new word, and the API readback and the on-disk file both contain it.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+PUT /api/wordlists/custom/qa-f1 200
+GET /api/wordlists/custom/qa-f1 -> words=["APPLE", "BERRY", "CHERRY", "DAMSON"] word_count=4
+```
+
+### L15 — Delete the uploaded list
+- Phase: P3-lists · Env: E1 · Viewport: 1800×1042
+- Steps: 1. Stub the page's native confirm dialog to return true (test-harness only; the source is unchanged, and a native dialog would block the browser session). 2. Click "Delete" on the F1 list. 3. Check the list, the API and the disk.
+- Expected: UI label "Delete"; the list is gone from GET /api/wordlists
+- Observed: The confirm text read "Delete wordlist "custom/qa-f1"? This cannot be undone." DELETE returns 200; the list disappears from the panel, the list API, a direct GET (404), and the custom directory on disk. The un-stubbed confirm path was not exercised.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+DELETE /api/wordlists/custom/qa-f1 200
+GET /api/wordlists/custom/qa-f1 -> 404
+```
+
+### L16 — Lists tool against the dev server on :3000
+- Phase: P3-lists · Env: E1 · Viewport: 1800×986 (see ENV-3)
+- Steps: 1. Start `npm run dev` with Flask up. 2. Open `http://localhost:3000/` (README URL) and `http://127.0.0.1:3000/`. 3. Repeat L1 (names vs API), the L3 measurement, and the wheel test. 4. Stop the dev server.
+- Expected: "Open http://localhost:3000" (README.md:54); the production-mode behaviour from L1-L3 ("whether the modes differ", spec §2.3)
+- Observed: The README's localhost URL loads the app even though Vite reports it listens on 127.0.0.1. The list names match the API; the layout is the same as production mode: `.wordlist-list` starts below the bottom of its scrolling container and is invisible on open, and the wheel over the sidebar scrolls it into view. The modes do not differ.
+- Evidence: evidence/SERVE-dev-L16.log
+- Verdict: FAIL · Severity: S2 · Known: —
+
+```json
+{"viewport":[1800,986],"namesMatchApi":true,
+ "list":{"selector":".wordlist-list","rect":{"x":1397,"y":632,"w":339,"h":2203},"overflowY":"visible"},
+ "scroll_container":{"selector":".sidebar","rect":{"x":1373,"y":170,"w":395,"h":458},"scrollHeight":2702,"clientHeight":458,"overflowY":"auto"},
+ "wheel":{"after_5_ticks_scrollTop":500,"list_top_after":132}}
+```
