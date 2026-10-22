@@ -29,12 +29,12 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R2 | 23–25 | `source venv/bin/activate` then `python3 run.py` runs the app | Task 5 | PASS |
 | R3 | 26 | "Open http://localhost:5000" | Task 5 | PASS |
 | R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | PASS |
-| R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | |
+| R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | FAIL (I7) |
 | R6 | 64 | "11x11, 15x15, and 21x21 templates included" | Task 2 | PASS |
-| R7 | 65–67 | the `fill data/grids/example_15x15.json … -t 180 --min-score 30 -o filled.json` command | Task 10 | |
-| R8 | 70 | `validate puzzle.json` | Task 10 | |
-| R9 | 73 | `new --size 15 -o puzzle.json` | Task 10 | |
-| R10 | 76 | `export filled.json --format html -o puzzle.html` | Task 10 | |
+| R7 | 65–67 | the `fill data/grids/example_15x15.json … -t 180 --min-score 30 -o filled.json` command | Task 10 | PASS |
+| R8 | 70 | `validate puzzle.json` | Task 10 | PASS |
+| R9 | 73 | `new --size 15 -o puzzle.json` | Task 10 | PASS |
+| R10 | 76 | `export filled.json --format html -o puzzle.html` | Task 10 | PASS |
 | R11 | 82–84 | `pytest` runs backend + CLI tests | Task 13 | |
 | R12 | 86–87 | `npm test` runs the frontend tests | Task 13 | |
 | R13 | 89–91 | `npm run test:coverage` | Task 13 | |
@@ -1078,3 +1078,335 @@ blob type text/html ; table cells 225 ; black cells 30 ; rendered table 15 rows 
 - Observed: The panel shows a "Clue list" heading and the text "Arrives in a later task."
 - Evidence: —
 - Verdict: NOT-IMPLEMENTED · Severity: S3 · Known: I2
+
+### CLI-help — Top-level and per-command help
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. Run the top-level help, then help for each listed command, under the E1 wrapper from the clone root.
+- Expected: README.md:58 ("The CLI is the source of truth ... Activate the venv first.")
+- Observed: The top-level help lists every command and each per-command help exits 0 with usage text. The command set equals the plan's list; there is no extra command.
+- Evidence: evidence/CLI-help-top.log · evidence/CLI-help-all.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Usage: python -m cli.src.cli [OPTIONS] COMMAND [ARGS]...
+
+  Crossword Builder CLI — create, fill, validate, and export crossword
+  puzzles.
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  analyze      Analyze grid constraints and placement impact.
+  build-cache  Build binary cache file for fast wordlist loading.
+  export       Export a crossword grid to various formats.
+  fill         Fill a crossword grid using CSP autofill.
+  import-nyt   Import an NYT crossword JSON file (doshea/nyt_crosswords...
+  list-states  List all saved autofill states.
+  new          Create a new empty crossword grid.
+  normalize    Normalize crossword entry according to conventions.
+  number       Auto-number a crossword grid.
+  pattern      Find words matching a pattern.
+  pause        Pause a running autofill task.
+  resume       Resume autofill from a saved state file or task id.
+  show         Display a crossword grid.
+  validate     Validate a crossword grid against NYT standards.
+--- per-command help exit codes ---
+new rc=0 lines=       8
+validate rc=0 lines=       7
+fill rc=0 lines=      47
+show rc=0 lines=       8
+export rc=0 lines=      10
+pattern rc=0 lines=      17
+normalize rc=0 lines=      10
+number rc=0 lines=      12
+analyze rc=0 lines=      20
+build-cache rc=0 lines=      15
+pause rc=0 lines=      19
+resume rc=0 lines=      41
+list-states rc=0 lines=      23
+import-nyt rc=0 lines=      19
+```
+
+### R5 — README pattern command, verbatim
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. From the clone root, venv active: the README's pattern command with `--json-output`. 2. Control: the same command with the sibling .pkl moved aside (restored afterwards, mtime tie re-created).
+- Expected: "python -m cli.src.cli pattern \"C?T\" -w data/wordlists/comprehensive.txt --json-output" (README.md:62)
+- Observed: The command exits 0 but prints "Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'", loads zero words and returns zero matches, with `sources_searched` empty. A user sees a clean exit and an empty result. The shipped cache is what is unloadable under this invocation (it was written under a different module path, see CACHE-1); with the cache moved aside the same command loads the full text list and returns matches.
+- Evidence: evidence/R5.log · evidence/R5-nocache.log
+- Verdict: FAIL · Severity: S1 · Known: I7
+
+```
+{"type": "progress", "progress": 0, "message": "Searching for pattern \"C?T\"", "status": "running"}
+{"type": "progress", "progress": 0, "message": "Loading wordlist 1/1: comprehensive.txt", "status": "running"}
+Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'
+...
+    "total_found": 0,
+    "results_returned": 0,
+    "sources_searched": []
+  }
+}
+  0.05s user 0.01s system 92% cpu 0.064 total
+--- control: cache moved aside ---
+{"type": "progress", "progress": 30, "message": "Loaded 44024 words from 1 wordlist(s)", "status": "running"}
+      "word": "CAT",
+      "word": "CIT",
+      "word": "COT",
+      "word": "CRT",
+      "word": "CST",
+      "word": "CDT",
+      "word": "CUT",
+```
+
+### R9 — README new command, verbatim
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `new --size 15 -o puzzle.json`.
+- Expected: "python -m cli.src.cli new --size 15 -o puzzle.json" (README.md:73)
+- Observed: Exit 0; a 15x15 grid file is created.
+- Evidence: evidence/R9.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+✓ Created 15×15 grid: puzzle.json
+  Size: 15×15
+  Black squares: 0
+  Ready to fill!
+  0.04s user 0.01s system 93% cpu 0.059 total
+```
+
+### R8 — README validate command, verbatim (run after R9)
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `validate puzzle.json` on the file created by R9. The README lists validate before new; run in the order that gives the file an origin.
+- Expected: "python -m cli.src.cli validate puzzle.json" (README.md:70)
+- Observed: Exit 0 and a validation report: valid, symmetric, connected, meets the standards.
+- Evidence: evidence/R8.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+============================================================
+Grid Validation Report
+============================================================
+
+File: puzzle.json
+Size: 15×15
+Black squares: 0 (0.0%)
+White squares: 225
+Word count: 30 (15 across, 15 down)
+
+Symmetric: ✓ Yes
+Connected: ✓ Yes
+
+============================================================
+✓ VALID - Grid meets all standards!
+✓ Meets NYT standards
+```
+
+### R7 — README fill command, verbatim (its own -t 180)
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. The README's fill command on the 15x15 example with the comprehensive list, `-t 180 --min-score 30 -o filled.json`.
+- Expected: "fill data/grids/example_15x15.json -w data/wordlists/comprehensive.txt -t 180 --min-score 30 -o filled.json" (README.md:65-67)
+- Observed: Exit 0; the CLI loads the full text list (the fill path reads the text file, so the cache problem of R5 does not apply), fills every slot in a few seconds, and writes filled.json.
+- Evidence: evidence/R7.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Loading grid from data/grids/example_15x15.json...
+Loading word lists...
+  • data/wordlists/comprehensive.txt
+  Loaded 44024 words
+  Algorithm: repair (iterative repair)
+
+Filling 78 empty slots...
+Timeout: 180s, Min score: 30
+
+Progress
+
+============================================================
+Autofill Results
+============================================================
+
+✓ SUCCESS - Grid filled completely!
+
+Slots filled: 78/78
+Time elapsed: 5.42s
+Iterations: 9,781
+
+============================================================
+```
+
+### R10 — README export command, verbatim
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `export filled.json --format html -o puzzle.html`.
+- Expected: "export filled.json --format html -o puzzle.html" (README.md:76)
+- Observed: Exit 0; puzzle.html is written with a grid of cells (letters and black cells) and clue numbers.
+- Evidence: evidence/R10.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+✓ Exported to HTML: puzzle.html
+$SB/e1.sh   0.05s user 0.01s system 94% cpu 0.064 total
+cells in output: class="cell" 189 ; class="cell black" 36 ; class="cell-number" 73
+```
+
+### CLI-show — show a filled grid
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `show filled.json`.
+- Expected: UNSPECIFIED
+- Observed: Exit 0; prints the numbered grid with letters and black cells.
+- Evidence: evidence/CLI-show.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+15×15 Crossword Grid
+===============================
+ 1  2  3  4  5 ##  6  7  8  9 ## 10 11 12 13
+14  A  N  E  Y ## 15  N  E  L ## 16  H  A  T
+17  N  A  I  R ## 18  E  N  E ## 19  O  H  R
+## ## ## 20  I 21  E  B  O  A 22 ## 23  A  E
+```
+
+### CLI-normalize — normalize "Hello, World!"
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `normalize "Hello, World!" --json-output`.
+- Expected: UNSPECIFIED (README silent; help text: "Normalize crossword entry according to conventions.")
+- Observed: Exit 0 and JSON. The default rule is "remove spaces, uppercase", so the comma and the exclamation mark are kept (HELLO,WORLD!), although the result is meant as a crossword entry.
+- Evidence: evidence/CLI-normalize.log
+- Verdict: UNSPECIFIED · Severity: — · Known: —
+
+```
+{
+  "original": "Hello, World!",
+  "normalized": "HELLO,WORLD!",
+  "rule": {
+    "type": "default",
+    "description": "Default: remove spaces, uppercase",
+    "explanation": "No specific pattern matched - applying default normalization",
+    "examples": [],
+```
+
+### CLI-number — number a grid
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `number data/grids/example_15x15.json --json-output`.
+- Expected: UNSPECIFIED
+- Observed: Exit 0 and a JSON numbering map keyed by "(row,col)".
+- Evidence: evidence/CLI-number.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+{
+  "numbering": {
+    "(0,0)": 1,
+    "(0,1)": 2,
+    "(0,2)": 3,
+    "(0,3)": 4,
+```
+
+### CLI-analyze — analyze a partial grid with the comprehensive list
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `analyze data/grids/example_15x15_partial_mid.json -w data/wordlists/comprehensive.txt`.
+- Expected: UNSPECIFIED (help: "Analyze grid constraints and placement impact.")
+- Observed: Exit 1: the same unloadable-cache warning as R5, then "Error: no words loaded from wordlists". The command cannot be used with the shipped list in a fresh clone.
+- Evidence: evidence/CLI-analyze.log
+- Verdict: FAIL · Severity: S2 · Known: I7
+
+```
+Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'
+Error: no words loaded from wordlists
+```
+
+### CLI-build-cache — build-cache for another list
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `build-cache data/wordlists/top_50k.txt -o <sandbox path>`.
+- Expected: "Build binary cache file for fast wordlist loading." (help text)
+- Observed: Exit 0; the cache file is written and the command verifies it. (The same command run on the comprehensive list is the one whose output cannot be loaded back, CACHE-1.)
+- Evidence: evidence/CLI-build-cache.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Building cache for: top_50k.txt
+Output: /private/tmp/crossword-fresh/top_50k.pkl
+
+Loading wordlist...
+✓ Loaded 50000 words in 0.10s
+Writing cache file...
+✓ Cache written in 0.02s
+Verifying cache...
+```
+
+### CLI-pause-1 — pause on a task that already finished
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. Run the plan's pinned fill (15x15, comprehensive, -t 120, task id qa1, state and flag dirs in the sandbox). 2. Run `pause qa1` after 10 s.
+- Expected: plan Task 10 (pause after 10 s)
+- Observed: The plan's parameters finish the fill in about five seconds, before the planned pause, so a pause could not be exercised as pinned. `pause` on the finished task exits 1 with a clear message ("not running"); no state file was saved; list-states reports none.
+- Evidence: evidence/CLI-fill-qa1.log · evidence/CLI-pause-finished.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+✗ Task 'qa1' is not running (start a fill with --task-id qa1 first)
+============================================================
+Saved Autofill States (0 total)
+============================================================
+
+No saved states found.
+============================================================
+```
+
+### CLI-pause-2 — pause, list-states, resume on a longer-running fill
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. Same flags on the 21x21 example (task id qa2). 2. `pause qa2` after about 12 s. 3. `list-states`. 4. `resume qa2 -t 60`. (Deviation from the pinned 15x15 input, which is too fast to pause.)
+- Expected: help text for pause, list-states, resume
+- Observed: Pause: the fill prints "Paused - solver state saved" and exits within a second, and a gzip state file appears. list-states shows the task with its progress. Resume loads the state and ends with a partial grid at its cap. The resumed run's own report states a much shorter elapsed time than the wall time of the run (see the timing fence).
+- Evidence: evidence/CLI-pause-qa2.log · evidence/CLI-list-states-2.log · evidence/CLI-resume-qa2.log
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+✓ Pause requested for task: qa2
+The task will save its state and exit at the next checkpoint.
+============================================================
+Saved Autofill States (1 total)
+============================================================
+
+Task ID: qa2
+  Timestamp: 2026-10-22T12:31:42.299940
+  Grid size: 21×21
+  Progress: 137/140 slots (97.9%)
+
+--- resume ---
+Loaded csp state for task 'qa2'
+  Saved: 137/140 slots filled
+  Wordlists (from saved state): data/wordlists/comprehensive.txt
+  Loaded 44024 words
+
+Resuming autofill...
+  Algorithm: repair (fresh fill from the saved grid — exact csp position only resumes with a matching algorithm)
+  Timeout: 60s
+...
+Slots filled 139/140 ; report "Time elapsed" far below the wall time printed by the timing wrapper (60 s wall)
+```
+
+### CLI-pause-3 — pause a resumed repair fill
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. Start `resume qa2 -t 90` in the background. 2. After 8 s run `pause qa2`. 3. Watch the process, the state file and the flag directory.
+- Expected: help text for pause ("The task will save its current state and exit gracefully at the next checkpoint.")
+- Observed: `pause` reports success (exit 0, "Pause requested"), but the resumed run ignores it: it keeps running to its own timeout, ends "PARTIAL", and the state file is not rewritten. The flag and pid files are removed only at the end. The pause request is acknowledged and not honoured.
+- Evidence: evidence/CLI-resume-pause.log · evidence/CLI-pause-resumed.log
+- Verdict: FAIL · Severity: S2 · Known: #28
+
+```
+pause rc=0: Pause requested for task: qa2
+resume process still running 18 s later (99% CPU), ended at its 90 s timeout
+final: PARTIAL, slots 139/140 ; state file qa2.json.gz timestamp unchanged since the first pause
+```
+
+### CLI-import-nyt — import-nyt
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. `import-nyt --help`. 2. Look for a tracked file in the doshea format (needs size rows/cols, flat grid, gridnums, clues, answers). 3. Probe with a tracked NYT-named grid that is not in that format.
+- Expected: help text ("Import an NYT crossword JSON file (doshea/nyt_crosswords format)")
+- Observed: No tracked file in the required format exists, so a real import could not be run. The probe with the repository's NYT-named template exits 1 with a clear, specific message naming the missing keys.
+- Evidence: evidence/CLI-import-nyt.log
+- Verdict: NOT-TESTABLE · Severity: — · Known: —
+
+```
+{"success": false, "error": "Missing required keys: ['gridnums', 'clues', 'answers']"}
+```
