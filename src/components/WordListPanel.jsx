@@ -127,6 +127,7 @@ const WordListPanel = () => {
 
     setUploadFile(file);
     setUploadError('');
+    setUploadReasons(null);
 
     setPreview(null);
 
