@@ -648,6 +648,12 @@ def get_edit_summary():
             )
 
         task_id = data["task_id"]
+        # #21.3: body-sourced, and reaches StateManager's path building below.
+        if not is_valid_task_id(task_id):
+            return (
+                jsonify({"error": "Field 'task_id' must match ^[A-Za-z0-9_-]{1,64}$"}),
+                400,
+            )
         edited_grid = data["edited_grid"]
 
         # Load saved state from the shared CLI state store

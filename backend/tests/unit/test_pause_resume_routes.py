@@ -748,7 +748,8 @@ class TestTaskIdValidation:
     Flask's default URL converter cannot match "/", so ids arriving as a URL
     segment (/fill/pause/<task_id>, /fill/cancel/<task_id>, /fill/state/<task_id>)
     cannot express traversal. The body-sourced ones can: POST /api/fill/resume
-    reads data["task_id"], and POST /api/fill reads data["resume_task_id"].
+    and POST /api/fill/edit-summary read data["task_id"], and POST /api/fill
+    reads data["resume_task_id"].
 
     Exploitability is limited — the target must already exist and parse as a valid
     state envelope, and writes always use a server-minted uuid — so this rejects
@@ -779,3 +780,39 @@ class TestTaskIdValidation:
         resp = client.post("/api/fill/resume", json={"task_id": good_id})
 
         assert resp.status_code != 400, f"{good_id!r} was wrongly rejected"
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "../../../etc/passwd",
+            "..",
+            "sub/dir",
+            "has space",
+            "trailing.dot",
+            "",
+            "x" * 65,
+        ],
+    )
+    def test_edit_summary_rejects_malformed_task_id(self, client, mock_state_manager, bad_id):
+        """The id must be rejected before it reaches StateManager's path building."""
+        resp = client.post(
+            "/api/fill/edit-summary",
+            json={"task_id": bad_id, "edited_grid": [["A"]]},
+        )
+
+        assert resp.status_code == 400, f"{bad_id!r} was not rejected"
+        assert b"task_id" in resp.data
+        mock_state_manager.load_csp_state.assert_not_called()
+
+    @pytest.mark.parametrize("good_id", ["task_abc123", "resume_9f2c1a0b", "A-b_9", "x" * 64])
+    def test_edit_summary_accepts_wellformed_task_id(self, client, mock_state_manager, good_id):
+        """A conforming id must get past validation and reach the state load."""
+        mock_state_manager.load_csp_state.side_effect = FileNotFoundError("gone")
+
+        resp = client.post(
+            "/api/fill/edit-summary",
+            json={"task_id": good_id, "edited_grid": [["A"]]},
+        )
+
+        assert resp.status_code == 404, f"{good_id!r}: {resp.status_code} {resp.data!r}"
+        mock_state_manager.load_csp_state.assert_called_once_with(good_id)
