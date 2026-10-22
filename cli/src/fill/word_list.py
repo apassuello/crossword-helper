@@ -301,12 +301,13 @@ class WordList:
                         # Cache is up-to-date, use it
                         try:
                             return cls.from_cache(str(cache_path))
-                        except (ValueError, FileNotFoundError) as e:
-                            # Cache is corrupt, fall through to text loading
+                        except Exception as e:
+                            # Any failure (stale pickle naming a missing module,
+                            # truncated file, ...) falls through to text loading
                             import sys
 
                             print(
-                                f"Warning: Cache corrupted, rebuilding: {e}",
+                                f"Warning: Cache {cache_path} could not be loaded, reading the text list instead: {e}",
                                 file=sys.stderr,
                             )
 

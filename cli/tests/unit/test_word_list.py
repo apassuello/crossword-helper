@@ -2,6 +2,7 @@
 Unit tests for word_list module.
 """
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -299,6 +300,54 @@ class TestScoredWordlistFormats:
         assert WordList.parse_line("CAT;50.0") == ("CAT", 50)
         assert WordList.parse_line("word,score") is None
         assert WordList.parse_line("BADLINE;xx") is None
+
+
+class TestFromFileCacheFallback:
+    """A cache that cannot load falls back to parsing the .txt (spec section 3)."""
+
+    @staticmethod
+    def _make(tmp_path, cache_bytes=None):
+        txt = tmp_path / "list.txt"
+        txt.write_text("CAT\nDOG\nBIRD\n")
+        cache = tmp_path / "list.pkl"
+        if cache_bytes is None:
+            WordList(["CAT", "DOG", "BIRD"]).to_cache(str(cache))
+        else:
+            cache.write_bytes(cache_bytes)
+        # Cache must be NEWER than the source or from_cache is never reached.
+        os.utime(txt, (1_000_000, 1_000_000))
+        os.utime(cache, (1_000_010, 1_000_010))
+        return txt, cache
+
+    def test_valid_newer_cache_is_used(self, tmp_path, capsys):
+        txt, cache = self._make(tmp_path)
+        # Make the cache distinguishable from the text so we know which loaded.
+        WordList(["ZEBRA"]).to_cache(str(cache))
+        os.utime(cache, (1_000_010, 1_000_010))
+        wl = WordList.from_file(str(txt))
+        assert [w.text for w in wl.words] == ["ZEBRA"]
+        assert capsys.readouterr().err == ""
+
+    def test_cache_naming_missing_module_falls_back(self, tmp_path, capsys):
+        txt, cache = self._make(tmp_path, b"cno_such_module_xyz\nThing\n.")
+        with pytest.raises(ModuleNotFoundError):
+            WordList.from_cache(str(cache))
+        wl = WordList.from_file(str(txt))
+        assert sorted(w.text for w in wl.words) == ["BIRD", "CAT", "DOG"]
+        err_lines = [ln for ln in capsys.readouterr().err.splitlines() if ln.strip()]
+        assert len(err_lines) == 1
+        assert str(cache.resolve()) in err_lines[0]
+
+    def test_truncated_cache_falls_back(self, tmp_path, capsys):
+        good = tmp_path / "g.pkl"
+        WordList(["CAT"]).to_cache(str(good))
+        data = good.read_bytes()
+        txt, cache = self._make(tmp_path, data[: len(data) // 2])
+        wl = WordList.from_file(str(txt))
+        assert sorted(w.text for w in wl.words) == ["BIRD", "CAT", "DOG"]
+        err_lines = [ln for ln in capsys.readouterr().err.splitlines() if ln.strip()]
+        assert len(err_lines) == 1
+        assert str(cache.resolve()) in err_lines[0]
 
 
 class TestScoredWord:
