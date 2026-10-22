@@ -237,8 +237,8 @@ export const api = {
   },
 
   // `wordlists` is not optional in practice: omitting it makes the backend
-  // validate against every installed list merged, while verifyWords validates
-  // against the ones passed here. Clean would then spare words that the grid
+  // validate against the default list (comprehensive) alone, while verifyWords
+  // validates against the ones passed here. Clean would then spare words that the grid
   // is painting red (present in a raw/ list, a themed list, ...), leaving red
   // cells behind after a "successful" clean. Pass the same selection to both.
   cleanGrid({ grid, size, wordlists }) {

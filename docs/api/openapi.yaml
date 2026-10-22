@@ -393,8 +393,8 @@ paths:
         Checks every slot in the grid. Fully-filled slots are checked by exact
         lookup; partially-filled slots are checked with `?`-wildcard pattern
         matching (unfillable if no candidate matches); fully-empty slots are
-        skipped. If `wordlists` is omitted, every installed non-custom
-        wordlist is merged for the check.
+        skipped. If `wordlists` is omitted, the default wordlist
+        (`comprehensive`) alone is used for the check.
       operationId: verifyWords
       requestBody:
         required: true
@@ -414,7 +414,7 @@ paths:
                   type: array
                   items:
                     type: string
-                  description: Defaults to every installed non-custom wordlist merged
+                  description: Defaults to the default wordlist (`comprehensive`) alone
       responses:
         '200':
           description: Verification results
@@ -466,7 +466,7 @@ paths:
                   type: array
                   items:
                     type: string
-                  description: Defaults to every installed non-custom wordlist merged
+                  description: Defaults to the default wordlist (`comprehensive`) alone
       responses:
         '200':
           description: Cleaned grid
