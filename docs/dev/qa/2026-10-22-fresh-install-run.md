@@ -25,7 +25,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 
 | # | README line | Claim (quoted) | Verified by | Verdict |
 |---|---|---|---|---|
-| R1 | 19–21 | `chmod +x setup.sh` / `./setup.sh` is the one-time setup | Task 4 | |
+| R1 | 19–21 | `chmod +x setup.sh` / `./setup.sh` is the one-time setup | Task 4 | PASS |
 | R2 | 23–25 | `source venv/bin/activate` then `python3 run.py` runs the app | Task 5 | |
 | R3 | 26 | "Open http://localhost:5000" | Task 5 | |
 | R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | |
@@ -43,7 +43,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R16 | 35–36 | autofill "using CSP with backtracking, beam search, or iterative repair; supports theme word locking" | Task 7 | |
 | R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | |
 | R18 | 39 | "Export -- HTML format" | Task 9 | |
-| R19 | setup.sh:67 | "Frontend built to frontend/dist/" | Task 4 | |
+| R19 | setup.sh:67 | "Frontend built to frontend/dist/" | Task 4 | PASS |
 | R20 | 105 | the Resources PDF link resolves | Task 2 | PASS |
 
 ## Cases
@@ -175,4 +175,103 @@ dirty entries in E1 clone: 0
 00000000: 4150 504c 450d 0a42 4552 5259 0d0a 4348  APPLE..BERRY..CH
 00000010: 4552 5259 0d0a                           ERRY..
 F9 identical
+```
+
+### SETUP-1 — README setup commands on E1 (R1)
+- Phase: P1-setup · Env: E1 · Viewport: —
+- Steps: 1. From the clone root under the E1 wrapper: `chmod +x setup.sh` then `./setup.sh`, timed.
+- Expected: "chmod +x setup.sh" / "./setup.sh" as the one-time setup (README.md:19-21)
+- Observed: Exit code 0; setup ran to "Setup complete". The frontend build printed Dart Sass "legacy-js-api" deprecation warnings (cosmetic, no failure).
+- Evidence: evidence/SETUP-1.log
+- Verdict: PASS · Severity: S4 (build-time deprecation noise) · Known: —
+
+```
+rc=0 (read on its own line after the timed subshell)
+18:DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+22:DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+$SB/e1.sh "cd $C && chmod +x setup.sh && ./setup.sh"  8.52s user 3.33s system 36% cpu 32.159 total
+```
+
+### SETUP-2 — Post-conditions of setup (R19)
+- Phase: P1-setup · Env: E1 · Viewport: —
+- Steps: 1. `venv/bin/python --version`, `venv/bin/pip list`, `npm ls --depth=0`, `ls -l frontend/dist/index.html`.
+- Expected: "Frontend built to frontend/dist/" (setup.sh:67)
+- Observed: venv uses the E1 interpreter; pytest, coverage and pytest-cov are installed by setup (relevant to R11/R13); vitest and its coverage plugin are in the npm tree; frontend/dist/index.html exists.
+- Evidence: evidence/SETUP-2.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Python 3.13.7
+Package            Version
+------------------ ----------
+black              26.10.1
+blinker            1.9.0
+certifi            2026.10.19
+cfgv               3.5.0
+charset-normalizer 3.5.2
+click              8.1.7
+coverage           7.16.2
+distlib            0.4.4
+execnet            2.1.2
+filelock           4.2.4
+flake8             7.4.1
+Flask              3.0.0
+Flask-Cors         4.0.0
+identify           2.6.20
+idna               3.20
+iniconfig          2.3.1
+isort              9.0.2
+itsdangerous       2.2.0
+Jinja2             3.1.6
+markdown-it-py     4.2.0
+MarkupSafe         3.0.4
+mccabe             0.7.0
+mdurl              0.1.2
+mypy_extensions    1.1.0
+nodeenv            1.11.0
+numpy              2.5.4
+packaging          26.3
+pathspec           1.1.1
+pip                26.2.2
+platformdirs       4.13.5
+pluggy             1.7.0
+pre_commit         4.7.0
+pycodestyle        2.15.0
+pyflakes           4.0.3
+Pygments           2.21.0
+pytest             7.4.3
+pytest-asyncio     0.23.2
+pytest-cov         4.1.0
+pytest-mock        3.12.0
+pytest-xdist       3.5.0
+python-discovery   1.6.4
+pytokens           0.4.1
+PyYAML             6.0.3
+requests           2.31.0
+rich               13.7.0
+ruff               0.17.1
+urllib3            2.8.0
+virtualenv         21.14.12
+Werkzeug           3.1.9
+crossword-helper@1.0.0 /private/tmp/crossword-fresh/crossword-helper
+├── @fontsource-variable/fraunces@5.2.9
+├── @fontsource-variable/jetbrains-mono@5.2.8
+├── @fontsource-variable/work-sans@5.2.8
+├── @testing-library/jest-dom@6.9.1
+├── @testing-library/react@14.3.1
+├── @testing-library/user-event@14.6.1
+├── @vitejs/plugin-react@4.7.0
+├── @vitest/coverage-v8@1.6.1
+├── @vitest/ui@1.6.1
+├── classnames@2.5.1
+├── jsdom@23.2.0
+├── msw@2.12.7
+├── react-dom@18.3.1
+├── react-hot-toast@2.6.0
+├── react@18.3.1
+├── sass@1.97.1
+├── vite@5.4.21
+└── vitest@1.6.1
+
+-rw-r--r--  1 apa  wheel  1107 Oct 22 11:07 frontend/dist/index.html
 ```
