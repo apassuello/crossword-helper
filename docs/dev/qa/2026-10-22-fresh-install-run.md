@@ -29,7 +29,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R2 | 23–25 | `source venv/bin/activate` then `python3 run.py` runs the app | Task 5 | PASS |
 | R3 | 26 | "Open http://localhost:5000" | Task 5 | PASS |
 | R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | PASS |
-| R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | FAIL (I7) |
+| R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | PASS (I7: see I7-MATRIX) |
 | R6 | 64 | "11x11, 15x15, and 21x21 templates included" | Task 2 | PASS |
 | R7 | 65–67 | the `fill data/grids/example_15x15.json … -t 180 --min-score 30 -o filled.json` command | Task 10 | PASS |
 | R8 | 70 | `validate puzzle.json` | Task 10 | PASS |
@@ -139,7 +139,7 @@ dirty entries in E1 clone: 0
 - Phase: P0 · Env: host · Viewport: —
 - Steps: 1. `stat` the .txt and sibling .pkl of two shipped lists, plus the byte size of the scored list.
 - Expected: UNSPECIFIED (evidence for the cache-preference variable, spec §2.4; used by Tasks 7 and 11)
-- Observed: Each .pkl carries the same mtime, to the second, as its .txt, so the rule "prefer .pkl when its mtime >= the .txt's" (I7) selects the .pkl on a fresh clone.
+- Observed: To the second, each .pkl carries the same mtime as its .txt, so this listing cannot say which is newer. The loader's cache rule compares full-resolution mtimes; the nanosecond values and what they decide are in I7-MATRIX (in a git clone the .pkl is written about a millisecond before the .txt, i.e. older).
 - Evidence: —
 - Verdict: UNSPECIFIED · Severity: — · Known: I7
 
@@ -735,7 +735,7 @@ server log: no cache warning, no traceback
 - Phase: P3-autofill · Env: E1 · Viewport: —
 - Steps: 1. Copy the tracked comprehensive cache out of the main checkout with `git show` (read-only). 2. Load it, and the cache rebuilt in A10, with the loader's own class through the runtime import path (the wrapper script imports `src...` with `cli/` on the path). 3. Count lines of the text list.
 - Expected: "ships with 44k curated words" (README.md:37-38)
-- Observed: The shipped cache holds the large scored list, a list far larger than the text list it sits beside (line counts in the fence), and in a fresh clone its mtime ties the text list's, so the loader's rule "use the cache when its mtime is not older" selects it. The cache rebuilt by the CLI's own build-cache command cannot be loaded back through the runtime import path (module `cli.src` not found) and the loader's fallback only catches ValueError/FileNotFoundError, so that error is not turned into a text-list reload at that call.
+- Observed: The shipped cache holds the large scored list, a list far larger than the text list it sits beside (line counts in the fence). The loader uses a cache whenever its mtime is not older than the text list's; that is not the case in a git clone but is the case after a ZIP extract or after build-cache (I7-MATRIX). The cache rebuilt by the CLI's own build-cache command cannot be loaded back through the runtime import path (module `cli.src` not found) and the loader's fallback only catches ValueError/FileNotFoundError, so that error is not turned into a text-list reload at that call.
 - Evidence: evidence/CACHE-1.log
 - Verdict: FAIL · Severity: S2 · Known: I7
 
@@ -873,7 +873,7 @@ data-theme: light -> dark ; after reload: dark ; stored value follows
 
 ### SR1 — Pattern search C?T in Comprehensive Dictionary
 - Phase: P3-search · Env: E1 · Viewport: 1800×986 (see ENV-3)
-- Steps: 1. Open Search with its default list. 2. Enter C?T. 3. Click Search. (State of the clone: shipped caches restored, see CACHE-2.)
+- Steps: 1. Open Search with its default list. 2. Enter C?T. 3. Click Search. (State of the clone: shipped caches restored with equal mtimes, see CACHE-2 and I7-MATRIX.)
 - Expected: "find words matching a pattern like C?T (gives CAT, COT, CUT, etc.)" (README.md:33-34)
 - Observed: The results include CAT, COT and CUT, together with other three-letter strings (abbreviations such as CIT, CRT, CST) because the list behind it is large. The README claim holds.
 - Evidence: —
@@ -1131,11 +1131,11 @@ import-nyt rc=0 lines=      19
 
 ### R5 — README pattern command, verbatim
 - Phase: P4-cli · Env: E1 · Viewport: —
-- Steps: 1. From the clone root, venv active: the README's pattern command with `--json-output`. 2. Control: the same command with the sibling .pkl moved aside (restored afterwards, mtime tie re-created).
+- Steps: 1. From the E2 clone as cloned, venv active: the README's pattern command with `--json-output`. 2. The E1 run (cache restored with an equal mtime) is kept as the contrast.
 - Expected: "python -m cli.src.cli pattern \"C?T\" -w data/wordlists/comprehensive.txt --json-output" (README.md:62)
-- Observed: The command exits 0 but prints "Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'", loads zero words and returns zero matches, with `sources_searched` empty. A user sees a clean exit and an empty result. The shipped cache is what is unloadable under this invocation (it was written under a different module path, see CACHE-1); with the cache moved aside the same command loads the full text list and returns matches.
+- Observed: On a genuine git clone (the E2 clone as cloned, and the E1 clone with the cache older than the text list) the command exits 0, loads the full text list and returns matches including CAT, COT and CUT. The failing output kept in evidence/R5.log, a clean exit with a warning "No module named 'src.fill'", zero words loaded and zero matches, was produced in E1 after I restored the cache with an equal mtime; that condition is an I7 case, not the as-cloned state (see I7-MATRIX).
 - Evidence: evidence/R5.log · evidence/R5-nocache.log
-- Verdict: FAIL · Severity: S1 · Known: I7
+- Verdict: PASS · Severity: — · Known: I7
 
 ```
 {"type": "progress", "progress": 0, "message": "Searching for pattern \"C?T\"", "status": "running"}
@@ -1306,9 +1306,9 @@ cells in output: class="cell" 189 ; class="cell black" 36 ; class="cell-number" 
 - Phase: P4-cli · Env: E1 · Viewport: —
 - Steps: 1. `analyze data/grids/example_15x15_partial_mid.json -w data/wordlists/comprehensive.txt`.
 - Expected: UNSPECIFIED (help: "Analyze grid constraints and placement impact.")
-- Observed: Exit 1: the same unloadable-cache warning as R5, then "Error: no words loaded from wordlists". The command cannot be used with the shipped list in a fresh clone.
+- Observed: On a genuine clone (E2 as cloned) the command exits 0 and prints the grid analysis. With the cache mtime equal to or newer than the text list (E1 after my restore; a ZIP extract) it exits 1: the unloadable-cache warning as in R5, then "Error: no words loaded from wordlists" (I7-MATRIX).
 - Evidence: evidence/CLI-analyze.log
-- Verdict: FAIL · Severity: S2 · Known: I7
+- Verdict: PASS · Severity: — · Known: I7
 
 ```
 Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill'
@@ -1915,4 +1915,112 @@ Test Files  20 passed (20)
 Tests  229 passed (229)
 All files          |   63.03 |    81.24 |   69.31 |   63.03 |
 PASS  Waiting for file changes...
+```
+
+### I7-MATRIX — The README's CLI commands break when the .pkl is not older than the .txt
+- Phase: P4-cli · Env: E1 · Viewport: —
+- Steps: 1. Read the nanosecond mtimes of the cache and text list in the E2 clone. 2. In the E1 clone set the cache's mtime to 1.1 ms older, equal, and 1.1 ms newer than the text list's and run the README pattern command and `analyze`. 3. Extract a `git archive` zip of the repository (the equivalent of a ZIP download) and run both commands there.
+- Expected: "python -m cli.src.cli pattern \"C?T\" -w data/wordlists/comprehensive.txt --json-output" (README.md:62) returns matches
+- Observed: The outcome is decided entirely by the mtime comparison in the word-list loader: cache older gives a correct run; cache equal or newer gives exit 0 with zero words loaded for pattern (silent) and exit 1 for analyze. A git clone writes the cache first, so it is older and works. A ZIP extract gives both files the identical mtime, so a user who downloads a ZIP instead of cloning gets an empty result from the README's first CLI example with a clean exit status. The shipped cache is unloadable through the documented module invocation (it was pickled under another module path, CACHE-1), and the loader does not fall back to the text list for that error.
+- Evidence: evidence/I7-matrix.log · evidence/ZIP-R5.log · evidence/ZIP-analyze.log · evidence/E2-R5.log
+- Verdict: FAIL · Severity: S2 · Known: I7
+
+```
+E2 clone (genuine git clone), nanosecond mtimes:
+comprehensive.pkl 1792659952089987592
+comprehensive.txt 1792659952091148936   -> .pkl is about 1.2 ms older: the loader skips it
+E1 clone, cache mtime set relative to the text list's, README pattern command and analyze:
+pkl mtime minus txt mtime = -1100000 ns | pattern rc=0 'Loaded 44024 words' warnings=0 | analyze rc=0
+pkl mtime minus txt mtime = 0 ns | pattern rc=0 'Loaded 0 words' warnings=1 | analyze rc=1
+pkl mtime minus txt mtime = 1100000 ns | pattern rc=0 'Loaded 0 words' warnings=1 | analyze rc=1
+ZIP extract of the repository (git archive, both files get the same mtime, 1792664996000000000):
+pattern: Warning: Could not load data/wordlists/comprehensive.txt: No module named 'src.fill' ; Loaded 0 words from 1 wordlist(s) ; exit 0
+analyze: same warning ; Error: no words loaded from wordlists ; exit 1
+```
+
+### E2-SETUP-1 — README setup commands on the system Python 3.9.6
+- Phase: P6-e2 · Env: E2 · Viewport: —
+- Steps: 1. In the second clone (never used before), under the E2 wrapper (system python3 first on the path, same Node): `chmod +x setup.sh` then `./setup.sh`, timed.
+- Expected: "chmod +x setup.sh" / "./setup.sh" (README.md:19-21); Python 3.9+ (README stack line)
+- Observed: Exit 0; setup completes on the floor Python version the README names, with the same Dart Sass deprecation noise in the frontend build as on E1.
+- Evidence: evidence/E2-SETUP-1.log
+- Verdict: PASS · Severity: S4 · Known: —
+
+```
+[ok] Python 3.9
+[ok] Node.js v22.23.4
+[ok] Virtual environment created at venv/
+[ok] Python dependencies installed
+[ok] Node.js dependencies installed
+[ok] Frontend built to frontend/dist/
+=== Setup complete ===
+$SB/e2.sh "cd $C2 && chmod +x setup.sh && ./setup.sh"  8.61s user 2.95s system 46% cpu 24.723 total
+```
+
+### E2-SETUP-2 — Post-conditions of setup on E2
+- Phase: P6-e2 · Env: E2 · Viewport: —
+- Steps: 1. `venv/bin/python --version`, selected `pip list` entries, `ls -l frontend/dist/index.html`.
+- Expected: "Frontend built to frontend/dist/" (setup.sh:67)
+- Observed: The venv uses the system 3.9 interpreter; the scientific and web dependencies installed (the numpy version differs from E1 because of the Python floor); the frontend build output exists.
+- Evidence: evidence/E2-SETUP-2.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Python 3.9.6
+click              8.1.7
+Flask              3.0.0
+numpy              2.0.2
+pytest             7.4.3
+-rw-r--r--  1 apa  wheel  1107 Oct 22 13:03 frontend/dist/index.html
+```
+
+### E2-CLI-help — Top-level and per-command help on E2
+- Phase: P6-e2 · Env: E2 · Viewport: —
+- Steps: 1. `--help` at the top level and for each of the 14 commands.
+- Expected: README.md:58
+- Observed: Every help invocation exits 0.
+- Evidence: evidence/E2-CLI-help.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+[top] rc=0
+[new] rc=0
+[validate] rc=0
+[fill] rc=0
+[show] rc=0
+[export] rc=0
+[pattern] rc=0
+[normalize] rc=0
+[number] rc=0
+[analyze] rc=0
+[build-cache] rc=0
+[pause] rc=0
+[resume] rc=0
+[list-states] rc=0
+[import-nyt] rc=0
+```
+
+### E2-fill — fill on the 11x11 example on E2
+- Phase: P6-e2 · Env: E2 · Viewport: —
+- Steps: 1. `fill data/grids/example_11x11.json -w data/wordlists/comprehensive.txt -t 60 --json-output`.
+- Expected: "fill" (README.md:65-67)
+- Observed: Exit 0; the full text list is loaded and every slot is filled.
+- Evidence: evidence/E2-fill.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+success=True empty_cells=0 slots=44/44
+```
+
+### E2-R5 — README pattern and analyze on a genuine clone
+- Phase: P6-e2 · Env: E2 · Viewport: —
+- Steps: 1. On the untouched E2 clone: the README pattern command and `analyze` with the comprehensive list.
+- Expected: "pattern ... --json-output" (README.md:62)
+- Observed: Both exit 0 and load the full text list (this clone has the cache a millisecond older than the text list, so it is not used). This is the as-cloned contrast for I7-MATRIX.
+- Evidence: evidence/E2-R5.log · evidence/E2-analyze.log
+- Verdict: PASS · Severity: — · Known: I7
+
+```
+{"type": "progress", "progress": 30, "message": "Loaded 44024 words from 1 wordlist(s)", "status": "running"}
+Grid analysis: 192 cells
 ```
