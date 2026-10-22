@@ -106,7 +106,7 @@ for algo in trie beam repair hybrid; do
     echo "Testing CLI with algorithm: $algo"
     if timeout 120 python3 -m cli.src.cli fill simple_fillable_11x11.json \
         --algorithm $algo \
-        --wordlists data/wordlists/top_50k.txt \
+        --wordlists data/wordlists/raw/top_50k.txt \
         --timeout 90 \
         --min-score 0 \
         --output "test_result_${algo}.json" > /tmp/cli_${algo}.log 2>&1; then
@@ -157,7 +157,7 @@ echo ""
 echo "Testing hybrid algorithm on standard_11x11.json..."
 if timeout 150 python3 -m cli.src.cli fill standard_11x11.json \
     --algorithm hybrid \
-    --wordlists data/wordlists/top_50k.txt \
+    --wordlists data/wordlists/raw/top_50k.txt \
     --timeout 120 \
     --min-score 0 \
     --output acceptance_test_result.json > /tmp/acceptance.log 2>&1; then

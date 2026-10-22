@@ -199,7 +199,7 @@ Equivalence contract (the test that is written first, RED against a stub):
 
 **[NOTE]**
 Both shipped word lists are pure A–Z after comment stripping (`data/wordlists/comprehensive.txt`,
-`comprehensive_intl.txt`; the only non-letters are `#` header lines). Deriving the alphabet from the
+`raw/comprehensive_intl.txt`; the only non-letters are `#` header lines). Deriving the alphabet from the
 list, rather than hardcoding 26, costs nothing today and keeps the index honest if a list ever
 carries accented letters. The test that touches the real list is marked `slow` if it exceeds a
 couple of seconds; `pytest.ini` deselects `slow` by default.

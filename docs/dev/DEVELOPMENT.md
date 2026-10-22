@@ -207,7 +207,7 @@ claims that those exact files exist.
 verified against `data/wordlists/comprehensive.txt`. This differs from an older draft of this
 document, which described a tab-separated `WORD  SCORE  SOURCE` format that does not match any
 wordlist file actually in the repo. The scored variant that does exist,
-`comprehensive_scored.txt`, uses `WORD;SCORE` (semicolon-delimited), documented in its own
+`raw/comprehensive_scored.txt`, uses `WORD;SCORE` (semicolon-delimited), documented in its own
 header comment.
 
 ```bash

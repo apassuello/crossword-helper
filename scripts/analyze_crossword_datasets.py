@@ -25,7 +25,7 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DEFAULT_ANALYSIS_DIR = os.path.join(PROJECT_ROOT, "data", "analysis")
-APP_WORDLIST = os.path.join(PROJECT_ROOT, "data", "wordlists", "comprehensive_scored.txt")
+APP_WORDLIST = os.path.join(PROJECT_ROOT, "data", "wordlists", "raw", "comprehensive_scored.txt")
 APP_WORDLIST_PLAIN = os.path.join(PROJECT_ROOT, "data", "wordlists", "comprehensive.txt")
 
 

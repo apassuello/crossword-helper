@@ -96,6 +96,18 @@ class TestDiscovery:
         assert "category" in comp
         assert "filepath" in comp
 
+    def test_list_all_skips_raw_directory(self, wordlist_dir):
+        """raw/ holds the unfiltered family; the panel must not list it."""
+        raw = wordlist_dir / "raw"
+        raw.mkdir()
+        (raw / "x.txt").write_text("AAA\nBBB\n")
+        manager = WordListManager(wordlist_dir=str(wordlist_dir))
+        keys = [wl["key"] for wl in manager.list_all()]
+        assert "comprehensive" in keys
+        assert not [k for k in keys if k.startswith("raw/")]
+        # still loadable by explicit key
+        assert manager.load("raw/x") == ["AAA", "BBB"]
+
     def test_list_all_category_filter(self, manager):
         items = manager.list_all(category="core")
         assert len(items) == 1

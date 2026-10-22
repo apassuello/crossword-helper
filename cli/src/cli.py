@@ -92,7 +92,7 @@ def _load_wordlist_words(wordlist_files) -> list:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Support WORD;SCORE format (comprehensive_scored.txt)
+                # Support WORD;SCORE format (raw/comprehensive_scored.txt)
                 word = line.split(";")[0].strip().upper()
                 if word:
                     all_words.append(word)
@@ -768,7 +768,7 @@ def fill(
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Support WORD;SCORE format (comprehensive_scored.txt)
+                # Support WORD;SCORE format (raw/comprehensive_scored.txt)
                 word = line.split(";")[0].strip().upper()
                 if word:
                     all_words.append(word)

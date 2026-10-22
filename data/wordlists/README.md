@@ -119,6 +119,17 @@ The original wordlist is from Chris Jones' crossword-wordlist repository, compil
 
 ---
 
+## Directory layout
+
+- `raw/` holds the unfiltered family cut from the 454k-word source predating the filtering above:
+  `comprehensive_scored.txt`, `comprehensive_intl.txt`, `top_50k.txt`, `top_100k.txt`, `top_200k.txt`.
+  They are not part of any default and the UI list panel does not show them. They stay loadable by
+  explicit path (for example `-w data/wordlists/raw/top_50k.txt`). Sizes: `wc -l data/wordlists/raw/*.txt`.
+- `external/` holds third-party lists, including `spreadthewordlist_caps.dict`; also skipped by the panel.
+- The default list is `comprehensive.txt` alone.
+
+---
+
 **Filtered by:** Claude Code
 **Date:** December 27, 2025
 **Filter Script:** Available upon request

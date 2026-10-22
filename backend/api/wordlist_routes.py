@@ -29,7 +29,7 @@ def _get_category(name: str) -> str:
         return category
     if "/" in name:
         return name.split("/")[0]
-    # Root-level lists without metadata (comprehensive, top_50k, ...) are
+    # Root-level lists without metadata (comprehensive, ...) are
     # shipped data files.
     return "builtin"
 
