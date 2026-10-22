@@ -197,7 +197,9 @@ characteristic runtime.
 ### File-Based IPC (`cli/src/fill/pause_controller.py`)
 - Backend writes a `crossword_pause_{task_id}.flag` file (note the `crossword_` prefix —
   `pause_controller.py:41`)
-- CLI polls for flag every ~100ms
+- CLI checks for the flag at solver checkpoints; the file stat itself is rate-limited inside
+  `PauseController.should_pause()`. Latency is bounded per engine, not by a fixed time — beam's
+  bound is one iteration (#26); see `ARCHITECTURE.md` §6.2
 - On detection: serialize state → exit gracefully
 
 ### State Serialization (`cli/src/fill/state_manager.py`)

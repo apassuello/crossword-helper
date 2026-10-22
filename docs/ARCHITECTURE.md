@@ -219,8 +219,8 @@ exists and is used by callers that don't need streaming updates.
 This is the one piece of state management worth documenting structurally, because it crosses
 the process boundary twice.
 
-1. **Pause:** backend writes a signal file. The CLI subprocess polls for it between iterations
-   (rate-limited, not checked every iteration) and, on detecting it, serializes its complete
+1. **Pause:** backend writes a signal file. The CLI subprocess checks for it at solver
+   checkpoints (cadence per engine in the note below) and, on detecting it, serializes its complete
    in-memory state — grid, algorithm position (backtrack stack or beam), remaining candidate
    domains, constraint-propagation state, iteration count — to gzip-compressed JSON, then exits
    with a "paused" status.
@@ -233,6 +233,25 @@ the process boundary twice.
    applies the validated edits, locks the edited cells (treated like theme entries — the
    algorithm will not overwrite them), and continues from the exact algorithmic position it
    paused at, under a fresh timeout window.
+
+**[NOTE]**
+Pause latency is bounded by the work between two checkpoints, not by a fixed time. Every
+checkpoint calls `PauseController.should_pause()`, which stats the flag file at most once per
+`_check_interval` and returns a cached answer in between, so the rate limit lives there and
+callers check freely. Where each engine checks:
+
+- **CSP** (`Autofill`): in the backtracking loop on every 20th iteration (`self.iterations % 20`),
+  plus during setup (`_check_pause_during_setup`) and inside AC-3 on every 128th arc.
+- **Repair** (`IterativeRepair`): at the top of every restart and on every conflict-repair step.
+- **Beam** (`BeamSearchOrchestrator`): at the top of every iteration of the main loop, in both
+  `fill()` and `_resume_fill()`. The bound is therefore **one iteration**, and one iteration has
+  no absolute bound: it expands the whole beam for one slot and, when that dead-ends,
+  `_try_backtracking` runs further `expand_beam` passes, none of them interruptible. On a grid
+  where an iteration is expensive, a pause is observed late. Tracked as #26, which stays open
+  until a check inside the iteration closes it.
+
+**[?]** `hybrid` forwards its pause controller to a beam first phase (`HybridAutofill`), so by
+reading it inherits beam's bound. #26 records this as untested; no probe has measured it.
 
 **[NOTE]**
 Why file-based IPC instead of in-memory state + threads: the CLI subprocess is a genuinely
