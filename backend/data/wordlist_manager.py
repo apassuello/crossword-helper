@@ -51,6 +51,9 @@ class WordListManager:
         Args:
             name: Wordlist name (can include category path)
 
+        A trailing ``;N`` score on a line is stripped (spec O5), so callers
+        see the word alone.
+
         Returns:
             List of words (uppercase)
 
@@ -79,7 +82,7 @@ class WordListManager:
                 line = line.strip()
                 # Skip comments and empty lines
                 if line and not line.startswith("#"):
-                    words.append(line.upper())
+                    words.append(line.split(";", 1)[0].strip().upper())
 
         self._cache[name] = words
         return words
@@ -159,8 +162,8 @@ class WordListManager:
         return self._metadata.get("tags", {})
 
     def get_wordlist_info(self, name: str) -> Dict[str, Any]:
-        """Get metadata for a specific wordlist."""
-        info = self._metadata["wordlists"].get(name, {})
+        """Get metadata for a specific wordlist (a copy; ``_metadata`` is never changed)."""
+        info = dict(self._metadata["wordlists"].get(name, {}))
         info["key"] = name
         info["word_count"] = len(self.load(name))
 
@@ -247,7 +250,7 @@ class WordListManager:
 
         Args:
             name: Wordlist name
-            words: Words to add
+            words: Words to add; an entry may carry a score as ``WORD;N``
             create: Create wordlist if it doesn't exist
         """
         filepath = self.wordlist_dir / name
@@ -260,25 +263,33 @@ class WordListManager:
         # Ensure directory exists
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Load existing words or start empty
-        existing = set(self.load(name)) if filepath.exists() else set()
+        # Existing lines keyed by word, so stored ;N scores survive a rewrite
+        lines: Dict[str, str] = {}
+        if filepath.exists():
+            with open(filepath, "r", encoding="utf-8") as f:
+                for raw in f:
+                    raw = raw.strip()
+                    if raw and not raw.startswith("#"):
+                        lines[raw.split(";", 1)[0].strip().upper()] = raw.upper()
 
-        # Add new words
-        new_words = set(word.upper() for word in words)
-        combined = existing | new_words
+        # New entries: "WORD" or canonical "WORD;N"; a later entry wins
+        for entry in words:
+            entry = entry.strip().upper()
+            if entry:
+                lines[entry.split(";", 1)[0].strip()] = entry
 
         # Write back
         with open(filepath, "w", encoding="utf-8") as f:
-            for word in sorted(combined):
-                f.write(f"{word}\n")
+            for word in sorted(lines):
+                f.write(f"{lines[word]}\n")
 
-        # Update cache
-        self._cache[name] = sorted(combined)
+        # Update cache (words only)
+        self._cache[name] = sorted(lines)
 
         # Update metadata
         if name not in self._metadata["wordlists"]:
             self._metadata["wordlists"][name] = {
-                "name": name.replace("_", " ").title(),
+                "name": name.split("/")[-1].replace("_", " ").title(),
                 "category": str(filepath.parent.relative_to(self.wordlist_dir)),
                 "description": "User-created wordlist",
                 "created": str(Path(filepath).stat().st_mtime if filepath.exists() else "now"),
