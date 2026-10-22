@@ -2,7 +2,7 @@
 
 ## Header
 
-- Clone target sha: <filled in Task 2>
+- Clone target sha: 4678406 (local main; clones come from the main checkout, not origin)
 - `origin/main` sha and `$MAIN` HEAD are in the fence below. origin/main lags local main until Arthur pushes; the friend's reinstall gets origin.
 - E1 python: CPython 3.13.7 (cpython-3.13.7-macos-aarch64-none, uv download only)
 - E1 node: node-v22.23.4-darwin-arm64.tar.gz (SHA-256 verified against SHASUMS256.txt)
@@ -30,7 +30,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R3 | 26 | "Open http://localhost:5000" | Task 5 | |
 | R4 | 46–51 | dev mode: `python3 run.py` + `npm run dev`, open :3000 | Task 5 | |
 | R5 | 62 | `pattern "C?T" -w data/wordlists/comprehensive.txt --json-output` | Task 10 | |
-| R6 | 64 | "11x11, 15x15, and 21x21 templates included" | Task 2 | |
+| R6 | 64 | "11x11, 15x15, and 21x21 templates included" | Task 2 | PASS |
 | R7 | 65–67 | the `fill data/grids/example_15x15.json … -t 180 --min-score 30 -o filled.json` command | Task 10 | |
 | R8 | 70 | `validate puzzle.json` | Task 10 | |
 | R9 | 73 | `new --size 15 -o puzzle.json` | Task 10 | |
@@ -44,7 +44,7 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 | R17 | 37–38 | "ships with 44k curated words; upload your own or combine multiple lists" | Tasks 6, 9 | |
 | R18 | 39 | "Export -- HTML format" | Task 9 | |
 | R19 | setup.sh:67 | "Frontend built to frontend/dist/" | Task 4 | |
-| R20 | 105 | the Resources PDF link resolves | Task 2 | |
+| R20 | 105 | the Resources PDF link resolves | Task 2 | PASS |
 
 ## Cases
 
@@ -105,4 +105,74 @@ Python 3.9.6
 v22.23.4
 HOME=/private/tmp/crossword-fresh/home
 uv absent (good)
+```
+
+### CLONE-1 — Clones of main are clean
+- Phase: P-Clone · Env: host · Viewport: —
+- Steps: 1. `git clone --branch main` of the main checkout into the E1 and E2 sandbox directories. 2. Read HEAD and `git status --short` of the E1 clone.
+- Expected: UNSPECIFIED (spec §1.2: both clones at the recorded main sha, clean)
+- Observed: Both clones report the same sha, equal to the main checkout's HEAD in the header; the E1 clone's status listing is empty.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+E1 clone: 4678406   E2 clone: 4678406
+dirty entries in E1 clone: 0
+```
+
+### CLONE-2 — Shipped templates and Resources PDF present (R6, R20)
+- Phase: P0 · Env: host · Viewport: —
+- Steps: 1. `ls -l` the three example grids and the PDF in the E1 clone.
+- Expected: "11x11, 15x15, and 21x21 templates included" (README.md:64); Resources link to docs/resources/art-of-construction.pdf (README.md:105)
+- Observed: All three template files and the PDF exist and are non-empty.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+-rw-r--r--  1 apa  wheel    1495 Oct 22 11:05 /private/tmp/crossword-fresh/crossword-helper/data/grids/example_11x11.json
+-rw-r--r--  1 apa  wheel    2687 Oct 22 11:05 /private/tmp/crossword-fresh/crossword-helper/data/grids/example_15x15.json
+-rw-r--r--  1 apa  wheel    5135 Oct 22 11:05 /private/tmp/crossword-fresh/crossword-helper/data/grids/example_21x21.json
+-rw-r--r--  1 apa  wheel  381224 Oct 22 11:05 /private/tmp/crossword-fresh/crossword-helper/docs/resources/art-of-construction.pdf
+```
+
+### CLONE-3 — Wordlist cache mtimes in a fresh clone (I7 evidence)
+- Phase: P0 · Env: host · Viewport: —
+- Steps: 1. `stat` the .txt and sibling .pkl of two shipped lists, plus the byte size of the scored list.
+- Expected: UNSPECIFIED (evidence for the cache-preference variable, spec §2.4; used by Tasks 7 and 11)
+- Observed: Each .pkl carries the same mtime, to the second, as its .txt, so the rule "prefer .pkl when its mtime >= the .txt's" (I7) selects the .pkl on a fresh clone.
+- Evidence: —
+- Verdict: UNSPECIFIED · Severity: — · Known: I7
+
+```
+2026-10-22T11:05:50 /private/tmp/crossword-fresh/crossword-helper/data/wordlists/comprehensive.txt
+2026-10-22T11:05:50 /private/tmp/crossword-fresh/crossword-helper/data/wordlists/comprehensive.pkl
+2026-10-22T11:05:51 /private/tmp/crossword-fresh/crossword-helper/data/wordlists/top_100k.txt
+2026-10-22T11:05:51 /private/tmp/crossword-fresh/crossword-helper/data/wordlists/top_100k.pkl
+ 6590415 /private/tmp/crossword-fresh/crossword-helper/data/wordlists/comprehensive_scored.txt
+```
+
+### FIX-1 — Upload fixtures F1-F9 built
+- Phase: P-Fixtures · Env: host · Viewport: —
+- Steps: 1. Write F1-F9 with printf/head/cp. 2. Verify sizes, line endings, encoding and byte-identity of F9.
+- Expected: UNSPECIFIED (plan Task 3 contents table)
+- Observed: F5 has CRLF terminators, F7 is UTF-8, F8 is zero bytes, F9 is byte-identical to the scored list.
+- Evidence: evidence/FIX-1.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+      19 /private/tmp/crossword-fresh/fixtures/F1-plain-lf.txt
+      28 /private/tmp/crossword-fresh/fixtures/F2-scored-semicolon.txt
+      28 /private/tmp/crossword-fresh/fixtures/F3-scored-comma.txt
+      29 /private/tmp/crossword-fresh/fixtures/F4-csv-header.csv
+      22 /private/tmp/crossword-fresh/fixtures/F5-crlf.txt
+     227 /private/tmp/crossword-fresh/fixtures/F6-dict.dict
+      19 /private/tmp/crossword-fresh/fixtures/F7-nonascii.txt
+       0 /private/tmp/crossword-fresh/fixtures/F8-empty.txt
+ 6590415 /private/tmp/crossword-fresh/fixtures/F9-large.txt
+ 6590787 total
+/private/tmp/crossword-fresh/fixtures/F5-crlf.txt:     ASCII text, with CRLF line terminators
+/private/tmp/crossword-fresh/fixtures/F7-nonascii.txt: Unicode text, UTF-8 text
+00000000: 4150 504c 450d 0a42 4552 5259 0d0a 4348  APPLE..BERRY..CH
+00000010: 4552 5259 0d0a                           ERRY..
+F9 identical
 ```
