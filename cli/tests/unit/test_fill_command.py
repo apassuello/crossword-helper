@@ -162,3 +162,126 @@ class TestFillValidationSet:
         word_list = WordList(["CAT"])
         assert len(word_list) > 0
         assert _validation_words(word_list)
+
+
+class TestLoadersParseLines:
+    """`fill` and `resume` load word-list lines with WordList.parse_line (spec 4, #51).
+
+    One file, four lines, loaded through each command's own code path. The solver
+    is aborted right after the list is built, so the loaded WordList is what is
+    asserted on, not a helper called in isolation.
+    """
+
+    LINES = "APPLE;50\ngrape,40\nLEMON\nword,score\n"
+
+    class _Abort(Exception):
+        pass
+
+    @pytest.fixture
+    def wordlist_path(self, tmp_path):
+        path = tmp_path / "mixed.txt"
+        path.write_text(self.LINES)
+        return str(path)
+
+    @pytest.fixture
+    def captured(self, monkeypatch):
+        """Record every WordList the CLI builds and abort before any solving."""
+        import cli.src.cli as cli_mod
+        from cli.src.fill.word_list import WordList
+
+        abort = self._Abort
+        box = {"lists": [], "validation": None}
+
+        class Recording(WordList):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                box["lists"].append(self)
+
+        real_validation = cli_mod._validation_words
+
+        def recording_validation(word_list):
+            box["validation"] = real_validation(word_list)
+            raise abort()
+
+        monkeypatch.setattr(cli_mod, "WordList", Recording)
+        monkeypatch.setattr(cli_mod, "_validation_words", recording_validation)
+        return box
+
+    @staticmethod
+    def _scores(word_list):
+        return {w.text: w.score for w in word_list.words}
+
+    def _assert_normative_rows(self, word_list):
+        from cli.src.fill.word_list import WordList
+
+        scores = self._scores(word_list)
+        assert set(scores) == {"APPLE", "GRAPE", "LEMON"}
+        assert scores["APPLE"] == 50
+        assert scores["GRAPE"] == 40
+        assert scores["LEMON"] == WordList(["LEMON"]).words[0].score
+
+    def test_fill_loads_scored_comma_and_header_lines(self, wordlist_path, captured, tmp_path):
+        from click.testing import CliRunner
+
+        from cli.src.cli import cli
+
+        grid = tmp_path / "g.json"
+        grid.write_text(json.dumps({"size": 11, "grid": [["."] * 11 for _ in range(11)]}))
+        result = CliRunner().invoke(cli, ["fill", str(grid), "-w", wordlist_path, "-t", "20"])
+        assert isinstance(result.exception, self._Abort), result.output
+        assert len(captured["lists"]) == 1
+        self._assert_normative_rows(captured["lists"][0])
+
+    def test_fill_validation_set_holds_uppercased_word_texts(self, wordlist_path, captured, tmp_path):
+        from click.testing import CliRunner
+
+        from cli.src.cli import cli
+
+        grid = tmp_path / "g.json"
+        grid.write_text(json.dumps({"size": 11, "grid": [["."] * 11 for _ in range(11)]}))
+        CliRunner().invoke(cli, ["fill", str(grid), "-w", wordlist_path, "-t", "20"])
+        assert captured["validation"] == {"APPLE", "GRAPE", "LEMON"}
+        assert "grape,40" not in captured["validation"]
+
+    def test_resume_loads_scored_comma_and_header_lines(self, wordlist_path, captured, tmp_path, monkeypatch):
+        from datetime import datetime
+
+        from click.testing import CliRunner
+
+        from cli.src.cli import cli
+        from cli.src.core.grid import Grid
+        from cli.src.fill.state_manager import CSPState, StateManager
+
+        state_dir = tmp_path / "states"
+        sm = StateManager(storage_dir=state_dir)
+        state = CSPState(
+            grid_dict=Grid(11).to_dict(),
+            domains={},
+            constraints={},
+            used_words=[],
+            slot_id_map={},
+            slot_list=[],
+            slots_sorted=[],
+            current_slot_index=0,
+            iteration_count=1,
+            locked_slots=[],
+            timestamp=datetime.now().isoformat(),
+        )
+        path = sm.save_csp_state(
+            task_id="t6",
+            csp_state=state,
+            metadata={"algorithm": "trie", "wordlists": [], "slots_filled": 0, "total_slots": 0},
+            compress=True,
+        )
+
+        # resume builds its matcher right after loading the list; stop there. The
+        # command may swallow the exception, so assert on the captured list only.
+        from cli.src.fill import trie_pattern_matcher
+
+        def stop(*args, **kwargs):
+            raise self._Abort()
+
+        monkeypatch.setattr(trie_pattern_matcher, "TriePatternMatcher", stop)
+        CliRunner().invoke(cli, ["resume", str(path), "-w", wordlist_path, "-t", "20", "--state-dir", str(state_dir)])
+        assert len(captured["lists"]) == 1
+        self._assert_normative_rows(captured["lists"][0])

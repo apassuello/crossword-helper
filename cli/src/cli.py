@@ -90,9 +90,13 @@ def _fail_fill(message: str, json_output: bool, hint: Optional[str] = None):
 
 def _load_wordlist_words(wordlist_files) -> list:
     """
-    Load words from wordlist files the same way `fill` does.
+    Load (word, score) tuples from wordlist files the same way `fill` does.
 
-    Handles comments and the WORD;SCORE scored format.
+    Each non-comment line goes through `WordList.parse_line`: plain `WORD` gives
+    score None (WordList computes one), `WORD;50` and `word,50` keep the file
+    score, and malformed or header lines are skipped. Words are not uppercased
+    here; `WordList` does that. The only consumer is `_execute_resume`, which
+    passes the result straight to `WordList`.
     """
     all_words = []
     for wordlist_file in wordlist_files:
@@ -101,10 +105,11 @@ def _load_wordlist_words(wordlist_files) -> list:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Support WORD;SCORE format (raw/comprehensive_scored.txt)
-                word = line.split(";")[0].strip().upper()
-                if word:
-                    all_words.append(word)
+                # One line format (spec 4): WORD, WORD;SCORE or word,SCORE. A malformed
+                # line or a "word,score" header parses to None and is skipped.
+                parsed = WordList.parse_line(line)
+                if parsed and parsed[0]:
+                    all_words.append(parsed)
     return all_words
 
 
@@ -777,10 +782,12 @@ def fill(
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Support WORD;SCORE format (raw/comprehensive_scored.txt)
-                word = line.split(";")[0].strip().upper()
-                if word:
-                    all_words.append(word)
+                # One line format (spec 4): WORD, WORD;SCORE or word,SCORE. A malformed
+                # line or a "word,score" header parses to None and is skipped. The
+                # file score is kept; WordList uppercases and validates the word.
+                parsed = WordList.parse_line(line)
+                if parsed and parsed[0]:
+                    all_words.append(parsed)
 
     word_list = WordList(all_words)
 
