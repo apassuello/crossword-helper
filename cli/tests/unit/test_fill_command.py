@@ -126,3 +126,39 @@ class TestFillExitCodes:
 
         assert rc == 1
         assert "Traceback" not in stderr
+
+
+class TestFillValidationSet:
+    """`fill` validates entries against the lists it loaded, not every file on disk.
+
+    IterativeRepair._is_valid_word returns False for every word when the set is
+    empty, so the set must be non-empty whenever the loaded list is.
+    """
+
+    def test_set_contains_only_loaded_words(self):
+        from cli.src.cli import _validation_words
+        from cli.src.fill.word_list import WordList
+
+        words = _validation_words(WordList(["CAT", "DOG", "EMU"]))
+        assert words == {"CAT", "DOG", "EMU"}
+
+    def test_word_only_in_raw_comprehensive_list_is_not_in_the_set(self):
+        from cli.src.cli import _validation_words
+        from cli.src.fill.word_list import WordList
+
+        raw = os.path.join(PROJECT_ROOT, "data", "wordlists", "raw", "comprehensive_scored.txt")
+        with open(raw) as f:
+            raw_words = {line.split(";")[0].strip().upper() for line in f if line.strip() and not line.startswith("#")}
+        only_in_raw = sorted(w for w in raw_words if w.isalpha() and 3 <= len(w) <= 21 and w not in {"CAT", "DOG"})
+        assert only_in_raw, "fixture check: raw list must hold words beyond the tiny list"
+
+        words = _validation_words(WordList(["CAT", "DOG"]))
+        assert only_in_raw[0] not in words
+
+    def test_set_is_non_empty_when_loaded_list_is_non_empty(self):
+        from cli.src.cli import _validation_words
+        from cli.src.fill.word_list import WordList
+
+        word_list = WordList(["CAT"])
+        assert len(word_list) > 0
+        assert _validation_words(word_list)

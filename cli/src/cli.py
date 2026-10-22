@@ -65,6 +65,15 @@ def _load_grid_or_exit(grid_file: str, allow_nonstandard: bool = False, json_out
     return data, grid
 
 
+def _validation_words(word_list: WordList) -> set:
+    """Words `fill` treats as valid: exactly those in the loaded list, no directory read.
+
+    Non-empty whenever `word_list` is, which IterativeRepair._is_valid_word relies on
+    (an empty set flags every word).
+    """
+    return {w.text for w in word_list.words}
+
+
 def _fail_fill(message: str, json_output: bool, hint: Optional[str] = None):
     """Emit a fill/resume error (JSON or human) and exit with code 1."""
     if json_output:
@@ -882,26 +891,10 @@ def fill(
 
     progress.update(30, f"Loaded {len(word_list)} words, starting autofill")
 
-    # Load ALL available wordlists for validation (not just user-selected ones)
-    # This ensures words from any wordlist are recognized as valid
-    all_valid_words = set()
-    wordlist_dir = Path(__file__).parent.parent.parent / "data" / "wordlists"
-    if wordlist_dir.exists():
-        for wl_file in wordlist_dir.rglob("*.txt"):
-            # Skip archive and custom directories
-            if "archive" in wl_file.parts or "custom" in wl_file.parts:
-                continue
-            try:
-                with open(wl_file) as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        word = line.split(";")[0].strip().upper()
-                        if word and word.isalpha() and 3 <= len(word) <= 21:
-                            all_valid_words.add(word)
-            except Exception:
-                pass  # Skip unreadable files
+    # Validate against the lists this run loaded (-w), not every file on disk: a word
+    # outside the user's chosen list is reported invalid when placed. Theme words and
+    # theme entries are added separately inside IterativeRepair.
+    all_valid_words = _validation_words(word_list)
 
     # Set up pause/resume wiring (DD1). `pause_controller` itself was already built
     # above, before wordlist loading — NOT rebuilt here, so the finally block's
