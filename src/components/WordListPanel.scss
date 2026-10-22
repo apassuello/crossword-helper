@@ -88,36 +88,56 @@
   .panel-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    // Stacked: the list (sidebar) gets two thirds, the detail pane one third.
+    // Equal auto rows left the sidebar ~240px at 1024x768, less than one
+    // category strip plus one list card (#45). The pane scrolls on its own.
+    grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
     gap: 2rem;
     height: calc(100% - 60px);
 
     @container xw-panel (min-width: 700px) {
       grid-template-columns: 320px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
     }
   }
 
   .sidebar {
     background: #f8f9fa;
     border-radius: 12px;
-    padding: 1.5rem;
-    overflow-y: auto;
+    padding: 1rem 1.25rem;
+
+    // Two stacked regions: a one-row category strip that never grows, and the
+    // list as its own scroll container taking the rest. The sidebar can be as
+    // short as ~240px (stacked layout in the bench rail at 1024x768), and a
+    // vertical category column used to fill all of it, pushing the first list
+    // row below the fold (#45).
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
 
     .categories {
-      margin-bottom: 2rem;
+      flex: 0 0 auto;
+      margin-bottom: 0.75rem;
 
       h3 {
         font-size: 0.9rem;
         text-transform: uppercase;
         color: #666;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
       }
 
       .category-list {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         gap: 0.5rem;
+        padding-bottom: 0.25rem;
 
         .category-btn {
+          flex: 0 0 auto;
+          white-space: nowrap;
           padding: 0.75rem 1rem;
           text-align: left;
           background: white;
@@ -141,6 +161,10 @@
     }
 
     .wordlist-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+
       h3 {
         font-size: 0.9rem;
         text-transform: uppercase;
