@@ -558,3 +558,48 @@ GET /api/wordlists/custom/qa-f1 -> 404
  "scroll_container":{"selector":".sidebar","rect":{"x":1373,"y":170,"w":395,"h":458},"scrollHeight":2702,"clientHeight":458,"overflowY":"auto"},
  "wheel":{"after_5_ticks_scrollTop":500,"list_top_after":132}}
 ```
+
+### A1 — Import example_11x11 through the Import tool
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import tool, "Choose JSON file", select the 11x11 example. 2. Read the preview. 3. Click "Import Grid".
+- Expected: UI label "Import Grid"; "Select a .json file exported from this tool"
+- Observed: The preview reads size 11x11 with a cell count and "Filled: 0"; after "Import Grid" the app switches to the Grid tool and shows an 11x11 grid with black squares (SVG with one group per cell).
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: —
+
+```
+preview: Size 11x11, Cells 121, Filled 0
+svg cell groups: 121 ; black cells: 20 ; white cells: 101
+```
+
+### A2 — Autofill with panel defaults on the 11x11 grid
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042
+- Steps: 1. Open Autofill; leave the defaults (Repair, 5 min, Min Score 50, Comprehensive Dictionary). 2. Click "Start Autofill". 3. Poll the SVG for empty white cells and the panel status for 3 minutes, then keep watching to the run's own end. 4. Click Cancel at the end.
+- Expected: "fill grids using CSP with backtracking, beam search, or iterative repair" (README.md:35-36); autofill works = run ends within 3 minutes and every white cell holds a letter (plan Task 7 criteria)
+- Observed: The run does not finish within 3 minutes and the grid is not filled: after the cap the grid still has empty white cells, the status reads "Filling" with a progress bar pinned at 90 from the first second, and the grid flickers between partial and cleared states. The server-side run ends at about its 5-minute timeout with conflicts left; the browser never notices: the panel keeps the running state and the Cancel button, with the last message "Repairing: 4 conflicts left", until the user clicks Cancel ("Cancelled by user"). The grid keeps a partial fill.
+- Evidence: evidence/A2.log · evidence/SERVE-run.log
+- Verdict: FAIL · Severity: S1 · Known: —
+
+```
+A2 timeline (fill id c65ddc8d-..., repair, timeout 300 s, min score 50, list Comprehensive Dictionary, grid example_11x11)
+11:21:06 POST /api/fill/with-progress -> 202 ; GET /api/progress/<id> (SSE) opened
+t+49s   cells: white=101 empty=64 black=20  progress "Filling ... slots", bar 90
+t+63s   cells: white=101 empty=101  (grid cleared again; letters flash then clear)
+t+100s  empty=64 ; t+130s empty=70
+t+186s  empty=70 ; message "Filling: 3/44 slots (4500 steps)" ; bar 90   <- 3-minute cap reached, run still going
+t+308s  empty=24 ; message "Repairing: 4 conflicts left" ; bar 90 ; CLI process (cli/crossword fill --timeout 300 --algorithm repair) already exited
+11:26:18 GET /api/progress/<id> -> 404 ("Task not found")   (server-side task gone)
+UI still shows running state + Cancel button; click Cancel -> "Cancelled by user / Reset"; grid keeps empty=24
+```
+
+### A-SBS — "Suggest Black Square" button in the Autofill panel
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042
+- Steps: 1. Open Autofill. 2. Inspect the "Suggest Black Square" button.
+- Expected: UI label "Suggest Black Square"
+- Observed: The button is disabled with the tooltip "lands in Task 20": a visible control for a capability that is not wired up. The server has routes for suggesting and applying black squares (probed in P5).
+- Evidence: —
+- Verdict: NOT-IMPLEMENTED · Severity: S3 · Known: —
+
+```
+button: text="Suggest Black Square" title="lands in Task 20" disabled=true
+```
