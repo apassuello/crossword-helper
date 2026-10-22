@@ -683,3 +683,21 @@ s=35   empty=0   Filled 44/44 slots - 5 entries may be invalid (use Verify Words
 A7 trie (label "Classic CSP"), timeout 2 min
 s=5    empty=101 Partial: 0/44 slots (0%) - Lower minimum score (currently 50) | Reset   (run already ended)
 ```
+
+### A8 — Theme-locked autofill
+- Phase: P3-autofill · Env: E1 · Viewport: 1800×1042 (see ENV-3)
+- Steps: 1. Import the 11x11 example. 2. Theme tool: upload a three-word file (all 11 letters). 3. Apply one suggested placement. 4. Autofill with Beam Search (the option that completes in A6), 2 min timeout. 5. Compare the themed column before and after.
+- Expected: "supports theme word locking" (README.md:36)
+- Observed: The applied theme word is untouched after the run and the slot count drops by one (the themed slot is excluded); every white cell is filled. The Beam Search status again warns that some entries may be invalid. Side observation for TH2: two of the three uploaded words get "No valid placements found" although the grid has other open full-width rows.
+- Evidence: evidence/A8.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+A8 theme-locked autofill, 11x11, beam, timeout 2 min
+Theme tool: upload T1-theme.txt (OBSERVATION, MIRRORIMAGE, PERFORMANCE) -> POST /api/theme/upload 200, POST /api/theme/suggest-placements 200
+Apply first OBSERVATION suggestion (Row 0, Col 5, down) -> POST /api/theme/apply-placement 200
+col 5 before apply: "..........."   after apply: "OBSERVATION"   empty white cells after apply: 90
+s=5   empty=58  col5=OBSERVATION  Beam search: slot 17/43 | 45%
+s=15  empty=20  col5=OBSERVATION  Beam search: slot 33/43 | 79%
+s=20  empty=0   col5=OBSERVATION  Filled 43/43 slots - 6 entries may be invalid (use Verify Words to check) | Reset
+```
