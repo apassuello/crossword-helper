@@ -128,3 +128,6 @@ data/wordlists/custom/*
 # Design bundle snapshot (D2:A) — port source for Tasks 9-12/20-21; local-only,
 # contains personal fill examples so MUST stay out of this public repo.
 .design-bundle/
+
+# Word-list caches are built per install (`build-cache`); a tracked one goes stale (#58)
+data/wordlists/**/*.pkl
