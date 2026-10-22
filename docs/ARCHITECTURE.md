@@ -242,7 +242,9 @@ callers check freely. Where each engine checks:
 
 - **CSP** (`Autofill`): in the backtracking loop on every 20th iteration (`self.iterations % 20`),
   plus during setup (`_check_pause_during_setup`) and inside AC-3 on every 128th arc.
-- **Repair** (`IterativeRepair`): at the top of every restart and on every conflict-repair step.
+- **Repair** (`IterativeRepair`): on `fill`, at the top of every restart and on every conflict-repair
+  step. On `resume` it is constructed without a pause controller, so a resumed repair fill never
+  observes a pause (#28).
 - **Beam** (`BeamSearchOrchestrator`): at the top of every iteration of the main loop, in both
   `fill()` and `_resume_fill()`. The bound is therefore **one iteration**, and one iteration has
   no absolute bound: it expands the whole beam for one slot and, when that dead-ends,
