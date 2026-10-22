@@ -4,8 +4,8 @@
 
 - Clone target sha: <filled in Task 2>
 - `origin/main` sha and `$MAIN` HEAD are in the fence below. origin/main lags local main until Arthur pushes; the friend's reinstall gets origin.
-- E1 python: <filled in Task 1>
-- E1 node: <filled in Task 1>
+- E1 python: CPython 3.13.7 (cpython-3.13.7-macos-aarch64-none, uv download only)
+- E1 node: node-v22.23.4-darwin-arm64.tar.gz (SHA-256 verified against SHASUMS256.txt)
 - README line numbers checked against the table below: R5 is at line 62 (table said 61–62) and R19's quoted string is at `setup.sh:67` (table said 66); the table is corrected accordingly.
 
 ```
@@ -58,3 +58,51 @@ GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
 - Verdict: <PASS|FAIL|BLOCKED|NOT-IMPLEMENTED|UNSPECIFIED|NOT-TESTABLE> · Severity: <S1|S2|S3|S4|—> · Known: <#NN|I<n>|—>
 (fenced command + output, when there is one)
 -->
+
+### ENV-1 — E1 clean environment (CPython 3.13.7 + Node 22)
+- Phase: P-ENV · Env: E1 · Viewport: —
+- Steps: 1. `uv python install 3.13.7` with `UV_PYTHON_INSTALL_DIR` under the sandbox. 2. Download Node 22 tarball, verify SHA-256, unpack. 3. Write the sandbox E1 wrapper script and run the probe through it.
+- Expected: "python3 --version prints Python 3.13.7; which -a python3 node npm print only paths under $SB/tools" (plan Task 1 criteria, spec §1.3–§1.5)
+- Observed: Every criterion holds except the literal "only paths under $SB/tools": `which -a python3` also lists `/usr/bin/python3` as its second entry, behind the E1 interpreter. The plan's own mandated PATH includes `/usr/bin`, so the criterion contradicts the plan; the first resolution is the E1 interpreter and the stub is shadowed. `uv` is absent. Env contains exactly HOME, LANG, PATH, PWD, SHLVL, TERM, _.
+- Evidence: evidence/ENV-1.log · evidence/ENV-1-uv.log · evidence/ENV-1-sha.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+node-v22.23.4-darwin-arm64.tar.gz: OK
+Python 3.13.7
+/private/tmp/crossword-fresh/tools/python/cpython-3.13.7-macos-aarch64-none/bin/python3
+/usr/bin/python3
+/private/tmp/crossword-fresh/tools/node/bin/node
+/private/tmp/crossword-fresh/tools/node/bin/npm
+Package Version
+------- -------
+pip     24.3.1
+v22.23.4
+HOME=/private/tmp/crossword-fresh/home
+_=/usr/bin/env
+HOME=/private/tmp/crossword-fresh/home
+LANG=en_US.UTF-8
+PATH=/private/tmp/crossword-fresh/tools/node/bin:/private/tmp/crossword-fresh/tools/python/cpython-3.13.7-macos-aarch64-none/bin:/usr/bin:/bin:/usr/sbin:/sbin
+PWD=/private/tmp/crossword-fresh/tools
+SHLVL=1
+TERM=xterm
+uv absent (good)
+```
+
+### ENV-2 — E2 clean environment (Xcode CLT /usr/bin/python3 + Node 22)
+- Phase: P-ENV · Env: E2 · Viewport: —
+- Steps: 1. Write the sandbox E2 wrapper script (PATH without the E1 python segment). 2. Run the probe through it.
+- Expected: "python3 --version prints Python 3.9.6 and which python3 prints /usr/bin/python3" (plan Task 1 criteria, spec §1.4)
+- Observed: Python 3.9.6 at /usr/bin/python3; node under the sandbox tools; HOME is the sandbox home; uv absent.
+- Evidence: evidence/ENV-2.log
+- Verdict: PASS · Severity: — · Known: —
+
+```
+Python 3.9.6
+/usr/bin/python3
+/private/tmp/crossword-fresh/tools/node/bin/node
+/private/tmp/crossword-fresh/tools/node/bin/npm
+v22.23.4
+HOME=/private/tmp/crossword-fresh/home
+uv absent (good)
+```
