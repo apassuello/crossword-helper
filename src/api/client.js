@@ -44,8 +44,9 @@ async function parseBody(response) {
  * Rule 4: non-envelope code synthesis — 409 -> "UNSOLVABLE_EDITS", else "HTTP_<status>".
  * Rule 5: `details` precedence chain — top-level `data.details`, else nested
  *         `err.details`, else `data.conflicts` (the apply-placement 400 shape,
- *         which has no `details` key of its own). Whichever is present first
- *         wins; the others are never consulted.
+ *         which has no `details` key of its own), else `{skipped, reasons}`
+ *         when `data.reasons` is present (the word-list import 400). Whichever
+ *         is present first wins; the others are never consulted.
  */
 function normalizeError(status, data) {
   const body = data || {};
