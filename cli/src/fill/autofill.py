@@ -538,7 +538,7 @@ class Autofill:
         """
         best_result = None
         original_timeout = self.timeout
-        original_grid_state = self.grid.to_dict()
+        original_grid_state = self.grid.to_dict(include_locks=True)
 
         for attempt in range(attempts):
             # Reset grid to original state

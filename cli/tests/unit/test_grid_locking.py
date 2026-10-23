@@ -230,3 +230,111 @@ class TestCellLocking:
         # Try to place a conflicting crossing word
         with pytest.raises(ValueError, match="would overwrite locked cell"):
             grid.place_word("ABCD", 0, 3, "down", lock=False)  # Would put 'C' where 'E' is at (2,3)
+
+    # ------------------------------------------------------------------
+    # novice-readiness spec 0.2.4 §2.1 (C12, C10, D3, D2): normative rows
+    # fd1-fd9, td1-td4, sl1-sl3, bs1-bs3 of Task 2.1.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _g33_cat(**extra):
+        """G33 with CAT across row 0; ``extra`` keys are merged into the dict."""
+        data = {"size": 3, "grid": [["C", "A", "T"], [".", ".", "."], [".", ".", "."]]}
+        data.update(extra)
+        return data
+
+    def _fd1_grid(self):
+        return Grid.from_dict(self._g33_cat(locked=[[0, 0], [0, 2]]), strict_size=False)
+
+    def test_fd1_from_dict_applies_locked(self):
+        assert self._fd1_grid().locked_cells == {(0, 0), (0, 2)}
+
+    def test_fd2_from_dict_empty_locked_locks_nothing(self):
+        grid = Grid.from_dict(self._g33_cat(locked=[]), strict_size=False)
+        assert grid.locked_cells == set()
+
+    def test_fd3_from_dict_absent_locked_locks_nothing(self):
+        grid = Grid.from_dict(self._g33_cat(), strict_size=False)
+        assert grid.locked_cells == set()
+
+    def test_fd4_from_dict_out_of_bounds_raises(self):
+        with pytest.raises(ValueError):
+            Grid.from_dict(self._g33_cat(locked=[[3, 0]]), strict_size=False)
+
+    def test_fd5_from_dict_negative_index_raises(self):
+        # A negative index is out of bounds, not Python negative indexing.
+        with pytest.raises(ValueError):
+            Grid.from_dict(self._g33_cat(locked=[[-1, 0]]), strict_size=False)
+
+    def test_fd6_from_dict_locked_empty_cell_raises(self):
+        with pytest.raises(ValueError):
+            Grid.from_dict(self._g33_cat(locked=[[1, 1]]), strict_size=False)
+
+    def test_fd7_from_dict_locked_black_cell_raises(self):
+        data = {"size": 3, "grid": [["C", "A", "T"], [".", "#", "."], [".", ".", "."]], "locked": [[1, 1]]}
+        with pytest.raises(ValueError):
+            Grid.from_dict(data, strict_size=False)
+
+    @pytest.mark.parametrize("locked", [[[0]], [[0, 0, 1]], [["0", 0]], "0,0"])
+    def test_fd8_from_dict_malformed_locked_raises(self, locked):
+        with pytest.raises(ValueError):
+            Grid.from_dict(self._g33_cat(locked=locked), strict_size=False)
+
+    def test_fd9_from_dict_duplicate_entries_collapse(self):
+        grid = Grid.from_dict(self._g33_cat(locked=[[0, 0], [0, 0]]), strict_size=False)
+        assert grid.locked_cells == {(0, 0)}
+
+    def test_td1_to_dict_default_has_no_locked_key(self):
+        assert set(self._fd1_grid().to_dict().keys()) == {"size", "grid", "black_squares", "is_symmetric"}
+
+    def test_td2_to_dict_include_locks_lists_locked_cells(self):
+        assert self._fd1_grid().to_dict(include_locks=True)["locked"] == [[0, 0], [0, 2]]
+
+    def test_td3_to_dict_include_locks_empty(self):
+        grid = Grid.from_dict(self._g33_cat(locked=[]), strict_size=False)
+        assert grid.to_dict(include_locks=True)["locked"] == []
+
+    def test_td4_locks_survive_clone_and_dict_round_trip(self):
+        grid = self._fd1_grid()
+        cloned = grid.clone()
+        rebuilt = Grid.from_dict(grid.to_dict(include_locks=True), strict_size=False)
+        for other in (cloned, rebuilt):
+            assert other.locked_cells == {(0, 0), (0, 2)}
+            assert other.to_dict()["grid"] == grid.to_dict()["grid"]
+
+    @pytest.mark.parametrize("letter", ["C", "c"])
+    def test_sl1_set_letter_same_letter_on_locked_cell_succeeds(self, letter):
+        grid = self._fd1_grid()
+        grid.set_letter(0, 0, letter)
+        assert grid.get_cell(0, 0) == "C"
+
+    def test_sl2_set_letter_different_letter_on_locked_cell_raises(self):
+        grid = self._fd1_grid()
+        with pytest.raises(ValueError):
+            grid.set_letter(0, 0, "D")
+        assert grid.get_cell(0, 0) == "C"
+
+    def test_sl3_set_letter_on_unlocked_cell_succeeds(self):
+        grid = self._fd1_grid()
+        grid.set_letter(1, 1, "D")
+        assert grid.get_cell(1, 1) == "D"
+
+    def test_bs1_set_black_square_on_locked_cell_raises(self):
+        grid = self._fd1_grid()
+        with pytest.raises(ValueError):
+            grid.set_black_square(0, 0)
+        assert grid.get_cell(0, 0) == "C"
+        assert grid.get_cell(2, 2) == "."
+
+    def test_bs2_set_black_square_with_locked_partner_raises(self):
+        grid = self._fd1_grid()
+        with pytest.raises(ValueError):
+            grid.set_black_square(2, 0)  # 180-degree partner is (0, 2), locked
+        assert grid.get_cell(2, 0) == "."
+        assert grid.get_cell(0, 2) == "T"
+
+    def test_bs3_set_black_square_without_symmetry_checks_only_the_cell(self):
+        grid = self._fd1_grid()
+        grid.set_black_square(2, 0, enforce_symmetry=False)
+        assert grid.get_cell(2, 0) == "#"
+        assert grid.get_cell(0, 2) == "T"

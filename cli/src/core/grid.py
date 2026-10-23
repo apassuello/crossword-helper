@@ -57,10 +57,22 @@ class Grid:
             col: Column index (0-based)
             enforce_symmetry: If True, also set symmetric position
 
+        A locked cell is never blacked out: the call raises when the cell is
+        locked or, with ``enforce_symmetry``, when its 180° partner is, before
+        either cell is written (novice-readiness spec 0.2.4 §2.1 (D2)).
+
         Raises:
-            ValueError: If position is out of bounds
+            ValueError: If position is out of bounds, or the cell (or its
+                symmetric partner, when enforced) is locked
         """
         self._validate_position(row, col)
+
+        if (row, col) in self.locked_cells:
+            raise ValueError(f"Cannot place a black square on locked cell ({row}, {col})")
+        if enforce_symmetry:
+            partner = (self.size - 1 - row, self.size - 1 - col)
+            if partner in self.locked_cells:
+                raise ValueError(f"Cannot place a black square at ({row}, {col}): its symmetric partner {partner} is locked")
 
         self.cells[row, col] = BLACK_SQUARE
 
@@ -83,8 +95,13 @@ class Grid:
             letter: Single letter A-Z
             lock: If True, lock this cell so it cannot be overwritten
 
+        A locked cell keeps its letter: setting the same letter (any case)
+        succeeds, a different one raises and leaves the cell unchanged
+        (novice-readiness spec 0.2.4 §2.1 (D3)).
+
         Raises:
-            ValueError: If position is out of bounds or letter invalid
+            ValueError: If position is out of bounds, letter invalid, or the
+                cell is locked and holds a different letter
         """
         self._validate_position(row, col)
 
@@ -94,6 +111,9 @@ class Grid:
         upper = letter.upper()
         if not ("A" <= upper <= "Z"):
             raise ValueError(f"Letter must be A-Z, got '{letter}' (non-ASCII)")
+
+        if (row, col) in self.locked_cells and self.get_cell(row, col) != upper:
+            raise ValueError(f"Cannot overwrite locked cell ({row}, {col}): holds '{self.get_cell(row, col)}', got '{upper}'")
 
         # Encode: A=1, B=2, ..., Z=26
         self.cells[row, col] = ord(upper) - ord("A") + 1
@@ -272,9 +292,18 @@ class Grid:
 
         return slots
 
-    def to_dict(self) -> Dict:
+    def to_dict(self, include_locks: bool = False) -> Dict:
         """
         Export grid to dictionary format.
+
+        The default output carries no locks, so ``-o`` files, pause state and
+        progress snapshots are unchanged. Only the two solver round trips set
+        ``include_locks``, which adds ``"locked"``: the locked cells as
+        ``[row, col]`` lists sorted row-major, ``[]`` when none
+        (novice-readiness spec 0.2.4 §2.1 (C10)).
+
+        Args:
+            include_locks: If True, add the ``"locked"`` key
 
         Returns:
             Dictionary with grid data
@@ -286,12 +315,15 @@ class Grid:
                 row_data.append(self.get_cell(row, col))
             grid_2d.append(row_data)
 
-        return {
+        data = {
             "size": self.size,
             "grid": grid_2d,
             "black_squares": len(self.get_black_squares()),
             "is_symmetric": self.check_symmetry(),
         }
+        if include_locks:
+            data["locked"] = [[row, col] for row, col in sorted(self.locked_cells)]
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict, strict_size: bool = True) -> "Grid":
@@ -301,6 +333,12 @@ class Grid:
         Supports both webapp and CLI formats:
         - webapp format: {"grid": [[...]], "size": N}
         - CLI format: {"grid": [[...]], "size": N, "black_squares": M, "is_symmetric": bool}
+
+        An optional ``"locked": [[r, c], ...]`` key is applied in its own pass
+        after every cell is populated; absent, ``locked_cells`` is empty. Each
+        entry must be a 2-element list of ints naming an in-bounds cell that
+        holds a letter, else ``ValueError`` -- the list is never trimmed.
+        Duplicate entries collapse (novice-readiness spec 0.2.4 §2.1 (C12)).
 
         Args:
             data: Dictionary with 'size' and 'grid' keys
@@ -367,7 +405,36 @@ class Grid:
                     # Unknown cell value - treat as empty with warning
                     grid.cells[row, col] = EMPTY_CELL
 
+        # Locks: a separate pass, after every cell is populated (C12).
+        if "locked" in data:
+            grid.locked_cells = grid._parse_locked(data["locked"])
+
         return grid
+
+    def _parse_locked(self, locked) -> Set[Tuple[int, int]]:
+        """
+        Validate a ``"locked"`` value and return it as a set of cells.
+
+        Raises ``ValueError`` on any malformed, out-of-bounds or letterless
+        entry rather than dropping it (novice-readiness spec 0.2.4 §2.1 (C12)).
+        """
+        if not isinstance(locked, list):
+            raise ValueError(f"'locked' must be a list of [row, col] pairs, got {locked!r}")
+        cells: Set[Tuple[int, int]] = set()
+        for entry in locked:
+            if (
+                not isinstance(entry, list)
+                or len(entry) != 2
+                or not all(isinstance(v, int) and not isinstance(v, bool) for v in entry)
+            ):
+                raise ValueError(f"'locked' entry must be a [row, col] pair of ints, got {entry!r}")
+            row, col = entry
+            if not (0 <= row < self.size and 0 <= col < self.size):
+                raise ValueError(f"'locked' cell ({row}, {col}) is out of bounds for {self.size}×{self.size} grid")
+            if not self.has_letter(row, col):
+                raise ValueError(f"'locked' cell ({row}, {col}) holds no letter")
+            cells.add((row, col))
+        return cells
 
     def _validate_position(self, row: int, col: int):
         """Validate that position is within grid bounds."""
