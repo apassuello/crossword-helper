@@ -29,8 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from src.core.cell_types import WILDCARD
-from src.core.grid import Grid
+from ..core.cell_types import WILDCARD
+from ..core.grid import Grid
 
 
 @dataclass(frozen=True)

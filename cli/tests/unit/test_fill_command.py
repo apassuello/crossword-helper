@@ -11,6 +11,7 @@ Contract, deliberate:
   exit code.
 - exit 1 - the run could not happen or could not finish: bad arguments,
   missing files, invalid theme entries, an out-of-range timeout.
+- exit 3 - blocked by pre-flight; stdout JSON carries "blocked": true
 
 A caller must never infer fill quality from the exit code.
 """
@@ -70,9 +71,13 @@ def small_grid():
 
 @pytest.fixture
 def tiny_wordlist():
-    """Too few words to fill the grid, so the fill completes but does not succeed."""
+    """Too few words to fill the grid, so the fill completes but does not succeed.
+
+    It holds a word of every slot length (3, 4, 5): a length with no word at all
+    is a pre-flight block (exit 3, spec 0.2.4 §2.1 B2), not a completed fill.
+    """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write("CAT\nDOG\nEMU\nABCDE\nFGHIJ\n")
+        f.write("CAT\nDOG\nEMU\nABCD\nABCDE\nFGHIJ\n")
         path = f.name
     yield path
     if os.path.exists(path):
@@ -605,3 +610,281 @@ def test_pc9_subprocess_keeps_locked_letter(tmp_path, extra, timeout):
     result = last_json(stdout)
     assert result is not None, (stdout, stderr)
     assert result["grid"][0][0] == "C"
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight: dead slots, case 1, B2, case 2, the blocked result and exit 3
+# novice-readiness spec 0.2.4 §2.1 (C1, C4, C9, M2, B2)
+# ---------------------------------------------------------------------------
+
+L2_LINES = "CRANE;50\nSLATE;50\n"
+L3_LINES = "CARE;50\n"
+L4_LINES = "COT;50\nCAT;50\nART;50\nAHA;50\nBOA;50\nBIT;50\n"
+L5_LINES = "COD;50\nALE;50\nBEE;50\nOLE;50\nDEE;50\n"
+
+G33_ROWS = [[".", ".", "."], [".", ".", "."], [".", ".", "."]]
+G44_ROWS = [["#", ".", ".", "."], [".", ".", ".", "."], [".", ".", ".", "."], [".", ".", ".", "#"]]
+BLOCKED_KEYS = {"success", "blocked", "reason", "blocked_cells", "blocked_slots", "off_list_cells", "stuck_cells", "grid"}
+
+
+def _pf_fill(tmp_path, rows, lines, *extra, locked=None, json_output=True, run_args=()):
+    grid_path = tmp_path / "grid.json"
+    data = {"size": len(rows), "grid": rows}
+    if locked is not None:
+        data["locked"] = locked
+    grid_path.write_text(json.dumps(data))
+    words = tmp_path / "words.txt"
+    words.write_text(lines)
+    args = [str(grid_path), "-w", str(words), "--allow-nonstandard", "-a", "trie", "-t", "10"]
+    if json_output:
+        args.append("--json-output")
+    stdout, stderr, code = run_fill(args + list(extra))
+    return stdout, stderr, code, grid_path
+
+
+def _rows(base, **cells):
+    rows = [list(r) for r in base]
+    for key, letter in cells.items():
+        rows[int(key[1])][int(key[2])] = letter
+    return rows
+
+
+PF1_ROWS = _rows(G33_ROWS, c00="Q", c01="X")
+
+
+def test_pf1_case_1_blocked_result(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, PF1_ROWS, L1_LINES)
+    assert code == 3, (stdout, stderr)
+    result = json.loads(stdout)
+    assert set(result) == BLOCKED_KEYS
+    assert result["success"] is False and result["blocked"] is True
+    assert result["reason"] == "no_word_fits"
+    assert result["blocked_slots"] == [{"row": 0, "col": 0, "direction": "across", "length": 3, "pattern": "QX?"}]
+    assert result["blocked_cells"] == [[0, 0], [0, 1]]
+    assert result["off_list_cells"] == []
+    assert result["stuck_cells"] == []
+    assert result["grid"] == [["Q", "X", "."], [".", ".", "."], [".", ".", "."]]
+
+
+def test_pf2_text_mode_line(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, PF1_ROWS, L1_LINES, json_output=False)
+    assert code == 3, (stdout, stderr)
+    assert "Blocked: no word fits QX? at 0,0 across" in stdout.splitlines()
+
+
+def test_pf3_unlocked_letters_take_no_part(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, PF1_ROWS, L1_LINES, locked=[])
+    assert code != 3, (stdout, stderr)
+
+
+def test_pf4_partial_lock_not_blocked(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, PF1_ROWS, L1_LINES, locked=[[0, 0]])
+    assert code != 3, (stdout, stderr)
+
+
+def test_pf5_b2_empty_grid(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, G33_ROWS, L2_LINES)
+    assert code == 3, (stdout, stderr)
+    result = json.loads(stdout)
+    assert result["reason"] == "no_word_of_length"
+    assert result["blocked_cells"] == []
+    assert [(s["row"], s["col"], s["direction"], s["length"], s["pattern"]) for s in result["blocked_slots"]] == [
+        (0, 0, "across", 3, "???"),
+        (1, 0, "across", 3, "???"),
+        (2, 0, "across", 3, "???"),
+        (0, 0, "down", 3, "???"),
+        (0, 1, "down", 3, "???"),
+        (0, 2, "down", 3, "???"),
+    ]
+
+
+def test_pf6_b2_text_mode_one_line(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, G33_ROWS, L2_LINES, json_output=False)
+    assert code == 3, (stdout, stderr)
+    lines = [ln for ln in stdout.splitlines() if ln.startswith("Blocked")]
+    assert lines == ["Blocked: the selected word lists have no words of length 3"]
+
+
+def _pf7_8(tmp_path, rows):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L3_LINES)
+    assert code == 3, (stdout, stderr)
+    return json.loads(stdout)
+
+
+def test_pf7_pf8_b2_with_and_without_typed_letter(tmp_path):
+    typed = _pf7_8(tmp_path, _rows(G44_ROWS, c11="A"))
+    empty = _pf7_8(tmp_path, G44_ROWS)
+    assert typed["reason"] == "no_word_of_length"
+    assert typed["blocked_cells"] == []
+    assert [(s["row"], s["col"], s["direction"], s["length"], s["pattern"]) for s in typed["blocked_slots"]] == [
+        (0, 1, "across", 3, "???"),
+        (3, 0, "across", 3, "???"),
+        (1, 0, "down", 3, "???"),
+        (0, 3, "down", 3, "???"),
+    ]
+    typed.pop("grid")
+    empty.pop("grid")
+    assert typed == empty
+
+
+def test_pf9_b2_with_empty_lock_set(tmp_path):
+    rows = _rows(G33_ROWS, c00="C")
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L2_LINES, "--no-lock-filled")
+    assert code == 3, (stdout, stderr)
+    result = json.loads(stdout)
+    assert result["reason"] == "no_word_of_length"
+    assert result["blocked_cells"] == []
+    assert len(result["blocked_slots"]) == 6
+    assert all(s["pattern"] == "???" for s in result["blocked_slots"])
+
+
+def _progress_events(stderr):
+    events = []
+    for line in stderr.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "progress":
+            events.append(event)
+    return events
+
+
+def test_pf10_case_2_warning_and_event(tmp_path):
+    rows = _rows(G33_ROWS, c00="C", c01="A", c02="B")
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L5_LINES)
+    assert code != 3, (stdout, stderr)
+    text = "Typed words not in the selected word lists: CAB"
+    assert text in json.loads(stdout)["warnings"]
+    events = [e for e in _progress_events(stderr) if "off_list_cells" in (e.get("data") or {})]
+    assert len(events) == 1
+    assert events[0]["status"] == "running"
+    assert events[0]["data"] == {"off_list_cells": [[0, 0], [0, 1], [0, 2]], "warning": text}
+
+
+def test_pf11_two_off_list_words(tmp_path):
+    rows = _rows(G33_ROWS, c00="C", c01="A", c02="B", c20="T", c21="A", c22="T")
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L4_LINES)
+    assert code != 3, (stdout, stderr)
+    assert "Typed words not in the selected word lists: CAB, TAT" in json.loads(stdout)["warnings"]
+
+
+def test_pf12_no_lock_filled_means_no_case_2(tmp_path):
+    rows = _rows(G33_ROWS, c00="C", c01="A", c02="B")
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L5_LINES, "--no-lock-filled")
+    assert code != 3, (stdout, stderr)
+    assert not any("Typed words not in" in w for w in json.loads(stdout).get("warnings", []))
+    assert not [e for e in _progress_events(stderr) if "off_list_cells" in (e.get("data") or {})]
+
+
+def test_pf13_refuted_without_dead_slot_proceeds(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, G33_ROWS, "ABA;50\n")
+    assert code != 3, (stdout, stderr)
+
+
+def test_pf15_readme_argv_imports_and_blocks(tmp_path):
+    grid = json.loads(open(os.path.join(PROJECT_ROOT, "data", "grids", "example_15x15.json")).read())
+    grid["grid"][0][0] = "Q"
+    grid["grid"][0][1] = "X"
+    grid_copy = tmp_path / "example_15x15.json"
+    grid_copy.write_text(json.dumps(grid))
+    out_path = tmp_path / "filled.json"
+    stdout, stderr, code = run_fill(
+        [str(grid_copy), "-w", "data/wordlists/comprehensive.txt", "-t", "180", "--min-score", "30", "-o", str(out_path)]
+    )
+    assert code == 3, (stdout, stderr)
+    assert any(ln.startswith("Blocked: no word fits QX") for ln in stdout.splitlines()), stdout
+    assert "ModuleNotFoundError" not in stderr
+
+
+def test_pf16_resume_never_calls_preflight(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("preflight must not run on --resume")
+
+    monkeypatch.setattr(cli_module, "preflight", _boom)
+    state_path, words = _paused_state_file(tmp_path)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "fill",
+            "--resume",
+            state_path,
+            "-w",
+            words,
+            "-a",
+            "trie",
+            "-t",
+            "20",
+            "-o",
+            str(tmp_path / "out.json"),
+            "--json-output",
+        ],
+    )
+    assert not isinstance(result.exception, AssertionError), result.output
+    assert result.exit_code == 0, (result.output, result.exception)
+
+
+def test_pf16_control_fresh_run_calls_preflight(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    calls = []
+    real = cli_module.preflight
+
+    def _spy(grid, word_list):
+        calls.append(1)
+        return real(grid, word_list)
+
+    monkeypatch.setattr(cli_module, "preflight", _spy)
+    grid_path = tmp_path / "g33.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": PF1_ROWS}))
+    words = tmp_path / "l1.txt"
+    words.write_text(L1_LINES)
+    CliRunner().invoke(cli_module.cli, ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output"])
+    assert calls == [1]
+
+
+def test_pf17_b2_length_block_holding_locked_letter(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, _rows(G33_ROWS, c00="Q"), L2_LINES)
+    assert code == 3, (stdout, stderr)
+    result = json.loads(stdout)
+    assert result["reason"] == "no_word_of_length"
+    assert result["blocked_cells"] == []
+    assert len(result["blocked_slots"]) == 6
+    assert all(s["length"] == 3 for s in result["blocked_slots"])
+    by_key = {(s["row"], s["col"], s["direction"]): s["pattern"] for s in result["blocked_slots"]}
+    assert by_key[(0, 0, "across")] == "Q??" and by_key[(0, 0, "down")] == "Q??"
+    assert sum(1 for p in by_key.values() if p == "???") == 4
+
+
+@pytest.mark.parametrize("json_output", [True, False], ids=["json", "text"])
+def test_pf18_blocked_writes_nothing(tmp_path, json_output):
+    out = tmp_path / "out.json"
+    grid_path = tmp_path / "grid.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": PF1_ROWS}))
+    before = grid_path.read_bytes()
+    words = tmp_path / "words.txt"
+    words.write_text(L1_LINES)
+    args = [str(grid_path), "-w", str(words), "--allow-nonstandard", "-a", "trie", "-t", "10", "-o", str(out)]
+    if json_output:
+        args.append("--json-output")
+    stdout, stderr, code = run_fill(args)
+    assert code == 3, (stdout, stderr)
+    assert not out.exists()
+    assert grid_path.read_bytes() == before
+
+
+def test_pf18_text_mode_without_o_leaves_input_file(tmp_path):
+    grid_path = tmp_path / "grid.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": PF1_ROWS}))
+    before = grid_path.read_bytes()
+    words = tmp_path / "words.txt"
+    words.write_text(L1_LINES)
+    stdout, stderr, code = run_fill([str(grid_path), "-w", str(words), "--allow-nonstandard", "-a", "trie", "-t", "10"])
+    assert code == 3, (stdout, stderr)
+    assert grid_path.read_bytes() == before

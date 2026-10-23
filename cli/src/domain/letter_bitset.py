@@ -26,8 +26,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from src.domain.wordorder import canonical_words
-from src.fill.word_list import ScoredWord, WordList
+
+from ..fill.word_list import ScoredWord, WordList
+from .wordorder import canonical_words
 
 _CHUNK_BITS = 64
 _FULL_CHUNK_MASK = np.uint64(0xFFFFFFFFFFFFFFFF)

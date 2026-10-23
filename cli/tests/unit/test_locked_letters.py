@@ -6,7 +6,18 @@ novice-readiness spec 0.2.4 §2.1 (C12): which input letters `fill` locks.
 import pytest
 
 from cli.src.core.grid import Grid
-from cli.src.fill.locked_letters import apply_lock_mode, cell_list, input_lock_letters
+from cli.src.domain.fillability import assess
+from cli.src.domain.slot_model import SlotModel, fixed_from_grid, pattern
+from cli.src.fill.locked_letters import (
+    OFF_LIST_WARNING_PREFIX,
+    apply_lock_mode,
+    blocked_text_lines,
+    cell_list,
+    input_lock_letters,
+    off_list_warning,
+    preflight,
+)
+from cli.src.fill.word_list import WordList
 
 
 def _g33():
@@ -103,3 +114,161 @@ def test_postcondition_message_is_pinned():
     from cli.src.fill.locked_letters import POSTCONDITION_MESSAGE
 
     assert POSTCONDITION_MESSAGE == "Autofill changed a locked letter; nothing was written."
+
+
+# ---------------------------------------------------------------------------
+# preflight / off_list_warning / blocked_text_lines
+# novice-readiness spec 0.2.4 §2.1 (C1, C4, M2, B2)
+# ---------------------------------------------------------------------------
+
+L1 = ["CAT", "COT", "CUT", "QUA", "XIS"]
+L2 = ["CRANE", "SLATE"]
+L5 = ["COD", "ALE", "BEE", "OLE", "DEE"]
+
+
+def _wl(words):
+    return WordList([(w, 50) for w in words])
+
+
+def _grid(rows, locked=None):
+    """Build a Grid from rows of '.', '#' and letters; lock every letter unless `locked` is given."""
+    grid = Grid(len(rows), validate_size=False)
+    for r, row in enumerate(rows):
+        for c, ch in enumerate(row):
+            if ch == "#":
+                grid.set_black_square(r, c, enforce_symmetry=False)
+            elif ch != ".":
+                grid.set_letter(r, c, ch)
+    grid.locked_cells = (
+        {(r, c) for r, row in enumerate(rows) for c, ch in enumerate(row) if ch not in ".#"} if locked is None else set(locked)
+    )
+    return grid
+
+
+G33_QX = [["Q", "X", "."], [".", ".", "."], [".", ".", "."]]
+G33_EMPTY = [[".", ".", "."], [".", ".", "."], [".", ".", "."]]
+G44 = [["#", ".", ".", "."], [".", ".", ".", "."], [".", ".", ".", "."], [".", ".", ".", "#"]]
+
+
+def test_preflight_case_1_dead_slot_through_locked_cells():
+    result = preflight(_grid(G33_QX), _wl(L1))
+    assert result.reason == "no_word_fits"
+    assert result.blocked_cells == [[0, 0], [0, 1]]
+    assert result.blocked_slots == [{"row": 0, "col": 0, "direction": "across", "length": 3, "pattern": "QX?"}]
+    assert result.off_list_cells == []
+    assert result.off_list_words == []
+
+
+def test_preflight_unlocked_letters_take_no_part():
+    result = preflight(_grid(G33_QX, locked=[]), _wl(L1))
+    assert result.reason is None
+
+
+def test_preflight_partial_lock_matches():
+    assert preflight(_grid(G33_QX, locked=[(0, 0)]), _wl(L1)).reason is None
+
+
+def test_preflight_b2_empty_grid():
+    result = preflight(_grid(G33_EMPTY), _wl(L2))
+    assert result.reason == "no_word_of_length"
+    assert result.blocked_cells == []
+    assert [(s["row"], s["col"], s["direction"], s["length"], s["pattern"]) for s in result.blocked_slots] == [
+        (0, 0, "across", 3, "???"),
+        (1, 0, "across", 3, "???"),
+        (2, 0, "across", 3, "???"),
+        (0, 0, "down", 3, "???"),
+        (0, 1, "down", 3, "???"),
+        (0, 2, "down", 3, "???"),
+    ]
+
+
+def test_preflight_b2_length_block_holding_locked_letter_goes_to_b2():
+    rows = [["Q", ".", "."], [".", ".", "."], [".", ".", "."]]
+    result = preflight(_grid(rows), _wl(L2))
+    assert result.reason == "no_word_of_length"
+    assert result.blocked_cells == []
+    assert len(result.blocked_slots) == 6
+    patterns = {(s["row"], s["col"], s["direction"]): s["pattern"] for s in result.blocked_slots}
+    assert patterns[(0, 0, "across")] == "Q??"
+    assert patterns[(0, 0, "down")] == "Q??"
+    assert patterns[(1, 0, "across")] == "???"
+
+
+def test_preflight_b2_with_typed_letter_on_g44():
+    rows = [list(r) for r in G44]
+    rows[1][1] = "A"
+    result = preflight(_grid(rows), _wl(["CARE"]))
+    assert result.reason == "no_word_of_length"
+    assert result.blocked_cells == []
+    assert [(s["row"], s["col"], s["direction"], s["length"], s["pattern"]) for s in result.blocked_slots] == [
+        (0, 1, "across", 3, "???"),
+        (3, 0, "across", 3, "???"),
+        (1, 0, "down", 3, "???"),
+        (0, 3, "down", 3, "???"),
+    ]
+
+
+def test_preflight_refuted_without_dead_slot_is_not_blocked():
+    """P10: only the arc-consistency cascade refutes the empty grid; no slot is dead by itself."""
+    grid = _grid(G33_EMPTY)
+    index = preflight(grid, _wl(["ABA"])).index
+    model = SlotModel.from_grid(grid)
+    fixed = fixed_from_grid(grid)
+    assert assess(model, index, fixed, min_score=0).refuted is True
+    assert all(index.count_matches(pattern(model, s.id, fixed), min_score=0) == 1 for s in model.slots)
+    assert preflight(grid, _wl(["ABA"])).reason is None
+
+
+def test_preflight_case_2_off_list_typed_word():
+    rows = [["C", "A", "B"], [".", ".", "."], [".", ".", "."]]
+    result = preflight(_grid(rows), _wl(L5))
+    assert result.reason is None
+    assert result.off_list_cells == [[0, 0], [0, 1], [0, 2]]
+    assert result.off_list_words == ["CAB"]
+
+
+def test_preflight_case_2_two_words_in_slot_model_order():
+    rows = [["C", "A", "B"], [".", ".", "."], ["T", "A", "T"]]
+    result = preflight(_grid(rows), _wl(["COT", "CAT", "ART", "AHA", "BOA", "BIT"]))
+    assert result.off_list_words == ["CAB", "TAT"]
+
+
+def test_preflight_empty_lock_set_has_no_off_list():
+    rows = [["C", "A", "B"], [".", ".", "."], [".", ".", "."]]
+    result = preflight(_grid(rows, locked=[]), _wl(L5))
+    assert result.off_list_cells == [] and result.off_list_words == []
+
+
+def test_preflight_never_mutates_the_grid():
+    grid = _grid(G33_QX, locked=[(0, 0)])
+    before = (grid.cells.copy(), set(grid.locked_cells))
+    preflight(grid, _wl(L1))
+    assert (grid.cells == before[0]).all() and grid.locked_cells == before[1]
+
+
+def test_off_list_warning_text():
+    assert OFF_LIST_WARNING_PREFIX == "Typed words not in the selected word lists: "
+    assert off_list_warning(["CAB", "TAT"]) == "Typed words not in the selected word lists: CAB, TAT"
+
+
+def test_blocked_text_lines_no_word_fits():
+    result = preflight(_grid(G33_QX), _wl(L1))
+    assert blocked_text_lines(result) == ["Blocked: no word fits QX? at 0,0 across"]
+
+
+def test_blocked_text_lines_one_line_per_length_ascending():
+    rows = [list(r) for r in G44]
+    result = preflight(_grid(rows), _wl(L2))
+    assert blocked_text_lines(result) == [
+        "Blocked: the selected word lists have no words of length 3",
+        "Blocked: the selected word lists have no words of length 4",
+    ]
+
+
+def test_blocked_text_lines_b2_g33():
+    result = preflight(_grid(G33_EMPTY), _wl(L2))
+    assert blocked_text_lines(result) == ["Blocked: the selected word lists have no words of length 3"]
+
+
+def test_blocked_text_lines_empty_when_not_blocked():
+    assert blocked_text_lines(preflight(_grid(G33_EMPTY, locked=[]), _wl(L1))) == []

@@ -913,10 +913,12 @@ done; done
 ```
 
 `data/wordlists/raw/comprehensive_scored.txt` is the largest `raw/` list by bytes (`ls -S data/wordlists/raw`). Record the four timings and the command in this task. If `comprehensive` at 21×21 takes more than 2 s, **STOP and report to Arthur** before the commit.
+
+  Recorded 2026-10-23 (the loop above, run alone after `pytest cli/tests`): 15x15 `comprehensive.txt` 0.09s; 15x15 `raw/comprehensive_scored.txt` 0.92s; 21x21 `comprehensive.txt` 0.12s; 21x21 `raw/comprehensive_scored.txt` 0.95s. The gate (`comprehensive` at 21x21 at most 2 s) holds.
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add cli/src/domain cli/src/fill/locked_letters.py cli/src/cli.py docs/specs/CLI_SPEC.md cli/tests/unit/test_locked_letters.py cli/tests/unit/test_fill_command.py cli/tests/unit/test_pause_resume_regressions.py
+git add cli/src/domain cli/src/fill/locked_letters.py cli/src/cli.py docs/specs/CLI_SPEC.md docs/superpowers/plans/2026-10-23-novice-readiness.md cli/tests/unit/test_locked_letters.py cli/tests/unit/test_fill_command.py cli/tests/unit/test_pause_resume_regressions.py
 git diff --cached --stat
 git commit -m "feat(fill): pre-flight blocks a dead slot with exit 3 and reports off-list typed words"
 ```

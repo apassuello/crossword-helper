@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from src.fill.word_list import ScoredWord, WordList
+from ..fill.word_list import ScoredWord, WordList
 
 
 def canonical_words(word_list: WordList) -> dict[int, tuple[ScoredWord, ...]]:
