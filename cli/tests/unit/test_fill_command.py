@@ -909,3 +909,93 @@ def test_pf18_text_mode_without_o_leaves_input_file(tmp_path):
     stdout, stderr, code = run_fill([str(grid_path), "-w", str(words), "--allow-nonstandard", "-a", "trie", "-t", "10"])
     assert code == 3, (stdout, stderr)
     assert grid_path.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# Result keys on every fill result
+# novice-readiness spec 0.2.4 §2.1 (C11, C2)
+# ---------------------------------------------------------------------------
+
+RESULT_KEYS = ("blocked", "blocked_cells", "off_list_cells", "stuck_cells")
+
+
+def _assert_cell_lists(result, blocked=False):
+    for key in RESULT_KEYS:
+        assert key in result, (key, result)
+    assert result["blocked"] is blocked
+    for key in RESULT_KEYS[1:]:
+        assert isinstance(result[key], list), (key, result)
+
+
+def test_fill_keys_main_result(tmp_path):
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "-a", "repair", "-t", "10", "--json-output"]
+    )
+    assert code == 0, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    _assert_cell_lists(result)
+
+
+def test_fill_keys_already_filled_early_return(tmp_path):
+    grid_path = tmp_path / "full.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": [list("CAT"), list("ORE"), list("WED")]}))
+    words = tmp_path / "l6.txt"
+    words.write_text(L6_LINES)
+    stdout, stderr, code = run_fill([str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output"])
+    assert code == 0, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None and result["all_slots_filled"] is True, (stdout, stderr)
+    _assert_cell_lists(result)
+    assert [result[k] for k in RESULT_KEYS[1:]] == [[], [], []]
+
+
+def test_fill_keys_paused_payload(tmp_path, monkeypatch):
+    """Uses a stub solver returning a paused result (as pc8 does), not test_fill_pause_resume.py's subprocess mechanism."""
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    _stub_repair(monkeypatch, letter="C", paused=True)
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "fill",
+            str(grid_path),
+            "-w",
+            str(words),
+            "--allow-nonstandard",
+            "-o",
+            str(tmp_path / "out.json"),
+            "--json-output",
+            "--task-id",
+            "t2",
+            "--state-dir",
+            str(tmp_path / "states"),
+            "--pause-flag-dir",
+            str(tmp_path / "flags"),
+        ],
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    payload = last_json(result.output)
+    assert payload is not None and payload["paused"] is True, result.output
+    _assert_cell_lists(payload)
+    assert payload["stuck_cells"] == []
+
+
+def test_fill_keys_blocked_result(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, PF1_ROWS, L1_LINES)
+    assert code == 3, (stdout, stderr)
+    _assert_cell_lists(json.loads(stdout), blocked=True)
+
+
+def test_fill_keys_absent_from_fail_fill_error(tmp_path):
+    grid_path, _ = _g33_c_at_origin(tmp_path)
+    stdout, stderr, code = run_fill([str(grid_path), "-w", str(tmp_path), "--allow-nonstandard", "--json-output"])
+    assert code == 1, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None and result["success"] is False, (stdout, stderr)
+    for key in RESULT_KEYS:
+        assert key not in result
