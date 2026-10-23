@@ -16,6 +16,7 @@ from .core.numbering import GridNumbering
 from .core.validator import GridValidator
 from .export.html_exporter import HTMLExporter
 from .fill.autofill import Autofill
+from .fill.locked_letters import apply_lock_mode, input_lock_letters
 from .fill.pattern_matcher import PatternMatcher
 from .fill.word_list import WordList
 
@@ -597,6 +598,14 @@ def validate(grid_file: str, allow_nonstandard: bool):
     help="Directory watched for the pause flag file (PauseController pause_dir)",
 )
 @click.option(
+    "--lock-filled/--no-lock-filled",
+    "lock_filled",
+    default=True,
+    help="Lock the letters already in the grid file so the fill never changes them "
+    '(default). A "locked": [[row, col], ...] key in the grid file locks exactly '
+    "those cells instead; --no-lock-filled locks none.",
+)
+@click.option(
     "--resume",
     "resume_state_file",
     type=click.Path(),
@@ -625,6 +634,7 @@ def fill(
     task_id: Optional[str],
     state_dir: Optional[str],
     pause_flag_dir: Optional[str],
+    lock_filled: bool,
     resume_state_file: Optional[str],
 ):
     """Fill a crossword grid using CSP autofill."""
@@ -717,6 +727,7 @@ def fill(
             wordlists = tuple(recorded)
 
         grid = Grid.from_dict(resume_csp_state.grid_dict, strict_size=False)
+        input_letters = {}  # §2.1 last bullet: no input lock set on --resume
     else:
         if not json_output:
             click.echo(f"Loading grid from {grid_file}...")
@@ -725,7 +736,15 @@ def fill(
         with open(grid_file, "r") as f:
             data = json.load(f)
 
-        grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+        # novice-readiness spec 0.2.4 §2.1 (C12): from_dict validates the "locked"
+        # key (before --no-lock-filled empties the set); apply_lock_mode resolves
+        # the set. A ValueError (shape or "locked") exits 1 through _fail_fill.
+        try:
+            grid = Grid.from_dict(data, strict_size=not allow_nonstandard)
+        except ValueError as e:
+            _fail_fill(str(e), json_output)
+        apply_lock_mode(grid, data, lock_filled)
+        input_letters = input_lock_letters(grid)  # noqa: F841 - Task 2.8's postcondition reads it
 
     # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
     # Any stale pause flag for this task id is cleared before starting, and a

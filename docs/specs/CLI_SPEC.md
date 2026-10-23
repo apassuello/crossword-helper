@@ -184,6 +184,7 @@ crossword fill [GRID_FILE] -w/--wordlists PATH [...] [OPTIONS]
 | `--task-id` | string | none | Enables `crossword pause TASK_ID` on this run |
 | `--state-dir` | Path | `/tmp/crossword_states` (StateManager default) | Directory for saved solver state |
 | `--pause-flag-dir` | Path | `/tmp` (PauseController default) | Directory watched for the pause flag file |
+| `--lock-filled/--no-lock-filled` | flag | `--lock-filled` | Which input letters the fill may never change; see [Grid File Format](#grid-file-format). Not applied on `--resume` |
 | `--resume` | Path (or bare task id) | none | Continues a paused fill; see the resolution note below |
 
 **[NOTE]** The Click default for `--algorithm` is `repair`, not `hybrid`. A
@@ -662,6 +663,16 @@ The `--json-output` object (printed indented) for the three lines `APPLE;50`, `g
 ```
 Cell values: `.` = empty, `#` = black square, `A`–`Z` = filled letter.
 Verified against a live `new` + `number` round trip.
+
+**[SPEC]** Optional key `"locked": [[row, col], ...]` (zero-based cells). On a
+fresh `fill` run the lock set is: with `--lock-filled` (the default) and a
+`"locked"` key, exactly the listed cells (`"locked": []` locks nothing); with
+`--lock-filled` and no key, every letter in the input grid; with
+`--no-lock-filled`, no input letter, with or without the key. A listed cell that
+is out of bounds or holds no letter fails the run (exit `1`, the usual
+`{success, error, hint}` JSON); the list is never trimmed silently, and it is
+validated even under `--no-lock-filled`. `fill --resume` ignores both the option
+and the key.
 
 ### Theme Entries Format
 
