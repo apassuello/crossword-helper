@@ -41,3 +41,18 @@ def apply_lock_mode(grid: Grid, grid_data: Mapping, lock_filled: bool) -> None:
 def input_lock_letters(grid: Grid) -> Dict[Tuple[int, int], str]:
     """``{(row, col): letter}`` for every cell in ``grid.locked_cells``."""
     return {(row, col): grid.get_cell(row, col) for row, col in grid.locked_cells}
+
+
+POSTCONDITION_MESSAGE = "Autofill changed a locked letter; nothing was written."
+
+
+def changed_locked_cells(grid: Grid, expected: Mapping[Tuple[int, int], str]) -> List[List[int]]:
+    """
+    Cell list of every ``expected`` cell that no longer holds its letter in ``grid``.
+
+    novice-readiness spec 0.2.4 §2.1 (D3): the end-to-end postcondition. An empty,
+    black or differently lettered cell all count as changed.
+    """
+    return cell_list(
+        (row, col) for (row, col), letter in expected.items() if grid.is_black(row, col) or grid.get_cell(row, col) != letter
+    )

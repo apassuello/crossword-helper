@@ -416,3 +416,147 @@ def test_fill_fresh_run_calls_apply_lock_mode(tmp_path, monkeypatch):
         ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--no-lock-filled", "-t", "10", "--json-output"],
     )
     assert calls == [False]
+
+
+# ---------------------------------------------------------------------------
+# End-to-end postcondition: a changed locked letter writes nothing
+# novice-readiness spec 0.2.4 §2.1 (D3)
+# ---------------------------------------------------------------------------
+
+L6_LINES = "CAT;50\nORE;50\nWED;50\nCOW;50\nARE;50\nTED;50\n"
+POSTCONDITION_TEXT = "Autofill changed a locked letter; nothing was written."
+
+
+def _stub_repair(monkeypatch, *, letter="D", paused=False, touch=None):
+    """Replace the repair solver with one that returns a grid whose (0,0) is `letter`."""
+    import cli.src.fill.iterative_repair as repair_module
+    from cli.src.core.grid import Grid as _Grid
+    from cli.src.fill.autofill import FillResult
+
+    class _StubRepair:
+        def __init__(self, grid, *args, **kwargs):
+            self.grid = grid
+
+        def fill(self, timeout=None):
+            if touch is not None:
+                touch()
+            out = _Grid(3, validate_size=False)
+            out.set_letter(0, 0, letter)
+            return FillResult(
+                success=True,
+                grid=out,
+                time_elapsed=0.1,
+                slots_filled=6,
+                total_slots=6,
+                problematic_slots=[],
+                iterations=1,
+                paused=paused,
+            )
+
+    monkeypatch.setattr(repair_module, "IterativeRepair", _StubRepair)
+
+
+def _g33_c_at_origin(tmp_path):
+    grid_path = tmp_path / "g33.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": [["C", ".", "."], [".", ".", "."], [".", ".", "."]]}))
+    words = tmp_path / "l6.txt"
+    words.write_text(L6_LINES)
+    return grid_path, words
+
+
+def test_pc6_changed_locked_letter_json_writes_nothing(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    _stub_repair(monkeypatch)
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    out = tmp_path / "out.json"
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "-o", str(out), "--json-output"],
+    )
+    assert result.exit_code == 1, (result.output, result.exception)
+    payload = last_json(result.output)
+    assert payload is not None, result.output
+    assert payload["success"] is False
+    assert payload["error"] == POSTCONDITION_TEXT
+    assert not out.exists()
+
+
+def test_pc7_changed_locked_letter_human_leaves_input_bytes(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    _stub_repair(monkeypatch)
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    before = grid_path.read_bytes()
+    result = CliRunner().invoke(cli_module.cli, ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard"])
+    assert result.exit_code == 1, (result.output, result.exception)
+    assert grid_path.read_bytes() == before
+
+
+def test_pc8_changed_locked_letter_on_paused_result_clears_markers(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    state_dir = tmp_path / "states"
+    flag_dir = tmp_path / "flags"
+    flag_dir.mkdir()
+    _stub_repair(monkeypatch, paused=True, touch=lambda: (flag_dir / "crossword_pause_t1.flag").touch())
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    out = tmp_path / "out.json"
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "fill",
+            str(grid_path),
+            "-w",
+            str(words),
+            "--allow-nonstandard",
+            "-o",
+            str(out),
+            "--json-output",
+            "--task-id",
+            "t1",
+            "--state-dir",
+            str(state_dir),
+            "--pause-flag-dir",
+            str(flag_dir),
+        ],
+    )
+    assert result.exit_code == 1, (result.output, result.exception)
+    payload = last_json(result.output)
+    assert payload is not None and payload.get("paused") is not True, result.output
+    assert payload["error"] == POSTCONDITION_TEXT
+    assert not out.exists()
+    assert not state_dir.exists() or list(state_dir.iterdir()) == []
+    assert not (flag_dir / "crossword_pause_t1.flag").exists()
+    assert not (flag_dir / "crossword_running_t1.pid").exists()
+    assert not (flag_dir / "crossword_searching_t1.flag").exists()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "extra, timeout",
+    [
+        (["--algorithm", "regex"], "10"),
+        (["--algorithm", "trie"], "10"),
+        (["--algorithm", "beam"], "10"),
+        (["--algorithm", "repair"], "10"),
+        (["--algorithm", "hybrid"], "30"),
+        (["--adaptive"], "10"),
+    ],
+    ids=["regex", "trie", "beam", "repair", "hybrid", "adaptive"],
+)
+def test_pc9_subprocess_keeps_locked_letter(tmp_path, extra, timeout):
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", timeout] + extra
+    )
+    assert code != 1, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    assert result["grid"][0][0] == "C"

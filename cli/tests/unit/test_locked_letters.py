@@ -63,3 +63,43 @@ def test_input_lock_letters_maps_locked_cells_to_letters():
 
 def test_input_lock_letters_empty_without_locks():
     assert input_lock_letters(_g33()) == {}
+
+
+# ---------------------------------------------------------------------------
+# changed_locked_cells: the end-to-end postcondition's comparison
+# novice-readiness spec 0.2.4 §2.1 (D3)
+# ---------------------------------------------------------------------------
+
+
+def _changed(setup, expected):
+    from cli.src.fill.locked_letters import changed_locked_cells
+
+    grid = Grid(3, validate_size=False)
+    setup(grid)
+    return changed_locked_cells(grid, expected)
+
+
+def test_pc1_unchanged_letter():
+    assert _changed(lambda g: g.set_letter(0, 0, "C"), {(0, 0): "C"}) == []
+
+
+def test_pc2_different_letter():
+    assert _changed(lambda g: g.set_letter(0, 0, "D"), {(0, 0): "C"}) == [[0, 0]]
+
+
+def test_pc3_emptied_cell():
+    assert _changed(lambda g: None, {(0, 0): "C"}) == [[0, 0]]
+
+
+def test_pc4_blackened_cell():
+    assert _changed(lambda g: g.set_black_square(0, 0, enforce_symmetry=False), {(0, 0): "C"}) == [[0, 0]]
+
+
+def test_pc5_nothing_expected():
+    assert _changed(lambda g: g.set_letter(0, 0, "D"), {}) == []
+
+
+def test_postcondition_message_is_pinned():
+    from cli.src.fill.locked_letters import POSTCONDITION_MESSAGE
+
+    assert POSTCONDITION_MESSAGE == "Autofill changed a locked letter; nothing was written."
