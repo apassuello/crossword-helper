@@ -9,7 +9,8 @@ export default defineConfig({
     host: '127.0.0.1',  // Force IPv4
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        // novice-readiness spec 0.2.4 §5 (I6): follows run.py's PORT (default 5000)
+        target: `http://localhost:${process.env.PORT || 5000}`,
         changeOrigin: true,
       },
     },
