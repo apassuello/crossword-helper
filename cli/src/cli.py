@@ -16,7 +16,7 @@ from .core.numbering import GridNumbering
 from .core.validator import GridValidator
 from .export.html_exporter import HTMLExporter
 from .fill.autofill import Autofill
-from .fill.locked_letters import apply_lock_mode, input_lock_letters
+from .fill.locked_letters import POSTCONDITION_MESSAGE, apply_lock_mode, changed_locked_cells, input_lock_letters
 from .fill.pattern_matcher import PatternMatcher
 from .fill.word_list import WordList
 
@@ -744,7 +744,7 @@ def fill(
         except ValueError as e:
             _fail_fill(str(e), json_output)
         apply_lock_mode(grid, data, lock_filled)
-        input_letters = input_lock_letters(grid)  # noqa: F841 - read by the end-to-end postcondition check
+        input_letters = input_lock_letters(grid)
 
     # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
     # Any stale pause flag for this task id is cleared before starting, and a
@@ -780,6 +780,7 @@ def fill(
     # mark_running(), so every exit after it (theme and word-list errors, the
     # solver error, the already-filled return) reaches the one cleanup below.
     result = None
+    locked_letter_changed = False
     try:
         # Load word lists
         if not json_output:
@@ -1150,6 +1151,10 @@ def fill(
                 if result.total_slots > 0:
                     progress_pct = int((result.slots_filled / result.total_slots) * 100)
                     bar.update(progress_pct)
+        # novice-readiness spec 0.2.4 §2.1 (D3): decided here so the one `finally`
+        # below also clears the pause markers of a paused result; the failure itself
+        # is raised after it, before the DD6 block can write anything.
+        locked_letter_changed = bool(changed_locked_cells(result.grid if result is not None else grid, input_letters))
     except ValueError as e:
         # Solvers reject out-of-range arguments with a bare `raise` (for
         # example iterative_repair.fill()'s 10-second timeout floor).
@@ -1164,8 +1169,12 @@ def fill(
         # anything left here is stale. See #21.2.
         if pause_controller:
             pause_controller.clear_running()
-            if result is None or not result.paused:
+            if result is None or not result.paused or locked_letter_changed:
                 pause_controller.clear_pause()
+
+    # novice-readiness spec 0.2.4 §2.1 (D3): check (a), before the DD6 paused block.
+    if locked_letter_changed:
+        _fail_fill(POSTCONDITION_MESSAGE, json_output)
 
     # DD6: paused outcome — save state (graceful-stop engines only), emit the paused
     # stdout protocol, and return BEFORE cleanup/completion so no spurious "complete"
@@ -1289,6 +1298,11 @@ def fill(
                 f"{cleanup_result.slots_filled}/{cleanup_result.total_slots} valid words remain"
             )
         result = cleanup_result
+
+    # novice-readiness spec 0.2.4 §2.1 (D3): check (b), after --cleanup and before
+    # the completion event, the -o write and the stdout result.
+    if changed_locked_cells(result.grid, input_letters):
+        _fail_fill(POSTCONDITION_MESSAGE, json_output)
 
     all_slots_filled = result.total_slots > 0 and result.slots_filled == result.total_slots
 
