@@ -93,33 +93,6 @@
       "key": "comprehensive",
       "filepath": "data/wordlists/comprehensive.txt",
       "word_count": 44024
-    },
-    "custom/personal": {
-      "name": "Personal Theme Words",
-      "category": "custom",
-      "description": "Custom themed words for personal puzzles",
-      "difficulty": "medium",
-      "tags": [
-        "custom",
-        "themed",
-        "personal"
-      ],
-      "created": "2024-12-21",
-      "last_modified": "2024-12-21",
-      "auto_generated": false,
-      "key": "custom/personal",
-      "filepath": "data/wordlists/custom/personal.txt",
-      "word_count": 24
-    },
-    "custom/theme_list": {
-      "category": "custom",
-      "description": "Uploaded from theme_list.txt",
-      "tags": [
-        "custom",
-        "uploaded"
-      ],
-      "source": "direct_import",
-      "name": "Theme List"
     }
   },
   "categories": {
