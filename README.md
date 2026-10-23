@@ -13,6 +13,20 @@ logic lives in the CLI; the web app is a thin wrapper around it.
 |:-:|:-:|:-:|
 | ![Grid editor](docs/screenshots/grid_editor_15x15.png) | ![Autofill](docs/screenshots/autofill_15x15_birthday.png) | ![Complete](docs/screenshots/autofill_21x21_complete.png) |
 
+## Before you start
+
+You need two tools installed first. Windows is not supported yet (macOS and Linux only).
+
+- **Python 3.9 or later.** On macOS, install it from [python.org](https://www.python.org/downloads/).
+  The `python3` that ships with macOS is a stub that opens an Xcode command-line-tools install dialog
+  the first time you use it; either path works. On Linux, install your distribution's `python3` and
+  `python3-venv` packages (for example `sudo apt install python3 python3-venv`).
+- **Node.js 18 or later (LTS).** Install it from [nodejs.org](https://nodejs.org/), or use your
+  distribution's package if it is version 18 or later.
+- **The code.** Either use "Download ZIP" on the GitHub page and extract it, or run
+  `git clone https://github.com/apassuello/crossword-helper.git`. After a ZIP extract, the
+  `chmod +x setup.sh` line in Quick Start below is part of the steps.
+
 ## Quick Start
 
 ```bash
@@ -25,6 +39,23 @@ source venv/bin/activate
 python3 run.py
 # Open http://localhost:5000
 ```
+
+## Using the app
+
+Open http://localhost:5000. The tool rail on the left switches between tools:
+
+- **Grid** -- click a square and type to enter letters; the `Symmetry` toggle under VIEW mirrors
+  black squares across the grid.
+- **Lists** -- the word lists the app searches and fills from; upload your own with `Upload`.
+- **Search** -- type a pattern such as `C?T` (`?` is an unknown letter), tick the word lists to
+  search in, and press `Search`.
+- **Theme** -- load your theme words with `Choose File`, then `Apply All Best Placements` to put
+  them in the grid.
+- **Autofill** -- choose an `Algorithm` and the word lists, then press `Start Autofill`.
+- **Import** and **Export** -- `Import Grid` reads a saved grid from `Upload File` or `Paste JSON`;
+  `Export` saves the grid as JSON, HTML or text, and `Preview` shows it first.
+
+The top bar has `Verify words`, `Clean grid` and `Save grid`.
 
 ## Features
 
@@ -52,6 +83,20 @@ npm run dev
 ```
 
 Open http://localhost:3000 -- frontend changes reload automatically.
+
+Debug mode is off by default. To turn it on, start the backend with `FLASK_DEBUG=1`:
+
+```bash
+FLASK_DEBUG=1 python3 run.py
+```
+
+To use a port other than 5000, set the same `PORT` for both terminals. The Vite server stays on
+:3000 and proxies `/api` to that `PORT`:
+
+```bash
+PORT=5001 python3 run.py   # Terminal 1
+PORT=5001 npm run dev      # Terminal 2
+```
 
 ## CLI Usage
 
