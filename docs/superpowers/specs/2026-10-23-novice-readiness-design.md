@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.1.1** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
+**Version 0.1.2** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
 2026-10-23; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
 by 2026-10-30
 
@@ -39,7 +39,7 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     are auto-restored, named, and listed (§3).
   - #57 item 1: accented letters are folded to A–Z on upload. **What it beat:** rejecting them.
 - **Must-have, in order:** §5 install, §2 autofill safety (with #41), §3.1 hiding, §3.3 black squares,
-  §3.2 new grid, §3.4 saves, §4 word-list and CLI rulings.
+  §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63), §4 word-list and CLI rulings.
 - **Stretch, if the must-haves land:** #19, #20 and #57 item 4 (theme placement); SR2 (search results
   below the viewport, the rest of #45); TH5 (theme panel covers the top bar).
 - **Out of scope:** Windows; solver fill quality beyond #40's default; #26 #28 #29 #36 #37 #38 #39 #52
@@ -197,6 +197,18 @@ the Heatmap toggle (#50). The issues stay open. No test may depend on them being
 - A failed write (quota) shows `Could not save: browser storage is full. Delete a saved grid or export
   this one.` and is never swallowed.
 
+### 3.5 Grid-edit guards (#62, #63)
+
+**[SPEC]**
+- **#62:** placing a Search result (`handlePatternSelect`) writes a letter only into a white cell that is
+  not theme-locked, exactly the rule the key handler applies to typed letters, and stops at the first
+  black square in the slot's direction. Cells it skips keep their content.
+- **#63:** Clean with `removed_count === 0` clears `isError` on every cell before its
+  `Grid is clean — all words are valid!` toast (Greptile's suggested patch on PR #35).
+
+**[NOTE]** Both came from the 2026-08-23 Greptile audit (PR #35), re-checked on `fd392c9` and filed
+2026-10-23. #62 destroys theme-locked letters, the same class as the autofill rule in §2.
+
 ---
 
 ## 4. Word lists and CLI rulings (#57)
@@ -252,6 +264,7 @@ the old one:
 |---|---|---|
 | Install | SETUP-1, SETUP-2, SETUP-3, E2-SETUP-1, SERVE-1 | Setup completes, the tree stays clean, debug off |
 | Grid | G1, G3, G8, G9 | New grid, discoverable black squares, no Heatmap toggle, save restored |
+| Grid guards | New: SR-PLACE (place a Search result across a black square and a theme-locked cell); new: CL-CLEAR (Verify flags cells, retype them, Clean) | Protected cells unchanged; no red cells after "Grid is clean" |
 | Hidden | CL1, A-SBS | Control absent |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
@@ -281,3 +294,5 @@ the old one:
   `Autofill` restart loop dropped locks), the pinned `SlotModel.from_grid` constructor and a pre-flight
   latency check; §2.4 covers a run killed at the adapter's ceiling; §5 covers a lock/`package.json`
   mismatch under `npm ci`; case 2's continue-on-red moves from §1's rulings to P6.
+- 0.1.2 (2026-10-23): §3.5 adds #62 and #63 to the must-haves (Greptile PR #35 findings, filed that day);
+  §6 gains their acceptance cases.
