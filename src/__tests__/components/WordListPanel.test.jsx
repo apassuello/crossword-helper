@@ -146,6 +146,23 @@ describe('WordListPanel upload', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('a dry-run response for a file the user has since replaced is ignored', async () => {
+    let resolveFirst;
+    vi.spyOn(api, 'importWordlist').mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFirst = resolve; })
+    );
+    const user = userEvent.setup();
+    await openUploadAndPick(user, new File(['OLD'], 'old.dict'), 'old');
+    await user.click(screen.getByRole('button', { name: /^upload$/i }));
+    await waitFor(() => expect(resolveFirst).toBeTypeOf('function'));
+    await user.upload(document.querySelector('input[type="file"]'), new File(['NEW'], 'new.dict'), {
+      applyAccept: false,
+    });
+    resolveFirst({ words: parsed(1), skipped: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('upload-preview')).not.toBeInTheDocument();
+  });
+
   it('picking another file after a 400 clears the stale skipped-reasons box', async () => {
     vi.spyOn(api, 'importWordlist').mockRejectedValue(
       new ApiError({

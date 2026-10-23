@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import './WordListPanel.scss';
 
@@ -20,6 +20,9 @@ const WordListPanel = () => {
   const [uploadError, setUploadError] = useState('');
   const [uploadReasons, setUploadReasons] = useState(null);
   const [preview, setPreview] = useState(null);
+  // Bumped on every file pick: a dry-run response for an earlier pick is dropped,
+  // or it would restore a preview of a file the user has already replaced.
+  const selectionRef = useRef(0);
   const [error, setError] = useState(null);
   const [operationStatus, setOperationStatus] = useState(null);
 
@@ -125,6 +128,7 @@ const WordListPanel = () => {
       return;
     }
 
+    selectionRef.current += 1;
     setUploadFile(file);
     setUploadError('');
     setUploadReasons(null);
@@ -164,6 +168,7 @@ const WordListPanel = () => {
       return;
     }
 
+    const selection = selectionRef.current;
     try {
       setLoading(true);
       setUploadError('');
@@ -172,8 +177,10 @@ const WordListPanel = () => {
 
       const content = await uploadFile.text();
       const response = await api.importWordlist(buildImport(content, { dryRun: true }));
+      if (selection !== selectionRef.current) return;
       setPreview({ content, words: response.words || [], skipped: response.skipped || [] });
     } catch (error) {
+      if (selection !== selectionRef.current) return;
       console.error('Failed to preview wordlist:', error);
       setUploadError(error.message || 'Failed to upload wordlist');
       const d = error.details;
