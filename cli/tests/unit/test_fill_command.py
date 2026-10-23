@@ -427,7 +427,7 @@ L6_LINES = "CAT;50\nORE;50\nWED;50\nCOW;50\nARE;50\nTED;50\n"
 POSTCONDITION_TEXT = "Autofill changed a locked letter; nothing was written."
 
 
-def _stub_repair(monkeypatch, *, letter="D", paused=False, touch=None):
+def _stub_repair(monkeypatch, *, letter="D", paused=False, touch=None, cleanup_letter=None):
     """Replace the repair solver with one that returns a grid whose (0,0) is `letter`."""
     import cli.src.fill.iterative_repair as repair_module
     from cli.src.core.grid import Grid as _Grid
@@ -436,6 +436,19 @@ def _stub_repair(monkeypatch, *, letter="D", paused=False, touch=None):
     class _StubRepair:
         def __init__(self, grid, *args, **kwargs):
             self.grid = grid
+
+        def cleanup_grid(self):
+            out = _Grid(3, validate_size=False)
+            out.set_letter(0, 0, cleanup_letter)
+            return FillResult(
+                success=True,
+                grid=out,
+                time_elapsed=0.1,
+                slots_filled=6,
+                total_slots=6,
+                problematic_slots=[],
+                iterations=1,
+            )
 
         def fill(self, timeout=None):
             if touch is not None:
@@ -480,6 +493,38 @@ def test_pc6_changed_locked_letter_json_writes_nothing(tmp_path, monkeypatch):
     payload = last_json(result.output)
     assert payload is not None, result.output
     assert payload["success"] is False
+    assert payload["error"] == POSTCONDITION_TEXT
+    assert not out.exists()
+
+
+def test_pc9_cleanup_changing_a_locked_letter_writes_nothing(tmp_path, monkeypatch):
+    """Check (b): the solver keeps C at (0,0) so check (a) passes; only --cleanup changes it."""
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    _stub_repair(monkeypatch, letter="C", cleanup_letter="D")
+    grid_path, words = _g33_c_at_origin(tmp_path)
+    out = tmp_path / "out.json"
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "fill",
+            str(grid_path),
+            "-w",
+            str(words),
+            "--allow-nonstandard",
+            "--cleanup",
+            "--algorithm",
+            "repair",
+            "-o",
+            str(out),
+            "--json-output",
+        ],
+    )
+    assert result.exit_code == 1, (result.output, result.exception)
+    payload = last_json(result.output)
+    assert payload is not None, result.output
     assert payload["error"] == POSTCONDITION_TEXT
     assert not out.exists()
 
