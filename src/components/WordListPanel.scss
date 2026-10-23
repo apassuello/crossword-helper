@@ -583,6 +583,11 @@
     border-radius: 12px;
     padding: 1.5rem;
     margin-bottom: 2rem;
+    // .wordlist-panel is fixed-height with overflow hidden, so an uncapped form plus a
+    // 20-row preview pushed Confirm below the clip at every supported size. Cap it at
+    // the height .panel-layout gets and let it scroll.
+    max-height: calc(100% - 60px);
+    overflow-y: auto;
 
     h3 {
       margin-bottom: 1.5rem;
