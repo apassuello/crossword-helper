@@ -1,7 +1,6 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.2** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
-2026-10-23, including the five review rulings; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
-by 2026-10-30
+**Version 0.2.3** · Claude with Arthur Passuello · 2026-10-23 · status: approved by owner 2026-10-23;
+rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written
 
 ---
 
@@ -50,6 +49,8 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     merge wrote carries `isAutofilled`, cleared by any other edit; the UI sends only the other letters
     as locked, and the CLI keeps its own default (P1, an open point in §7). Mechanism in §2; UI rule in §3.7. **What it
     beat:** locking every letter in the grid, which makes "Keep partial fill" freeze the next run.
+    Re-affirmed 2026-10-23 after M4 narrowed the gain (no solver is known to change a pre-placed
+    unlocked letter, so today the gain is that repair can rework a conflicting autofilled word): (b) stands.
   - **Locked crossing slots (G13, 2026-10-23):** a fully locked crossing slot is valid regardless of list
     membership or score. Mechanism in §2. The run's score floor is not checked a second time before
     Start: a typed pattern that fits only words below the floor passes pre-flight and can still fail
@@ -150,7 +151,7 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
   `IterativeRepair.fill` places with `lock=True`. The theme-entry case is a defect on `main` today:
   `_forward_check` never consults `_is_valid_word`, and the trie the repair matcher searches holds only
   list words and is searched at the run's floor, so a theme entry that is off-list or below the floor rejects every
-  CSP placement crossing it. This rule fixes it.
+  CSP placement crossing it. This rule fixes it (#74).
 - **Pre-flight** runs on every fresh run (not `--resume`), after the word lists load and after the
   `empty_slots` early return, before the solver runs. Its length check (B2, below) runs whatever the
   lock set, including an empty one; the locked-cell checks (case 1 and case 2) need a non-empty lock set,
@@ -556,7 +557,7 @@ cells; S1: typing during a Verify or Clean request survives its response, and St
 dismisses the open confirm.
 
 **[NOTE]** The stale write is live on `main` today: both handlers end in `setGrid(newGrid)` built from
-the closure's `grid`, so letters typed while a Verify or Clean request is in flight are reverted.
+the closure's `grid`, so letters typed while a Verify or Clean request is in flight are reverted. Filed as #73.
 
 **[NOTE]** `verify_words` and `clean_grid` are defined in `backend/api/routes.py` and have no CLI
 command. That deviates from "the CLI is the single source of truth" (`.claude/CLAUDE.md`). Moving them is
@@ -731,6 +732,8 @@ the old one:
 
 ## 7. Open points (default applies if unruled by 2026-10-30)
 
+Owner approval of 0.2.2 on 2026-10-23 ruled every row's default as written; P17 carries its own ruling.
+
 | # | Question | Default |
 |---|---|---|
 | P1 | `fill`'s `--lock-filled` default on the CLI, not only from the UI | On. The owner rule is about what the user typed; a CLI user's input grid is what they typed. The shipped `data/grids/example_11x11.json`, `data/grids/example_15x15.json` and `data/grids/example_21x21.json` contain no letters, so the README's `fill` example (R7) is unaffected. An explicit `"locked"` key in the grid file (the UI's channel, §2.2) overrides lock-every-letter. |
@@ -800,3 +803,6 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   in place (Vite `PORT`, tracker retention, watchdog arming, 'every slot filled', TH5 width, banner,
   `normalize`, Linux containers). §7 gains P16 to P18 and #65 is out of scope in §1. Owner ruling the same day on P17: #20 and #19's
   panel half become must-haves in a new §3.8, with TH2b and TH3 acceptance cases.
+- 0.2.3 (2026-10-23): owner approval of 0.2.2. §7's defaults are ruled as written (P17 ruled earlier);
+  G12 (b) re-affirmed after M4 (§1). The two defects live on `main` are filed: S1's stale Verify/Clean
+  write as #73 (§3.5) and the theme-entry `_forward_check` defect as #74 (§2.1).
