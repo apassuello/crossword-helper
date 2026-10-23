@@ -50,16 +50,23 @@ class TestWordlistMetadataStructure:
             for field in required_fields:
                 assert field in info, f"Wordlist '{key}' missing required field '{field}'"
 
-    def test_custom_wordlists_have_name_field(self):
-        """Specifically verify custom wordlists have 'name' field (regression test)."""
+    def test_custom_wordlists_have_name_field(self, tmp_path):
+        """A custom list created through the manager gets a 'name' field (regression test).
+
+        Builds its own custom list in a tmp dir: the shipped metadata.json holds no
+        custom entries, because every custom list except the demo is gitignored.
+        """
         from backend.data.wordlist_manager import WordListManager
 
-        manager = WordListManager()
+        (tmp_path / "metadata.json").write_text(json.dumps({"wordlists": {}, "categories": {}, "tags": {}}))
+        manager = WordListManager(wordlist_dir=str(tmp_path))
+        manager.add_words("custom/my_theme_words", ["APPLE", "GRAPE;40"], create=True)
         metadata = manager._metadata
 
         custom_wordlists = {key: info for key, info in metadata["wordlists"].items() if info.get("category") == "custom"}
 
         assert len(custom_wordlists) > 0, "No custom wordlists found for testing"
+        assert custom_wordlists["custom/my_theme_words"]["name"] == "My Theme Words"
 
         for key, info in custom_wordlists.items():
             assert "name" in info, f"Custom wordlist '{key}' missing 'name' field (bug regression!)"
