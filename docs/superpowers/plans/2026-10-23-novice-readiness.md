@@ -334,6 +334,7 @@ git commit -m "feat(install): setup.sh repairs a venv without pip and says which
 | `backend/app.py` as `__main__`, `PORT=5057` (`PD-L5`) | `port=5057` (an `int`) |
 
 - [ ] **Step 1: STOP gate, AirPlay on :5000 (§5 `[?]`, P13).** On a stock Mac run `lsof -nP -iTCP:5000 -sTCP:LISTEN` and, separately, `lsof -i :5000`. **STOP and report to Arthur:** the command output verbatim, the macOS version (`sw_vers -productVersion`), and whether AirPlay Receiver (ControlCenter) holds the port. The 2026-10-22 run could not test this (its SERVE-0 case: "the setting is off"). If the executing machine is not a stock Mac, report that instead; do not guess.
+  Result (2026-10-23): macOS 26.5.2 (`sw_vers -productVersion`). `lsof -nP -iTCP:5000 -sTCP:LISTEN` and `lsof -i :5000` printed nothing (rc=1 both); `lsof -nP -iTCP -sTCP:LISTEN | grep -iE 'ControlCe|AirPlay|:7000|:5000'` printed nothing; `defaults -currentHost read com.apple.controlcenter AirplayRecieverEnabled` -> "does not exist". AirPlay Receiver does not hold :5000 here; whether this Mac is stock is unconfirmed.
 - [ ] **Step 2: Write the failing tests** from the table.
 - [ ] **Step 3: Run, confirm failure:** `pytest backend/tests/unit/test_run_launcher.py -v`.
 - [ ] **Step 4: Implement `run.py`.**
