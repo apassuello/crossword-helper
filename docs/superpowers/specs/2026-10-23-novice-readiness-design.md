@@ -75,94 +75,258 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
 ### 2.1 CLI `fill`
 
 **[SPEC]**
-- New option `--lock-filled/--no-lock-filled`, **default `--lock-filled`**. With it, every letter in the
-  input grid is placed with `Grid.set_letter(row, col, letter, lock=True)`, so it joins
-  `grid.locked_cells`. Theme entries are locked as today.
-- **`locked_cells` survives every grid copy a solver makes.** `Grid.clone` already copies it, but
-  `Grid.to_dict`/`Grid.from_dict` drop it, and two fill paths round-trip through them: the restart loop
-  in `Autofill` (`self.grid = Grid.from_dict(original_grid_state)`) and `AdaptiveAutofill`. `to_dict` gains
-  `"locked": [[r, c], ...]` (sorted row-major, `[]` when none) and `from_dict` restores it, defaulting to
-  none when the key is absent so older state files still load. A test copies a locked grid through
-  `clone` and through a `to_dict`/`from_dict` round trip and asserts the set is intact; this is the
-  load-bearing test of §2.1.
-- **No code path empties a locked cell.** `Grid.remove_word` skips locked cells, and so does every other
-  path in `cli/src/` that writes an empty value into `Grid.cells`. The plan enumerates those paths with
-  `ast-grep` and a positive control. (`remove_word` and `place_word` already honour `locked_cells` for
-  theme entries; the sweep is for every other writer.) A solver that tries to place a word conflicting with a locked
-  letter fails that placement; it does not overwrite.
-- **Pre-flight**, only with `--lock-filled` and only on a fresh run (not `--resume`): before any solver
-  runs, call `src.domain.fillability.assess(model, index, fixed, min_score=0)` with
-  `model = SlotModel.from_grid(grid)` (not `from_blacks`, which passes NumPy integers through),
-  `fixed = slot_model.fixed_from_grid(grid)`, and the index built from the loaded lists.
-  - **Case 1, `report.refuted`:** no solver runs. The `--json-output` result is
+- **Which letters are locked.** New option `--lock-filled/--no-lock-filled`, **default `--lock-filled`**
+  (P1). The input grid file may carry an optional `"locked": [[r, c], ...]` key. On a fresh run (for
+  `--resume`, see the last bullet) the lock set is:
+  - `--lock-filled` with a `"locked"` key: exactly the listed cells. This is the UI's channel (§2.2): the
+    UI lists the letters the user typed and leaves autofilled letters unlocked, so the solver may change
+    them.
+  - `--lock-filled` without the key: every letter in the input grid. A CLI user's input grid is what they
+    typed.
+  - `--no-lock-filled`: no input letter, with or without the key.
+
+  Theme entries given with `--theme-entries` are locked by the beam, repair and hybrid solvers as today,
+  in all three cases. A listed cell that is out of bounds or holds no letter fails the run through
+  `_fail_fill` (exit 1); the list is never trimmed silently.
+- **Where the lock set is applied (C12).** `Grid.from_dict` writes `Grid.cells` directly and never calls
+  `set_letter`, so it applies the `"locked"` key in its own pass after the cells are populated, and
+  defaults to no locks when the key is absent. The other two cases are post-load passes in `cli.py`'s
+  `fill`: without the key, `--lock-filled` locks every letter; `--no-lock-filled` empties
+  `locked_cells` whatever `from_dict` applied. `place_word` already tolerates a locked cell holding the
+  same letter, and `set_letter`'s new check (below) raises only on a different one, so a theme entry
+  that is also in the `"locked"` list places cleanly.
+- **`locked_cells` survives every grid copy a solver makes.** `Grid.clone` already copies it. Two fill
+  paths round-trip through `Grid.to_dict`/`Grid.from_dict`, which drop it: `Autofill.fill_with_restarts`
+  (`self.grid = Grid.from_dict(original_grid_state)`) and `AdaptiveAutofill` (`_original_grid_dict`,
+  rebuilt by `_skeleton_grid`). `to_dict` gains `include_locks: bool = False`; with `True` it adds
+  `"locked"` (sorted row-major, `[]` when none), and only those two round trips pass `True`. With the
+  default its output is unchanged, so `-o` files, pause state (`state_manager.py` and the degenerate
+  save in `fill`), progress snapshots and `nyt_parser.py` carry no locks (C10). A test copies a locked
+  grid through `clone` and through a `to_dict(include_locks=True)`/`from_dict` round trip and asserts
+  the set is intact; this is the load-bearing test of §2.1.
+- **No write changes the value of a locked cell (D3)**, not only writes that empty it. `Grid.set_letter`
+  raises `ValueError` when the cell is locked and the letter differs (today it has no lock check).
+  `Grid.remove_word` and `Grid.place_word` already honour `locked_cells`. Other writers of `Grid.cells`
+  include `IterativeRepair`'s bulk `cells[:] = ...` restores, `_backtrack_region` and
+  `_would_create_gibberish`; the plan enumerates every writer in `cli/src/` with `ast-grep` and a
+  positive control, and each one either skips locked cells or is shown to restore a copy taken while the
+  locked cells held their input letters.
+- **End-to-end postcondition in `cli.py` `fill`.** Before a grid leaves `fill` (the stdout result, the
+  paused payload, the `-o` file), every locked cell of the input lock set holds its input letter. On a
+  mismatch, `fill` writes no output file and fails closed through `_fail_fill` (exit 1) with
+  `Autofill changed a locked letter; nothing was written.` The sweep above is defence in depth; this
+  check is the guarantee. Tests: a stub solver that overwrites a locked cell gives exit 1 and no `-o`
+  file; and the postcondition holds on a grid with a typed letter under every `--algorithm` value and
+  under `--adaptive`.
+- **A placement that conflicts with a lock fails that placement (C13).** `Grid.place_word` raises
+  `ValueError` on a word that disagrees with a locked letter. Beam search and repair's CSP path already
+  catch it and try the next candidate. Three sites call it bare: `Autofill._backtrack`,
+  `Autofill._backtrack_with_mac` and `IterativeRepair._repair_invalid_words`; there the error reaches
+  `fill`'s `except ValueError` and the run exits 1 (non-destructive, but failed). Each of the three treats
+  it as a failed placement instead. Theme entries reach only beam, repair and hybrid (classic `regex` and
+  `trie` warn and ignore `--theme-entries`); from the UI, theme-locked letters are also in the `"locked"`
+  list, so classic locks them too.
+- **Adaptive mode never blacks out a locked letter (D2).** `Grid.set_black_square` raises `ValueError`
+  when the cell, or with `enforce_symmetry` its 180° partner, is locked. `AdaptiveAutofill` drops any
+  black-square suggestion whose cell or partner is locked or holds a letter, before it reaches
+  `_apply_black_square`.
+- **A fully locked slot is valid (B1, owner ruling G13).** In `IterativeRepair` (`--algorithm repair`,
+  and hybrid's repair phase), a slot whose every cell is locked (`_slot_fully_locked`) is valid
+  regardless of list membership or score: `_find_conflicts` does not flag it as an invalid word, and
+  `_forward_check` skips `find` for a fully locked crossing slot. This covers a typed word that is not in
+  the lists (case 2), a typed listed word that scores below the run's min score, and a theme entry, which
+  `IterativeRepair.fill` places with `lock=True`. The theme-entry case is a defect on `main` today:
+  `_forward_check` never consults `_is_valid_word`, and the trie the repair matcher searches holds only
+  list words and is searched at the run's floor, so a theme entry that is off-list or below the floor rejects every
+  CSP placement crossing it. This rule fixes it.
+- **Pre-flight** runs on a fresh run (not `--resume`) whose lock set is non-empty, after the word lists
+  load and after the `empty_slots` early return, before the solver runs:
+  - `model = SlotModel.from_grid(grid)` (not `from_blacks`, which passes NumPy integers through);
+    `index = LetterBitsetIndex.from_word_list(word_list)`; `fixed = slot_model.fixed_from_grid(g)`,
+    where `g` is `grid.clone()` after `g.clear_unlocked()`, so unlocked letters (autofilled ones sent by
+    the UI) take no part; `report = src.domain.fillability.assess(model, index, fixed, min_score=0)`.
+  - A **dead slot** is an open slot (its pattern has a `?`) whose own pattern matches no word:
+    `index.count_matches(pattern(model, s.id, fixed), min_score=0) == 0`. Pass `min_score=0` explicitly;
+    `count_matches` defaults to 30. Only these directly dead slots count, not `report.wiped_slots`:
+    `assess`'s cascade empties every slot crossing a dead one, which would turn every typed letter in
+    the region red (C1).
+  - **Case 1, a dead slot contains a locked cell:** no solver runs. The `--json-output` result is
     `{"success": false, "blocked": true, "reason": "no_word_fits", "blocked_cells": [[r, c], ...],
     "blocked_slots": [{"row": r, "col": c, "direction": "across"|"down", "length": n, "pattern": "C?T"}],
     "off_list_cells": [...], "stuck_cells": [], "grid": <input grid, unchanged>}` and the exit code is
-    **3**. `blocked_slots` lists `report.wiped_slots` in slot-model order; `blocked_cells` is the locked <!-- docs-check: allow (planned by this spec, not built yet) -->
-    cells inside those slots. Text output prints `Blocked: no word fits <pattern> at <row>,<col>
+    **3**. `"blocked_slots"` lists every dead slot in slot-model order; `"blocked_cells"` is the locked
+    cells inside them. Text output prints `Blocked: no word fits <pattern> at <row>,<col>
     <direction>`, one line per slot.
-  - **Case 2, `report.off_list_fixed`:** a typed word that is not in the lists does not make the fill
-    impossible, so the run **proceeds**. Its cells are reported in `"off_list_cells"`, and the
-    `"warnings"` array gains `"Typed words not in the selected word lists: <WORD>, ..."`.
+  - **Dead slots, none containing a locked cell (B2):** the selected lists have no word of that length.
+    Same result shape and exit 3, with `"reason": "no_word_of_length"` and `"blocked_cells": []`; text
+    output prints `Blocked: the selected word lists have no words of length <n>`, one line per length.
+    Without this split, an empty grid on a list with no long words was blocked with nothing to
+    highlight.
+  - **`report.refuted` with no dead slot** (a refutation only the cascade finds): the run proceeds, and
+    case 3 reports what it could not fill.
+  - **Case 2, `report.off_list_fixed`:** a fully locked word that is not in the lists does not make the
+    fill impossible (the rule above makes it valid), so the run **proceeds**. Its cells are reported in
+    `"off_list_cells"`, and the `"warnings"` array gains
+    `"Typed words not in the selected word lists: <WORD>, ..."`. Pre-flight also emits one stderr
+    progress event, status `running`, whose `data` carries `"off_list_cells"` and that warning, so the UI
+    can show it while the run continues (C4); today `warnings` reaches only the final stdout JSON.
+  - Pre-flight sees only letters in the input grid. On the bare CLI, entries given with
+    `--theme-entries` are placed later, inside the solver, so pre-flight does not check them. From the
+    UI they are in the grid and in the lock list.
+  - **Imports (C9).** `cli/src/domain/*` use absolute `from src.…` imports, which fail under the
+    README's `python -m cli.src.cli` from the repo root (`ModuleNotFoundError: No module named
+    'src.domain'`). Pre-flight must import under both entry points (relative imports in
+    `cli/src/domain/`, or the `sys.path` bootstrap `adaptive_autofill.py` uses). A test runs the
+    README's `fill` example through `python -m cli.src.cli` from the repo root on a grid with at least
+    one letter; the shipped example grids have none, so on them pre-flight never runs.
 - Pre-flight latency is measured in the plan on `comprehensive` and on the largest `raw/` list, at
   15×15 and 21×21, and recorded there with the command that produced it. If it exceeds 2 s on
   `comprehensive` at 21×21, that is reported to the owner before the task lands.
-- **Case 3, end of run:** every result (success, partial, timeout) carries `"stuck_cells"`: the locked <!-- docs-check: allow (planned by this spec, not built yet) -->
-  cells in slots that still contain an empty cell. `[]` when the fill is complete.
-- Every `--json-output` fill result carries `"blocked"` (bool), `"blocked_cells"`, `"off_list_cells"`
-  and `"stuck_cells"` (lists, `[]` when empty). Cell lists are unique, sorted row-major, `[row, col]`
-  zero-based.
-- `--resume` is unchanged: locks are not persisted in state files (the DD4 comment in `cli.py`'s `fill`),
-  and pause/resume has no UI.
+- **Case 3, end of run (C2):** every result (success, partial, timeout) carries `"stuck_cells"`: the
+  locked cells in (a) slots that still contain an empty cell and whose final pattern matches no word at
+  the run's min score, and (b) filled slots that the result's `problematic_slots` flags with reason
+  `invalid_word`. Repair and hybrid fill invalid words rather than leave `?`, so (a) alone is `[]` on
+  them; counting every slot with an empty cell would over-report on a timeout. `[]` when the fill is
+  complete.
+- **Result keys (C11).** The four `--json-output` fill results (the main result, the already-filled
+  early return, the paused payload and the blocked result) carry `"blocked"` (bool), `"blocked_cells"`,
+  `"off_list_cells"` and `"stuck_cells"` (lists, `[]` when empty). Errors from `_fail_fill`
+  (`{success, error, hint}`) do not. Cell lists are unique, sorted row-major, `[row, col]` zero-based.
+- **Pause markers (C6).** `pause_controller.mark_running()` precedes word-list loading, but `fill`'s
+  `try`/`finally` covers only `_run_fill`, so every exit between them leaks the markers: the
+  theme-entries JSON error `return`, each `_fail_fill` (`sys.exit`), the word-list open error, and now
+  the blocked return. The `try` whose `finally:` clears the markers starts immediately after
+  `mark_running()`, so one cleanup covers all of them and the `empty_slots` early return.
+- `--resume` is unchanged: neither `--lock-filled` nor a `"locked"` key applies, locks are not
+  persisted in state files (the DD4 comment in `cli.py`'s `fill`; `to_dict`'s default output stays
+  lock-free), pre-flight does not run, and pause/resume has no UI.
 
 **[NOTE]** `assess` is the 2026-09 redesign's fillability capability (spec
 2026-09-07-domain-capabilities-design, §8). `refuted` is one-sided: `True` proves no fill exists;
-`False` proves nothing, which is why case 3 exists. Pre-flight uses `min_score=0` so it blocks only when
-no listed word fits at all, never because of the score floor.
+`False` proves nothing, which is why case 3 exists. A dead slot always makes `refuted` true; pre-flight
+blocks on dead slots only, so the red cells are the letters that cause the block. Pre-flight uses floor
+0 so it blocks only when no listed word fits at all, never because of the score floor.
+
+**[NOTE]** Known limitation (owner ruling G13): a partially locked slot is still searched at the run's
+min score. A typed pattern that only below-floor words fit passes pre-flight, and the run cannot fill
+that slot; it ends partial or at its timeout, with those cells in `"stuck_cells"`. There is no second
+pre-flight at the run's floor.
+
+**[?]** Not read: how `BeamSearchAutofill` and the beam orchestrator judge a fully filled off-list slot,
+and the `problematic_slots` shape of solvers other than `IterativeRepair`. The plan checks both before
+relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and hybrid.
 
 ### 2.2 Adapter and route
 
 **[SPEC]**
-- `cli_adapter.py` treats exit code 3 with a parseable JSON body as a blocked result, not a CLI failure,
-  and returns the body. Any other non-zero exit stays a failure. A contract test pins the argv
-  (`--lock-filled` is passed explicitly), and one real-subprocess test drives a blocked grid end to end.
-- The fill-with-progress route emits the blocked result as the run's terminal event with status
-  `"blocked"`.
+- **The UI's seam is the route (C5).** UI autofill posts to `/api/fill/with-progress`; `routes.py`
+  `fill_with_progress` builds the argv and runs it in a thread through `run_cli_with_progress`, which
+  today parses stdout only on exit 0 and reports any other exit as `CLI Error (code N)`.
+- **Lock channel.** The request body gains `locked_cells: [[r, c], ...]`, built by the UI (§2.3).
+  `validate_fill_request` checks it is a list of in-bounds integer pairs. `fill_with_progress` writes it
+  into the temp grid file as `"locked"`, beside `"size"` and `"grid"`, and always passes `--lock-filled`
+  explicitly. A request without `locked_cells` gets no `"locked"` key, so the CLI locks every letter:
+  an older client fails safe.
+- **Exit 3.** `run_cli_with_progress` treats exit 3 with parseable stdout JSON carrying
+  `"blocked": true` as a result, and emits it as the terminal event with status `complete`. Any other
+  non-zero exit stays `error`. Reusing `complete` rather than adding a `blocked` status leaves the three
+  places that know the terminal set unchanged (`progress_routes.py`'s `generate()`, `_pump_stderr`'s
+  rewrite list, §2.4's cleanup trigger) (B3). The CLI never emits `blocked` on stderr.
+- **Ceiling (B4).** `fill_with_progress` passes `timeout + 10` to `run_cli_with_progress`, whose
+  `TimeoutExpired` branch sends `Operation timed out` with status `error`. The SSE statuses are
+  `running`, `complete`, `paused` and `error`; there is no `failed`. The route's addend becomes
+  `CLI_STARTUP_BUDGET_SECONDS` from `cli_adapter.py`, the addend the adapter already uses: `--timeout`
+  bounds solver time only, so with `+ 10` a run whose startup (now including pre-flight) exceeds 10 s is
+  killed before it can report its partial result (open point, §7). The 202 response gains
+  `"ceiling_seconds"`, the value passed, for the client watchdog (§2.4).
+- **Tests.** An argv contract test on `fill_with_progress`, in the style of
+  `backend/tests/unit/test_fill_resume_route.py`, pins `--lock-filled` and the temp file's `"locked"`
+  key (present with `locked_cells`, absent without). One real-subprocess test drives a blocked grid end
+  to end to a `complete` event with `blocked: true`.
+- `CLIAdapter.fill` (the synchronous `/api/fill`; it reads the `-o` file and passes no
+  `--json-output`) is not on the UI's path. It sends no lock list, so the CLI locks every letter, and it
+  treats exit 3 as a failure carrying the CLI's message.
 
 ### 2.3 UI
 
 **[SPEC]**
-- At Start, `useAutofillMachine` stores a full snapshot of the grid.
-- A progress or result grid is merged so that it never changes a cell that was non-empty in the
-  snapshot or is theme-locked (extending `mergeGridPreserveThemeLocked`).
+- **Provenance (owner ruling G12 (b)).** The canonical cell (`gridCodec.js`'s `makeCell`, and
+  `App.jsx`'s `initializeGrid`, which builds cells by hand) gains `isAutofilled: false`. Only the
+  autofill merge below sets it `true`. Every other writer that changes a cell's letter, black state or
+  theme lock sets it `false` on the cells it changes: a user edit makes the letter the user's. The flag
+  is part of the saved document (§3.4 saves cells whole) and of `contentSigOf`, so a restored grid keeps
+  its provenance; a grid loaded without the field gets `false`.
+- **Lock list.** `useAutofillMachine.start` sends `locked_cells`: every white cell with a letter that is
+  not `isAutofilled`, plus every `isThemeLocked` cell with a letter. Autofilled letters go in the grid
+  unlocked, so a run started after "Keep partial fill" can still change them.
+- **No other grid writer runs while a run is live (D1).** While `autofill.state` is `submitting` or
+  `running`, the machine's `onGridUpdate` is the only writer of letters and black squares. Every other
+  `setGrid` caller in `App.jsx`, and every control that leads to one (typing and Backspace in
+  `CrosswordGrid`, the black-square and theme-lock toggles, Search placement, theme apply, import,
+  Verify and Clean, grid size, New grid §3.2, Open saved §3.4), is disabled. Each writer also returns
+  early when the check fails at write time, not only at render, so an async handler (Verify, Clean)
+  whose response lands after Start writes nothing. `useNumbering` is already gated on the same
+  states. While gated, the grid shows `Editing is paused while autofill runs.`
+- **Snapshot.** At Start the machine stores a full copy of the grid and the current `gridId`.
+- **Merge** (`mergeGridPreserveThemeLocked`, extended) is defined against the **current** grid: a
+  progress or result grid writes a cell only if that cell is not theme-locked and is either an empty
+  white cell or `isAutofilled`. A cell it gives a letter becomes `isAutofilled: true`; a cell it empties
+  or blacks out becomes `isAutofilled: false`. It never changes a user's letter. A merge arriving when
+  `gridId` differs from the one stored at Start is dropped.
+- **Restore** replaces the grid with the Start snapshot. This is exact because no other writer ran
+  during the run: the only changes since Start are the merge's, including adaptive black squares.
+- **"Keep partial fill"** applies the last result or progress grid through the same merge, against the
+  grid as it is when clicked, so letters the user typed after the run ended stay. It is offered only
+  while `gridId` still matches Start's.
 - Terminal outcomes:
 
   | Outcome | Grid afterwards | Offer | Message |
   |---|---|---|---|
-  | complete fill | the result | — | `Successfully filled X/Y slots!` (unchanged) |
-  | partial / timeout | the snapshot | "Keep partial fill (X/Y slots)" | `Autofill could not fill around the highlighted letters.` if `stuck_cells` is non-empty, else `Partial: X/Y slots (P%)` | <!-- docs-check: allow (planned by this spec, not built yet) -->
-  | blocked (case 1) | the snapshot | — | `No word fits the highlighted letters.` |
+  | complete fill (`success: true`) | the result, merged | — | `Successfully filled X/Y slots!` (unchanged) |
+  | every slot filled, `success: false` | the snapshot | "Keep fill" | `Filled X/Y slots — N entries may be invalid (use Verify Words to check)` (unchanged text) |
+  | partial / timeout | the snapshot | "Keep partial fill (X/Y slots)" | `Autofill could not fill around the highlighted letters.` if `"stuck_cells"` is non-empty, else `Partial: X/Y slots (P%)` |
+  | blocked, `"no_word_fits"` | the snapshot | — | `No word fits the highlighted letters.` |
+  | blocked, `"no_word_of_length"` | the snapshot | — | `The selected word lists have no words of length N.` |
+  | `complete` without a grid | the snapshot | — | `No solution found` (unchanged) |
   | cancelled | the snapshot | "Keep partial fill" if any progress grid filled at least one cell | `Cancelled by user` (unchanged) |
-  | failed / lost contact | the snapshot | as for cancelled | the error, or `Lost contact with the autofill run.` |
+  | paused (no UI control; only an API pause reaches it) | the snapshot | as for cancelled | `Autofill was paused outside the app.` |
+  | `error` event, or lost contact (§2.4) | the snapshot | as for cancelled | the error, or `Lost contact with the autofill run.` |
 
-- "Keep partial fill" applies the last result or progress grid through the same merge.
-- Red cells: a new canonical cell field `isBlocked` (separate from `isError`), set for `blocked_cells`, <!-- docs-check: allow (planned by this spec, not built yet) -->
-  `stuck_cells` and `off_list_cells`. Case 2 shows its warning as a toast while the run continues. Red <!-- docs-check: allow (planned by this spec, not built yet) -->
-  clears on any cell edit, on New grid, and on Start.
+- A blocked run arrives as a `complete` event with `data.blocked === true` (§2.2); `handleEvent`'s
+  `complete` branch checks for it first.
+- Red cells: a new canonical cell field `isBlocked` (separate from `isError`), set for `"blocked_cells"`,
+  `"stuck_cells"` and `"off_list_cells"`. For case 2, `handleEvent`'s `running` branch reads
+  `"off_list_cells"` and the warning from the pre-flight event's `data`, marks those cells and shows the
+  warning as a toast while the run continues. Red clears on any cell edit, on New grid, and on Start.
+- **Zero word lists (I5).** Start is disabled when no word list is ticked, with the hint
+  `Select at least one word list` (as Search, §4). Today Start is gated only on there being empty
+  slots; the request then sends `wordlists: []` and `validate_fill_request` refuses it with a 400.
 
 ### 2.4 #41: the panel never strands
 
 **[SPEC]**
 - Server (`backend/api/progress_routes.py`): a subscriber's `generate()` no longer calls
-  `cleanup_progress_tracker` in its `finally:`. The tracker is removed 60 s after its terminal event is
-  enqueued. A run the backend kills at its wall-clock ceiling (`timeout_seconds +
-  CLI_STARTUP_BUDGET_SECONDS` in `cli_adapter.py`) enqueues a `failed` terminal event, so that path
-  reaches cleanup too. A second subscriber disconnecting therefore cannot drop the terminal event.
-- Client: a watchdog fires at Start + the run's timeout + 30 s, or when the progress stream answers 404.
-  Either one moves the machine to `failed` with `Lost contact with the autofill run.`, restoring the
-  snapshot (table above).
-- Cancel after the run has ended (server 404) shows the run's real terminal state, not
-  `Cancelled by user`.
+  `cleanup_progress_tracker` in its `finally:`. The tracker is removed 60 s after its terminal event
+  (`complete`, `error` or `paused`) is enqueued. A run the backend kills at its ceiling
+  (`run_cli_with_progress`'s `TimeoutExpired` branch, §2.2) already enqueues `error` with
+  `Operation timed out`, so that path reaches cleanup too. A second subscriber disconnecting therefore
+  cannot drop the terminal event.
+- **Client watchdog (B4).** Armed when the machine enters `running`, keyed to that `taskId`, it fires
+  at Start + `"ceiling_seconds"` + 30 s. When it fires it calls `api.cancelFill(taskId)` (best effort)
+  and moves the machine to `failed` with `Lost contact with the autofill run.`, restoring the snapshot
+  (table above). It is cleared on every transition out of `running` and on unmount.
+- **Stream errors (C8).** `EventSource.onerror` carries no HTTP status, so a 404 from the progress
+  stream cannot be told apart from any other stream error. Any stream error while `running` moves the
+  machine to `failed` with `Lost contact with the autofill run.` (replacing `Connection error`),
+  restoring the snapshot.
+- **Cancel (C7).** Today `cancel()` closes the stream and moves to `cancelled` before posting, so a
+  Cancel after the run has ended shows `Cancelled by user` for a run that was not cancelled. Instead
+  `cancel()` posts `api.cancelFill(taskId)` first and keeps the stream open, the machine staying
+  `running` with a cancel pending. On 200 it moves to `cancelled`; an `error` event that arrives while
+  the cancel is pending (the killed process) also counts as `cancelled`. On 404 (no process running:
+  the run has ended) it keeps waiting on the open stream, and the terminal event, which the server now
+  keeps, or the watchdog decides the outcome. A `complete` event that arrives first is shown as what it
+  is.
 
 **[NOTE]** Not addressed: two subscribers open at the same time each `get()` from one queue and split the
 events (#41's comment, unmeasured). A novice opening a second tab on a running fill is unlikely; the
