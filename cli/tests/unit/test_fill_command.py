@@ -285,3 +285,134 @@ class TestLoadersParseLines:
         CliRunner().invoke(cli, ["resume", str(path), "-w", wordlist_path, "-t", "20", "--state-dir", str(state_dir)])
         assert len(captured["lists"]) == 1
         self._assert_normative_rows(captured["lists"][0])
+
+
+# ---------------------------------------------------------------------------
+# --lock-filled / --no-lock-filled and the grid file's "locked" key
+# novice-readiness spec 0.2.4 §2.1 (C12)
+# ---------------------------------------------------------------------------
+
+L1_LINES = "CAT;50\nCOT;50\nCUT;50\nQUA;50\nXIS;50\n"
+
+
+def _g33_with_locked(locked):
+    return {
+        "size": 3,
+        "grid": [["C", ".", "."], [".", ".", "."], [".", ".", "."]],
+        "locked": locked,
+    }
+
+
+@pytest.mark.parametrize(
+    "locked, extra_flags",
+    [
+        ([[5, 5]], []),
+        ([[2, 2]], []),
+        ([[5, 5]], ["--no-lock-filled"]),
+    ],
+    ids=["out-of-bounds", "empty-cell", "out-of-bounds-no-lock-filled"],
+)
+def test_fill_invalid_locked_list_exits_1(tmp_path, locked, extra_flags):
+    grid_path = tmp_path / "g33.json"
+    grid_path.write_text(json.dumps(_g33_with_locked(locked)))
+    words = tmp_path / "l1.txt"
+    words.write_text(L1_LINES)
+    stdout, stderr, code = run_fill([str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output"] + extra_flags)
+    assert code == 1, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    assert result["success"] is False
+    assert "error" in result
+    assert "blocked" not in result
+
+
+def _paused_state_file(tmp_path):
+    """A complete-grid CSP state file for `fill --resume`, plus a word list."""
+    from datetime import datetime
+
+    from cli.src.core.grid import Grid as _Grid
+    from cli.src.fill.state_manager import CSPState, StateManager
+
+    grid = _Grid(11)
+    for row in range(11):
+        grid.place_word("A" * 11, row, 0, "across")
+    state = CSPState(
+        grid_dict=grid.to_dict(),
+        domains={},
+        constraints={},
+        used_words=[],
+        slot_id_map={},
+        slot_list=[],
+        slots_sorted=[],
+        current_slot_index=0,
+        iteration_count=1,
+        locked_slots=[],
+        timestamp=datetime.now().isoformat(),
+    )
+    sm = StateManager(storage_dir=tmp_path / "states")
+    path = sm.save_csp_state(
+        task_id="lockmode_resume",
+        csp_state=state,
+        metadata={"algorithm": "trie", "wordlists": [], "slots_filled": 0, "total_slots": 0},
+        compress=True,
+    )
+    words = tmp_path / "words.txt"
+    words.write_text(L1_LINES)
+    return str(path), str(words)
+
+
+def test_fill_resume_never_calls_apply_lock_mode(tmp_path, monkeypatch):
+    """§2.1 last bullet: on --resume neither --lock-filled nor a "locked" key applies."""
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("apply_lock_mode must not run on --resume")
+
+    monkeypatch.setattr(cli_module, "apply_lock_mode", _boom)
+    state_path, words = _paused_state_file(tmp_path)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "fill",
+            "--resume",
+            state_path,
+            "-w",
+            words,
+            "-a",
+            "trie",
+            "-t",
+            "20",
+            "-o",
+            str(tmp_path / "out.json"),
+            "--json-output",
+        ],
+    )
+    assert not isinstance(result.exception, AssertionError), result.output
+    assert result.exit_code == 0, (result.output, result.exception)
+
+
+def test_fill_fresh_run_calls_apply_lock_mode(tmp_path, monkeypatch):
+    """Control for the --resume test: the spy does fire on the fresh branch."""
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    calls = []
+    real = cli_module.apply_lock_mode
+
+    def _spy(grid, grid_data, lock_filled):
+        calls.append(lock_filled)
+        return real(grid, grid_data, lock_filled)
+
+    monkeypatch.setattr(cli_module, "apply_lock_mode", _spy)
+    grid_path = tmp_path / "g33.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": [["C", ".", "."], [".", ".", "."], [".", ".", "."]]}))
+    words = tmp_path / "l1.txt"
+    words.write_text(L1_LINES)
+    CliRunner().invoke(
+        cli_module.cli,
+        ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--no-lock-filled", "-t", "10", "--json-output"],
+    )
+    assert calls == [False]
