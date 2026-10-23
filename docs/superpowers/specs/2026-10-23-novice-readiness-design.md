@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.0** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
+**Version 0.2.1** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
 2026-10-23, including the five review rulings; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
 by 2026-10-30
 
@@ -55,7 +55,7 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     Start: a typed pattern that fits only words below the floor passes pre-flight and can still fail
     later, a known limitation. **What it beat:** folding plus a warning-only second `assess` at the
     run's floor.
-- **Must-have, in order:** §5 install, §2 autofill safety (with #41), §3.1 hiding, §3.3 black squares,
+- **Must-have, in order:** §5 install, §2 autofill safety (with #41 and #40's default, §2.5), §3.1 hiding, §3.3 black squares,
   §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
   (TH5), §3.7 grid-writer provenance, §4 word-list and CLI rulings.
 - **Stretch, if the must-haves land:** #19, #20 and #57 item 4 (theme placement); SR2 (search results
@@ -78,9 +78,9 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
 - **Which letters are locked.** New option `--lock-filled/--no-lock-filled`, **default `--lock-filled`**
   (P1). The input grid file may carry an optional `"locked": [[r, c], ...]` key. On a fresh run (for
   `--resume`, see the last bullet) the lock set is:
-  - `--lock-filled` with a `"locked"` key: exactly the listed cells. This is the UI's channel (§2.2): the
-    UI lists the letters the user typed and leaves autofilled letters unlocked, so the solver may change
-    them.
+  - `--lock-filled` with a `"locked"` key: exactly the listed cells; `"locked": []` locks nothing. This
+    is the UI's channel (§2.2): the UI lists the letters the user typed and leaves autofilled letters out
+    of the list, so they are not locked.
   - `--lock-filled` without the key: every letter in the input grid. A CLI user's input grid is what they
     typed.
   - `--no-lock-filled`: no input letter, with or without the key.
@@ -139,8 +139,10 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
   `_forward_check` never consults `_is_valid_word`, and the trie the repair matcher searches holds only
   list words and is searched at the run's floor, so a theme entry that is off-list or below the floor rejects every
   CSP placement crossing it. This rule fixes it.
-- **Pre-flight** runs on a fresh run (not `--resume`) whose lock set is non-empty, after the word lists
-  load and after the `empty_slots` early return, before the solver runs:
+- **Pre-flight** runs on every fresh run (not `--resume`), after the word lists load and after the
+  `empty_slots` early return, before the solver runs. Its length check (B2, below) runs whatever the
+  lock set, including an empty one; the locked-cell checks (case 1 and case 2) need a non-empty lock set,
+  because an unrelated typed letter must not decide whether the same grid is refused:
   - `model = SlotModel.from_grid(grid)` (not `from_blacks`, which passes NumPy integers through);
     `index = LetterBitsetIndex.from_word_list(word_list)`; `fixed = slot_model.fixed_from_grid(g)`,
     where `g` is `grid.clone()` after `g.clear_unlocked()`, so unlocked letters (autofilled ones sent by
@@ -158,10 +160,11 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
     cells inside them. Text output prints `Blocked: no word fits <pattern> at <row>,<col>
     <direction>`, one line per slot.
   - **Dead slots, none containing a locked cell (B2):** the selected lists have no word of that length.
-    Same result shape and exit 3, with `"reason": "no_word_of_length"` and `"blocked_cells": []`; text
+    This check runs on every fresh run, with or without locked cells (M2). Same result shape and exit 3, with `"reason": "no_word_of_length"` and `"blocked_cells": []`; text
     output prints `Blocked: the selected word lists have no words of length <n>`, one line per length.
     Without this split, an empty grid on a list with no long words was blocked with nothing to
-    highlight.
+    highlight. With an empty lock set the fixed letters are none, so every dead slot is a
+    length block.
   - **`report.refuted` with no dead slot** (a refutation only the cascade finds): the run proceeds, and
     case 3 reports what it could not fill.
   - **Case 2, `report.off_list_fixed`:** a fully locked word that is not in the lists does not make the
@@ -178,7 +181,8 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
     'src.domain'`). Pre-flight must import under both entry points (relative imports in
     `cli/src/domain/`, or the `sys.path` bootstrap `adaptive_autofill.py` uses). A test runs the
     README's `fill` example through `python -m cli.src.cli` from the repo root on a grid with at least
-    one letter; the shipped example grids have none, so on them pre-flight never runs.
+    one letter; the shipped example grids have none, so on them only the length check can run and the
+    locked-cell checks never do.
 - Pre-flight latency is measured in the plan on `comprehensive` and on the largest `raw/` list, at
   15×15 and 21×21, and recorded there with the command that produced it. If it exceeds 2 s on
   `comprehensive` at 21×21, that is reported to the owner before the task lands.
@@ -222,11 +226,13 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
 - **The UI's seam is the route (C5).** UI autofill posts to `/api/fill/with-progress`; `routes.py`
   `fill_with_progress` builds the argv and runs it in a thread through `run_cli_with_progress`, which
   today parses stdout only on exit 0 and reports any other exit as `CLI Error (code N)`.
-- **Lock channel.** The request body gains `locked_cells: [[r, c], ...]`, built by the UI (§2.3).
-  `validate_fill_request` checks it is a list of in-bounds integer pairs. `fill_with_progress` writes it
-  into the temp grid file as `"locked"`, beside `"size"` and `"grid"`, and always passes `--lock-filled`
-  explicitly. A request without `locked_cells` gets no `"locked"` key, so the CLI locks every letter:
-  an older client fails safe.
+- **Lock channel.** The request body gains `"locked_cells": [[r, c], ...]`, built by the UI (§2.3), which
+  always sends it, including `[]`. `validate_fill_request` checks it is a list of in-bounds integer
+  pairs; an empty list is valid. `fill_with_progress` tests `locked_cells is not None` (never
+  truthiness): a list, `[]` included, is written into the temp grid file as `"locked"`, beside `"size"`
+  and `"grid"` (`"locked": []` for `[]`), and `--lock-filled` is always passed explicitly. A request
+  with no `locked_cells` field is an older client: no `"locked"` key is written, so the CLI locks every
+  letter and the old client fails safe. `[]` means lock nothing.
 - **Exit 3.** `run_cli_with_progress` treats exit 3 with parseable stdout JSON carrying
   `"blocked": true` as a result, and emits it as the terminal event with status `complete`. Any other
   non-zero exit stays `error`. Reusing `complete` rather than adding a `blocked` status leaves the three
@@ -238,10 +244,11 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
   `CLI_STARTUP_BUDGET_SECONDS` from `cli_adapter.py`, the addend the adapter already uses: `--timeout`
   bounds solver time only, so with `+ 10` a run whose startup (now including pre-flight) exceeds 10 s is
   killed before it can report its partial result (open point, §7). The 202 response gains
-  `"ceiling_seconds"`, the value passed, for the client watchdog (§2.4).
+  `"ceiling_seconds"`, the value passed (`timeout` plus the addend, P7), for the client watchdog (§2.4).
 - **Tests.** An argv contract test on `fill_with_progress`, in the style of
   `backend/tests/unit/test_fill_resume_route.py`, pins `--lock-filled` and the temp file's `"locked"`
-  key (present with `locked_cells`, absent without). One real-subprocess test drives a blocked grid end
+  key in three cases: `locked_cells` present and non-empty, `locked_cells` `[]` (key present, empty), and
+  the field absent (key absent). One real-subprocess test drives a blocked grid end
   to end to a `complete` event with `blocked: true`.
 - `CLIAdapter.fill` (the synchronous `/api/fill`; it reads the `-o` file and passes no
   `--json-output`) is not on the UI's path. It sends no lock list, so the CLI locks every letter, and it
@@ -253,12 +260,23 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
 - **Provenance (owner ruling G12 (b)).** The canonical cell (`gridCodec.js`'s `makeCell`, and
   `App.jsx`'s `initializeGrid`, which builds cells by hand) gains `isAutofilled: false`. Only the
   autofill merge below sets it `true`. Every other writer that changes a cell's letter, black state or
-  theme lock sets it `false` on the cells it changes: a user edit makes the letter the user's. The flag
+  theme lock sets it `false` on the cells it changes: a user edit makes the letter the user's. The
+  exceptions are restore-on-load and Open saved (§3.4), which load a saved document's provenance as
+  saved. The flag
   is part of the saved document (§3.4 saves cells whole) and of `contentSigOf`, so a restored grid keeps
   its provenance; a grid loaded without the field gets `false`.
-- **Lock list.** `useAutofillMachine.start` sends `locked_cells`: every white cell with a letter that is
-  not `isAutofilled`, plus every `isThemeLocked` cell with a letter. Autofilled letters go in the grid
-  unlocked, so a run started after "Keep partial fill" can still change them.
+- **Lock list.** `useAutofillMachine.start` **always** sends `"locked_cells"`, including `[]`: every
+  white cell with a letter that is not `isAutofilled`, plus every `isThemeLocked` cell with a letter.
+  After "Keep partial fill" every letter may be autofilled and the list is `[]`; the route reads that as
+  lock nothing (§2.2), never as lock everything. G12's guarantee is that autofilled letters are not
+  locked.
+- **[?]** Whether each `--algorithm` will *change* a pre-placed unlocked letter is unverified:
+  `Grid.clear_unlocked` has no caller in `cli/src`, and solvers other than `IterativeRepair` may treat
+  such letters as constraints. The plan runs one test per `--algorithm` value that records what happens
+  to a pre-placed unlocked letter before anything relies on it; this spec adds no mechanism.
+- **Document id (M1).** The machine receives the document id as an argument to `start` and stores it
+  with the snapshot. `App` passes its current document id (§3.4) with every merge and with "Keep
+  partial fill"; each compares it with the stored one.
 - **No other grid writer runs while a run is live (D1).** While `autofill.state` is `submitting` or
   `running`, the machine's `onGridUpdate` is the only writer of letters and black squares. Every other
   `setGrid` caller in `App.jsx`, and every control that leads to one (typing and Backspace in
@@ -267,17 +285,19 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
   early when the check fails at write time, not only at render, so an async handler (Verify, Clean)
   whose response lands after Start writes nothing. `useNumbering` is already gated on the same
   states. While gated, the grid shows `Editing is paused while autofill runs.`
-- **Snapshot.** At Start the machine stores a full copy of the grid and the current `gridId`.
+- **Snapshot.** At Start the machine stores a full copy of the grid and the document id passed to
+  `start`. Start clears all red cells (`isBlocked`) **before** the copy is taken, so Restore cannot
+  bring old red back.
 - **Merge** (`mergeGridPreserveThemeLocked`, extended) is defined against the **current** grid: a
   progress or result grid writes a cell only if that cell is not theme-locked and is either an empty
   white cell or `isAutofilled`. A cell it gives a letter becomes `isAutofilled: true`; a cell it empties
   or blacks out becomes `isAutofilled: false`. It never changes a user's letter. A merge arriving when
-  `gridId` differs from the one stored at Start is dropped.
+  the document id `App` passes differs from the one stored at Start is dropped.
 - **Restore** replaces the grid with the Start snapshot. This is exact because no other writer ran
   during the run: the only changes since Start are the merge's, including adaptive black squares.
 - **"Keep partial fill"** applies the last result or progress grid through the same merge, against the
   grid as it is when clicked, so letters the user typed after the run ended stay. It is offered only
-  while `gridId` still matches Start's.
+  while the document id `App` passes still matches Start's.
 - Terminal outcomes:
 
   | Outcome | Grid afterwards | Offer | Message |
@@ -297,7 +317,9 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
 - Red cells: a new canonical cell field `isBlocked` (separate from `isError`), set for `"blocked_cells"`,
   `"stuck_cells"` and `"off_list_cells"`. For case 2, `handleEvent`'s `running` branch reads
   `"off_list_cells"` and the warning from the pre-flight event's `data`, marks those cells and shows the
-  warning as a toast while the run continues. Red clears on any cell edit, on New grid, and on Start.
+  warning as a toast while the run continues. An edit clears red **on the edited cell only**; New grid
+  clears all red; Start clears all red before it takes the snapshot (above). `isBlocked` is **not**
+  saved and not part of `contentSigOf`.
 - **Zero word lists (I5).** Start is disabled when no word list is ticked, with the hint
   `Select at least one word list` (as Search, §4). Today Start is gated only on there being empty
   slots; the request then sends `wordlists: []` and `validate_fill_request` refuses it with a 400.
@@ -306,8 +328,14 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
 
 **[SPEC]**
 - Server (`backend/api/progress_routes.py`): a subscriber's `generate()` no longer calls
-  `cleanup_progress_tracker` in its `finally:`. The tracker is removed 60 s after its terminal event
-  (`complete`, `error` or `paused`) is enqueued. A run the backend kills at its ceiling
+  `cleanup_progress_tracker` in its `finally:`. The tracker records its terminal event (`complete`,
+  `error` or `paused`) when it is enqueued, keeps it, and is removed 60 s after that.
+  **Why a kept event is needed:** the tracker holds one `queue.Queue` per task
+  (`progress_queues[task_id]`) and each subscriber's `generate()` does `task_queue.get(timeout=30)`, so
+  concurrent subscribers *consume* each other's events, and an open second stream can take the terminal
+  event from the panel's stream (#41). On connect and on every queue timeout, `generate()` checks the
+  recorded terminal event and sends it if its own subscriber has not yet sent a terminal event, so a
+  subscriber that lost the race still ends within one timeout. A run the backend kills at its ceiling
   (`run_cli_with_progress`'s `TimeoutExpired` branch, §2.2) already enqueues `error` with
   `Operation timed out`, so that path reaches cleanup too. A second subscriber disconnecting therefore
   cannot drop the terminal event.
@@ -328,9 +356,10 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
   keeps, or the watchdog decides the outcome. A `complete` event that arrives first is shown as what it
   is.
 
-**[NOTE]** Not addressed: two subscribers open at the same time each `get()` from one queue and split the
-events (#41's comment, unmeasured). A novice opening a second tab on a running fill is unlikely; the
-watchdog bounds the damage.
+**[NOTE]** Two subscribers open at the same time still split the *progress* events between them (one
+shared queue); only the terminal event is made safe by the record above. A novice opening a second tab on
+a running fill is unlikely, and the watchdog bounds the damage. Cancel (below) and §6 AF-SUB2 rely on the
+recorded terminal event.
 
 ### 2.5 #40
 
@@ -389,8 +418,13 @@ scope here.
 - Storage stays behind `src/lib/storage.js` (its transport contract is unchanged in spirit: `save`
   rejects on a write failure, `load` never rejects). Saved grids are an array in localStorage key
   `crossword_saved_grids`, newest first; each entry is today's save document plus `name`, keyed by the <!-- docs-check: allow (planned by this spec, not built yet) -->
-  document's `doc.id`. Each cell carries `isAutofilled` (§3.7); an entry without it reads as
+  document's `doc.id`, a unique string (M1). Each cell carries `isAutofilled` (§3.7); an entry without it reads as
   `false`, so letters in an old save count as typed and stay locked. <!-- docs-check: allow (planned by this spec, not built yet) -->
+- **Document id (M1).** `App`'s `gridId` is a counter that restarts at 1 on every load, so it cannot key
+  a save: after a restore, autosave would overwrite a different saved grid. A document id is instead a
+  unique string minted when a grid is created, `crypto.randomUUID()` with a fallback where it is
+  unavailable. New grid (§3.2) and import (§3.7) mint one; Open saved and restore-on-load adopt the
+  entry's id. §2.3 says how the autofill machine uses it. <!-- docs-check: allow (planned by this spec, not built yet) -->
 - `storage.js` gains `list()` (all entries, newest first), `remove(id)` and an upsert-by-id `save(doc)`;
   `load()` returns the newest entry. <!-- docs-check: allow (planned by this spec, not built yet) -->
 - **Autosave and named saves (G3):** `useSaveMachine.js`'s 30 s autosave (`AUTOSAVE_MS`) updates the one
@@ -412,7 +446,7 @@ scope here.
   `offline — will retry` status label, and the unbounded 30 s re-arm. **[?]** Whether autosave should
   also show the quota text is open (§7 proposal in the amendment report).
 
-### 3.5 Grid-edit guards (#62, #63)
+### 3.5 Grid-edit guards (#62, #63, Clean)
 
 **[SPEC]**
 - **#62:** placing a Search result (`handlePatternSelect`) writes a letter only into a white cell that is
@@ -432,7 +466,9 @@ scope here.
   2. `N` = the number of cells that are not theme-locked, held a letter before, and hold none in the
      cleaned result. If `N > 0`, an in-panel confirm (the §3.2 component, no browser dialog) asks
      `Clean will remove N letters` (`1 letter` when `N` is 1) with "Clean" and "Cancel". Cancel leaves
-     the grid, `isError` flags and toasts exactly as they were.
+     the grid, `isError` flags and toasts exactly as they were. On accept, the cleaned letters apply,
+     `isError` is cleared on the cells Clean emptied, and the toast is today's removed-count toast (the
+     server's `message`).
   3. If `N === 0` after step 1, no confirm is shown and the #63 rule applies: `isError` is cleared on
      every cell. The toast is `Grid is clean — all words are valid!` only when `removed_count === 0`;
      when the server wanted to remove only theme-locked letters it reads
@@ -465,8 +501,9 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   "Keep partial fill" path of §2.3) sets it on a letter it writes, which by §2.3's merge rule is only
   into a cell that is empty or already `isAutofilled` in the current grid, and on no other cell.
 - **Every other UI writer clears it** on the cell it changes: `setLetter`, `toggleBlackSquare` (both the
-  cell and its symmetric partner), `handlePatternSelect`, `handleThemeWordApplied`, `handleGridImport`,
-  `handleCleanGrid`, and New grid (§3.2). A cell the user retypes with the same letter is user-typed.
+  cell and its symmetric partner), `toggleThemeLock`, `handlePatternSelect`, `handleThemeWordApplied`, `handleGridImport`,
+  `handleCleanGrid`, and New grid (§3.2); restore-on-load and Open saved (§3.4) are the exceptions and
+  load provenance as saved. A cell the user retypes with the same letter is user-typed.
 - Saved grids carry the field per cell (§3.4); an entry without it reads as `false`. JSON export may
   include it; import ignores it, so every imported letter counts as typed.
 - The UI sends only cells with a letter and `isAutofilled` false as locked letters; the lock channel
@@ -557,9 +594,12 @@ the old one:
 | Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
 | New: AF-LOCK | Type letters, run Repair on the 11x11, cancel and let one run end | Typed letters intact in every progress sample and at the end |
 | New: AF-BLOCK | Type a partial pattern no word fits (e.g. `QX` in the first two cells of a 3-letter slot, pattern `QX?`; a fully typed off-list word is case 2, not a block) | Run does not start; those cells red; message as §2.3. A valid word typed elsewhere in the grid stays black, not red (C1: only directly dead slots count) |
-| New: AF-BLOCK-LEN | Tick a single list that has no word of some slot length in the grid (`awk '{print length($1)}' <list> \| sort -n \| uniq -c` shows which lengths it has); type a valid word elsewhere; Start | Run does not start; `The selected word lists have no words of length N.`; no cell red, including the typed word |
-| New: AF-DEFAULTS | Press Start with all panel defaults on the shipped 11x11 and 15x15 example grids, after typing a few letters | `Successfully filled`; every typed letter intact |
+| New: AF-BLOCK-LEN | Tick a single list that has no word of some slot length in the grid (`awk '{print length($1)}' <list> \| sort -n \| uniq -c` shows which lengths it has); type a valid word elsewhere; Start | Run does not start; `The selected word lists have no words of length N.`; no cell red, including the typed word. Repeat on an empty grid: the same block (M2) |
+| New: AF-DEFAULTS | Press Start with all panel defaults on the shipped 11x11 and 15x15 example grids, after typing a few letters | `Successfully filled`, **or** a partial result with every typed letter intact and the panel back at idle; the log records which |
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
+| New: AF-REFILL | Run Repair, choose "Keep partial fill", type a letter, press Start again | The typed letter is intact; the run is not refused because of the autofilled letters; the lock list sent excludes them |
+| New: AF-LOCKED-CROSS | Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start | The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement |
+| New: AF-GATE | Start a run, then type, press Clean, import a grid and apply a theme | None of them changes the grid; `Editing is paused while autofill runs.` shows |
 
 ---
 
@@ -574,7 +614,7 @@ the old one:
 | P5 | Accent folding scope | Upload/import parsing only; `pattern` input is already A–Z and `?`. |
 | P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam is `[?]` in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
 | P7 | The UI route's ceiling addend (§2.2) | `CLI_STARTUP_BUDGET_SECONDS`, the adapter's addend, replacing `+ 10`, so startup and pre-flight cannot kill a run before it reports. Cost: a stuck run lives longer before `error`. |
-| P8 | Lists with no word of a slot's length, no typed letter involved (§2.1) | Refuse with `"no_word_of_length"` and no red cells. It is a new block that no user letter causes. |
+| P8 | Lists with no word of a slot's length, whatever the lock set (§2.1) | Refuse with `"no_word_of_length"` and no red cells, on every fresh run, with or without typed letters, so one unrelated typed letter never changes the outcome. It is a new block that no user letter causes. |
 | P9 | Every slot filled but `success: false` (§2.3) | Restore the snapshot and offer "Keep fill". The owner ruling covers failed and partial runs; this grid is complete but may hold invalid entries. |
 | P10 | A refutation only `assess`'s cascade finds, no dead slot (§2.1) | Proceed; case 3 reports. Its red set is ill-defined. |
 | P11 | Text of a failed **autosave** (§3.4) | Keep today's `Couldn’t save — will retry.` and the 30 s re-arm; only an explicit Save shows the quota text. Existing tests pin today's text, and a retry cannot fix a full quota. |
@@ -602,3 +642,15 @@ the old one:
   §3 gains Clean's guard and confirm (§3.5), the Theme panel (§3.6) and grid writers (§3.7); §3.4
   specifies autosave against named saves. §5 gains the venv check, `engines` and `PORT`. §6 gains
   ZIP, Linux, named-save, Clean, export, TH5, defaults and length-block cases. §7 gains P7–P15.
+  The 0.2.0 pass also added I5 (zero word lists, §2.3), G1, G6 to G9 (the Grid panel, `handlePatternSelect`
+  cell copies, the theme-locked black-square rule, the hint line) and the §3.2 ordering fix (New grid owns
+  the clearing).
+- 0.2.1 (2026-10-23): amended from a cold review of 0.2.0 (findings M1 to M6 re-checked against
+  `a72be24`, plus minors). M1: a unique string document id replaces `gridId` as the save key and the
+  machine's stale-merge guard (§2.3, §3.4). M2: the length block runs on every fresh run (§2.1, P8).
+  M3: `start` always sends `"locked_cells"`, `[]` meaning lock nothing (§2.2, §2.3). M4: G12 now
+  guarantees only that autofilled letters are not locked; whether a solver changes them is `[?]`. M5:
+  §6 gains AF-REFILL, AF-LOCKED-CROSS and AF-GATE. M6: the tracker records its terminal event and
+  `generate()` re-sends it (§2.4). Minors: `toggleThemeLock` and the restore exceptions (§2.3, §3.7), red
+  cell scope and `isBlocked` persistence, Clean's accepted outcome, `"ceiling_seconds"`, §1's must-have
+  list, the §3.5 heading, AF-DEFAULTS wording.
