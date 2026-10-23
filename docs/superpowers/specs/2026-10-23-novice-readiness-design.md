@@ -303,7 +303,7 @@ before relying on case 3 (b) outside repair and hybrid.
   and hybrid may rewrite an unlocked pre-placed letter, which is intended under G12. Regex, trie and beam keep
   it as a fixed constraint; when it fits no word they fill nothing, and no red cell shows, because
   `stuck_cells` covers locked cells only. This is a known limitation (owner ruling 2026-10-23), tracked as
-  issue #TBD. This spec adds no mechanism.
+  issue #75. This spec adds no mechanism.
 - **Document id (M1).** The machine receives the document id as an argument to `start` and stores it
   with the snapshot. `App` passes its current document id (§3.4) with every merge and with "Keep
   partial fill"; each compares it with the stored one.
@@ -888,4 +888,4 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
 - 0.2.5 (2026-10-23): Task 2.11 characterization and owner ruling (option A: record, no product change).
   §2.3's `[?]` on pre-placed unlocked letters and §2.1's `[?]` on beam with a locked off-list word are closed by
   observation (`cli/tests/unit/test_fill_characterization.py`); the `problematic_slots` half of §2.1's `[?]`
-  stays open. §7 P6 now cites the observation. Known limitation filed as issue #TBD.
+  stays open. §7 P6 now cites the observation. Known limitation filed as issue #75.
