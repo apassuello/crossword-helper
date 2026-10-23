@@ -37,6 +37,12 @@ def test_malformed_score_skipped(tmp_path):
     assert out["skipped"] == [{"line": 1, "text": "apple,x", "reason": "malformed score"}]
 
 
+def test_overflowing_score_skipped_and_other_words_kept(tmp_path):
+    out = parse(tmp_path, "DOG;1e999\nCAT;50\n")
+    assert out["words"] == [{"word": "CAT", "score": 50}]
+    assert out["skipped"] == [{"line": 1, "text": "DOG;1e999", "reason": "malformed score"}]
+
+
 def test_accented_word_accepted(tmp_path):
     assert parse(tmp_path, "CAFÉ\n")["words"] == [{"word": "CAFÉ", "score": None}]
 

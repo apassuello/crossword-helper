@@ -240,8 +240,9 @@ class WordList:
 
         Returns:
             (word, score) tuple where score is None for plain lines, or
-            None if the line is malformed (e.g. a "word,score" CSV header
-            or a scored line with a non-numeric score).
+            None if the line is malformed (e.g. a "word,score" CSV header,
+            a scored line with a non-numeric score, or a score that is
+            infinite or NaN).
         """
         for sep in (";", ","):
             if sep in line:
@@ -249,8 +250,9 @@ class WordList:
                 word = parts[0].strip()
                 try:
                     score = int(float(parts[1].strip()))
-                except (ValueError, IndexError):
-                    # Malformed scored line (e.g. CSV header "word,score") - skip
+                except (ValueError, IndexError, OverflowError):
+                    # Malformed scored line (e.g. CSV header "word,score", or a
+                    # score such as "1e999" that float() reads as infinity) - skip
                     return None
                 return (word, score)
         return (line, None)

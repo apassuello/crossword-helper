@@ -301,6 +301,12 @@ class TestScoredWordlistFormats:
         assert WordList.parse_line("word,score") is None
         assert WordList.parse_line("BADLINE;xx") is None
 
+    def test_parse_line_overflowing_score_is_malformed(self):
+        """A score float() reads as infinity is malformed, not a crash (PR #61 review)."""
+        assert WordList.parse_line("DOG;1e999") is None
+        assert WordList.parse_line("DOG;inf") is None
+        assert WordList.parse_line("dog,-inf") is None
+
 
 class TestFromFileCacheFallback:
     """A cache that cannot load falls back to parsing the .txt (spec section 3)."""
