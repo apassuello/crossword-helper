@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.1.0** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
+**Version 0.1.1** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
 2026-10-23; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
 by 2026-10-30
 
@@ -29,7 +29,8 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     shipping a prebuilt frontend (Python-only install, but a build artefact to maintain); Docker.
   - **Autofill never touches a letter the user typed.** If the solver blocks and would have to clear
     those cells, it stops and shows them in red (Arthur, 11:22 CEST). Implemented as approach A, §2, with
-    all three red cases. **What it beat:** B, re-applying the user's letters in the UI only (the solver
+    all three red cases (Arthur, 11:31 CEST). That case 2 marks cells red *without* stopping the run is
+    not a ruling: it is Claude's reading of the rule, open as §7 P6. **What it beat:** B, re-applying the user's letters in the UI only (the solver
     still clears them internally, so results come back inconsistent, and the logic leaves `cli/`); C,
     pre-flight only (a solvable grid could still lose letters mid-run).
   - A failed, partial or cancelled run restores the grid as it was at Start and offers the partial fill
@@ -57,14 +58,22 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
 - New option `--lock-filled/--no-lock-filled`, **default `--lock-filled`**. With it, every letter in the
   input grid is placed with `Grid.set_letter(row, col, letter, lock=True)`, so it joins
   `grid.locked_cells`. Theme entries are locked as today.
+- **`locked_cells` survives every grid copy a solver makes.** `Grid.clone` already copies it, but
+  `Grid.to_dict`/`Grid.from_dict` drop it, and two fill paths round-trip through them: the restart loop
+  in `Autofill` (`self.grid = Grid.from_dict(original_grid_state)`) and `AdaptiveAutofill`. `to_dict` gains
+  `"locked": [[r, c], ...]` (sorted row-major, `[]` when none) and `from_dict` restores it, defaulting to
+  none when the key is absent so older state files still load. A test copies a locked grid through
+  `clone` and through a `to_dict`/`from_dict` round trip and asserts the set is intact; this is the
+  load-bearing test of §2.1.
 - **No code path empties a locked cell.** `Grid.remove_word` skips locked cells, and so does every other
   path in `cli/src/` that writes an empty value into `Grid.cells`. The plan enumerates those paths with
-  `ast-grep` and a positive control. A solver that tries to place a word conflicting with a locked
+  `ast-grep` and a positive control. (`remove_word` and `place_word` already honour `locked_cells` for
+  theme entries; the sweep is for every other writer.) A solver that tries to place a word conflicting with a locked
   letter fails that placement; it does not overwrite.
 - **Pre-flight**, only with `--lock-filled` and only on a fresh run (not `--resume`): before any solver
   runs, call `src.domain.fillability.assess(model, index, fixed, min_score=0)` with
-  `fixed = slot_model.fixed_from_grid(grid)`, the model from the input grid, and the index from the
-  loaded lists.
+  `model = SlotModel.from_grid(grid)` (not `from_blacks`, which passes NumPy integers through),
+  `fixed = slot_model.fixed_from_grid(grid)`, and the index built from the loaded lists.
   - **Case 1, `report.refuted`:** no solver runs. The `--json-output` result is
     `{"success": false, "blocked": true, "reason": "no_word_fits", "blocked_cells": [[r, c], ...],
     "blocked_slots": [{"row": r, "col": c, "direction": "across"|"down", "length": n, "pattern": "C?T"}],
@@ -75,6 +84,9 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
   - **Case 2, `report.off_list_fixed`:** a typed word that is not in the lists does not make the fill
     impossible, so the run **proceeds**. Its cells are reported in `"off_list_cells"`, and the
     `"warnings"` array gains `"Typed words not in the selected word lists: <WORD>, ..."`.
+- Pre-flight latency is measured in the plan on `comprehensive` and on the largest `raw/` list, at
+  15×15 and 21×21, and recorded there with the command that produced it. If it exceeds 2 s on
+  `comprehensive` at 21×21, that is reported to the owner before the task lands.
 - **Case 3, end of run:** every result (success, partial, timeout) carries `"stuck_cells"`: the locked <!-- docs-check: allow (planned by this spec, not built yet) -->
   cells in slots that still contain an empty cell. `[]` when the fill is complete.
 - Every `--json-output` fill result carries `"blocked"` (bool), `"blocked_cells"`, `"off_list_cells"`
@@ -123,7 +135,9 @@ no listed word fits at all, never because of the score floor.
 **[SPEC]**
 - Server (`backend/api/progress_routes.py`): a subscriber's `generate()` no longer calls
   `cleanup_progress_tracker` in its `finally:`. The tracker is removed 60 s after its terminal event is
-  enqueued. A second subscriber disconnecting therefore cannot drop the terminal event.
+  enqueued. A run the backend kills at its wall-clock ceiling (`timeout_seconds +
+  CLI_STARTUP_BUDGET_SECONDS` in `cli_adapter.py`) enqueues a `failed` terminal event, so that path
+  reaches cleanup too. A second subscriber disconnecting therefore cannot drop the terminal event.
 - Client: a watchdog fires at Start + the run's timeout + 30 s, or when the progress stream answers 404.
   Either one moves the machine to `failed` with `Lost contact with the autofill run.`, restoring the
   snapshot (table above).
@@ -215,7 +229,10 @@ the Heatmap toggle (#50). The issues stay open. No test may depend on them being
 - **`setup.sh`:**
   - The existing Python ≥3.9 and Node ≥18 checks print `Missing: <tool> <minimum version> — install from
     <url>` (python.org/downloads, nodejs.org) and exit 1. An `npm` check is added in the same form.
-  - `npm install` becomes `npm ci`, so setup leaves the tracked `package-lock.json` unchanged (#49).
+  - `npm install` becomes `npm ci`, which never writes `package-lock.json`, so setup leaves the tracked
+    tree clean (#49). `npm ci` fails outright if `package.json` and the lock disagree, so the plan first
+    runs it on a fresh clone with the Node LTS the README names; if it fails, the lock is regenerated
+    once with that Node and committed, and SETUP-1, SETUP-3 and E2-SETUP-1 confirm it.
 - **`run.py`:** `debug=False` by default; `FLASK_DEBUG=1` turns debug on. The docstring and the README's
   dev-mode section say so.
 
@@ -248,14 +265,19 @@ the old one:
 
 | # | Question | Default |
 |---|---|---|
-| P1 | `fill`'s `--lock-filled` default on the CLI, not only from the UI | On. The owner rule is about what the user typed; a CLI user's input grid is what they typed. |
+| P1 | `fill`'s `--lock-filled` default on the CLI, not only from the UI | On. The owner rule is about what the user typed; a CLI user's input grid is what they typed. The shipped `data/grids/example_11x11.json`, `data/grids/example_15x15.json` and `data/grids/example_21x21.json` contain no letters, so the README's `fill` example (R7) is unaffected. |
 | P2 | Pre-flight min score | `0`: block only when no listed word fits at all. |
 | P3 | Tracker retention after the terminal event | 60 s. |
 | P4 | Client watchdog grace | 30 s beyond the run's timeout. |
 | P5 | Accent folding scope | Upload/import parsing only; `pattern` input is already A–Z and `?`. |
+| P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot. Stopping would refuse every grid with a deliberate proper noun. |
 
 ---
 
 ## 8. Amendment record
 
 - 0.1.0 (2026-10-23): first version, from the owner rulings in §1.
+- 0.1.1 (2026-10-23): before owner review. §2.1 gains lock survival across `to_dict`/`from_dict` (the
+  `Autofill` restart loop dropped locks), the pinned `SlotModel.from_grid` constructor and a pre-flight
+  latency check; §2.4 covers a run killed at the adapter's ceiling; §5 covers a lock/`package.json`
+  mismatch under `npm ci`; case 2's continue-on-red moves from §1's rulings to P6.
