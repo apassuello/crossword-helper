@@ -125,11 +125,12 @@ class TestThemeLocking:
         assert grid.is_locked(5, 5)
         assert (5, 5) in grid.locked_cells
 
-        # Try to overwrite it - should be possible with set_letter (low-level)
-        # Note: place_word respects locks, but set_letter is more direct
-        grid.set_letter(5, 5, "Y")
-        assert grid.get_cell(5, 5) == "Y"  # Changed
-        assert grid.is_locked(5, 5)  # Still locked from before
+        # A different letter on a locked cell is refused, like place_word
+        # (novice-readiness spec 0.2.4 §2.1 (D3)).
+        with pytest.raises(ValueError):
+            grid.set_letter(5, 5, "Y")
+        assert grid.get_cell(5, 5) == "X"  # Unchanged
+        assert grid.is_locked(5, 5)  # Still locked
 
     def test_multiple_theme_words(self):
         """Test placing multiple theme words with locking."""

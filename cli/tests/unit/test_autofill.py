@@ -673,3 +673,75 @@ class TestResumeUnwinding:
         autofill = Autofill(grid, tiny_word_list, timeout=5)
 
         assert autofill._unwind_dead_ends() == 0
+
+
+class TestLockPreservingRoundTrips:
+    """Rows rt1/rt2 of Task 2.1: locks survive the two solver round trips
+    (novice-readiness spec 0.2.4 §2.1 (C10))."""
+
+    def test_rt1_fill_with_restarts_rebuild_keeps_locks(self):
+        # 11x11 because fill_with_restarts rebuilds with Grid.from_dict's
+        # default strict_size=True. fill() is stubbed so that attempt 1 fails
+        # and attempt 2 (run on the rebuilt grid) fills more: fill_with_restarts
+        # then keeps attempt 2's grid, so the assertion reads the rebuilt grid
+        # rather than the caller's original object.
+        grid = Grid(11)
+        grid.set_black_square(5, 5)
+        grid.set_letter(0, 0, "C", lock=True)
+        autofill = Autofill(grid, WordList(["CAT"]), timeout=5)
+        calls = []
+
+        def stub_fill(**kwargs):
+            calls.append(autofill.grid)
+            return FillResult(
+                success=False,
+                grid=autofill.grid,
+                time_elapsed=0.0,
+                slots_filled=len(calls),
+                total_slots=10,
+                problematic_slots=[],
+                iterations=0,
+            )
+
+        autofill.fill = stub_fill
+
+        autofill.fill_with_restarts(attempts=2, timeout_per_attempt=3)
+
+        # Preconditions: attempt 2 ran on a rebuilt grid and its grid was kept.
+        assert len(calls) == 2
+        assert calls[0] is grid
+        assert autofill.grid is calls[1]
+        assert autofill.grid is not grid
+        assert autofill.grid.locked_cells == {(0, 0)}
+        assert autofill.grid.get_cell(0, 0) == "C"
+
+    def test_rt2_adaptive_skeleton_grid_keeps_locks(self):
+        from src.fill.adaptive_autofill import AdaptiveAutofill
+
+        grid = Grid(11)
+        grid.set_letter(0, 0, "C", lock=True)
+
+        class _SucceedingSolver:
+            """Stub base solver: one successful attempt, so fill() returns at once."""
+
+            def __init__(self, grid):
+                self.grid = grid
+
+            def fill(self, timeout):
+                return FillResult(
+                    success=True,
+                    grid=self.grid,
+                    time_elapsed=0.0,
+                    slots_filled=0,
+                    total_slots=0,
+                    problematic_slots=[],
+                    iterations=0,
+                )
+
+        adaptive = AdaptiveAutofill(grid, [], {}, base_autofill=_SucceedingSolver(grid))
+        adaptive.fill(timeout=60)
+
+        # Precondition: fill() took the adaptive path and set the snapshot
+        # (it does not when BlackSquareSuggester failed to import).
+        assert hasattr(adaptive, "_original_grid_dict")
+        assert adaptive._skeleton_grid().locked_cells == {(0, 0)}

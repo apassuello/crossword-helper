@@ -179,7 +179,7 @@ class AdaptiveAutofill:
         # Snapshot the pristine grid so failed attempts can be rolled back:
         # without this, junk letters from a failed attempt leak into the next
         # attempt and into the final saved grid.
-        original_grid_dict = copy.deepcopy(self.grid.to_dict())
+        original_grid_dict = copy.deepcopy(self.grid.to_dict(include_locks=True))
         self._original_grid_dict = original_grid_dict
 
         # Main autofill loop
@@ -284,7 +284,7 @@ class AdaptiveAutofill:
         attempt left behind (it refuses to place a black square on a cell
         containing a letter, so a repair-filled grid would never be adaptable).
         """
-        base_dict = getattr(self, "_original_grid_dict", None) or self.grid.to_dict()
+        base_dict = getattr(self, "_original_grid_dict", None) or self.grid.to_dict(include_locks=True)
         fresh = Grid.from_dict(copy.deepcopy(base_dict), strict_size=False)
         for _slot, suggestion in self.adaptations_applied:
             try:
