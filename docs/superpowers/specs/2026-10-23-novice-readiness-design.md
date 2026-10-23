@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.4** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.5** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -234,9 +234,12 @@ min score. A typed pattern that only below-floor words fit passes pre-flight, an
 that slot; it ends partial or at its timeout, with those cells in `"stuck_cells"`. There is no second
 pre-flight at the run's floor.
 
-**[?]** Not read: how `BeamSearchAutofill` and the beam orchestrator judge a fully filled off-list slot,
-and the `problematic_slots` shape of solvers other than `IterativeRepair`. The plan checks both before
-relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and hybrid.
+**[NOTE]** Observed (Task 2.11, CH3, `cli/tests/unit/test_fill_characterization.py`): `--algorithm beam` fills
+around a locked off-list word; with row 0 `CAB` locked on `G33` it fills the remaining rows and downs, so case 2
+under beam continues.
+
+**[?]** Not read: the `problematic_slots` shape of solvers other than `IterativeRepair`. The plan checks it
+before relying on case 3 (b) outside repair and hybrid.
 
 ### 2.2 Adapter and route
 
@@ -296,10 +299,11 @@ relying on case 2 under `--algorithm beam` and on case 3 (b) outside repair and 
   locked.
 - **Theme entries (`getThemeEntries`).** The UI sends a theme entry (`--theme-entries`) only for a
   theme-locked run that fills a whole slot. A partial theme-locked run goes only in the lock list.
-- **[?]** Whether each `--algorithm` will *change* a pre-placed unlocked letter is unverified:
-  `Grid.clear_unlocked` has no caller in `cli/src`, and solvers other than `IterativeRepair` may treat
-  such letters as constraints. The plan runs one test per `--algorithm` value that records what happens
-  to a pre-placed unlocked letter before anything relies on it; this spec adds no mechanism.
+- **[NOTE]** Observed (Task 2.11, CH1/CH2, pinned by `cli/tests/unit/test_fill_characterization.py`): repair
+  and hybrid may rewrite an unlocked pre-placed letter, which is intended under G12. Regex, trie and beam keep
+  it as a fixed constraint; when it fits no word they fill nothing, and no red cell shows, because
+  `stuck_cells` covers locked cells only. This is a known limitation (owner ruling 2026-10-23), tracked as
+  issue #TBD. This spec adds no mechanism.
 - **Document id (M1).** The machine receives the document id as an argument to `start` and stores it
   with the snapshot. `App` passes its current document id (§3.4) with every merge and with "Keep
   partial fill"; each compares it with the stored one.
@@ -746,7 +750,7 @@ Owner approval of 0.2.2 on 2026-10-23 ruled every row's default as written; P17 
 | P3 | Tracker retention after the terminal event | 60 s. |
 | P4 | Client watchdog grace | 30 s beyond the route's `"ceiling_seconds"` (§2.4). |
 | P5 | Accent folding scope | Every word-list load: the shared `WordList.from_file → parse_line → add_words` path of §4, so upload preview and solver fold alike; `pattern` input is already A–Z and `?`. `[?]` `verify_words` and `clean_grid` in `backend/api/routes.py` read lists with their own parser; whether they fold is for the plan to check. |
-| P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam is `[?]` in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
+| P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam fills around it, observed in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
 | P7 | The UI route's ceiling addend (§2.2) | `CLI_STARTUP_BUDGET_SECONDS`, the adapter's addend, replacing `+ 10`, so startup and pre-flight cannot kill a run before it reports. Cost: a stuck run lives longer before `error`. |
 | P8 | Lists with no word of a slot's length, whatever the lock set (§2.1) | Refuse with `"no_word_of_length"` and no red cells, on every fresh run, with or without typed letters, so one unrelated typed letter never changes the outcome. It is a new block that no user letter causes. |
 | P9 | Every slot filled but `success: false` (§2.3) | Restore the snapshot and offer "Keep fill". The owner ruling covers failed and partial runs; this grid is complete but may hold invalid entries. |
@@ -881,3 +885,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   owner; defaults apply if unruled by 2026-10-30); the amendment record moves to §9. §4 names the test that pins the old accent behaviour and
   the `ß` → `SS` trap; §3.1 corrects which `ToolRail.test.jsx` tests mention Heatmap. Same day: PD-5C starred;
   PD-6-G18, G19 and G21 carry their values here rather than pointing at the plan.
+- 0.2.5 (2026-10-23): Task 2.11 characterization and owner ruling (option A: record, no product change).
+  §2.3's `[?]` on pre-placed unlocked letters and §2.1's `[?]` on beam with a locked off-list word are closed by
+  observation (`cli/tests/unit/test_fill_characterization.py`); the `problematic_slots` half of §2.1's `[?]`
+  stays open. §7 P6 now cites the observation. Known limitation filed as issue #TBD.

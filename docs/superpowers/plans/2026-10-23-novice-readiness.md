@@ -1013,6 +1013,16 @@ git commit -m "feat(fill): blocked/off-list/stuck cell lists on every fill resul
 - [ ] **Step 2: STOP gate (§2.3 `[?]`).** If any CH1/CH2 row shows a solver changing a pre-placed unlocked letter (other letter or `"."`), or the outcome varies between runs, **STOP and report to Arthur** with the table. Do not fix it in this task.
 - [ ] **Step 3: STOP gate (§2.1 `[?]`).** If CH3 shows beam rejecting every placement crossing the locked off-list word, **STOP and report to Arthur**: the spec's case 2 under beam needs an amendment.
 - [ ] **Step 4: Record** the observed table in this task, with the command `pytest cli/tests/unit/test_fill_characterization.py -v`.
+
+  Recorded 2026-10-23 (3 runs per row; the `(0,0)` outcome never varied). Per run: `python -m cli.src.cli fill <grid> -w <list> --allow-nonstandard --json-output --timeout 10 --algorithm <alg> -o <out>` (`--timeout 30` for hybrid). Test command: `pytest cli/tests/unit/test_fill_characterization.py -v`.
+
+  | row | regex | trie | beam | repair | hybrid |
+  |---|---|---|---|---|---|
+  | CH1: G33, `C` at (0,0), `"locked": []`, L6 | C kept | C kept | C kept (fills the transpose) | C kept | C kept (square or transpose varies; (0,0) does not) |
+  | CH2: as CH1 with `Q` | Q kept, nothing filled | same | same | rewritten to C, full CAT/ORE/WED | rewritten to C, full CAT/ORE/WED |
+  | CH3: beam, G33, row 0 `CAB` locked, L5 | | | fills: rows OLE/DEE, downs COD/ALE/BEE | | |
+
+  Step 2 STOP gate fired (CH2: repair and hybrid rewrite an unlocked `Q`); owner ruled 2026-10-23: record, no product change (beat: clear unlocked letters before regex/trie/beam; hide Beam/Classic CSP). Step 3 not triggered: beam fills around a locked off-list word.
 - [ ] **Step 5: Commit.**
 
 ```bash
