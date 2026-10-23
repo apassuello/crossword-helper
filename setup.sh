@@ -50,12 +50,29 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/venv"
 
+# novice-readiness spec 0.2.4 §5 (venv): Debian/Ubuntu without python3-venv leave a
+# partial venv/ with no bin/pip. A venv/ is trusted only if bin/pip exists: on either
+# branch a pip-less venv/ is removed, so the next run starts clean, and the message
+# names the package.
+VENV_MISSING="Install python3-venv (for example: sudo apt install python3-venv), then run ./setup.sh again"
+
+require_venv_pip() {
+    if [ ! -x "$VENV_DIR/bin/pip" ]; then
+        rm -rf "$VENV_DIR"
+        echo "$VENV_MISSING"
+        exit 1
+    fi
+}
+
 if [ ! -d "$VENV_DIR" ]; then
     echo ""
     echo "Creating Python virtual environment..."
-    python3 -m venv "$VENV_DIR"
+    # `|| true`: a failing `-m venv` must reach the pip check (set -e would abort first)
+    python3 -m venv "$VENV_DIR" || true
+    require_venv_pip
     echo "[ok] Virtual environment created at venv/"
 else
+    require_venv_pip
     echo "[ok] Virtual environment already exists"
 fi
 
