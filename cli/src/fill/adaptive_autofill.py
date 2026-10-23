@@ -13,6 +13,8 @@ import logging
 import time
 from typing import Dict, List, Optional
 
+from ..core.cell_types import BLACK_CELL as BLACK_STR
+from ..core.cell_types import EMPTY_CELL as EMPTY_STR
 from ..core.grid import Grid
 from .autofill import Autofill
 
@@ -326,6 +328,23 @@ class AdaptiveAutofill:
         )
 
         if not suggestions or len(suggestions) == 0:
+            logger.info("No valid black square suggestions for problematic slot")
+            return False
+
+        # novice-readiness spec 0.2.4 §2.1 (D2): never black out a locked cell
+        # or a cell holding a letter, nor the 180-degree partner of one.
+        locked = self.grid.locked_cells
+
+        def _blocked(row: int, col: int) -> bool:
+            return (row, col) in locked or skeleton_grid_cells[row][col] not in (EMPTY_STR, BLACK_STR)
+
+        suggestions = [
+            s
+            for s in suggestions
+            if not _blocked(s["row"], s["col"])
+            and not _blocked(s["symmetric_position"]["row"], s["symmetric_position"]["col"])
+        ]
+        if not suggestions:
             logger.info("No valid black square suggestions for problematic slot")
             return False
 

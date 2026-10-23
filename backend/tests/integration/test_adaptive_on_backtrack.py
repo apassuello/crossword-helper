@@ -137,3 +137,70 @@ class TestAdaptiveOnBacktrackIntegration:
         # The hook should be set during __init__ → _create_autofill
         assert adaptive.autofill.on_backtrack is not None
         assert adaptive.autofill.on_backtrack == adaptive._on_backtrack
+
+
+def _suggestion(row, col, size=11):
+    """A suggester-shaped dict whose symmetric_position is the 180-degree partner."""
+    return {
+        "row": row,
+        "col": col,
+        "score": 1.0,
+        "reasoning": "stub",
+        "symmetric_position": {"row": size - 1 - row, "col": size - 1 - col},
+    }
+
+
+def _adaptive_with_suggestions(suggestions, letters=(), locked=()):
+    """11x11 AdaptiveAutofill whose suggester returns ``suggestions`` in order."""
+    grid = Grid(11)
+    for row, col, letter in letters:
+        grid.set_letter(row, col, letter, lock=(row, col) in locked)
+    wl = WordList(["CAT", "BAT"])
+    adaptive = AdaptiveAutofill(
+        grid=grid,
+        wordlists=wl,
+        options={"timeout": 1},
+        base_autofill=Autofill(grid, wl, timeout=1),
+    )
+    adaptive._find_problematic_slot = lambda *a, **k: {"row": 5, "col": 0, "direction": "across", "length": 11}
+    adaptive.suggester.suggest_placements = lambda **kw: list(suggestions)
+    applied = []
+    real_apply = adaptive._apply_black_square
+
+    def spy(suggestion):
+        applied.append((suggestion["row"], suggestion["col"]))
+        real_apply(suggestion)
+
+    adaptive._apply_black_square = spy
+    return adaptive, applied
+
+
+class TestTryAdaptSkipsLockedCells:
+    """novice-readiness spec 0.2.4 §2.1 (D2): no black square on a locked or lettered cell."""
+
+    def test_locked_cell_suggestion_is_dropped(self):
+        adaptive, applied = _adaptive_with_suggestions([_suggestion(0, 0)], letters=[(0, 0, "C")], locked={(0, 0)})
+        assert adaptive._try_adapt() is False
+        assert applied == []
+
+    def test_locked_partner_suggestion_is_dropped(self):
+        adaptive, applied = _adaptive_with_suggestions([_suggestion(10, 10)], letters=[(0, 0, "C")], locked={(0, 0)})
+        assert adaptive._try_adapt() is False
+        assert applied == []
+
+    def test_best_remaining_suggestion_is_applied(self):
+        adaptive, applied = _adaptive_with_suggestions(
+            [_suggestion(0, 0), _suggestion(10, 10), _suggestion(5, 3)],
+            letters=[(0, 0, "C")],
+            locked={(0, 0)},
+        )
+        assert adaptive._try_adapt() is True
+        assert applied == [(5, 3)]
+        assert adaptive.grid.is_black(5, 3)
+        assert adaptive.grid.is_black(5, 7)
+        assert adaptive.grid.get_cell(0, 0) == "C"
+
+    def test_unlocked_lettered_cell_suggestion_is_dropped(self):
+        adaptive, applied = _adaptive_with_suggestions([_suggestion(2, 2)], letters=[(2, 2, "Q")])
+        assert adaptive._try_adapt() is False
+        assert applied == []
