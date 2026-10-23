@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.9+ · Click · Flask 3.0 · React 18 · Vite 5 · pytest · vitest
 
-**Spec:** `docs/superpowers/specs/2026-10-22-basics-first-design.md`. §6 open points carry defaults that apply if unruled by 2026-10-29. Tasks 6, 7, 8 and 10 implement those defaults; re-read §6 before starting them.
+**Spec:** `docs/archive/completed-plans/2026-10-22-basics-first-design.md`. §6 open points carry defaults that apply if unruled by 2026-10-29. Tasks 6, 7, 8 and 10 implement those defaults; re-read §6 before starting them.
 
 ## Global Constraints
 
@@ -40,10 +40,10 @@
 | cache whose pickle names a missing module | words from `.txt`, one stderr warning naming the cache |
 | truncated cache file | words from `.txt`, one stderr warning |
 
-- [ ] Write a failing test that builds a cache pickling a class under a module path that does not exist, and asserts the `.txt` words come back.
-- [ ] Run `pytest cli/tests/unit/test_word_list.py -v`; confirm it fails on the propagated exception.
-- [ ] Implement; rerun; pass.
-- [ ] Commit `fix(wordlist): fall back to the text list when a cache cannot be unpickled`, with `Refs #44` and `Refs #43` in the body (not `Closes`: `scripts/check-commit-msg.sh` rejects partial-closure trailers).
+- [x] Write a failing test that builds a cache pickling a class under a module path that does not exist, and asserts the `.txt` words come back.
+- [x] Run `pytest cli/tests/unit/test_word_list.py -v`; confirm it fails on the propagated exception.
+- [x] Implement; rerun; pass.
+- [x] Commit `fix(wordlist): fall back to the text list when a cache cannot be unpickled`, with `Refs #44` and `Refs #43` in the body (not `Closes`: `scripts/check-commit-msg.sh` rejects partial-closure trailers).
 
 ### Task 2: Stop tracking caches (spec §2)
 
@@ -53,8 +53,8 @@
 - `git ls-files 'data/wordlists/*.pkl'` prints nothing; the files may stay on disk.
 - `git check-ignore -v data/wordlists/x.pkl` names the new `.gitignore` line.
 
-- [ ] `git rm --cached` both caches; add `data/wordlists/**/*.pkl` to `.gitignore`.
-- [ ] Commit `chore(wordlists): untrack the stale .pkl caches`, body `Refs #58`.
+- [x] `git rm --cached` both caches; add `data/wordlists/**/*.pkl` to `.gitignore`.
+- [x] Commit `chore(wordlists): untrack the stale .pkl caches`, body `Refs #58`.
 
 ### Task 3: Move the unfiltered family to `raw/`; panel skips it; metadata cleanup (spec §2)
 
@@ -72,10 +72,10 @@
 - Every key in `metadata.json["wordlists"]` names an existing file; the `comprehensive` description contains no digits.
 - The `#` header lines inside moved files are left as they are.
 
-- [ ] Failing test: `list_all()` over a fixture dir containing `raw/x.txt` excludes it.
-- [ ] Move files with `git mv`; edit `list_all`; clean the metadata; update consumers and the word-list README.
-- [ ] `pytest backend/tests/unit/test_wordlist_manager.py backend/tests/integration/test_wordlist_metadata.py -v`; `scripts/docs-check.sh` after staging.
-- [ ] Commit `chore(wordlists): move the unfiltered list family to raw/ and drop dead metadata`, body `Refs #58`.
+- [x] Failing test: `list_all()` over a fixture dir containing `raw/x.txt` excludes it.
+- [x] Move files with `git mv`; edit `list_all`; clean the metadata; update consumers and the word-list README.
+- [x] `pytest backend/tests/unit/test_wordlist_manager.py backend/tests/integration/test_wordlist_metadata.py -v`; `scripts/docs-check.sh` after staging.
+- [x] Commit `chore(wordlists): move the unfiltered list family to raw/ and drop dead metadata`, body `Refs #58`.
 
 ### Task 4: verify-words and clean default to `comprehensive` (spec §2)
 
@@ -93,9 +93,9 @@
 | `["core/crosswordese"]` | that list only (unchanged) |
 | `["nope"]` | 400 `UNKNOWN_WORDLIST` (unchanged) |
 
-- [ ] Failing test asserting `wordlist_size` for an omitted `wordlists` equals the `comprehensive` word count read from the file in the test.
-- [ ] Implement; run `pytest backend/tests/unit/test_routes.py backend/tests/test_api.py -v`.
-- [ ] Commit `fix(api): verify-words and clean fall back to the default list, not every list`.
+- [x] Failing test asserting `wordlist_size` for an omitted `wordlists` equals the `comprehensive` word count read from the file in the test.
+- [x] Implement; run `pytest backend/tests/unit/test_routes.py backend/tests/test_api.py -v`.
+- [x] Commit `fix(api): verify-words and clean fall back to the default list, not every list`.
 
 ### Task 5: `fill` validates against its own lists (spec §2, sub-ruling ii)
 
@@ -110,9 +110,9 @@
 
 **Normative case:** `fill` with `-w` a list that lacks a word present only in `raw/comprehensive_scored.txt` reports that word as invalid if it is placed.
 
-- [ ] Failing test on the validation set's contents (inject a tiny `-w` list; assert nothing outside it is in the set).
-- [ ] Implement; run the new test, then `pytest cli/tests/unit -v` **alone**.
-- [ ] Commit `fix(fill): validate entries against the loaded lists, not every file on disk`.
+- [x] Failing test on the validation set's contents (inject a tiny `-w` list; assert nothing outside it is in the set).
+- [x] Implement; run the new test, then `pytest cli/tests/unit -v` **alone**.
+- [x] Commit `fix(fill): validate entries against the loaded lists, not every file on disk`.
 
 ### Task 6: One line parser for `fill` and `resume` (spec §4, #51 reader half)
 
@@ -133,8 +133,8 @@
 | `LEMON` | `LEMON` | computed |
 | `word,score` | (skipped) | — |
 
-- [ ] Failing tests for both loaders over that file.
-- [ ] Implement; run; commit `fix(cli): fill and resume parse word-list lines with parse_line`, body `Refs #51`.
+- [x] Failing tests for both loaders over that file.
+- [x] Implement; run; commit `fix(cli): fill and resume parse word-list lines with parse_line`, body `Refs #51`.
 
 ### Task 7: `parse-wordlist` command and adapter method (spec §4, O4)
 
@@ -168,8 +168,8 @@ def parse_wordlist(self, path: str) -> Dict[str, Any]: ...   # CLIAdapter
 | `AB` | skipped, `length outside 3-21` |
 | `ONE TWO` | skipped, `not letters only` |
 
-- [ ] Failing CLI tests, failing adapter argv contract test, then implement both, then the real-subprocess test.
-- [ ] Commit `feat(cli): parse-wordlist reports parsed words and skipped lines`, body `Refs #51 #46`.
+- [x] Failing CLI tests, failing adapter argv contract test, then implement both, then the real-subprocess test.
+- [x] Commit `feat(cli): parse-wordlist reports parsed words and skipped lines`, body `Refs #51 #46`.
 
 ### Task 8: Import route parses, rejects, stores canonically, previews (spec §4, O5–O7; #48 §1)
 
@@ -198,8 +198,8 @@ def parse_wordlist(self, path: str) -> Dict[str, Any]: ...   # CLIAdapter
 | GET per-list after import | 200 | `metadata.json` on disk byte-identical before and after |
 | `POST /api/wordlists/qa-put` then PUT, then DELETE | each the success code `docs/api/openapi.yaml` documents for it (not 403) | entry `custom/qa-put`, category `custom`, then gone |
 
-- [ ] Failing tests per row; implement; `pytest backend/tests -v` alone.
-- [ ] Commit `fix(api): import parses via the CLI, rejects empty lists, keeps metadata names`, body `Refs #46 #48 #51`.
+- [x] Failing tests per row; implement; `pytest backend/tests -v` alone.
+- [x] Commit `fix(api): import parses via the CLI, rejects empty lists, keeps metadata names`, body `Refs #46 #48 #51`.
 
 ### Task 9: Upload UI — no extension gate, preview, confirm (spec §4, O6, O8, O9)
 
@@ -212,10 +212,10 @@ def parse_wordlist(self, path: str) -> Dict[str, Any]: ...   # CLIAdapter
 - Selecting a file and pressing Upload first calls import with `dry_run: true` and shows the preview (O8). Confirm sends the real import; Cancel sends nothing more.
 - A 400 shows the server's `error` plus the skipped count and reasons; nothing is added to the list.
 
-- [ ] Failing vitest cases: a `.dict` file reaches the dry-run call; Cancel sends one request in total; a 400 renders the reasons.
-- [ ] Implement; `npx vitest run` alone; `npm run build`.
-- [ ] **Browser:** with `python run.py`, upload `data/wordlists/external/crossword_nexus.dict` (first 20 lines copied to a temp file), see the preview, confirm, see the list in the panel, run a pattern search on it. Record what was seen.
-- [ ] Commit `feat(ui): word-list upload previews any text file before saving`, body `Refs #46`.
+- [x] Failing vitest cases: a `.dict` file reaches the dry-run call; Cancel sends one request in total; a 400 renders the reasons.
+- [x] Implement; `npx vitest run` alone; `npm run build`.
+- [x] **Browser:** with `python run.py`, upload `data/wordlists/external/crossword_nexus.dict` (first 20 lines copied to a temp file), see the preview, confirm, see the list in the panel, run a pattern search on it. Record what was seen. *(Done with a deviation: the 20-line excerpt is all digit lines, so it was rejected with reasons; the preview, confirm and pattern search were driven with a mixed `.owl` file. Ledger, Task 9.)*
+- [x] Commit `feat(ui): word-list upload previews any text file before saving`, body `Refs #46`.
 
 ### Task 10: `pattern` reports a list it could not load (spec O1, #44 remainder) and strict cache freshness (O2, #42)
 
@@ -226,7 +226,7 @@ def parse_wordlist(self, path: str) -> Dict[str, Any]: ...   # CLIAdapter
 
 **Behavioral criteria:** per O1 and O2.
 
-- [ ] Failing tests; implement; run; commit `fix(pattern): report lists that failed to load instead of dropping them`, body `Refs #44 #42`.
+- [x] Failing tests; implement; run; commit `fix(pattern): report lists that failed to load instead of dropping them`, body `Refs #44 #42`.
 
 ### Task 11: The list panel is visible on open (#45)
 
@@ -238,11 +238,11 @@ def parse_wordlist(self, path: str) -> Dict[str, Any]: ...   # CLIAdapter
 
 Use the QA run's method (same-origin iframe at exact sizes, `docs/dev/qa/2026-10-22-fresh-install-run.md` cases L3/L4/L16) and paste the DOM JSON for each of the four combinations.
 
-- [ ] Measure before (expect the QA failure); fix; measure after; `npx vitest run`; `npm run build`.
-- [ ] Commit `fix(ui): show the word-list box inside the sidebar on open`, body `Refs #45`.
+- [x] Measure before (expect the QA failure); fix; measure after; `npx vitest run`; `npm run build`.
+- [x] Commit `fix(ui): show the word-list box inside the sidebar on open`, body `Refs #45`.
 
 ### Task 12: Close-out
 
-- [ ] `pytest` alone, `npx vitest run`, `npm run build`, `scripts/docs-check.sh`, `scripts/check-guards.sh --full-tree`: each rc read from a redirect.
-- [ ] Fast-forward `main`; re-pin the bundle (standing note); comment on each issue with what landed (draft, then post in a separate call).
-- [ ] Move this plan and its spec to `docs/archive/completed-plans/` once every task is checked.
+- [x] `pytest` alone, `npx vitest run`, `npm run build`, `scripts/docs-check.sh`, `scripts/check-guards.sh --full-tree`: each rc read from a redirect.
+- [x] Fast-forward `main`; re-pin the bundle (standing note); comment on each issue with what landed (draft, then post in a separate call). *(Fast-forward and re-pin done 2026-10-23. Per Arthur's ruling that day, the comments go out with the PR that carries these commits, not as standalone posts.)*
+- [x] Move this plan and its spec to `docs/archive/completed-plans/` once every task is checked.
