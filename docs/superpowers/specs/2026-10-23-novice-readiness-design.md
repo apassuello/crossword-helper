@@ -620,12 +620,16 @@ the old one:
 | P11 | Text of a failed **autosave** (§3.4) | Keep today's `Couldn’t save — will retry.` and the 30 s re-arm; only an explicit Save shows the quota text. Existing tests pin today's text, and a retry cannot fix a full quota. |
 | P12 | Autosave versus named saves (§3.4) | One entry per `doc.id`; autosave keeps the name; Save renames in place; a name used by another entry asks to replace it. The owner ruled "All 3", not these mechanics. |
 | P13 | Port (§5, I6) | `PORT` env var, default 5000, with a clear "port in use" message; the Vite proxy follows. Not measured whether AirPlay holds :5000 on a stock Mac. |
-| P14 | Node floor and pin (§5) | `engines` `>=18`, no `.nvmrc`. Node 18 reached end of life in April 2025; raising the floor to 20 is the owner's call. |
+| P14 | Node floor and pin (§5) | `engines` `>=18`, no `.nvmrc`. **[?]** Node 18 is past end of life (April 2025 per the Node.js release schedule, nodejs.org/en/about/previous-releases; from general knowledge, not checked here); raising the floor to 20 is the owner's call. |
 | P15 | Clean's toast when only theme-locked letters would go (§3.5) | `Nothing removed: theme-locked letters are kept.` (text by Claude). |
 
 ---
 
 ## 8. Amendment record
+
+Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`G13`, `I1`–`I8`, `M1`–`M6`) come from
+the 2026-10-23 review files in `.handoff/drafts/2026-10-23-spec-review/` (`FINDINGS.md`, `VERIFIED.md`,
+`REVIEW-0.2.0.md`), which are untracked; every rule they tag is stated in full where it is cited.
 
 - 0.1.0 (2026-10-23): first version, from the owner rulings in §1.
 - 0.1.1 (2026-10-23): before owner review. §2.1 gains lock survival across `to_dict`/`from_dict` (the
