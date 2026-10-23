@@ -331,16 +331,23 @@ def test_fill_invalid_locked_list_exits_1(tmp_path, locked, extra_flags):
     assert "blocked" not in result
 
 
-def _paused_state_file(tmp_path):
-    """A complete-grid CSP state file for `fill --resume`, plus a word list."""
+def _paused_state_file(tmp_path, filled=True):
+    """A CSP state file for `fill --resume`, plus a word list.
+
+    `filled=True` is a complete 11x11 grid (resume returns at the already-filled exit);
+    `filled=False` is an empty 3x3 grid, so a resume run goes past that exit.
+    """
     from datetime import datetime
 
     from cli.src.core.grid import Grid as _Grid
     from cli.src.fill.state_manager import CSPState, StateManager
 
-    grid = _Grid(11)
-    for row in range(11):
-        grid.place_word("A" * 11, row, 0, "across")
+    if filled:
+        grid = _Grid(11)
+        for row in range(11):
+            grid.place_word("A" * 11, row, 0, "across")
+    else:
+        grid = _Grid(3, validate_size=False)
     state = CSPState(
         grid_dict=grid.to_dict(),
         domains={},
@@ -762,6 +769,13 @@ def test_pf10_case_2_warning_and_event(tmp_path):
     assert events[0]["data"] == {"off_list_cells": [[0, 0], [0, 1], [0, 2]], "warning": text}
 
 
+def test_pf10_text_mode_off_list_warning_line(tmp_path):
+    rows = _rows(G33_ROWS, c00="C", c01="A", c02="B")
+    stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L5_LINES, json_output=False)
+    assert code != 3, (stdout, stderr)
+    assert "Warning: Typed words not in the selected word lists: CAB" in stdout.splitlines(), (stdout, stderr)
+
+
 def test_pf11_two_off_list_words(tmp_path):
     rows = _rows(G33_ROWS, c00="C", c01="A", c02="B", c20="T", c21="A", c22="T")
     stdout, stderr, code, _ = _pf_fill(tmp_path, rows, L4_LINES)
@@ -798,15 +812,22 @@ def test_pf15_readme_argv_imports_and_blocks(tmp_path):
 
 
 def test_pf16_resume_never_calls_preflight(tmp_path, monkeypatch):
+    """The resumed grid has empty slots, so the run passes the already-filled exit
+    and reaches the pre-flight gate's position (a filled grid returns before it)."""
     from click.testing import CliRunner
 
     import cli.src.cli as cli_module
 
+    calls = []
+
     def _boom(*args, **kwargs):
+        calls.append(1)
         raise AssertionError("preflight must not run on --resume")
 
     monkeypatch.setattr(cli_module, "preflight", _boom)
-    state_path, words = _paused_state_file(tmp_path)
+    solver_ran = []
+    _stub_repair(monkeypatch, touch=lambda: solver_ran.append(1))
+    state_path, words = _paused_state_file(tmp_path, filled=False)
     result = CliRunner().invoke(
         cli_module.cli,
         [
@@ -816,7 +837,7 @@ def test_pf16_resume_never_calls_preflight(tmp_path, monkeypatch):
             "-w",
             words,
             "-a",
-            "trie",
+            "repair",
             "-t",
             "20",
             "-o",
@@ -824,8 +845,8 @@ def test_pf16_resume_never_calls_preflight(tmp_path, monkeypatch):
             "--json-output",
         ],
     )
-    assert not isinstance(result.exception, AssertionError), result.output
-    assert result.exit_code == 0, (result.output, result.exception)
+    assert solver_ran == [1], (result.output, result.exception)
+    assert calls == [], (result.output, result.exception)
 
 
 def test_pf16_control_fresh_run_calls_preflight(tmp_path, monkeypatch):
