@@ -55,10 +55,17 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     Start: a typed pattern that fits only words below the floor passes pre-flight and can still fail
     later, a known limitation. **What it beat:** folding plus a warning-only second `assess` at the
     run's floor.
+  - **Theme suggestions (#19, #20, 2026-10-23):** #20 and the panel half of #19 are must-haves (§3.8):
+    Apply All reports each word's real failure, and suggestions are fetched again whenever the grid
+    changes. The backend half of #19 (the suggester's working grid and the validator gap in
+    `backend/core/theme_placer.py`) stays stretch. **What it beat:** promoting both in full (the
+    backend half is the least certain part and sits outside the CLI); keeping both stretch (a novice
+    is told the wrong cause and offered placements that fail).
 - **Must-have, in order:** §5 install, §2 autofill safety (with #41 and #40's default, §2.5), §3.1 hiding, §3.3 black squares,
   §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
-  (TH5), §3.7 grid-writer provenance, §4 word-list and CLI rulings.
-- **Stretch, if the must-haves land:** #19, #20 and #57 item 4 (theme placement); SR2 (search results
+  (TH5), §3.7 grid-writer provenance, §3.8 theme suggestions (#19 panel half, #20), §4 word-list and CLI
+  rulings.
+- **Stretch, if the must-haves land:** #19's backend half and #57 item 4 (theme placement); SR2 (search results
   below the viewport, the rest of #45).
 - **Out of scope:** Windows; solver fill quality beyond #40's default; #26 #28 #29 #36 #37 #38 #39 #52
   #59 (solver internals or pause/resume, which has no UI); #18 #56 #60 (developer-facing); #43; #64 (NaN%, see the §3.3 NOTE); #65 (403 on a POST-created list: API-level, not on the novice path).
@@ -594,6 +601,29 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
 
 ---
 
+### 3.8 Theme suggestions (#19 panel half, #20)
+
+**[SPEC]**
+- **Fresh suggestions (#19, panel half).** While the Theme panel shows suggestions, any change to the
+  grid's letters or black squares runs `ThemeWordsPanel`'s `analyzePlacements` again for the same words,
+  debounced, and replaces the list. A placement offered before the change is never applied after it:
+  Apply on an entry from a superseded list does nothing and the panel says `Suggestions updated for
+  the changed grid.` Today the list is fetched on upload, or by the "Analyze Placements" button, which renders only
+  while no suggestions exist; once a list shows, nothing refreshes it (QA TH2b).
+- **Apply All tells the truth (#20).** `handleApplyAllPlacements` keeps each word's failure instead of
+  counting it in a bare catch. The summary counts only the words this action applied, and lists every
+  skipped word with its reason: for a 400 with a `conflicts` array, the server's conflict text (as
+  `handleApplyPlacement` already shows it, fixed under #15); for any other failure, `Could not reach
+  the server` or the error's message. `skipped due to conflicts` is used only for real conflicts.
+- Tests: a grid change while suggestions show triggers one refetch and drops the old list; Apply on a
+  superseded entry is a no-op; Apply All with a 400 conflict, a 500 and a network failure reports three
+  different reasons and counts only its own applies.
+
+**[NOTE]** #19's backend half stays open: `ThemePlacer.apply_placement` writes only a word's letters,
+not the black squares the real applier writes, so the second and later suggestions in one batch can
+still be refused on apply. With fresh suggestions on every grid change, a novice sees the refusal's
+real reason (above) instead of a stale offer.
+
 ## 4. Word lists and CLI rulings (#57)
 
 **[SPEC]**
@@ -675,6 +705,8 @@ the old one:
 | New: PORT | Start with `PORT=<other>` while :5000 is held, and with the port in use; the Vite proxy with the same `PORT` | The app serves on `<other>`; the in-use case prints `Port <n> is in use. Start with PORT=<other> python3 run.py`, no traceback |
 | New: SETUP-MISSING | `setup.sh` with each tool (python3, node, npm) absent in turn; `FLASK_DEBUG=1 python3 run.py` | Each prints its `Missing: <tool> <minimum version> — install from <url>` and exits 1; debug is off unless `FLASK_DEBUG=1` |
 | Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
+| New: TH2b | With suggestions showing, place a black square through an offered placement | The list refreshes; that placement is no longer offered; nothing stale can be applied |
+| New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
@@ -717,7 +749,7 @@ the old one:
 | P14 | Node floor and pin (§5) | `engines` `>=18`, no `.nvmrc`. **[?]** Node 18 is past end of life (April 2025 per the Node.js release schedule, nodejs.org/en/about/previous-releases; from general knowledge, not checked here); raising the floor to 20 is the owner's call. |
 | P15 | Clean's toast when only theme-locked letters would go (§3.5) | `Nothing removed: theme-locked letters are kept.` (text by Claude). |
 | P16 | Two tabs on one saved grid (§3.4) | Fork on conflict: save as a new entry named `<name> (copy)`. Why: last-writer-wins silently loses a tab's work. |
-| P17 | Promote #19/#20 (TH2b, TH3) to must-have? | Stay stretch, accepted as known issues a novice may hit. Why: they are S3 and theme-only. |
+| P17 | Promote #19/#20 (TH2b, TH3) to must-have? | **Ruled 2026-10-23** (§1): #20 and #19's panel half are must-haves (§3.8); #19's backend half stays stretch. |
 | P18 | Re-run autofill on a grid with no empty cells (§2.3) | Not supported in this spec: Start stays disabled and the hint says to clear cells to re-run. Why: the CLI returns early when there are no empty slots. |
 
 ---
@@ -766,4 +798,5 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   (P18). `CLIAdapter.fill` parses the blocked JSON. Named tests sit in the sections they test, §6 gains
   PORT, setup, off-list, no-lists, stale-write, save and provenance cases, and ambiguities are resolved
   in place (Vite `PORT`, tracker retention, watchdog arming, 'every slot filled', TH5 width, banner,
-  `normalize`, Linux containers). §7 gains P16 to P18 and #65 is out of scope in §1.
+  `normalize`, Linux containers). §7 gains P16 to P18 and #65 is out of scope in §1. Owner ruling the same day on P17: #20 and #19's
+  panel half become must-haves in a new §3.8, with TH2b and TH3 acceptance cases.
