@@ -7,6 +7,7 @@ import pytest
 
 from cli.src.core.grid import Grid
 from cli.src.domain.fillability import assess
+from cli.src.domain.letter_bitset import LetterBitsetIndex
 from cli.src.domain.slot_model import SlotModel, fixed_from_grid, pattern
 from cli.src.fill.locked_letters import (
     OFF_LIST_WARNING_PREFIX,
@@ -16,6 +17,7 @@ from cli.src.fill.locked_letters import (
     input_lock_letters,
     off_list_warning,
     preflight,
+    stuck_cells,
 )
 from cli.src.fill.word_list import WordList
 
@@ -272,3 +274,63 @@ def test_blocked_text_lines_b2_g33():
 
 def test_blocked_text_lines_empty_when_not_blocked():
     assert blocked_text_lines(preflight(_grid(G33_EMPTY, locked=[]), _wl(L1))) == []
+
+
+# ---------------------------------------------------------------------------
+# stuck_cells
+# novice-readiness spec 0.2.4 §2.1 (C2, C11)
+# ---------------------------------------------------------------------------
+
+SC_LOCKED = {(0, 0), (0, 1)}
+SC_ROWS_OPEN = ["CA.", "...", "..."]
+SC_ROWS_FULL = ["CAX", "OLE", "TED"]
+SC_WORDS = [("CAT", 10), ("COT", 50), ("ART", 50)]
+SC_INVALID = {"slot": (0, 0, "across"), "pattern": "CAX", "reason": "invalid_word"}
+
+
+def _sc(rows, words, min_score, problematic, locked=SC_LOCKED, index="build"):
+    grid = _grid(rows, locked=locked)
+    if index == "build":
+        index = LetterBitsetIndex.from_word_list(WordList(words))
+    return stuck_cells(grid, locked, problematic, index, min_score)
+
+
+def test_sc1_unmatched_pattern_under_min_score():
+    assert _sc(SC_ROWS_OPEN, SC_WORDS, 30, []) == [[0, 0], [0, 1]]
+
+
+def test_sc2_min_score_zero_matches():
+    assert _sc(SC_ROWS_OPEN, SC_WORDS, 0, []) == []
+
+
+def test_sc3_invalid_word_entry():
+    assert _sc(SC_ROWS_FULL, [("COT", 50)], 30, [SC_INVALID]) == [[0, 0], [0, 1]]
+
+
+def test_sc4_other_reason_contributes_nothing():
+    entry = dict(SC_INVALID, reason="unfilled")
+    assert _sc(SC_ROWS_FULL, [("COT", 50)], 30, [entry]) == []
+
+
+def test_sc5_beam_shaped_entry_contributes_nothing():
+    entry = {"row": 0, "col": 0, "direction": "across", "length": 3}
+    assert _sc(SC_ROWS_FULL, [("COT", 50)], 30, [entry]) == []
+
+
+def test_sc6_invalid_word_slot_without_locked_cell():
+    entry = {"slot": (1, 0, "across"), "pattern": "OLE", "reason": "invalid_word"}
+    assert _sc(SC_ROWS_FULL, [("COT", 50)], 30, [entry]) == []
+
+
+def test_sc7_cells_in_both_sources_are_unique():
+    assert _sc(SC_ROWS_OPEN, SC_WORDS, 30, [SC_INVALID]) == [[0, 0], [0, 1]]
+
+
+def test_sc8_resume_empty_lock_set_never_touches_the_index():
+    class _Untouchable:
+        def __getattr__(self, name):
+            raise AssertionError(f"index touched: {name}")
+
+    grid = _grid(SC_ROWS_OPEN, locked=set())
+    assert stuck_cells(grid, set(), [SC_INVALID], None, 30) == []
+    assert stuck_cells(grid, set(), [SC_INVALID], _Untouchable(), 30) == []

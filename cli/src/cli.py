@@ -24,6 +24,7 @@ from .fill.locked_letters import (
     input_lock_letters,
     off_list_warning,
     preflight,
+    stuck_cells,
 )
 from .fill.pattern_matcher import PatternMatcher
 from .fill.word_list import WordList
@@ -1108,6 +1109,12 @@ def fill(
                             "task_id": task_id,
                             "wordlists": [str(w) for w in wordlists],
                             "message": "Grid was already completely filled",
+                            # novice-readiness spec 0.2.4 §2.1 (C11): pre-flight runs
+                            # after this return, so the lists are empty.
+                            "blocked": False,
+                            "blocked_cells": [],
+                            "off_list_cells": [],
+                            "stuck_cells": [],
                         }
                     )
                 )
@@ -1118,6 +1125,7 @@ def fill(
         # novice-readiness spec 0.2.4 §2.1 (C1, C4, C6, B2): pre-flight, fresh runs
         # only. A block returns from inside the `try`, so the `finally` clears the
         # pause markers, and before check (a) and every output write.
+        preflight_result = None  # stays None on --resume: no pre-flight, no index
         if not resume_state_file:
             preflight_result = preflight(grid, word_list)
             if preflight_result.reason is not None:
@@ -1312,6 +1320,12 @@ def fill(
                 "task_id": task_id,
                 "slots_filled": slots_filled,
                 "total_slots": total_slots,
+                # novice-readiness spec 0.2.4 §2.1 (C11): a paused run has no verdict
+                # on stuck cells (PD-2-PAUSE).
+                "blocked": False,
+                "blocked_cells": [],
+                "off_list_cells": preflight_result.off_list_cells if preflight_result else [],
+                "stuck_cells": [],
             }
             if paused_state_path:
                 paused_payload["state_path"] = str(paused_state_path)
@@ -1421,6 +1435,17 @@ def fill(
             # reported both. Dropping them would narrow the seam contract.
             "task_id": task_id,
             "wordlists": [str(w) for w in wordlists],
+            # novice-readiness spec 0.2.4 §2.1 (C11, C2): the red-cell lists.
+            "blocked": False,
+            "blocked_cells": [],
+            "off_list_cells": preflight_result.off_list_cells if preflight_result else [],
+            "stuck_cells": stuck_cells(
+                result.grid,
+                input_letters.keys(),
+                result.problematic_slots,
+                preflight_result.index if preflight_result else None,
+                min_score,
+            ),
         }
         if warnings:
             output_data["warnings"] = warnings

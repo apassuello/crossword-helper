@@ -235,6 +235,22 @@ partial/problematic fills), `state_path` (present when `paused` is true and a
 state was written). Progress updates are streamed to stderr as
 `{"progress": N, "message": "...", "status": "running"|"complete"}` lines.
 
+**[SPEC] Red-cell keys on every fill result** (novice-readiness spec 0.2.4 §2.1, C11/C2).
+The four `--json-output` results (main, already-filled early return, paused
+payload, blocked) each carry `blocked` (bool) and the cell lists `blocked_cells`,
+`off_list_cells` and `stuck_cells` (`[]` when empty; unique, sorted row-major,
+`[row, col]` zero-based). A `_fail_fill` error (`{"success": false, "error": ...}`,
+plus `hint` only when one applies) carries none of them.
+
+- `blocked` is `false` outside the blocked result. `blocked_cells` is `[]`
+  outside it.
+- `off_list_cells` is pre-flight's list; `[]` on the already-filled early return
+  and on `--resume`.
+- `stuck_cells` (main result only) names the locked input cells in a slot that
+  still has an empty cell and whose pattern matches no word at `--min-score`, or
+  in a slot `repair` reports as `invalid_word`. It is `[]` on a complete fill, on
+  `--resume` (no input lock set), on the paused payload and on the early return.
+
 **[SPEC] Exit codes**
 
 | Code | Meaning |

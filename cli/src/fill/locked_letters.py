@@ -157,3 +157,52 @@ def blocked_text_lines(result: PreflightResult) -> List[str]:
         lengths = sorted({int(s["length"]) for s in result.blocked_slots})  # type: ignore[call-overload]
         return [f"Blocked: the selected word lists have no words of length {n}" for n in lengths]
     return []
+
+
+def stuck_cells(
+    final_grid: Grid,
+    locked: Iterable[Tuple[int, int]],
+    problematic_slots: Sequence[Mapping],
+    index: Optional[LetterBitsetIndex],
+    min_score: int,
+) -> List[List[int]]:
+    """
+    Locked cells the solver could not fill around (novice-readiness spec 0.2.4
+    §2.1, C11/C2): the cell list of ``locked`` cells lying in
+
+    (a) a slot of ``final_grid`` with an empty cell whose pattern matches no word
+        of ``index`` at ``min_score``, or
+    (b) a slot named by a ``problematic_slots`` entry with ``"reason":
+        "invalid_word"`` (``IterativeRepair._build_result``'s shape; entries
+        without a ``"reason"``, as beam and classic return, contribute nothing).
+
+    ``index`` is ``None`` on ``--resume``, where the lock set is empty: with no
+    locked cell the result is ``[]`` and ``index`` is never touched.
+    """
+    locked_set = {(int(r), int(c)) for r, c in locked}
+    if not locked_set:
+        return []
+
+    stuck = set()
+
+    model = SlotModel.from_grid(final_grid)
+    fixed = fixed_from_grid(final_grid)
+    size = model.size
+    for slot in model.slots:
+        slot_pattern = pattern(model, slot.id, fixed)
+        if "?" not in slot_pattern:
+            continue
+        if index is not None and index.count_matches(slot_pattern, min_score=min_score) == 0:
+            stuck.update((cell // size, cell % size) for cell in slot.cells if (cell // size, cell % size) in locked_set)
+
+    for entry in problematic_slots:
+        if entry.get("reason") != "invalid_word":
+            continue
+        row, col, direction = entry["slot"]
+        step = (0, 1) if direction == "across" else (1, 0)
+        for offset in range(len(entry["pattern"])):
+            cell = (row + step[0] * offset, col + step[1] * offset)
+            if cell in locked_set:
+                stuck.add(cell)
+
+    return cell_list(stuck)
