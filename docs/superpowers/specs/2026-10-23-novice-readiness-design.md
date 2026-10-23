@@ -1,6 +1,6 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.1.2** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
-2026-10-23; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
+**Version 0.2.0** · Claude with Arthur Passuello · 2026-10-23 · status: rulings in §1 given by owner
+2026-10-23, including the five review rulings; the whole document awaits owner review; §7 open points carry defaults that apply if unruled
 by 2026-10-30
 
 ---
@@ -462,8 +462,8 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
 
 **[SPEC]**
 - Each cell gains a boolean `isAutofilled`. The autofill merge (`mergeGridPreserveThemeLocked` and the
-  "Keep partial fill" path of §2.3) sets it on a letter it wrote into a cell that was empty at Start,
-  and on no other cell.
+  "Keep partial fill" path of §2.3) sets it on a letter it writes, which by §2.3's merge rule is only
+  into a cell that is empty or already `isAutofilled` in the current grid, and on no other cell.
 - **Every other UI writer clears it** on the cell it changes: `setLetter`, `toggleBlackSquare` (both the
   cell and its symmetric partner), `handlePatternSelect`, `handleThemeWordApplied`, `handleGridImport`,
   `handleCleanGrid`, and New grid (§3.2). A cell the user retypes with the same letter is user-typed.
@@ -550,13 +550,14 @@ the old one:
 | Grid | G1, G3, G8, G9 | New grid, discoverable black squares, no Heatmap toggle, save restored |
 | New: SAVE-NAMED | Autosave a grid, then Save under a name, Open saved, Delete; fill storage until a write fails | Autosave keeps one entry per grid; the name prompt appears only on Save; Open asks the confirm; the quota text shows on an explicit Save |
 | Grid guards | New: SR-PLACE (place a Search result across a black square and a theme-locked cell); new: CL-CLEAR (Verify flags cells, retype them, Clean) | Protected cells unchanged; no red cells after "Grid is clean" |
-| New: CL-CLEAN-GUARD | Theme-lock a word, type an invalid word elsewhere, press Clean; once with Cancel, once with the confirm accepted | The confirm shows `Clean will remove N letters` with `N` equal to the typed invalid letters only; Cancel changes nothing, including `isError`; accepting removes those letters and every theme-locked letter is unchanged |
+| New: CL-CLEAN-GUARD | Theme-lock a word, type an invalid word elsewhere, press Clean; once with Cancel, once with the confirm accepted | The confirm shows `Clean will remove N letters` with `N` equal to the non-theme-locked letters in the slots Clean flags (Clean blanks every cell of a flagged slot, so a crossing letter counts too); Cancel changes nothing, including `isError`; accepting removes those letters and every theme-locked letter is unchanged |
 | Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
 | New: TH5 | Open the Theme panel at the desktop viewport and at the narrowest width the app supports | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
 | New: AF-LOCK | Type letters, run Repair on the 11x11, cancel and let one run end | Typed letters intact in every progress sample and at the end |
-| New: AF-BLOCK | Type a partial pattern no word fits (e.g. `QX` in the first two cells of a 3-letter slot, pattern `QX?`; a fully typed off-list word is case 2, not a block) | Run does not start; those cells red; message as §2.3 |
+| New: AF-BLOCK | Type a partial pattern no word fits (e.g. `QX` in the first two cells of a 3-letter slot, pattern `QX?`; a fully typed off-list word is case 2, not a block) | Run does not start; those cells red; message as §2.3. A valid word typed elsewhere in the grid stays black, not red (C1: only directly dead slots count) |
+| New: AF-BLOCK-LEN | Tick a single list that has no word of some slot length in the grid (`awk '{print length($1)}' <list> \| sort -n \| uniq -c` shows which lengths it has); type a valid word elsewhere; Start | Run does not start; `The selected word lists have no words of length N.`; no cell red, including the typed word |
 | New: AF-DEFAULTS | Press Start with all panel defaults on the shipped 11x11 and 15x15 example grids, after typing a few letters | `Successfully filled`; every typed letter intact |
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 
@@ -566,12 +567,21 @@ the old one:
 
 | # | Question | Default |
 |---|---|---|
-| P1 | `fill`'s `--lock-filled` default on the CLI, not only from the UI | On. The owner rule is about what the user typed; a CLI user's input grid is what they typed. The shipped `data/grids/example_11x11.json`, `data/grids/example_15x15.json` and `data/grids/example_21x21.json` contain no letters, so the README's `fill` example (R7) is unaffected. |
+| P1 | `fill`'s `--lock-filled` default on the CLI, not only from the UI | On. The owner rule is about what the user typed; a CLI user's input grid is what they typed. The shipped `data/grids/example_11x11.json`, `data/grids/example_15x15.json` and `data/grids/example_21x21.json` contain no letters, so the README's `fill` example (R7) is unaffected. An explicit `"locked"` key in the grid file (the UI's channel, §2.2) overrides lock-every-letter. |
 | P2 | Pre-flight min score | `0`: block only when no listed word fits at all. |
 | P3 | Tracker retention after the terminal event | 60 s. |
-| P4 | Client watchdog grace | 30 s beyond the run's timeout. |
+| P4 | Client watchdog grace | 30 s beyond the route's `"ceiling_seconds"` (§2.4). |
 | P5 | Accent folding scope | Upload/import parsing only; `pattern` input is already A–Z and `?`. |
-| P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot. Stopping would refuse every grid with a deliberate proper noun. |
+| P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam is `[?]` in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
+| P7 | The UI route's ceiling addend (§2.2) | `CLI_STARTUP_BUDGET_SECONDS`, the adapter's addend, replacing `+ 10`, so startup and pre-flight cannot kill a run before it reports. Cost: a stuck run lives longer before `error`. |
+| P8 | Lists with no word of a slot's length, no typed letter involved (§2.1) | Refuse with `"no_word_of_length"` and no red cells. It is a new block that no user letter causes. |
+| P9 | Every slot filled but `success: false` (§2.3) | Restore the snapshot and offer "Keep fill". The owner ruling covers failed and partial runs; this grid is complete but may hold invalid entries. |
+| P10 | A refutation only `assess`'s cascade finds, no dead slot (§2.1) | Proceed; case 3 reports. Its red set is ill-defined. |
+| P11 | Text of a failed **autosave** (§3.4) | Keep today's `Couldn’t save — will retry.` and the 30 s re-arm; only an explicit Save shows the quota text. Existing tests pin today's text, and a retry cannot fix a full quota. |
+| P12 | Autosave versus named saves (§3.4) | One entry per `doc.id`; autosave keeps the name; Save renames in place; a name used by another entry asks to replace it. The owner ruled "All 3", not these mechanics. |
+| P13 | Port (§5, I6) | `PORT` env var, default 5000, with a clear "port in use" message; the Vite proxy follows. Not measured whether AirPlay holds :5000 on a stock Mac. |
+| P14 | Node floor and pin (§5) | `engines` `>=18`, no `.nvmrc`. Node 18 reached end of life in April 2025; raising the floor to 20 is the owner's call. |
+| P15 | Clean's toast when only theme-locked letters would go (§3.5) | `Nothing removed: theme-locked letters are kept.` (text by Claude). |
 
 ---
 
@@ -584,3 +594,11 @@ the old one:
   mismatch under `npm ci`; case 2's continue-on-red moves from §1's rulings to P6.
 - 0.1.2 (2026-10-23): §3.5 adds #62 and #63 to the must-haves (Greptile PR #35 findings, filed that day);
   §6 gains their acceptance cases.
+- 0.2.0 (2026-10-23): amended from a three-reviewer review of 0.1.2 (findings re-checked against
+  `a72be24`). §1 records owner rulings G5, G10, G11, G12 and G13; TH5 becomes a must-have. §2 gains
+  the `"locked"` lock channel, a fail-closed postcondition in `fill`, the `isAutofilled` merge and
+  restore, writer gating during a run, `"no_word_of_length"`, blocked results as `complete`, and fixes
+  to the pre-flight red set, `"stuck_cells"`, pause markers, the route ceiling, the watchdog and Cancel.
+  §3 gains Clean's guard and confirm (§3.5), the Theme panel (§3.6) and grid writers (§3.7); §3.4
+  specifies autosave against named saves. §5 gains the venv check, `engines` and `PORT`. §6 gains
+  ZIP, Linux, named-save, Clean, export, TH5, defaults and length-block cases. §7 gains P7–P15.
