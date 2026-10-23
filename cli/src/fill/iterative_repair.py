@@ -488,8 +488,14 @@ class IterativeRepair:
             if improved and best_word:
                 slot = self._get_slot_by_id(culprit, all_slots)
                 old_word = self.grid.get_pattern_for_slot(slot)
+                try:
+                    self.grid.place_word(best_word, slot["row"], slot["col"], slot["direction"])
+                except ValueError:
+                    # A swap that disagrees with a locked letter is a failed repair, as if
+                    # _try_repair_slot had returned (False, None): no tabu entry, no
+                    # re-scan (novice-readiness spec 0.2.4 §2.1 (C13)).
+                    continue
                 tabu_list[(culprit, old_word)] = iteration + tabu_tenure
-                self.grid.place_word(best_word, slot["row"], slot["col"], slot["direction"])
                 conflicts = self._find_conflicts(self.grid, all_slots)
                 tried_slots.clear()
                 if len(conflicts) < best_conflict_count:

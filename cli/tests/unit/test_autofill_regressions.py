@@ -113,3 +113,52 @@ class TestPerformanceRegression:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestLockConflictFailsPlacement:
+    """novice-readiness spec 0.2.4 §2.1 (C13): a candidate that disagrees with a lock is skipped, not fatal."""
+
+    L6 = ["CAT", "ORE", "WED", "COW", "ARE", "TED"]
+
+    @staticmethod
+    def _solver_with_dog_first(on_backtrack):
+        from src.fill.autofill import Autofill
+
+        grid = Grid(3, validate_size=False)
+        grid.set_letter(0, 0, "C", lock=True)
+        wl = WordList([(w, 50) for w in TestLockConflictFailsPlacement.L6])
+        solver = Autofill(grid, wl, PatternMatcher(wl), timeout=30)
+        solver.on_backtrack = on_backtrack
+        real = solver._get_candidates
+
+        def patched(slot):
+            if (slot["row"], slot["col"], slot["direction"]) == (0, 0, "across"):
+                return [("DOG", 50), ("CAT", 50)]
+            return real(slot)
+
+        solver._get_candidates = patched
+        # MAC re-sorts candidates by LCV; a constant keeps the stable order DOG, CAT.
+        solver._lcv_score_accurate = lambda word, slot: 0
+        solver._lcv_score_fast = lambda word, slot: 0
+        return grid, solver
+
+    @pytest.mark.parametrize("use_mac", [False, True], ids=["_backtrack", "_backtrack_with_mac"])
+    def test_conflicting_candidate_is_skipped(self, use_mac):
+        recorded = []
+        grid, solver = self._solver_with_dog_first(recorded.append)
+        attempted = []
+        real_place = grid.place_word
+
+        def spy(word, *args, **kwargs):
+            attempted.append(word)
+            return real_place(word, *args, **kwargs)
+
+        grid.place_word = spy
+
+        solver.fill(timeout=30, use_mac=use_mac)
+
+        assert attempted[:2] == ["DOG", "CAT"], "the conflicting candidate must reach place_word first"
+        assert grid.get_cell(0, 0) == "C"
+        assert grid.get_pattern_for_slot({"row": 0, "col": 0, "direction": "across", "length": 3}) == "CAT"
+        assert "DOG" not in solver.used_words
+        assert recorded == []

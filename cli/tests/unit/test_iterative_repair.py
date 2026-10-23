@@ -554,3 +554,43 @@ class TestLockedCellWriters:
         assert matcher.seen, "recording matcher was never called"
         assert set(matcher.seen) == {"C"}
         assert grid.get_cell(0, 0) == "C"
+
+
+class TestLockConflictInRepair:
+    """novice-readiness spec 0.2.4 §2.1 (C13): a lock-conflicting swap is a failed repair, not a crash."""
+
+    def test_conflicting_swap_is_not_applied(self):
+        grid = Grid(3, validate_size=False)
+        grid.set_letter(0, 0, "C", lock=True)
+        for col, letter in enumerate("XQZ"):
+            grid.set_letter(1, col, letter)
+        wl = WordList([(w, 50) for w in ["CAT", "ORE", "WED", "COW", "ARE", "TED"]])
+        solver = IterativeRepair(grid, wl, PatternMatcher(wl), max_iterations=100)
+        all_slots = grid.get_word_slots()
+        solver._intersection_cache = {}
+        for i, s1 in enumerate(all_slots):
+            s1_id = (s1["row"], s1["col"], s1["direction"])
+            for s2 in all_slots[i + 1 :]:
+                s2_id = (s2["row"], s2["col"], s2["direction"])
+                inter = solver._get_intersection(s1, s2)
+                if inter is not None:
+                    solver._intersection_cache[(s1_id, s2_id)] = inter
+                    solver._intersection_cache[(s2_id, s1_id)] = (inter[1], inter[0])
+        assert solver._find_conflicts(grid, all_slots), "fixture must start with a conflict"
+
+        calls = []
+
+        def stub(g, culprit, *args, **kwargs):
+            calls.append(culprit)
+            if len(calls) == 1:
+                return True, "DOG"
+            return False, None
+
+        solver._try_repair_slot = stub
+        solver._identify_culprit_slot = lambda conflicts, slot_id, slots: (0, 0, "across")
+
+        solver._repair_invalid_words(all_slots, timeout=1, randomize=False)
+
+        assert calls, "stub was never reached"
+        assert grid.get_cell(0, 0) == "C"
+        assert "DOG" not in "".join(grid.get_cell(r, c) for r in range(3) for c in range(3))

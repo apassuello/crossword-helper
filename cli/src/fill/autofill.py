@@ -1086,7 +1086,13 @@ class Autofill:
                 continue
 
             # Place word
-            self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+            try:
+                self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+            except ValueError:
+                # A candidate that disagrees with a locked letter fails this placement
+                # (novice-readiness spec 0.2.4 §2.1 (C13)). place_word writes nothing
+                # before it raises, so there is nothing to undo; no backtrack event.
+                continue
             self.used_words.add(word)
 
             # Forward check
@@ -1226,7 +1232,13 @@ class Autofill:
                 continue
 
             # Place word
-            self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+            try:
+                self.grid.place_word(word, slot["row"], slot["col"], slot["direction"])
+            except ValueError:
+                # A candidate that disagrees with a locked letter fails this placement
+                # (novice-readiness spec 0.2.4 §2.1 (C13)). place_word writes nothing
+                # before it raises, so there is nothing to undo; no backtrack event.
+                continue
             self.used_words.add(word)
 
             # Save domains (for backtracking)
