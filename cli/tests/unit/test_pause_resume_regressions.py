@@ -731,3 +731,80 @@ class TestBeamNativeStateWriterStaysDisabled:
         phase_one = BeamSearchAutofill(hybrid.grid, hybrid.word_list, PatternMatcher(word_list), task_id=hybrid.task_id)
         assert hybrid.task_id == "tHybrid", "hybrid keeps its own task_id for the CLI-side save"
         assert phase_one.task_id is None
+
+
+class TestFillEarlyExitsClearPauseMarkers:
+    """
+    novice-readiness spec 0.2.4 §2.1 (C6): every exit after ``mark_running()``
+    clears the running marker and any stale pause flag, not only the exits
+    inside the solver ``try``.
+    """
+
+    L1 = ["CAT;50", "COT;50", "CUT;50", "QUA;50", "XIS;50"]
+
+    def _fill(self, tmp_path, grid_rows, *extra, wordlist=None):
+        flag_dir = tmp_path / "flags"
+        state_dir = tmp_path / "states"
+        flag_dir.mkdir()
+        state_dir.mkdir()
+        grid_file = tmp_path / "grid.json"
+        grid_file.write_text(json.dumps({"size": 3, "grid": grid_rows}))
+        if wordlist is None:
+            wordlist = tmp_path / "l1.txt"
+            wordlist.write_text("\n".join(self.L1) + "\n")
+        out, err, rc = run_cli(
+            [
+                "fill",
+                str(grid_file),
+                "-w",
+                str(wordlist),
+                "--task-id",
+                "t1",
+                "--pause-flag-dir",
+                str(flag_dir),
+                "--state-dir",
+                str(state_dir),
+                "--json-output",
+                "--allow-nonstandard",
+                *extra,
+            ]
+        )
+        leftovers = sorted(p.name for p in flag_dir.iterdir())
+        return out, err, rc, leftovers
+
+    EMPTY = [[".", ".", "."], [".", ".", "."], [".", ".", "."]]
+
+    def test_theme_entries_json_error_return(self, tmp_path):
+        theme = tmp_path / "theme.json"
+        theme.write_text("{not json")
+        out, err, rc, leftovers = self._fill(tmp_path, self.EMPTY, "--theme-entries", str(theme))
+        assert rc == 0, (out, err)
+        assert "Invalid theme entries JSON" in out
+        assert leftovers == []
+
+    def test_wordlist_open_error(self, tmp_path):
+        out, err, rc, leftovers = self._fill(tmp_path, self.EMPTY, wordlist=tmp_path)
+        assert rc == 1, (out, err)
+        assert "Could not read wordlist" in out
+        assert leftovers == []
+
+    def test_invalid_theme_entries(self, tmp_path):
+        theme = tmp_path / "theme.json"
+        theme.write_text(json.dumps({"(0,0,across)": "TOOLONG"}))
+        out, err, rc, leftovers = self._fill(tmp_path, self.EMPTY, "--theme-entries", str(theme))
+        assert rc == 1, (out, err)
+        assert "Invalid theme entries" in out
+        assert leftovers == []
+
+    def test_solver_value_error(self, tmp_path):
+        out, err, rc, leftovers = self._fill(tmp_path, self.EMPTY, "--algorithm", "repair", "--timeout", "5")
+        assert rc == 1, (out, err)
+        assert json.loads(out)["success"] is False
+        assert leftovers == []
+
+    def test_already_filled_early_return(self, tmp_path):
+        full = [["C", "A", "T"], ["O", "R", "E"], ["W", "E", "D"]]
+        out, err, rc, leftovers = self._fill(tmp_path, full)
+        assert rc == 0, (out, err)
+        assert json.loads(out)["message"] == "Grid was already completely filled"
+        assert leftovers == []
