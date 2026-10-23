@@ -1,6 +1,7 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.3** · Claude with Arthur Passuello · 2026-10-23 · status: approved by owner 2026-10-23;
-rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written
+**Version 0.2.4** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
+§8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
 ---
 
@@ -436,8 +437,8 @@ uses. The comment above `AutofillPanel.jsx`'s defaults is updated to match.
 the Heatmap toggle (#50), and in `ExportPanel.jsx` the disabled `PDF (coming soon)` and
 `.puz (coming soon)` format options, the disabled `Include clues (if available)` checkbox, and the
 `PDF` and `.puz` entries of its Format Information list (G10). The issues stay open. No test may depend
-on them being present: the plan edits `ToolRail.test.jsx` (its `TOOL_LABELS` assertions for Clues and
-Heatmap) and `AutofillPanel.test.jsx` (its "Suggest Black Square" assertion), and adds an assertion
+on them being present: the plan edits `ToolRail.test.jsx` (its `TOOL_LABELS` assertion for Clues and the
+separate Heatmap tests) and `AutofillPanel.test.jsx` (its "Suggest Black Square" assertion), and adds an assertion
 that none of the hidden labels renders.
 
 ### 3.2 New grid (#55)
@@ -636,7 +637,11 @@ real reason (above) instead of a stale offer.
   `cli/src/fill/word_list.py`, so the solver and the upload preview fold identically (the solver loads
   lists via `from_file`, not through the upload parser). `WordList._is_valid_word` is tightened from
   `isalpha()` plus `isupper()`, which accept non-ASCII letters, to require ASCII A–Z.
-  Tests: the fold changes the expected output in `test_parse_wordlist_e2e.py`, which is updated.
+  Tests: the fold changes the expected output of `cli/tests/unit/test_parse_wordlist_command.py`'s
+  `test_accented_word_accepted` (`CAFÉ` was kept as `CAFÉ`), which is updated; the fold rows are added to
+  `backend/tests/integration/test_parse_wordlist_e2e.py`, which has no accented input today. Folding
+  uppercases only ASCII letters: `"ß".upper()` is `"SS"`, so a plain `upper()` before the A–Z check would
+  accept `ß` as `SS`.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
 - **Item 3 (CLI-normalize):** the default `normalize` rule keeps letters only:
@@ -757,7 +762,73 @@ Owner approval of 0.2.2 on 2026-10-23 ruled every row's default as written; P17 
 
 ---
 
-## 8. Amendment record
+## 8. Planning defaults (0.2.4; default applies if unruled by 2026-10-30)
+
+**[SPEC]** Writing the plan surfaced choices the sections above do not make. Each row is the default the
+plan implements; a row the owner rules otherwise is amended here and in the plan. Rows marked **★** are
+behaviour a user sees and are put to the owner; the rest are mechanics recorded so the plan does not
+invent them silently. Ids are the plan's (`PD-<phase>-…`).
+
+| Id | Section | Question | Default |
+|---|---|---|---|
+| ★ PD-2-PREC | §2.1 | A dead slot that has no word of its length at all and also holds a typed letter: case 1 or B2? | B2: a slot is a length block when `count_matches("?" * n, min_score=0) == 0`; it reports `"no_word_of_length"` with no red cell whether or not it holds a typed letter (P8: one unrelated typed letter never changes the outcome). Only the other dead slots are case 1. |
+| PD-2-OUT | §2.1 | Text-mode blocked lines: stream, order, files | stdout; length lines in ascending length; no `-o` file (and no input-file write) on a block. |
+| PD-2-WARN | §2.1 | Order and repeats in the off-list warning | Slot-model order; a word typed twice is listed twice. |
+| PD-2-STUCK | §2.1 | "the locked cells" of case 3 | The input lock set (not the cells `--theme-entries` adds inside the solver). |
+| PD-2-PAUSE | §2.1 | `"stuck_cells"` on the paused payload | `[]`. |
+| PD-2-D2 | §2.1 | "holds a letter" for adaptive's black-square drop | Checked on the skeleton grid adaptive restarts from. |
+| PD-2-C13 | §2.1 | Does a lock-conflict failed placement fire `on_backtrack`? | No, as for a `used_words` skip. |
+| PD-2-C6P | §2.1 | A postcondition failure on a paused result | Also clears the pause markers (one `finally`). |
+| PD-3-MSG | §2.2 | `CLIAdapter.fill`'s message on exit 3 (the blocked JSON has no message key) | The adapter renders §2.1's `Blocked: …` text lines from the JSON. |
+| PD-3-ERR | §2.2 | `CLIAdapter.fill`'s failure text: "the CLI's stderr" vs `--json-output`, which puts `_fail_fill`'s error on stdout | The stdout JSON `error`; when absent, stderr's non-JSON lines. |
+| ★ PD-3-KILL | §2.2, §2.4 | The `error` event's text, which §2.4's "not the kill's" test needs | On a non-zero exit whose stdout parses as JSON with a string `"error"`, the event's message is that string (so `Autofill changed a locked letter; nothing was written.` reaches the user as written, not as `CLI Error (code 1): {…}`). A negative return code (killed by a signal) keeps `CLI Error (code <rc>)`. The client treats an `error` as the cancel's kill when a cancel is pending and the message starts with `CLI Error (code -`. |
+| PD-3-EARLY | §2.4 | HTTP status of an early Cancel | 200, as for a kill (a 404 would make the client show the killed run as an error). |
+| PD-3-SWEEP | §2.4 | When `generate()` removes expired trackers | On each queue timeout, besides each new subscription. |
+| PD-3-NULL | §2.2 | `"locked_cells": null` | Refused with 400 (the validator requires a list); only an absent field means an older client. |
+| PD-4A | §3.7 | Which cells Clean "writes" | Only cells whose letter or black state Clean changes (a surviving autofilled letter stays autofilled). |
+| PD-5C | §2.3 | Machine state after a blocked run | `failed` (the error card), grid restored, red cells shown. |
+| PD-5D | §2.3 | Is Restore also guarded by the document id? | Yes, as the merge is. |
+| PD-5F | §2.3 | `"no_word_of_length"` with several lengths | One message, distinct lengths ascending joined by `, `. |
+| PD-5G | §2.3 | The "every slot filled" message without a count | Keep today's no-count variant beside the counted text. |
+| ★ PD-5H | §2.4 | Submit timeout: duration, message, a late 202 | 30 s; `Lost contact with the autofill run.`; a 202 arriving later is ignored and its task cancelled best effort. |
+| PD-5I | §2.4 | Cancel while `submitting` | Recorded; posted as soon as the 202 brings the task id. |
+| PD-5J | §2.4 | A cancel rejection other than 200 or 404 | Treated as 404 (keep waiting for the terminal event or the watchdog). |
+| PD-6-G1 | §3.4 | Id of the migrated legacy entry | `legacy-<savedAt>`, so an interrupted migration does not duplicate. |
+| PD-6-G2 | §3.4 | `<time>` in the banner, list and prompt; local or UTC | `YYYY-MM-DD HH:MM`, local time, the default name's shape. |
+| PD-6-G3 | §3.4 | Name-collision match | Trimmed, case-sensitive equality. |
+| PD-6-G4 | §3.2, §3.4 | Selected cell after New grid, restore, Open saved | None. |
+| PD-6-G6 | §3.4 | Status and retry after a failed explicit Save | Status `error`; the 30 s autosave re-arm continues; no second toast. |
+| PD-6-G7 | §3.4 | Empty or blank name in the Save prompt | Confirm disabled. |
+| PD-6-G8 | §3.4 | Wording of the name-collision confirm | `Replace the saved grid named "<name>"?` with "Replace" and "Cancel". |
+| PD-6-G9 | §3.4 | What "Start blank" does | Opens the Grid tool, where New grid is; the §3.2 confirm then applies. |
+| ★ PD-6-G10 | §3.5 | Where Clean's confirm renders (Clean is in the top bar; any tool may be open) | Above the grid, whatever tool is open. |
+| PD-6-G11 | §3.5 | What "any grid change" means for dismissing Clean's confirm | A change to letters, black squares, theme locks or provenance (`contentSigOf`); not `isError`, so Verify landing does not dismiss it. |
+| ★ PD-6-G12 | §2.3, §3.5 | A Verify or Clean response landing after the document was replaced (New grid, Open saved) | Dropped: it writes nothing when `docId` changed since its request. |
+| PD-6-G13 | §3.8 | Refetch debounce | 400 ms. |
+| PD-6-G14 | §3.8 | Channel for `Suggestions updated for the changed grid.` | The panel's existing toast. |
+| PD-6-G15 | §3.8 | Refetch during Apply All's own grid changes | Suspended while Apply All runs; one refetch afterwards. |
+| PD-6-G16 | §3.8 | Does a refetch announce itself? | No; only an Apply on a superseded entry shows the message. |
+| PD-6-G17 | §3.8 | `Could not reach the server` versus the error's message | The former when no HTTP response arrived (status 0); otherwise the message. |
+| PD-6-G18 | §3.8 | Reasons for words Apply All skips without a request | As listed in the plan's Task 6.14. |
+| PD-6-G19 | §3.8 | Format of Apply All's summary | As listed in the plan's Task 6.14. |
+| ★ PD-6-G20 | §3.4 | Fork notice; Delete without a confirm | A fork is silent (the tab continues on the `(copy)` entry). Delete asks the §3.2 confirm, `Delete "<name>"?` with "Delete" and "Cancel", because a deleted save cannot be recovered. |
+| PD-6-G21 | §3.4 | What counts as saved after a save during a run (S2) | As stated in the plan's Task 6.7. |
+| PD-L1 | §5 | npm's `<minimum version>` in the `Missing:` line | `npm (installed with Node.js 18 or later)`. |
+| PD-L2 | §5 | URL form in the `Missing:` lines | `https://python.org/downloads`, `https://nodejs.org`. |
+| PD-L3 | §5 | `<other>` in the port-in-use message | Printed literally; no free port is computed. |
+| PD-L4 | §5 | `run.py`: exit code on port in use, a malformed `PORT`, `FLASK_DEBUG` values | Exit 1; a malformed `PORT` is not handled; only `FLASK_DEBUG=1` turns debug on. |
+| ★ PD-L5 | §5 | `backend/app.py` has its own `__main__` launcher with `debug=True` | Same rule as `run.py`: debug only with `FLASK_DEBUG=1`, port from `PORT` (the §5 safety note applies to any launcher). |
+| PD-L6 | §4 | A bare `ß`, `Æ` or `Ø` line is too short and is classified by length first | Unchanged; the fold rows use longer words (`STRAßE`, `ÆON`, `BJØRN`). |
+| PD-L7 | §4 | `normalize` default rule: description text, non-ASCII letters, no letters at all | Description `Letters only`; letters are folded as §4 item 1 folds them; input with no letter gives an empty string. |
+
+**[NOTE]** Two code facts the plan follows the spec on, recorded so a reviewer does not read them as
+gaps: `handleEvent`'s "all slots filled" test uses counts today, where §2.3 says "the result grid has no
+empty white cell"; and today's partial message appends a suggestion suffix, where §2.3 gives
+`Partial: X/Y slots (P%)` exactly. The spec governs both, and the tests pinning today's behaviour change.
+
+---
+
+## 9. Amendment record
 
 Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`G13`, `I1`–`I8`, `M1`–`M6`,
 `S1`–`S5`) come from the 2026-10-23 review files in `.handoff/drafts/2026-10-23-spec-review/`
@@ -806,3 +877,6 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
 - 0.2.3 (2026-10-23): owner approval of 0.2.2. §7's defaults are ruled as written (P17 ruled earlier);
   G12 (b) re-affirmed after M4 (§1). The two defects live on `main` are filed: S1's stale Verify/Clean
   write as #73 (§3.5) and the theme-entry `_forward_check` defect as #74 (§2.1).
+- 0.2.4 (2026-10-23): from writing the plan. A new §8 records the planning defaults (★ rows go to the
+  owner; defaults apply if unruled by 2026-10-30); the amendment record moves to §9. §4 names the test that pins the old accent behaviour and
+  the `ß` → `SS` trap; §3.1 corrects which `ToolRail.test.jsx` tests mention Heatmap.
