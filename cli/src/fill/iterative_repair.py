@@ -716,7 +716,10 @@ class IterativeRepair:
             pattern = self.grid.get_pattern_for_slot(other)
 
             if "?" not in pattern:
-                # Fully filled — must be valid word
+                # Fully filled — must be valid word, unless fully locked: the user's or a theme entry's
+                # word is not ours to judge (novice-readiness spec 0.2.4 §2.1 (B1), #74)
+                if self._slot_fully_locked(other):
+                    continue
                 cands = self.pattern_matcher.find(pattern, min_score=self.min_score)
                 if not any(w == pattern for w, s in cands):
                     return False
@@ -1016,6 +1019,9 @@ class IterativeRepair:
             pattern = grid.get_pattern_for_slot(slot)
             if "?" in pattern:
                 continue  # Not fully filled
+            # A fully locked slot is valid whatever the list or score (novice-readiness spec 0.2.4 §2.1 (B1))
+            if self._slot_fully_locked(slot):
+                continue
             if self._is_valid_word(pattern):
                 continue
             candidates = self.pattern_matcher.find(pattern, min_score=self.min_score)

@@ -594,3 +594,108 @@ class TestLockConflictInRepair:
         assert calls, "stub was never reached"
         assert grid.get_cell(0, 0) == "C"
         assert "DOG" not in "".join(grid.get_cell(r, c) for r in range(3) for c in range(3))
+
+
+class TestFullyLockedSlotIsValid:
+    """novice-readiness spec 0.2.4 §2.1 (B1): a fully locked slot is valid whatever the list or score (#74)."""
+
+    L5 = [("COD", 50), ("ALE", 50), ("BEE", 50), ("OLE", 50), ("DEE", 50)]
+    ACROSS0 = (0, 0, "across")
+
+    @staticmethod
+    def _solver(words, theme_entries=None):
+        grid = Grid(3, validate_size=False)
+        wl = WordList(list(words))
+        solver = IterativeRepair(
+            grid,
+            wl,
+            TriePatternMatcher(wl),
+            min_score=30,
+            theme_entries=theme_entries,
+            all_valid_words={w.text for w in wl.words},
+        )
+        return grid, solver
+
+    @staticmethod
+    def _build_cache(solver, all_slots):
+        """The intersection-cache build `fill` performs; `__init__` never sets it."""
+        solver._intersection_cache = {}
+        for i, s1 in enumerate(all_slots):
+            s1_id = (s1["row"], s1["col"], s1["direction"])
+            for s2 in all_slots[i + 1 :]:
+                s2_id = (s2["row"], s2["col"], s2["direction"])
+                inter = solver._get_intersection(s1, s2)
+                if inter is not None:
+                    solver._intersection_cache[(s1_id, s2_id)] = inter
+                    solver._intersection_cache[(s2_id, s1_id)] = (inter[1], inter[0])
+        assert solver._intersection_cache, "cache must be non-empty or the row passes vacuously"
+
+    @staticmethod
+    def _put(grid, row, col, word, direction, lock=False):
+        for i, ch in enumerate(word):
+            r, c = (row, col + i) if direction == "across" else (row + i, col)
+            grid.set_letter(r, c, ch, lock=lock)
+
+    def _lk1_setup(self, extra):
+        grid, solver = self._solver(self.L5 + extra)
+        self._put(grid, 0, 0, "CAB", "across", lock=True)
+        self._put(grid, 1, 0, "OLE", "across")
+        self._put(grid, 2, 0, "DEE", "across")
+        return grid, solver
+
+    def _own_conflicts(self, grid, solver):
+        conflicts = solver._find_conflicts(grid, grid.get_word_slots())
+        return [c for c in conflicts if c.slot1_id == self.ACROSS0 and c.slot2_id == self.ACROSS0]
+
+    def _down_cod_check(self, grid, solver):
+        slots = grid.get_word_slots()
+        self._build_cache(solver, slots)
+        self._put(grid, 0, 0, "COD", "down")
+        down = next(s for s in slots if (s["row"], s["col"], s["direction"]) == (0, 0, "down"))
+        return solver._forward_check(down, slots, set())
+
+    def test_lk1_off_list_locked_slot_is_not_a_conflict(self):
+        grid, solver = self._lk1_setup([])
+        assert self._own_conflicts(grid, solver) == []
+
+    def test_lk2_below_min_score_locked_slot_is_not_a_conflict(self):
+        grid, solver = self._lk1_setup([("CAB", 10)])
+        assert self._own_conflicts(grid, solver) == []
+
+    def test_lk3_forward_check_passes_over_locked_off_list_crossing(self):
+        grid, solver = self._solver(self.L5)
+        self._put(grid, 0, 0, "CAB", "across", lock=True)
+        assert self._down_cod_check(grid, solver) is True
+
+    def _theme_solver(self, extra):
+        theme = {self.ACROSS0: "CAB"}
+        grid, solver = self._solver(self.L5 + extra, theme_entries=theme)
+        for (row, col, direction), word in theme.items():
+            grid.place_word(word.upper(), row, col, direction, lock=True)
+        return grid, solver
+
+    def test_issue_74_lk4_locked_theme_entry_off_list_does_not_fail_forward_check(self):
+        grid, solver = self._theme_solver([])
+        assert self._down_cod_check(grid, solver) is True
+
+    def test_issue_74_lk5_locked_theme_entry_below_min_score_does_not_fail_forward_check(self):
+        grid, solver = self._theme_solver([("CAB", 10)])
+        assert self._down_cod_check(grid, solver) is True
+
+    def test_lk6_unlocked_off_list_crossing_still_fails_forward_check(self):
+        grid, solver = self._solver(self.L5)
+        self._put(grid, 0, 0, "CAB", "across")
+        assert self._down_cod_check(grid, solver) is False
+
+    def test_lk7_theme_entry_fill_succeeds(self):
+        grid, solver = self._solver(self.L5, theme_entries={self.ACROSS0: "CAB"})
+        result = solver.fill(timeout=10)
+        assert result.success is True
+        assert ["".join(grid.get_cell(r, c) for c in range(3)) for r in range(3)] == ["CAB", "OLE", "DEE"]
+
+    def test_lk8_typed_locked_off_list_word_fill_succeeds(self):
+        grid, solver = self._solver(self.L5)
+        self._put(grid, 0, 0, "CAB", "across", lock=True)
+        result = solver.fill(timeout=10)
+        assert result.success is True
+        assert result.problematic_slots == []
