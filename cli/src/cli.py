@@ -776,371 +776,371 @@ def fill(
         elif attempts > 1:
             warnings.append("Pause is not supported with --attempts > 1; " "--task-id will not enable pausing this run")
 
-    # Load word lists
-    if not json_output:
-        click.echo("Loading word lists...")
-
-    all_words = []
-    for idx, wordlist_file in enumerate(wordlists):
-        progress.update(
-            10 + int((idx / len(wordlists)) * 20),
-            f"Loading wordlist {idx+1}/{len(wordlists)}",
-        )
-        if not json_output:
-            click.echo(f"  • {wordlist_file}")
-        try:
-            wordlist_handle = open(wordlist_file, "r")
-        except OSError as e:
-            _fail_fill(
-                f"Could not read wordlist {wordlist_file}: {e.strerror}",
-                json_output,
-                hint="Check the path, or list available wordlists with: python -m cli.src.cli wordlists",
-            )
-        with wordlist_handle as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                # One line format (spec 4): WORD, WORD;SCORE or word,SCORE. A malformed
-                # line or a "word,score" header parses to None and is skipped. The
-                # file score is kept; WordList uppercases and validates the word.
-                parsed = WordList.parse_line(line)
-                if parsed and parsed[0]:
-                    all_words.append(parsed)
-
-    word_list = WordList(all_words)
-
-    if not json_output:
-        click.echo(f"  Loaded {len(word_list)} words")
-
-    # Load theme wordlist if provided
-    theme_words = set()
-    if theme_wordlist:
-        progress.update(22, f"Loading theme wordlist from {theme_wordlist}")
-        if not json_output:
-            click.echo(f"⭐ Loading theme wordlist from {theme_wordlist}...")
-
-        with open(theme_wordlist, "r") as f:
-            theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith("#")}
-
-        if not json_output:
-            click.echo(f"  ⭐ Loaded {len(theme_words)} theme words (will be prioritized)")
-
-    # Load theme entries if provided
-    theme_entries_dict = None
-    if theme_entries:
-        progress.update(25, f"Loading theme entries from {theme_entries}")
-        if not json_output:
-            click.echo(f"Loading theme entries from {theme_entries}...")
-
-        try:
-            with open(theme_entries, "r") as f:
-                theme_data = json.load(f)
-        except json.JSONDecodeError as e:
-            if json_output:
-                click.echo(json.dumps({"success": False, "error": f"Invalid theme entries JSON: {e}"}))
-            else:
-                click.echo(f"Error: Invalid JSON in theme entries file: {e}", err=True)
-            return
-
-        # Convert JSON format {"(row,col,direction)": "WORD"} to Python format {(row, col, direction): "WORD"}
-        theme_entries_dict = {}
-        for key_str, word in theme_data.items():
-            try:
-                # Parse key like "(0,1,across)" or "(0, 1, across)"
-                clean_key = key_str.strip("()")
-                parts = [p.strip().strip("'\"") for p in clean_key.split(",")]
-                if len(parts) != 3:
-                    if not json_output:
-                        click.echo(
-                            f"Warning: Skipping malformed theme entry key: {key_str}",
-                            err=True,
-                        )
-                    continue
-                row, col, direction = int(parts[0]), int(parts[1]), parts[2]
-                theme_entries_dict[(row, col, direction)] = word.upper()
-            except (ValueError, IndexError) as e:
-                if not json_output:
-                    click.echo(
-                        f"Warning: Skipping invalid theme entry '{key_str}': {e}",
-                        err=True,
-                    )
-
-        if not json_output:
-            click.echo(f"  Loaded {len(theme_entries_dict)} theme entries")
-            for (row, col, direction), word in theme_entries_dict.items():
-                click.echo(f"    • {direction.capitalize()} at ({row},{col}): {word}")
-
-        # Validate theme entries against the grid's slot structure UP FRONT.
-        # A mismatched length used to silently become a prefix constraint
-        # (e.g. "STO" in a 5-letter slot quietly filled as "STONE").
-        slot_lengths = {(s["row"], s["col"], s["direction"]): s["length"] for s in grid.get_word_slots()}
-        theme_errors = []
-        for (row, col, direction), word in theme_entries_dict.items():
-            slot_len = slot_lengths.get((row, col, direction))
-            if slot_len is None:
-                theme_errors.append(
-                    f"Theme entry '{word}' at ({row},{col},{direction}) does not " "start a word slot in this grid"
-                )
-            elif slot_len != len(word):
-                theme_errors.append(
-                    f"Theme entry '{word}' is {len(word)} letters but the "
-                    f"{direction} slot at ({row},{col}) is {slot_len} letters long"
-                )
-        if theme_errors:
-            _fail_fill("Invalid theme entries: " + "; ".join(theme_errors), json_output)
-
-    # Create pattern matcher based on algorithm
-    from .fill.beam_search_autofill import BeamSearchAutofill
-    from .fill.hybrid_autofill import HybridAutofill
-    from .fill.iterative_repair import IterativeRepair
-    from .fill.pattern_matcher import PatternMatcher
-    from .fill.trie_pattern_matcher import TriePatternMatcher
-
-    # Use trie for beam/repair/hybrid: O(pattern length) lookup vs the regex
-    # matcher's O(list size) scan per query (see trie_pattern_matcher.py); these
-    # algorithms issue many repeated lookups, so run
-    # cli/tests/performance/benchmark_algorithms.py for measured numbers.
-    use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
-    pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
-
-    # Display algorithm info
-    if not json_output:
-        algo_descriptions = {
-            "regex": "classic regex-based CSP",
-            "trie": "fast trie-based CSP",
-            "beam": f"beam search (width={beam_width})",
-            "repair": "iterative repair",
-            "hybrid": f"hybrid (beam width={beam_width} + repair)",
-        }
-        click.echo(f"  Algorithm: {algorithm} ({algo_descriptions.get(algorithm, algorithm)})")
-
-    progress.update(30, f"Loaded {len(word_list)} words, starting autofill")
-
-    # Validate against the lists this run loaded (-w), not every file on disk: a word
-    # outside the user's chosen list is reported invalid when placed. Theme words and
-    # theme entries are added separately inside IterativeRepair.
-    all_valid_words = _validation_words(word_list)
-
-    # Set up pause/resume wiring (DD1). `pause_controller` itself was already built
-    # above, before wordlist loading — NOT rebuilt here, so the finally block's
-    # clear_running()/clear_pause() always target the same PauseController that
-    # wrote the running marker, in every mode including --adaptive.
-    #
-    # `solver_pause_controller` is what actually gets threaded into the autofill
-    # constructors below, and IS gated on NOT --adaptive: adaptive pause is out of
-    # scope (AdaptiveAutofill.fill has no task_id param), so wiring pause into the
-    # base autofill it wraps would be a half-built path. Gating only the solver copy
-    # — not the bookkeeping `pause_controller` — is what lets the running-marker
-    # cleanup in `finally` still run under --adaptive (previously it could not: the
-    # single shared variable was reset to None for adaptive, so `if pause_controller`
-    # was False and the marker leaked on every adaptive run).
-    state_manager = None
-    solver_pause_controller = None
-    if task_id and not adaptive:
-        from .fill.state_manager import StateManager
-
-        solver_pause_controller = pause_controller
-        state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
-
-    # DD3 content dispatch: a real CSPState (non-empty domains) resumes at its exact
-    # position under classic Autofill regardless of --algorithm (the CSPState machinery
-    # is CSP-only). A degenerate state (empty domains) falls through to the normal
-    # --algorithm dispatch and re-seeds that engine from the reconstructed grid.
-    resume_exact = resume_csp_state is not None and bool(resume_csp_state.domains)
-
-    # Create appropriate autofill instance based on algorithm
-    if resume_exact:
-        # Force classic Autofill; the pause wiring survives restore_to_autofill so the
-        # resumed CSP fill re-pauses correctly. The grid handed here is immaterial —
-        # _resume_fill overwrites self.grid from the saved state.
-        autofill = Autofill(
-            grid,
-            word_list,
-            None,
-            timeout,
-            min_score,
-            algorithm,
-            progress,
-            pause_controller=solver_pause_controller,
-            state_manager=state_manager,
-        )
-    elif algorithm == "beam":
-        autofill = BeamSearchAutofill(
-            grid,
-            word_list,
-            pattern_matcher,
-            beam_width=beam_width,
-            min_score=min_score,
-            progress_reporter=progress,
-            theme_entries=theme_entries_dict,
-            theme_words=theme_words,
-            partial_fill_mode=partial_fill,
-            pause_controller=solver_pause_controller,
-            task_id=task_id,
-        )
-    elif algorithm == "repair":
-        autofill = IterativeRepair(
-            grid,
-            word_list,
-            pattern_matcher,
-            min_score=min_score,
-            progress_reporter=progress,
-            theme_entries=theme_entries_dict,
-            theme_words=theme_words,
-            all_valid_words=all_valid_words,
-            pause_controller=solver_pause_controller,
-        )
-    elif algorithm == "hybrid":
-        autofill = HybridAutofill(
-            grid,
-            word_list,
-            pattern_matcher,
-            beam_width=beam_width,
-            min_score=min_score,
-            progress_reporter=progress,
-            theme_entries=theme_entries_dict,
-            theme_words=theme_words,
-            all_valid_words=all_valid_words,
-            pause_controller=solver_pause_controller,
-            task_id=task_id,
-        )
-    else:
-        # Default to classic Autofill for 'regex' and 'trie'
-        # Note: Classic autofill doesn't support theme entries
-        if theme_entries_dict:
-            warnings.append(
-                f"Theme entries are not supported for the {algorithm} algorithm "
-                "and were IGNORED. Use beam, repair, or hybrid."
-            )
-        # DD3: inject pause wiring only for single-attempt runs. fill_with_restarts
-        # (attempts>1) calls self.fill() with no task_id, which would reach _handle_pause
-        # with task_id=None → ValueError; the attempts==1 gate keeps the controller off it.
-        _pc = solver_pause_controller if attempts == 1 else None
-        _sm = state_manager if attempts == 1 else None
-        autofill = Autofill(
-            grid,
-            word_list,
-            None,
-            timeout,
-            min_score,
-            algorithm,
-            progress,
-            pause_controller=_pc,
-            state_manager=_sm,
-        )
-
-    # Record the wordlist paths on the solver so a paused state stores them
-    # (resume reloads the same wordlists without needing -w)
-    autofill.wordlist_paths = [str(w) for w in wordlists]
-
-    # Emit any warnings collected so far (human mode; JSON gets them in the result)
-    if warnings and not json_output:
-        for w in warnings:
-            click.echo(click.style(f"Warning: {w}", fg="yellow"))
-
-    # Wrap with adaptive autofill if enabled
-    if adaptive:
-        from .fill.adaptive_autofill import AdaptiveAutofill
-
-        if not json_output:
-            click.echo(
-                click.style(
-                    f"⚡ Adaptive mode enabled (max {max_adaptations} adaptations)",
-                    fg="cyan",
-                )
-            )
-        progress.update(35, f"Adaptive mode enabled (max {max_adaptations} adaptations)")
-
-        # Wrap the base autofill with adaptive wrapper
-        # IMPORTANT: Store the original autofill (BeamSearch/Hybrid/etc.) to pass as base
-        base_autofill_instance = autofill
-
-        adaptive_options = {
-            "min_score": min_score,
-            "timeout": timeout,
-            "max_adaptations": max_adaptations,
-            "theme_entries": theme_entries_dict or {},
-        }
-        autofill = AdaptiveAutofill(
-            grid=grid,
-            wordlists=[word_list],  # Wrap in list
-            options=adaptive_options,
-            progress_reporter=progress,
-            base_autofill=base_autofill_instance,  # Pass the original autofill to preserve algorithm
-        )
-
-    # Get empty slots
-    empty_slots = grid.get_empty_slots()
-    if not empty_slots:
-        # Nothing to fill — release the pause/running markers before returning
-        if pause_controller:
-            pause_controller.clear_running()
-            pause_controller.clear_pause()
-        if json_output:
-            all_slots = grid.get_word_slots()
-            click.echo(
-                json.dumps(
-                    {
-                        "success": True,
-                        "grid": grid.to_dict()["grid"],
-                        "slots_filled": len(all_slots),
-                        "total_slots": len(all_slots),
-                        "fill_percentage": 100,
-                        "time_elapsed": 0.0,
-                        "iterations": 0,
-                        "problematic_slots_count": 0,
-                        "all_slots_filled": True,
-                        "paused": False,
-                        # Same fields the normal completion payload reports, so this
-                        # early return does not present a different contract.
-                        "task_id": task_id,
-                        "wordlists": [str(w) for w in wordlists],
-                        "message": "Grid was already completely filled",
-                    }
-                )
-            )
-        else:
-            click.echo(click.style("\n✓ Grid is already completely filled!", fg="green"))
-        return
-
-    if not json_output:
-        click.echo(f"\nFilling {len(empty_slots)} empty slots...")
-        if attempts > 1:
-            timeout_per_attempt = timeout // attempts
-            click.echo(f"Strategy: Randomized restart ({attempts} attempts)")
-            click.echo(f"Timeout: {timeout}s total ({timeout_per_attempt}s per attempt), Min score: {min_score}\n")
-        else:
-            click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
-
-    # Fill grid
-    # Adaptive and the new algorithms (beam, repair, hybrid) use fill(timeout);
-    # classic uses fill() or fill_with_restarts(). The -t value is ALWAYS
-    # forwarded (adaptive runs of classic algorithms used to ignore it).
-    def _run_fill():
-        if resume_exact:
-            # Exact-position resume: _resume_fill restores domains + current_slot_index
-            # and continues _backtrack_with_mac from there (use_mac default True — the
-            # pause check lives only in _backtrack_with_mac). Timeout is governed by the
-            # ctor, so no timeout= here.
-            return autofill.fill(resume_state=resume_csp_state, task_id=task_id)
-        if adaptive or algorithm in ["beam", "repair", "hybrid"]:
-            if attempts > 1 and not json_output:
-                mode = "adaptive mode" if adaptive else f"{algorithm} algorithm"
-                click.echo(click.style(f"Warning: --attempts parameter ignored for {mode}", fg="yellow"))
-            return autofill.fill(timeout=timeout)
-        # Classic autofill (regex, trie)
-        if attempts > 1:
-            timeout_per_attempt = timeout // attempts
-            return autofill.fill_with_restarts(
-                attempts=attempts,
-                timeout_per_attempt=timeout_per_attempt,
-                task_id=task_id,
-            )
-        return autofill.fill(task_id=task_id)
-
+    # novice-readiness spec 0.2.4 §2.1 (C6): the `try` starts right after
+    # mark_running(), so every exit after it (theme and word-list errors, the
+    # solver error, the already-filled return) reaches the one cleanup below.
     result = None
     try:
+        # Load word lists
+        if not json_output:
+            click.echo("Loading word lists...")
+
+        all_words = []
+        for idx, wordlist_file in enumerate(wordlists):
+            progress.update(
+                10 + int((idx / len(wordlists)) * 20),
+                f"Loading wordlist {idx+1}/{len(wordlists)}",
+            )
+            if not json_output:
+                click.echo(f"  • {wordlist_file}")
+            try:
+                wordlist_handle = open(wordlist_file, "r")
+            except OSError as e:
+                _fail_fill(
+                    f"Could not read wordlist {wordlist_file}: {e.strerror}",
+                    json_output,
+                    hint="Check the path, or list available wordlists with: python -m cli.src.cli wordlists",
+                )
+            with wordlist_handle as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    # One line format (spec 4): WORD, WORD;SCORE or word,SCORE. A malformed
+                    # line or a "word,score" header parses to None and is skipped. The
+                    # file score is kept; WordList uppercases and validates the word.
+                    parsed = WordList.parse_line(line)
+                    if parsed and parsed[0]:
+                        all_words.append(parsed)
+
+        word_list = WordList(all_words)
+
+        if not json_output:
+            click.echo(f"  Loaded {len(word_list)} words")
+
+        # Load theme wordlist if provided
+        theme_words = set()
+        if theme_wordlist:
+            progress.update(22, f"Loading theme wordlist from {theme_wordlist}")
+            if not json_output:
+                click.echo(f"⭐ Loading theme wordlist from {theme_wordlist}...")
+
+            with open(theme_wordlist, "r") as f:
+                theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith("#")}
+
+            if not json_output:
+                click.echo(f"  ⭐ Loaded {len(theme_words)} theme words (will be prioritized)")
+
+        # Load theme entries if provided
+        theme_entries_dict = None
+        if theme_entries:
+            progress.update(25, f"Loading theme entries from {theme_entries}")
+            if not json_output:
+                click.echo(f"Loading theme entries from {theme_entries}...")
+
+            try:
+                with open(theme_entries, "r") as f:
+                    theme_data = json.load(f)
+            except json.JSONDecodeError as e:
+                if json_output:
+                    click.echo(json.dumps({"success": False, "error": f"Invalid theme entries JSON: {e}"}))
+                else:
+                    click.echo(f"Error: Invalid JSON in theme entries file: {e}", err=True)
+                return
+
+            # Convert JSON format {"(row,col,direction)": "WORD"} to Python format {(row, col, direction): "WORD"}
+            theme_entries_dict = {}
+            for key_str, word in theme_data.items():
+                try:
+                    # Parse key like "(0,1,across)" or "(0, 1, across)"
+                    clean_key = key_str.strip("()")
+                    parts = [p.strip().strip("'\"") for p in clean_key.split(",")]
+                    if len(parts) != 3:
+                        if not json_output:
+                            click.echo(
+                                f"Warning: Skipping malformed theme entry key: {key_str}",
+                                err=True,
+                            )
+                        continue
+                    row, col, direction = int(parts[0]), int(parts[1]), parts[2]
+                    theme_entries_dict[(row, col, direction)] = word.upper()
+                except (ValueError, IndexError) as e:
+                    if not json_output:
+                        click.echo(
+                            f"Warning: Skipping invalid theme entry '{key_str}': {e}",
+                            err=True,
+                        )
+
+            if not json_output:
+                click.echo(f"  Loaded {len(theme_entries_dict)} theme entries")
+                for (row, col, direction), word in theme_entries_dict.items():
+                    click.echo(f"    • {direction.capitalize()} at ({row},{col}): {word}")
+
+            # Validate theme entries against the grid's slot structure UP FRONT.
+            # A mismatched length used to silently become a prefix constraint
+            # (e.g. "STO" in a 5-letter slot quietly filled as "STONE").
+            slot_lengths = {(s["row"], s["col"], s["direction"]): s["length"] for s in grid.get_word_slots()}
+            theme_errors = []
+            for (row, col, direction), word in theme_entries_dict.items():
+                slot_len = slot_lengths.get((row, col, direction))
+                if slot_len is None:
+                    theme_errors.append(
+                        f"Theme entry '{word}' at ({row},{col},{direction}) does not " "start a word slot in this grid"
+                    )
+                elif slot_len != len(word):
+                    theme_errors.append(
+                        f"Theme entry '{word}' is {len(word)} letters but the "
+                        f"{direction} slot at ({row},{col}) is {slot_len} letters long"
+                    )
+            if theme_errors:
+                _fail_fill("Invalid theme entries: " + "; ".join(theme_errors), json_output)
+
+        # Create pattern matcher based on algorithm
+        from .fill.beam_search_autofill import BeamSearchAutofill
+        from .fill.hybrid_autofill import HybridAutofill
+        from .fill.iterative_repair import IterativeRepair
+        from .fill.pattern_matcher import PatternMatcher
+        from .fill.trie_pattern_matcher import TriePatternMatcher
+
+        # Use trie for beam/repair/hybrid: O(pattern length) lookup vs the regex
+        # matcher's O(list size) scan per query (see trie_pattern_matcher.py); these
+        # algorithms issue many repeated lookups, so run
+        # cli/tests/performance/benchmark_algorithms.py for measured numbers.
+        use_trie = algorithm in ["trie", "beam", "repair", "hybrid"]
+        pattern_matcher = TriePatternMatcher(word_list) if use_trie else PatternMatcher(word_list)
+
+        # Display algorithm info
+        if not json_output:
+            algo_descriptions = {
+                "regex": "classic regex-based CSP",
+                "trie": "fast trie-based CSP",
+                "beam": f"beam search (width={beam_width})",
+                "repair": "iterative repair",
+                "hybrid": f"hybrid (beam width={beam_width} + repair)",
+            }
+            click.echo(f"  Algorithm: {algorithm} ({algo_descriptions.get(algorithm, algorithm)})")
+
+        progress.update(30, f"Loaded {len(word_list)} words, starting autofill")
+
+        # Validate against the lists this run loaded (-w), not every file on disk: a word
+        # outside the user's chosen list is reported invalid when placed. Theme words and
+        # theme entries are added separately inside IterativeRepair.
+        all_valid_words = _validation_words(word_list)
+
+        # Set up pause/resume wiring (DD1). `pause_controller` itself was already built
+        # above, before wordlist loading — NOT rebuilt here, so the finally block's
+        # clear_running()/clear_pause() always target the same PauseController that
+        # wrote the running marker, in every mode including --adaptive.
+        #
+        # `solver_pause_controller` is what actually gets threaded into the autofill
+        # constructors below, and IS gated on NOT --adaptive: adaptive pause is out of
+        # scope (AdaptiveAutofill.fill has no task_id param), so wiring pause into the
+        # base autofill it wraps would be a half-built path. Gating only the solver copy
+        # — not the bookkeeping `pause_controller` — is what lets the running-marker
+        # cleanup in `finally` still run under --adaptive (previously it could not: the
+        # single shared variable was reset to None for adaptive, so `if pause_controller`
+        # was False and the marker leaked on every adaptive run).
+        state_manager = None
+        solver_pause_controller = None
+        if task_id and not adaptive:
+            from .fill.state_manager import StateManager
+
+            solver_pause_controller = pause_controller
+            state_manager = StateManager(storage_dir=Path(state_dir) if state_dir else None)
+
+        # DD3 content dispatch: a real CSPState (non-empty domains) resumes at its exact
+        # position under classic Autofill regardless of --algorithm (the CSPState machinery
+        # is CSP-only). A degenerate state (empty domains) falls through to the normal
+        # --algorithm dispatch and re-seeds that engine from the reconstructed grid.
+        resume_exact = resume_csp_state is not None and bool(resume_csp_state.domains)
+
+        # Create appropriate autofill instance based on algorithm
+        if resume_exact:
+            # Force classic Autofill; the pause wiring survives restore_to_autofill so the
+            # resumed CSP fill re-pauses correctly. The grid handed here is immaterial —
+            # _resume_fill overwrites self.grid from the saved state.
+            autofill = Autofill(
+                grid,
+                word_list,
+                None,
+                timeout,
+                min_score,
+                algorithm,
+                progress,
+                pause_controller=solver_pause_controller,
+                state_manager=state_manager,
+            )
+        elif algorithm == "beam":
+            autofill = BeamSearchAutofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                beam_width=beam_width,
+                min_score=min_score,
+                progress_reporter=progress,
+                theme_entries=theme_entries_dict,
+                theme_words=theme_words,
+                partial_fill_mode=partial_fill,
+                pause_controller=solver_pause_controller,
+                task_id=task_id,
+            )
+        elif algorithm == "repair":
+            autofill = IterativeRepair(
+                grid,
+                word_list,
+                pattern_matcher,
+                min_score=min_score,
+                progress_reporter=progress,
+                theme_entries=theme_entries_dict,
+                theme_words=theme_words,
+                all_valid_words=all_valid_words,
+                pause_controller=solver_pause_controller,
+            )
+        elif algorithm == "hybrid":
+            autofill = HybridAutofill(
+                grid,
+                word_list,
+                pattern_matcher,
+                beam_width=beam_width,
+                min_score=min_score,
+                progress_reporter=progress,
+                theme_entries=theme_entries_dict,
+                theme_words=theme_words,
+                all_valid_words=all_valid_words,
+                pause_controller=solver_pause_controller,
+                task_id=task_id,
+            )
+        else:
+            # Default to classic Autofill for 'regex' and 'trie'
+            # Note: Classic autofill doesn't support theme entries
+            if theme_entries_dict:
+                warnings.append(
+                    f"Theme entries are not supported for the {algorithm} algorithm "
+                    "and were IGNORED. Use beam, repair, or hybrid."
+                )
+            # DD3: inject pause wiring only for single-attempt runs. fill_with_restarts
+            # (attempts>1) calls self.fill() with no task_id, which would reach _handle_pause
+            # with task_id=None → ValueError; the attempts==1 gate keeps the controller off it.
+            _pc = solver_pause_controller if attempts == 1 else None
+            _sm = state_manager if attempts == 1 else None
+            autofill = Autofill(
+                grid,
+                word_list,
+                None,
+                timeout,
+                min_score,
+                algorithm,
+                progress,
+                pause_controller=_pc,
+                state_manager=_sm,
+            )
+
+        # Record the wordlist paths on the solver so a paused state stores them
+        # (resume reloads the same wordlists without needing -w)
+        autofill.wordlist_paths = [str(w) for w in wordlists]
+
+        # Emit any warnings collected so far (human mode; JSON gets them in the result)
+        if warnings and not json_output:
+            for w in warnings:
+                click.echo(click.style(f"Warning: {w}", fg="yellow"))
+
+        # Wrap with adaptive autofill if enabled
+        if adaptive:
+            from .fill.adaptive_autofill import AdaptiveAutofill
+
+            if not json_output:
+                click.echo(
+                    click.style(
+                        f"⚡ Adaptive mode enabled (max {max_adaptations} adaptations)",
+                        fg="cyan",
+                    )
+                )
+            progress.update(35, f"Adaptive mode enabled (max {max_adaptations} adaptations)")
+
+            # Wrap the base autofill with adaptive wrapper
+            # IMPORTANT: Store the original autofill (BeamSearch/Hybrid/etc.) to pass as base
+            base_autofill_instance = autofill
+
+            adaptive_options = {
+                "min_score": min_score,
+                "timeout": timeout,
+                "max_adaptations": max_adaptations,
+                "theme_entries": theme_entries_dict or {},
+            }
+            autofill = AdaptiveAutofill(
+                grid=grid,
+                wordlists=[word_list],  # Wrap in list
+                options=adaptive_options,
+                progress_reporter=progress,
+                base_autofill=base_autofill_instance,  # Pass the original autofill to preserve algorithm
+            )
+
+        # Get empty slots
+        empty_slots = grid.get_empty_slots()
+        if not empty_slots:
+            # Nothing to fill; the `finally` below clears the pause/running markers.
+            if json_output:
+                all_slots = grid.get_word_slots()
+                click.echo(
+                    json.dumps(
+                        {
+                            "success": True,
+                            "grid": grid.to_dict()["grid"],
+                            "slots_filled": len(all_slots),
+                            "total_slots": len(all_slots),
+                            "fill_percentage": 100,
+                            "time_elapsed": 0.0,
+                            "iterations": 0,
+                            "problematic_slots_count": 0,
+                            "all_slots_filled": True,
+                            "paused": False,
+                            # Same fields the normal completion payload reports, so this
+                            # early return does not present a different contract.
+                            "task_id": task_id,
+                            "wordlists": [str(w) for w in wordlists],
+                            "message": "Grid was already completely filled",
+                        }
+                    )
+                )
+            else:
+                click.echo(click.style("\n✓ Grid is already completely filled!", fg="green"))
+            return
+
+        if not json_output:
+            click.echo(f"\nFilling {len(empty_slots)} empty slots...")
+            if attempts > 1:
+                timeout_per_attempt = timeout // attempts
+                click.echo(f"Strategy: Randomized restart ({attempts} attempts)")
+                click.echo(f"Timeout: {timeout}s total ({timeout_per_attempt}s per attempt), Min score: {min_score}\n")
+            else:
+                click.echo(f"Timeout: {timeout}s, Min score: {min_score}\n")
+
+        # Fill grid
+        # Adaptive and the new algorithms (beam, repair, hybrid) use fill(timeout);
+        # classic uses fill() or fill_with_restarts(). The -t value is ALWAYS
+        # forwarded (adaptive runs of classic algorithms used to ignore it).
+        def _run_fill():
+            if resume_exact:
+                # Exact-position resume: _resume_fill restores domains + current_slot_index
+                # and continues _backtrack_with_mac from there (use_mac default True — the
+                # pause check lives only in _backtrack_with_mac). Timeout is governed by the
+                # ctor, so no timeout= here.
+                return autofill.fill(resume_state=resume_csp_state, task_id=task_id)
+            if adaptive or algorithm in ["beam", "repair", "hybrid"]:
+                if attempts > 1 and not json_output:
+                    mode = "adaptive mode" if adaptive else f"{algorithm} algorithm"
+                    click.echo(click.style(f"Warning: --attempts parameter ignored for {mode}", fg="yellow"))
+                return autofill.fill(timeout=timeout)
+            # Classic autofill (regex, trie)
+            if attempts > 1:
+                timeout_per_attempt = timeout // attempts
+                return autofill.fill_with_restarts(
+                    attempts=attempts,
+                    timeout_per_attempt=timeout_per_attempt,
+                    task_id=task_id,
+                )
+            return autofill.fill(task_id=task_id)
+
         if json_output:
             result = _run_fill()
         else:
