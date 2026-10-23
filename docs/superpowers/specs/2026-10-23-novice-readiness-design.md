@@ -786,7 +786,7 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | PD-3-SWEEP | §2.4 | When `generate()` removes expired trackers | On each queue timeout, besides each new subscription. |
 | PD-3-NULL | §2.2 | `"locked_cells": null` | Refused with 400 (the validator requires a list); only an absent field means an older client. |
 | PD-4A | §3.7 | Which cells Clean "writes" | Only cells whose letter or black state Clean changes (a surviving autofilled letter stays autofilled). |
-| PD-5C | §2.3 | Machine state after a blocked run | `failed` (the error card), grid restored, red cells shown. |
+| ★ PD-5C | §2.3 | Machine state after a blocked run | `failed` (the error card), grid restored, red cells shown. A block is by design, yet it renders like a crash. |
 | PD-5D | §2.3 | Is Restore also guarded by the document id? | Yes, as the merge is. |
 | PD-5F | §2.3 | `"no_word_of_length"` with several lengths | One message, distinct lengths ascending joined by `, `. |
 | PD-5G | §2.3 | The "every slot filled" message without a count | Keep today's no-count variant beside the counted text. |
@@ -809,10 +809,10 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | PD-6-G15 | §3.8 | Refetch during Apply All's own grid changes | Suspended while Apply All runs; one refetch afterwards. |
 | PD-6-G16 | §3.8 | Does a refetch announce itself? | No; only an Apply on a superseded entry shows the message. |
 | PD-6-G17 | §3.8 | `Could not reach the server` versus the error's message | The former when no HTTP response arrived (status 0); otherwise the message. |
-| PD-6-G18 | §3.8 | Reasons for words Apply All skips without a request | As listed in the plan's Task 6.14. |
-| PD-6-G19 | §3.8 | Format of Apply All's summary | As listed in the plan's Task 6.14. |
+| PD-6-G18 | §3.8 | Reasons for words Apply All skips without a request | No suggestion → `no valid placement`; a best suggestion whose `reasoning` contains `WARNING` → `skipped due to conflicts: ` followed by that reasoning. |
+| PD-6-G19 | §3.8 | Format of Apply All's summary | `Applied N theme words successfully!` when N > 0, else `Could not apply any theme words`; when any word was skipped, ` Skipped: WORD (reason); WORD (reason)` is appended in suggestion order. The old `(K skipped due to conflicts)` suffix goes. |
 | ★ PD-6-G20 | §3.4 | Fork notice; Delete without a confirm | A fork is silent (the tab continues on the `(copy)` entry). Delete asks the §3.2 confirm, `Delete "<name>"?` with "Delete" and "Cancel", because a deleted save cannot be recovered. |
-| PD-6-G21 | §3.4 | What counts as saved after a save during a run (S2) | As stated in the plan's Task 6.7. |
+| PD-6-G21 | §3.4 | What counts as saved after a save during a run (S2) | The signature of the grid that was written (the Start snapshot), not the live grid's; merges during the run do not mark the grid unsaved. |
 | PD-L1 | §5 | npm's `<minimum version>` in the `Missing:` line | `npm (installed with Node.js 18 or later)`. |
 | PD-L2 | §5 | URL form in the `Missing:` lines | `https://python.org/downloads`, `https://nodejs.org`. |
 | PD-L3 | §5 | `<other>` in the port-in-use message | Printed literally; no free port is computed. |
@@ -879,4 +879,5 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   write as #73 (§3.5) and the theme-entry `_forward_check` defect as #74 (§2.1).
 - 0.2.4 (2026-10-23): from writing the plan. A new §8 records the planning defaults (★ rows go to the
   owner; defaults apply if unruled by 2026-10-30); the amendment record moves to §9. §4 names the test that pins the old accent behaviour and
-  the `ß` → `SS` trap; §3.1 corrects which `ToolRail.test.jsx` tests mention Heatmap.
+  the `ß` → `SS` trap; §3.1 corrects which `ToolRail.test.jsx` tests mention Heatmap. Same day: PD-5C starred;
+  PD-6-G18, G19 and G21 carry their values here rather than pointing at the plan.
