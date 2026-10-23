@@ -482,3 +482,75 @@ class TestIterativeRepair:
         assert result.time_elapsed < 10.0
         assert result.iterations >= 0
         assert result.slots_filled == result.total_slots
+
+
+class _RecordingMatcher:
+    """Pattern matcher double that records a cell's letter at each ``find`` call."""
+
+    def __init__(self, grid, cell, inner=None, canned=None):
+        self.grid = grid
+        self.cell = cell
+        self.inner = inner
+        self.canned = canned
+        self.seen = []
+
+    def find(self, pattern, *args, **kwargs):
+        self.seen.append(self.grid.get_cell(*self.cell))
+        if self.canned is not None:
+            return list(self.canned)
+        return self.inner.find(pattern, *args, **kwargs)
+
+
+class TestLockedCellWriters:
+    """novice-readiness spec 0.2.4 §2.1 (D3): trial writes never touch a locked cell."""
+
+    L6 = ["CAT", "ORE", "WED", "COW", "ARE", "TED"]
+
+    @staticmethod
+    def _g33_locked_c():
+        grid = Grid(3, validate_size=False)
+        grid.set_letter(0, 0, "C", lock=True)
+        return grid
+
+    @staticmethod
+    def _slot(row, col, direction, length=3):
+        return {"row": row, "col": col, "direction": direction, "length": length}
+
+    def _solver(self, grid, matcher):
+        return IterativeRepair(grid, WordList([(w, 50) for w in self.L6]), matcher, max_iterations=100)
+
+    def test_would_create_gibberish_keeps_locked_letter(self):
+        grid = self._g33_locked_c()
+        matcher = _RecordingMatcher(grid, (0, 0), canned=[("XYZ", 50)])
+        solver = self._solver(grid, matcher)
+        slots = [self._slot(0, 0, "across"), self._slot(0, 0, "down")]
+
+        solver._would_create_gibberish("DOG", slots[0], slots, min_filled=1)
+
+        assert matcher.seen, "recording matcher was never called"
+        assert set(matcher.seen) == {"C"}
+        assert grid.get_cell(0, 0) == "C"
+
+    def test_backtrack_region_keeps_locked_letter(self):
+        grid = self._g33_locked_c()
+        matcher = _RecordingMatcher(grid, (0, 0), canned=[("DOG", 50)])
+        solver = self._solver(grid, matcher)
+        slots = [self._slot(0, 0, "across"), self._slot(0, 0, "down")]
+
+        solver._backtrack_region([slots[0]], 0, set(), slots, 0.0, float("inf"))
+
+        assert matcher.seen, "recording matcher was never called"
+        assert set(matcher.seen) == {"C"}
+        assert grid.get_cell(0, 0) == "C"
+
+    def test_fill_keeps_locked_letter_at_every_find(self):
+        grid = self._g33_locked_c()
+        wl = WordList([(w, 50) for w in self.L6])
+        matcher = _RecordingMatcher(grid, (0, 0), inner=TriePatternMatcher(wl))
+        solver = IterativeRepair(grid, wl, matcher, max_iterations=100)
+
+        solver.fill(timeout=10)
+
+        assert matcher.seen, "recording matcher was never called"
+        assert set(matcher.seen) == {"C"}
+        assert grid.get_cell(0, 0) == "C"
