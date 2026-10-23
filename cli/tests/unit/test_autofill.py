@@ -745,3 +745,14 @@ class TestLockPreservingRoundTrips:
         # (it does not when BlackSquareSuggester failed to import).
         assert hasattr(adaptive, "_original_grid_dict")
         assert adaptive._skeleton_grid().locked_cells == {(0, 0)}
+
+    def test_rt2b_skeleton_grid_fallback_keeps_locks_without_snapshot(self):
+        from src.fill.adaptive_autofill import AdaptiveAutofill
+
+        grid = Grid(11)
+        grid.set_letter(0, 0, "C", lock=True)
+        adaptive = AdaptiveAutofill(grid, [], {}, base_autofill=object())
+
+        # Precondition: no snapshot, so _skeleton_grid takes the fallback.
+        assert getattr(adaptive, "_original_grid_dict", None) is None
+        assert adaptive._skeleton_grid().locked_cells == {(0, 0)}

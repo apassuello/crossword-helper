@@ -266,6 +266,18 @@ class TestCellLocking:
         with pytest.raises(ValueError):
             Grid.from_dict(self._g33_cat(locked=[[-1, 0]]), strict_size=False)
 
+    def test_fd5b_negative_col_wrapping_onto_a_letter_raises_out_of_bounds(self):
+        # (0, -1) would wrap to (0, 2) == "T" if the lower bound were dropped,
+        # so only the bounds check (not the no-letter check) can reject it.
+        with pytest.raises(ValueError, match="out of bounds"):
+            Grid.from_dict(self._g33_cat(locked=[[0, -1]]), strict_size=False)
+
+    def test_fd5c_negative_row_wrapping_onto_a_letter_raises_out_of_bounds(self):
+        # (-1, 0) wraps to (2, 0), which holds a letter here.
+        data = {"size": 3, "grid": [[".", ".", "."], [".", ".", "."], ["C", ".", "."]], "locked": [[-1, 0]]}
+        with pytest.raises(ValueError, match="out of bounds"):
+            Grid.from_dict(data, strict_size=False)
+
     def test_fd6_from_dict_locked_empty_cell_raises(self):
         with pytest.raises(ValueError):
             Grid.from_dict(self._g33_cat(locked=[[1, 1]]), strict_size=False)
@@ -275,10 +287,16 @@ class TestCellLocking:
         with pytest.raises(ValueError):
             Grid.from_dict(data, strict_size=False)
 
-    @pytest.mark.parametrize("locked", [[[0]], [[0, 0, 1]], [["0", 0]], "0,0"])
+    @pytest.mark.parametrize("locked", [[[0]], [[0, 0, 1]], [["0", 0]], [[True, 0]], "0,0"])
     def test_fd8_from_dict_malformed_locked_raises(self, locked):
         with pytest.raises(ValueError):
             Grid.from_dict(self._g33_cat(locked=locked), strict_size=False)
+
+    def test_fd8b_bool_entry_is_not_an_int(self):
+        # True == 1 and (0, 1) holds "A" in this grid, so without the bool
+        # rejection the entry would be accepted as a valid lock.
+        with pytest.raises(ValueError, match="pair of ints"):
+            Grid.from_dict(self._g33_cat(locked=[[0, True]]), strict_size=False)
 
     def test_fd9_from_dict_duplicate_entries_collapse(self):
         grid = Grid.from_dict(self._g33_cat(locked=[[0, 0], [0, 0]]), strict_size=False)
