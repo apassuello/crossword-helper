@@ -240,10 +240,12 @@ class IterativeRepair:
                 pass  # First attempt: use grid as-is
             elif best_result and best_result.slots_filled > total_slots * 0.8:
                 # Good progress — restart from best, don't wipe
+                # Restores best_grid (copy taken after an attempt) (novice-readiness spec 0.2.4 §2.1 (D3))
                 self.grid.cells[:] = best_grid
                 self.grid.locked_cells = set(original_locked)
             else:
                 # Poor progress — restart from scratch
+                # Restores original_grid (copy taken before any solver write) (novice-readiness spec 0.2.4 §2.1 (D3))
                 self.grid.cells[:] = original_grid
                 self.grid.locked_cells = set(original_locked)
 
@@ -278,6 +280,7 @@ class IterativeRepair:
                 break
 
         if best_result and best_grid is not None:
+            # Restores best_grid (copy taken after an attempt) (novice-readiness spec 0.2.4 §2.1 (D3))
             self.grid.cells[:] = best_grid
 
         # Mark the paused outcome so the CLI takes the paused branch (graceful-stop:
@@ -331,6 +334,7 @@ class IterativeRepair:
                 else:
                     pos = (slot["row"] + i, slot["col"])
                 if pos not in self.grid.locked_cells:
+                    # Skips locked cells (guard above) (novice-readiness spec 0.2.4 §2.1 (D3))
                     self.grid.cells[pos] = 0
 
         if self.progress_reporter:
@@ -497,6 +501,7 @@ class IterativeRepair:
 
         # Restore best seen
         if best_conflict_count < len(self._find_conflicts(self.grid, all_slots)):
+            # Restores best_grid (copied at entry and on improvement) (novice-readiness spec 0.2.4 §2.1 (D3))
             self.grid.cells[:] = best_grid
 
     def _find_dead_ends_and_blockers(self, all_slots: List[Dict]) -> Tuple[List[Dict], set]:
@@ -683,6 +688,7 @@ class IterativeRepair:
                 used_words.discard(word)
 
             for pos, val in saved_cells.items():
+                # Restores saved_cells, taken before place_word (novice-readiness spec 0.2.4 §2.1 (D3))
                 self.grid.cells[pos] = val
 
         return False
@@ -1189,6 +1195,7 @@ class IterativeRepair:
             is_tabu = tabu_list is not None and (slot_id, word) in tabu_list and tabu_list[(slot_id, word)] > current_iteration
             if is_tabu and new_count >= best_conflict_count:
                 for pos, val in saved_cells.items():
+                    # Restores saved_cells (novice-readiness spec 0.2.4 §2.1 (D3))
                     grid.cells[pos] = val
                 continue
 
@@ -1203,6 +1210,7 @@ class IterativeRepair:
 
             # Restore original cell values exactly
             for pos, val in saved_cells.items():
+                # Restores saved_cells (novice-readiness spec 0.2.4 §2.1 (D3))
                 grid.cells[pos] = val
 
         # Return result
@@ -1356,7 +1364,8 @@ class IterativeRepair:
                     pos = (slot["row"] + i, slot["col"])
                 saved_cells[pos] = self.grid.cells[pos]
                 ch = word[i]
-                if "A" <= ch <= "Z":
+                # Skips locked cells (novice-readiness spec 0.2.4 §2.1 (D3))
+                if "A" <= ch <= "Z" and pos not in self.grid.locked_cells:
                     self.grid.cells[pos] = ord(ch) - ord("A") + 1
 
             # Check crossing slots
@@ -1387,6 +1396,7 @@ class IterativeRepair:
             if creates_dead_end:
                 # Restore and try next candidate
                 for pos, val in saved_cells.items():
+                    # Restores saved_cells (novice-readiness spec 0.2.4 §2.1 (D3))
                     self.grid.cells[pos] = val
                 continue
 
@@ -1398,6 +1408,7 @@ class IterativeRepair:
             # Backtrack: remove word
             used_words.discard(word)
             for pos, val in saved_cells.items():
+                # Restores saved_cells (novice-readiness spec 0.2.4 §2.1 (D3))
                 self.grid.cells[pos] = val
 
         return False
@@ -1431,10 +1442,11 @@ class IterativeRepair:
 
             original_cells[pos] = self.grid.cells[pos]
             ch = word[i]
-            if "A" <= ch <= "Z":
+            # Skips locked cells (novice-readiness spec 0.2.4 §2.1 (D3))
+            if "A" <= ch <= "Z" and pos not in self.grid.locked_cells:
                 self.grid.cells[pos] = ord(ch) - ord("A") + 1
             else:
-                # Non-ASCII character (accented, etc.) — skip placement
+                # Non-ASCII character (accented, etc.) or a locked cell — skip placement
                 pass
 
         # Check all perpendicular slots for gibberish
@@ -1500,6 +1512,7 @@ class IterativeRepair:
 
         # Restore original state
         for pos, val in original_cells.items():
+            # Restores original_cells (novice-readiness spec 0.2.4 §2.1 (D3))
             self.grid.cells[pos] = val
 
         return creates_gibberish
@@ -1658,6 +1671,7 @@ class IterativeRepair:
                         break
 
                 if not keep_letter:
+                    # Skips locked cells (continue above) (novice-readiness spec 0.2.4 §2.1 (D3))
                     self.grid.cells[pos] = 0  # Clear to empty
 
         if self.progress_reporter:
