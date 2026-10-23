@@ -48,7 +48,7 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     (§3.6). **What it beat:** keeping it stretch and documenting the × close.
   - **Autofilled letters are not "typed" (G12, 2026-10-23):** per-cell provenance. A letter the autofill
     merge wrote carries `isAutofilled`, cleared by any other edit; the UI sends only the other letters
-    as locked, and the CLI keeps its own default (P1). Mechanism in §2; UI rule in §3.7. **What it
+    as locked, and the CLI keeps its own default (P1, an open point in §7). Mechanism in §2; UI rule in §3.7. **What it
     beat:** locking every letter in the grid, which makes "Keep partial fill" freeze the next run.
   - **Locked crossing slots (G13, 2026-10-23):** a fully locked crossing slot is valid regardless of list
     membership or score. Mechanism in §2. The run's score floor is not checked a second time before
@@ -476,7 +476,7 @@ scope here.
 - **Document id (M1).** `App`'s `gridId` is a counter that restarts at 1 on every load, so it cannot key
   a save: after a restore, autosave would overwrite a different saved grid. A document id is instead a
   unique string minted when a grid is created, `crypto.randomUUID()` with a fallback where it is
-  unavailable. New grid (§3.2) and import (§3.7) mint one; Open saved and restore-on-load adopt the
+  unavailable. New grid (§3.2) and import (§3.7) mint one, and so does app start when restore-on-load finds no save (the first blank grid); Open saved and restore-on-load adopt the
   entry's id. §2.3 says how the autofill machine uses it. <!-- docs-check: allow (planned by this spec, not built yet) -->
 - `storage.js` gains `list()` (all entries, newest first), `remove(id)` and an upsert-by-id `save(doc)`;
   `load()` returns the newest entry. <!-- docs-check: allow (planned by this spec, not built yet) -->
@@ -705,7 +705,7 @@ the old one:
 | P2 | Pre-flight min score | `0`: block only when no listed word fits at all. |
 | P3 | Tracker retention after the terminal event | 60 s. |
 | P4 | Client watchdog grace | 30 s beyond the route's `"ceiling_seconds"` (§2.4). |
-| P5 | Accent folding scope | Upload/import parsing only; `pattern` input is already A–Z and `?`. |
+| P5 | Accent folding scope | Every word-list load: the shared `WordList.from_file → parse_line → add_words` path of §4, so upload preview and solver fold alike; `pattern` input is already A–Z and `?`. `[?]` `verify_words` and `clean_grid` in `backend/api/routes.py` read lists with their own parser; whether they fold is for the plan to check. |
 | P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam is `[?]` in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
 | P7 | The UI route's ceiling addend (§2.2) | `CLI_STARTUP_BUDGET_SECONDS`, the adapter's addend, replacing `+ 10`, so startup and pre-flight cannot kill a run before it reports. Cost: a stuck run lives longer before `error`. |
 | P8 | Lists with no word of a slot's length, whatever the lock set (§2.1) | Refuse with `"no_word_of_length"` and no red cells, on every fresh run, with or without typed letters, so one unrelated typed letter never changes the outcome. It is a new block that no user letter causes. |
