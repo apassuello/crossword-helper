@@ -57,7 +57,8 @@ echo "[ok] Python dependencies installed"
 echo ""
 echo "Installing Node.js dependencies..."
 cd "$SCRIPT_DIR"
-npm install --silent 2>&1 | tail -1
+# novice-readiness spec 0.2.4 §5 (#49): ci installs from the lock file and never rewrites it
+npm ci --silent 2>&1 | tail -1
 echo "[ok] Node.js dependencies installed"
 
 # --- Build frontend ---

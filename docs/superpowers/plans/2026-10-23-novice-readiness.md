@@ -203,6 +203,8 @@ npm ci > "$SB/npm-ci.log" 2>&1
 ```
 Read `$?` on its own line. Then `git status --short` and `git diff --stat -- package-lock.json` in the clone. **STOP and report to Arthur:** the Node version, the `npm ci` exit code, and whether the status/diff are empty. Do not continue to Step 2 before reporting.
 
+**Result (2026-10-23):** `node --version` gave v24.22.1 (Active LTS) and `npm --version` gave 11.19.1. On a fresh `git clone --local` at `509f464`, `npm ci > "$SB/npm-ci.log" 2>&1` returned rc=0; `git status --short` and `git diff --stat -- package-lock.json` were both empty. `npm run build` on that clone returned rc=0. Step 2 was skipped (rc was 0) and `package-lock.json` is unchanged.
+
 - [ ] **Step 2: Lock-regenerate branch (only if Step 1's exit code was non-zero, §5).** With the same Node: `rm package-lock.json && npm install --package-lock-only`, copy the result to the worktree's `package-lock.json`, repeat Step 1 on a new fresh clone and read its exit code. Commit once: `git add package-lock.json`, `git diff --cached --stat`, `git commit -m "chore(deps): regenerate package-lock.json so npm ci succeeds"`. **STOP and report** either way (regenerated or not). The lock is regenerated at most once.
 - [ ] **Step 3: Write the failing test** for the two normative rows; design it yourself.
 - [ ] **Step 4: Run it, confirm it fails because `engines` is absent:** `pytest tests/test_setup_script.py -v`.
