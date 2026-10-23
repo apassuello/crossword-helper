@@ -27,8 +27,9 @@ class TriePatternMatcher:
     regex matcher performs.
 
     No timing figures are quoted here on purpose: earlier versions of this docstring cited measurements against a
-    "454k word list" that this repo does not contain (run `wc -l data/wordlists/comprehensive.txt` to check the actual
-    count). To get real timing numbers for your list, run cli/tests/performance/benchmark_algorithms.py.
+    "454k word list" without naming the file. That figure matches the unfiltered `data/wordlists/raw/` family, not
+    the default list (run `wc -l data/wordlists/comprehensive.txt data/wordlists/raw/*.txt` to compare).
+    To get real timing numbers for your list, run cli/tests/performance/benchmark_algorithms.py.
 
     Supports wildcards:
     - '?' matches any single letter
