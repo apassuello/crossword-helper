@@ -38,15 +38,35 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
   - Grid: a "New grid" control with 11/15/21; a black-square button plus a shortcut hint; saved grids
     are auto-restored, named, and listed (§3).
   - #57 item 1: accented letters are folded to A–Z on upload. **What it beat:** rejecting them.
+  - **Clean (G5, 2026-10-23):** Clean never blanks a theme-locked cell, and before removing any other
+    letter it asks `Clean will remove N letters` with Cancel (§3.5). **What it beat:** a guard alone (a
+    typed word vanishes silently); a guard plus undo (a new undo state).
+  - **Dead export UI (G10, 2026-10-23):** the disabled PDF and `.puz` options, the disabled "Include
+    clues" checkbox and their Format Information entries are hidden (§3.1). **What it beat:** leaving
+    them as "coming soon".
+  - **Theme panel (G11, 2026-10-23):** TH5 is a must-have: the Theme panel must not cover the top bar
+    (§3.6). **What it beat:** keeping it stretch and documenting the × close.
+  - **Autofilled letters are not "typed" (G12, 2026-10-23):** per-cell provenance. A letter the autofill
+    merge wrote carries `isAutofilled`, cleared by any other edit; the UI sends only the other letters
+    as locked, and the CLI keeps its own default (P1). Mechanism in §2; UI rule in §3.7. **What it
+    beat:** locking every letter in the grid, which makes "Keep partial fill" freeze the next run.
+  - **Locked crossing slots (G13, 2026-10-23):** a fully locked crossing slot is valid regardless of list
+    membership or score. Mechanism in §2. The run's score floor is not checked a second time before
+    Start: a typed pattern that fits only words below the floor passes pre-flight and can still fail
+    later, a known limitation. **What it beat:** folding plus a warning-only second `assess` at the
+    run's floor.
 - **Must-have, in order:** §5 install, §2 autofill safety (with #41), §3.1 hiding, §3.3 black squares,
-  §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63), §4 word-list and CLI rulings.
+  §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
+  (TH5), §3.7 grid-writer provenance, §4 word-list and CLI rulings.
 - **Stretch, if the must-haves land:** #19, #20 and #57 item 4 (theme placement); SR2 (search results
-  below the viewport, the rest of #45); TH5 (theme panel covers the top bar).
+  below the viewport, the rest of #45).
 - **Out of scope:** Windows; solver fill quality beyond #40's default; #26 #28 #29 #36 #37 #38 #39 #52
-  #59 (solver internals or pause/resume, which has no UI); #18 #56 #60 (developer-facing); #43.
+  #59 (solver internals or pause/resume, which has no UI); #18 #56 #60 (developer-facing); #43; #64 (NaN%, see the §3.3 NOTE).
 
 **[NOTE]** This supersedes the 2026-10-22 basics-first spec's §5 #47 ruling (option C: restore plus a
-"Start new" banner). §3.4 keeps that behaviour and adds named saves and a list (owner, 2026-10-23: "All 3").
+"Start new" banner). That ruling was never built: `storage.load` has no non-test caller, and
+`useSaveMachine.js` only calls `storage.save`. §3.4 therefore adds restore-on-load and the banner as
+new work, together with named saves and a list (owner, 2026-10-23: "All 3").
 
 ---
 
@@ -160,42 +180,73 @@ uses. The comment above `AutofillPanel.jsx`'s defaults is updated to match.
 ### 3.1 Hidden controls
 
 **[SPEC]** Not rendered: the Clues tool in the tool rail (#53), the "Suggest Black Square" button (#54),
-the Heatmap toggle (#50). The issues stay open. No test may depend on them being present.
+the Heatmap toggle (#50), and in `ExportPanel.jsx` the disabled `PDF (coming soon)` and
+`.puz (coming soon)` format options, the disabled `Include clues (if available)` checkbox, and the
+`PDF` and `.puz` entries of its Format Information list (G10). The issues stay open. No test may depend
+on them being present: the plan edits `ToolRail.test.jsx` (its `TOOL_LABELS` assertions for Clues and
+Heatmap) and `AutofillPanel.test.jsx` (its "Suggest Black Square" assertion), and adds an assertion
+that none of the hidden labels renders.
 
 ### 3.2 New grid (#55)
 
 **[SPEC]**
+- The Grid panel is **new**: for tool `edit`, `App.jsx` today renders only the static
+  `xw-inspector-empty` "Grid editor" placeholder, and this panel replaces it. It holds "New grid"
+  (here), the "Black square" toggle (§3.3) and "Open saved" (§3.4).
 - The Grid panel has a "New grid" control offering `11×11`, `15×15`, `21×21`.
 - If the current grid has any letter or black square, an in-panel confirm (no browser dialog) asks
   `Replace the current grid? Unsaved changes are lost.` with "Replace" and "Cancel".
 - The new grid is empty, numbered, with symmetry on. Red cells and autofill results are cleared.
 - Disabled while an autofill run is in progress.
+- **Ordering:** §2.3 says red cells clear on New grid, but the control lands here. This task owns the
+  clearing: it resets `isBlocked`, `isError` and any retained snapshot or "Keep partial fill" offer when
+  the new grid is created. If `isBlocked` does not exist yet, there is nothing to clear for it.
 
 ### 3.3 Black squares (#50)
 
 **[SPEC]**
 - The Grid panel has a "Black square" toggle that acts on the selected cell exactly as the Space and `.`
-  keys do: symmetry applies, and it is disabled with no selected cell or on a theme-locked cell.
+  keys do: symmetry applies, and it is disabled with no selected cell, or when the selected cell or, with
+  symmetry on, its symmetric partner is theme-locked (G7). `toggleBlackSquare` in `App.jsx` enforces the
+  same rule itself, because its symmetry branch today sets the partner's `isBlack` without checking
+  `isThemeLocked`; the key path and the button both go through it.
 - An always-visible hint line under the grid reads:
   `Type letters · Arrows move · Space or . black square · Enter switch direction · Tab next word · Backspace clear`
-  These are the keys `CrosswordGrid.jsx`'s key handler implements; a test pins the line against it.
+  The line lists the primary keys only. `dispatchGridKey` in `CrosswordGrid.jsx` also handles Delete,
+  Shift+Tab (previous word) and Ctrl/Cmd+L (theme lock). A test asserts that every key the line names is
+  handled by `dispatchGridKey`; it does not require the reverse.
+
+**[NOTE]** #64 (NaN%) becomes easier to reach once the Black square button exists. It stays out of
+scope here.
 
 ### 3.4 Saved grids (#47)
 
 **[SPEC]**
 - Storage stays behind `src/lib/storage.js` (its transport contract is unchanged in spirit: `save`
   rejects on a write failure, `load` never rejects). Saved grids are an array in localStorage key
-  `crossword_saved_grids`, newest first; each entry is today's save document plus `name`. <!-- docs-check: allow (planned by this spec, not built yet) -->
+  `crossword_saved_grids`, newest first; each entry is today's save document plus `name`, keyed by the <!-- docs-check: allow (planned by this spec, not built yet) -->
+  document's `doc.id`. Each cell carries `isAutofilled` (§3.7); an entry without it reads as
+  `false`, so letters in an old save count as typed and stay locked. <!-- docs-check: allow (planned by this spec, not built yet) -->
+- `storage.js` gains `list()` (all entries, newest first), `remove(id)` and an upsert-by-id `save(doc)`;
+  `load()` returns the newest entry. <!-- docs-check: allow (planned by this spec, not built yet) -->
+- **Autosave and named saves (G3):** `useSaveMachine.js`'s 30 s autosave (`AUTOSAVE_MS`) updates the one
+  entry for the current `doc.id`, creating it under the default name below if absent, and never prompts.
+  Only the explicit Save button in `TopBar` (`src/components/bench/TopBar.jsx`, the `onSave` prop) opens
+  the name prompt, which sits under that button, prefilled with the entry's current name.
 - A legacy save under `crossword_saved_grid` is migrated once into the array, named `Saved grid`, and the
   legacy key is removed.
-- "Save grid" asks for a name in the panel, defaulting to `<size>×<size> <YYYY-MM-DD HH:MM>`. Saving
-  under an existing name asks to replace it.
+- Confirming a name renames the document's own entry. A name already used by a *different* entry asks to
+  replace that entry. The default name is `<size>×<size> <YYYY-MM-DD HH:MM>`.
 - On load, the newest save is restored, with the banner `Restored "<name>" (saved <time>)` and a
   "Start blank" action (which opens New grid, §3.2).
-- "Open saved" lists every save (name, size, saved time) with "Open" and "Delete". Opening asks the §3.2
-  confirm when the current grid has content.
-- A failed write (quota) shows `Could not save: browser storage is full. Delete a saved grid or export
-  this one.` and is never swallowed.
+- "Open saved", a button in the Grid panel (§3.2), lists every save (name, size, saved time) with "Open"
+  and "Delete". Opening asks the §3.2 confirm when the current grid has content, and is disabled while an
+  autofill run is in progress.
+- **Failed writes (G4):** a failed **explicit** Save shows `Could not save: browser storage is full.
+  Delete a saved grid or export this one.` and is never swallowed. A failed **autosave** keeps today's
+  behaviour, pinned by existing tests: the toast `Couldn’t save — will retry.` (U+2019), the
+  `offline — will retry` status label, and the unbounded 30 s re-arm. **[?]** Whether autosave should
+  also show the quota text is open (§7 proposal in the amendment report).
 
 ### 3.5 Grid-edit guards (#62, #63)
 
@@ -203,11 +254,60 @@ the Heatmap toggle (#50). The issues stay open. No test may depend on them being
 - **#62:** placing a Search result (`handlePatternSelect`) writes a letter only into a white cell that is
   not theme-locked, exactly the rule the key handler applies to typed letters, and stops at the first
   black square in the slot's direction. Cells it skips keep their content.
+  `handlePatternSelect` today copies rows only and then mutates `newGrid[row][col+i].letter` on the
+  shared cell objects (G6). The fix writes a **new** cell object for each changed cell
+  (`newGrid[row][col+i] = { ...cell, letter }`), never mutating the previous grid's cells.
 - **#63:** Clean with `removed_count === 0` clears `isError` on every cell before its
   `Grid is clean — all words are valid!` toast (Greptile's suggested patch on PR #35).
+- **Clean never destroys a theme-locked letter, and asks before removing any other (G5).**
+  `handleCleanGrid` in `App.jsx` sends only `{letter, isBlack}` per cell and writes the cleaned letters
+  over every cell, so today it blanks theme-locked cells while keeping `isThemeLocked` on the emptied
+  cell. After the `api.cleanGrid` response and before any `setGrid`:
+  1. Every cell that is `isThemeLocked` in the pre-clean grid keeps its pre-clean `letter` and
+     `isThemeLocked`; the frontend restores them from the pre-clean grid. The server is unchanged.
+  2. `N` = the number of cells that are not theme-locked, held a letter before, and hold none in the
+     cleaned result. If `N > 0`, an in-panel confirm (the §3.2 component, no browser dialog) asks
+     `Clean will remove N letters` (`1 letter` when `N` is 1) with "Clean" and "Cancel". Cancel leaves
+     the grid, `isError` flags and toasts exactly as they were.
+  3. If `N === 0` after step 1, no confirm is shown and the #63 rule applies: `isError` is cleared on
+     every cell. The toast is `Grid is clean — all words are valid!` only when `removed_count === 0`;
+     when the server wanted to remove only theme-locked letters it reads
+     `Nothing removed: theme-locked letters are kept.`
 
-**[NOTE]** Both came from the 2026-08-23 Greptile audit (PR #35), re-checked on `fd392c9` and filed
-2026-10-23. #62 destroys theme-locked letters, the same class as the autofill rule in §2.
+**[NOTE]** `verify_words` and `clean_grid` are defined in `backend/api/routes.py` and have no CLI
+command. That deviates from "the CLI is the single source of truth" (`.claude/CLAUDE.md`). Moving them is
+out of scope here; recorded only.
+
+**[NOTE]** #62 and #63 came from the 2026-08-23 Greptile audit (PR #35), re-checked on `fd392c9` and filed
+2026-10-23. #62 and Clean (G5) destroy theme-locked letters, the same class as the autofill rule in §2.
+
+### 3.6 Theme panel and the top bar (TH5, G11)
+
+**[SPEC]**
+- With the Theme panel open, the top bar, including the Save button, is fully visible and clickable. The
+  panel is laid out below the top bar (offset by the top bar's height, taken from the layout's own
+  value, not a copied pixel count), or in flow in the inspector column.
+- `ThemeWordsPanel.scss` today positions the panel `fixed` with `z-index: 1000`, which covers the top
+  bar. That is the defect.
+- The panel's existing × close keeps working.
+
+**[NOTE]** Why it is must-have: the Save button in `TopBar` is the only save control. There is no Cmd+S
+shortcut and no Escape handler, so a covered top bar makes Save unreachable until the panel is closed.
+
+### 3.7 Grid writers and `isAutofilled` (G12, UI side)
+
+**[SPEC]**
+- Each cell gains a boolean `isAutofilled`. The autofill merge (`mergeGridPreserveThemeLocked` and the
+  "Keep partial fill" path of §2.3) sets it on a letter it wrote into a cell that was empty at Start,
+  and on no other cell.
+- **Every other UI writer clears it** on the cell it changes: `setLetter`, `toggleBlackSquare` (both the
+  cell and its symmetric partner), `handlePatternSelect`, `handleThemeWordApplied`, `handleGridImport`,
+  `handleCleanGrid`, and New grid (§3.2). A cell the user retypes with the same letter is user-typed.
+- Saved grids carry the field per cell (§3.4); an entry without it reads as `false`. JSON export may
+  include it; import ignores it, so every imported letter counts as typed.
+- The UI sends only cells with a letter and `isAutofilled` false as locked letters; the lock channel
+  through the route and the CLI argv is §2. This section owns the flag and its writers, §2 owns what is
+  locked.
 
 ---
 
@@ -217,7 +317,11 @@ the Heatmap toggle (#50). The issues stay open. No test may depend on them being
 - **Item 1 (L11):** the word-list line parser folds letters to A–Z with Unicode NFKD decomposition,
   dropping combining marks (`CAFÉ` → `CAFE`, `NAÏVE` → `NAIVE`, `ÜBER` → `UBER`). A word that still
   contains a non-A–Z letter after folding is skipped with reason `not letters only`. The upload preview
-  shows the folded word.
+  shows the folded word. `ß`, `Æ` and `Ø` have no NFKD decomposition and are skipped with that reason.
+  The fold lives in the shared load path, `WordList.from_file → parse_line → add_words` in
+  `cli/src/fill/word_list.py`, so the solver and the upload preview fold identically (the solver loads
+  lists via `from_file`, not through the upload parser). `WordList._is_valid_word` is tightened from
+  `isalpha()` plus `isupper()`, which accept non-ASCII letters, to require ASCII A–Z.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
 - **Item 3 (CLI-normalize):** the default `normalize` rule keeps letters only:
@@ -234,19 +338,33 @@ the Heatmap toggle (#50). The issues stay open. No test may depend on them being
     command-line-tools install dialog on first use; either path works); on Linux, the distribution's
     `python3` and `python3-venv` packages.
   - Node.js 18 or later (LTS): from nodejs.org, or the distribution package if it is 18 or later.
-  - Getting the code: "Download ZIP" from GitHub, or `git clone`.
+  - Getting the code: "Download ZIP" from GitHub, or `git clone`. After a ZIP extract the README's
+    `chmod +x setup.sh` line is part of the steps.
   - One line: Windows is not supported yet.
 - **README "Using the app"**: a short tour, one or two lines per visible tool (Grid, Lists, Search,
   Theme, Autofill, Import/Export), naming the controls as they appear on screen.
 - **`setup.sh`:**
   - The existing Python ≥3.9 and Node ≥18 checks print `Missing: <tool> <minimum version> — install from
     <url>` (python.org/downloads, nodejs.org) and exit 1. An `npm` check is added in the same form.
+  - After `python3 -m venv`, `setup.sh` checks that `venv/bin/pip` exists. If not (Debian and Ubuntu
+    without `python3-venv` leave a partial `venv/`), it removes the venv it just created and prints
+    `Install python3-venv (for example: sudo apt install python3-venv), then run ./setup.sh again`,
+    and exits 1. The "already exists" branch runs the same check, so a partial venv from an earlier
+    run is repaired rather than trusted.
+  - `package.json` gains `"engines": {"node": ">=18"}`, matching the README floor. **[?]** Whether the
+    repo also gets an `.nvmrc` is open; this spec does not require one.
   - `npm install` becomes `npm ci`, which never writes `package-lock.json`, so setup leaves the tracked
     tree clean (#49). `npm ci` fails outright if `package.json` and the lock disagree, so the plan first
     runs it on a fresh clone with the Node LTS the README names; if it fails, the lock is regenerated
     once with that Node and committed, and SETUP-1, SETUP-3 and E2-SETUP-1 confirm it.
 - **`run.py`:** `debug=False` by default; `FLASK_DEBUG=1` turns debug on. The docstring and the README's
   dev-mode section say so.
+- **Port (I6):** `run.py` reads the `PORT` environment variable, default 5000 (it hard-codes 5000 today).
+  On "address already in use" it prints `Port <n> is in use. Start with PORT=<other> python3 run.py`
+  instead of a traceback. **[?]** On a stock macOS, AirPlay Receiver may hold :5000; this is from
+  general knowledge, not measured here, so the plan checks `lsof -i :5000` on a stock Mac. The Vite
+  proxy target in `vite.config.js` is `http://localhost:5000` and would need to follow `PORT`; how is
+  left to the plan.
 
 **[NOTE]** ⚠️ Safety: `debug=True` exposes the Werkzeug debugger, which can execute code. On `localhost`
 it is still reachable through DNS rebinding. QA graded it S4 (SERVE-1); it is raised here because the
@@ -263,13 +381,19 @@ the old one:
 | Area | Cases | Pass criterion |
 |---|---|---|
 | Install | SETUP-1, SETUP-2, SETUP-3, E2-SETUP-1, SERVE-1 | Setup completes, the tree stays clean, debug off |
+| New: ZIP | SETUP-1 and the README `pattern`, `analyze` and `fill` examples on a GitHub "Download ZIP" extract (not a clone), following the README's `chmod +x setup.sh` | Setup completes; the examples run; Search for `C?T` returns CAT, COT and CUT; `chmod +x` alone is enough |
+| New: LINUX | `./setup.sh` on Debian or Ubuntu with and without `python3-venv`; `npm ci` on Node 18 | With: completes. Without: exits 1 with the `Install python3-venv` message and no partial `venv/` left; a re-run after installing it succeeds. Node 18: `npm ci` completes and leaves `package-lock.json` unchanged |
 | Grid | G1, G3, G8, G9 | New grid, discoverable black squares, no Heatmap toggle, save restored |
+| New: SAVE-NAMED | Autosave a grid, then Save under a name, Open saved, Delete; fill storage until a write fails | Autosave keeps one entry per grid; the name prompt appears only on Save; Open asks the confirm; the quota text shows on an explicit Save |
 | Grid guards | New: SR-PLACE (place a Search result across a black square and a theme-locked cell); new: CL-CLEAR (Verify flags cells, retype them, Clean) | Protected cells unchanged; no red cells after "Grid is clean" |
-| Hidden | CL1, A-SBS | Control absent |
+| New: CL-CLEAN-GUARD | Theme-lock a word, type an invalid word elsewhere, press Clean; once with Cancel, once with the confirm accepted | The confirm shows `Clean will remove N letters` with `N` equal to the typed invalid letters only; Cancel changes nothing, including `isError`; accepting removes those letters and every theme-locked letter is unchanged |
+| Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
+| New: TH5 | Open the Theme panel at the desktop viewport and at the narrowest width the app supports | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
 | New: AF-LOCK | Type letters, run Repair on the 11x11, cancel and let one run end | Typed letters intact in every progress sample and at the end |
 | New: AF-BLOCK | Type a partial pattern no word fits (e.g. `QX` in the first two cells of a 3-letter slot, pattern `QX?`; a fully typed off-list word is case 2, not a block) | Run does not start; those cells red; message as §2.3 |
+| New: AF-DEFAULTS | Press Start with all panel defaults on the shipped 11x11 and 15x15 example grids, after typing a few letters | `Successfully filled`; every typed letter intact |
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 
 ---
