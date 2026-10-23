@@ -4,9 +4,16 @@ set -euo pipefail
 echo "=== Crossword Helper Setup ==="
 echo ""
 
+# novice-readiness spec 0.2.4 §5 (SETUP-MISSING): a failed prerequisite check prints
+# one "Missing: <tool> <minimum version> — install from <url>" line and exits 1
+# before anything is created. Checks run in order: python3, node, npm.
+PYTHON_MISSING="Missing: python3 3.9 or later — install from https://python.org/downloads"
+NODE_MISSING="Missing: node 18 or later — install from https://nodejs.org"
+NPM_MISSING="Missing: npm (installed with Node.js 18 or later) — install from https://nodejs.org"
+
 # --- Check Python version ---
 if ! command -v python3 &>/dev/null; then
-    echo "Error: python3 not found. Install Python 3.9 or later."
+    echo "$PYTHON_MISSING"
     exit 1
 fi
 
@@ -15,23 +22,29 @@ PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
 PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
 
 if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 9 ]; }; then
-    echo "Error: Python 3.9+ required (found $PYTHON_VERSION)."
+    echo "$PYTHON_MISSING"
     exit 1
 fi
 echo "[ok] Python $PYTHON_VERSION"
 
 # --- Check Node.js version ---
 if ! command -v node &>/dev/null; then
-    echo "Error: node not found. Install Node.js 18 or later."
+    echo "$NODE_MISSING"
     exit 1
 fi
 
 NODE_MAJOR=$(node -e 'console.log(process.versions.node.split(".")[0])')
 if [ "$NODE_MAJOR" -lt 18 ]; then
-    echo "Error: Node.js 18+ required (found $(node --version))."
+    echo "$NODE_MISSING"
     exit 1
 fi
 echo "[ok] Node.js $(node --version)"
+
+# --- Check npm ---
+if ! command -v npm &>/dev/null; then
+    echo "$NPM_MISSING"
+    exit 1
+fi
 
 # --- Create virtual environment ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
