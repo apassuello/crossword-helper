@@ -744,7 +744,7 @@ def fill(
         except ValueError as e:
             _fail_fill(str(e), json_output)
         apply_lock_mode(grid, data, lock_filled)
-        input_letters = input_lock_letters(grid)  # noqa: F841 - Task 2.8's postcondition reads it
+        input_letters = input_lock_letters(grid)  # noqa: F841 - read by the end-to-end postcondition check
 
     # Pause/resume wiring: with --task-id, honor `crossword pause TASK_ID`.
     # Any stale pause flag for this task id is cleared before starting, and a

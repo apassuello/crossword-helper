@@ -670,7 +670,7 @@ fresh `fill` run the lock set is: with `--lock-filled` (the default) and a
 `--lock-filled` and no key, every letter in the input grid; with
 `--no-lock-filled`, no input letter, with or without the key. A listed cell that
 is out of bounds or holds no letter fails the run (exit `1`, the usual
-`{success, error, hint}` JSON); the list is never trimmed silently, and it is
+`{success, error}` JSON); the list is never trimmed silently, and it is
 validated even under `--no-lock-filled`. `fill --resume` ignores both the option
 and the key.
 
