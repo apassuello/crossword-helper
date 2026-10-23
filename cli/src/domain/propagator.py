@@ -37,8 +37,9 @@ from dataclasses import dataclass
 from typing import Callable, Sequence, Union
 
 import numpy as np
-from src.domain.letter_bitset import LetterBitsetIndex
-from src.domain.slot_model import SlotModel, pattern
+
+from .letter_bitset import LetterBitsetIndex
+from .slot_model import SlotModel, pattern
 
 # int is a constant policy; a callable is applied as min_score(length). Written in
 # the typing.Union form rather than `int | Callable[...]`: this is a module-level

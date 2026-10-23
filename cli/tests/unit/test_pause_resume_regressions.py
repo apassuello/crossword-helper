@@ -808,3 +808,11 @@ class TestFillEarlyExitsClearPauseMarkers:
         assert rc == 0, (out, err)
         assert json.loads(out)["message"] == "Grid was already completely filled"
         assert leftovers == []
+
+    def test_pf14_preflight_block_clears_markers(self, tmp_path):
+        """Task 2.9 (PF14): the exit-3 block returns inside the cleanup `try`."""
+        blocked = [["Q", "X", "."], [".", ".", "."], [".", ".", "."]]
+        out, err, rc, leftovers = self._fill(tmp_path, blocked)
+        assert rc == 3, (out, err)
+        assert json.loads(out)["blocked"] is True
+        assert leftovers == []

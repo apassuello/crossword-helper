@@ -241,6 +241,7 @@ state was written). Progress updates are streamed to stderr as
 |---|---|
 | `0` | The solver ran and produced a result — **including a partial or unsuccessful fill** |
 | `1` | The run could not happen or could not finish: missing grid file, unreadable wordlist, invalid theme entries, out-of-range `--timeout` |
+| `3` | Blocked by pre-flight: no solver ran and nothing was written. stdout JSON carries `"blocked": true` (see the blocked result below) |
 
 - A caller must never infer fill quality from the exit code. Parse the JSON
   `success` field for that. A grid the solver could not complete is a result,
@@ -252,6 +253,31 @@ state was written). Progress updates are streamed to stderr as
 - Pinned by `cli/tests/unit/test_fill_command.py`. Reproduce with:
 
       pytest cli/tests/unit/test_fill_command.py
+
+**[SPEC] Pre-flight and the blocked result** (novice-readiness spec 0.2.4 §2.1).
+On a fresh run (never `--resume`), after the already-filled early return and
+before any solver, `fill` checks the lists against the locked letters. A slot
+is *dead* when its pattern has a `?` and no word of the selected lists matches
+it (minimum score 0). Pre-flight blocks the run, exit `3`, when
+
+- **`no_word_fits`**: a dead slot (of a length the lists do have) contains a
+  locked letter; `blocked_cells` are the locked cells inside such slots; or
+- **`no_word_of_length`**: dead slots exist and none of that kind holds a locked
+  cell, so the lists have no word of that slot length; `blocked_cells` is `[]`.
+
+With `--json-output`, stdout is exactly one object:
+`{"success": false, "blocked": true, "reason": ..., "blocked_cells": [[r, c], ...],
+"blocked_slots": [{"row", "col", "direction", "length", "pattern"}, ...],
+"off_list_cells": [...], "stuck_cells": [], "grid": <input grid, unchanged>}`.
+Text mode prints `Blocked: no word fits <pattern> at <row>,<col> <direction>`
+(one line per dead slot) or `Blocked: the selected word lists have no words of length <n>`
+(one line per length, ascending). A blocked run writes neither `-o` nor the input
+file, and clears the pause markers.
+
+When not blocked, typed (locked) words that are not in the lists add the warning
+`Typed words not in the selected word lists: <WORD>, ...` to `warnings`; with
+`--json-output` one stderr progress event (`status` `running`) carries
+`data` `{"off_list_cells": [[r, c], ...], "warning": "<that text>"}`.
 
 **[SPEC] `--timeout` floors differ by algorithm: 10 seconds for `repair`, 30 for `hybrid`**
 - `iterative_repair.py`'s `fill()` rejects a timeout below 10 seconds.

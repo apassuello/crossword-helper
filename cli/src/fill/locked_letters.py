@@ -6,9 +6,13 @@ directly and applies only an explicit ``"locked"`` key, so the CLI decides the
 rest here, once, on a fresh run. ``--resume`` never reaches this module.
 """
 
-from typing import Dict, Iterable, List, Mapping, Tuple
+from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from ..core.grid import Grid
+from ..domain.fillability import assess
+from ..domain.letter_bitset import LetterBitsetIndex
+from ..domain.slot_model import SlotModel, fixed_from_grid, pattern
+from .word_list import WordList
 
 
 def cell_list(cells: Iterable[Tuple[int, int]]) -> List[List[int]]:
@@ -56,3 +60,100 @@ def changed_locked_cells(grid: Grid, expected: Mapping[Tuple[int, int], str]) ->
     return cell_list(
         (row, col) for (row, col), letter in expected.items() if grid.is_black(row, col) or grid.get_cell(row, col) != letter
     )
+
+
+OFF_LIST_WARNING_PREFIX = "Typed words not in the selected word lists: "
+
+
+class PreflightResult(NamedTuple):
+    """What pre-flight found; ``reason`` is ``None`` when the run may proceed."""
+
+    reason: Optional[str]  # None, "no_word_fits" or "no_word_of_length"
+    blocked_cells: List[List[int]]
+    blocked_slots: List[Dict[str, object]]  # {"row", "col", "direction", "length", "pattern"}
+    off_list_cells: List[List[int]]
+    off_list_words: List[str]  # slot-model order
+    index: LetterBitsetIndex
+
+
+def preflight(grid: Grid, word_list: WordList) -> PreflightResult:
+    """
+    Pre-flight for a fresh ``fill`` run; never mutates ``grid``.
+
+    novice-readiness spec 0.2.4 §2.1 (C1, C4, M2, B2): only locked letters
+    constrain the fill, so the unlocked ones are cleared on a clone first.
+
+    - dead slot: its pattern has a ``?`` and no word of the lists matches it
+      (``min_score=0`` passed explicitly; ``count_matches`` defaults to 30).
+      ``report.wiped_slots`` is never used for red cells (C1).
+    - length block (``PD-2-PREC``, option (b)): a dead slot whose length has
+      no word at all; it goes to B2 whether or not it holds a locked letter.
+    - case 1: a dead slot that is not a length block contains a locked cell.
+    - B2: dead slots exist but none of that kind holds a locked cell.
+    - case 2: every cell of every typed (fixed) word that is not in the lists.
+    """
+    model = SlotModel.from_grid(grid)
+    index = LetterBitsetIndex.from_word_list(word_list)
+    cleared = grid.clone()
+    cleared.clear_unlocked()
+    fixed = fixed_from_grid(cleared)
+    report = assess(model, index, fixed, min_score=0)
+
+    size = model.size
+    locked = {(int(r), int(c)) for r, c in grid.locked_cells}
+
+    dead = []  # (slot, pattern, is_length_block), slot-model order
+    for slot in model.slots:
+        slot_pattern = pattern(model, slot.id, fixed)
+        if "?" in slot_pattern and index.count_matches(slot_pattern, min_score=0) == 0:
+            dead.append((slot, slot_pattern, index.count_matches("?" * slot.length, min_score=0) == 0))
+
+    blocked_slots: List[Dict[str, object]] = [
+        {"row": slot.row, "col": slot.col, "direction": slot.direction, "length": slot.length, "pattern": slot_pattern}
+        for slot, slot_pattern, _ in dead
+    ]
+    case_1_cells = [
+        (cell // size, cell % size)
+        for slot, _, is_length_block in dead
+        if not is_length_block
+        for cell in slot.cells
+        if (cell // size, cell % size) in locked
+    ]
+
+    reason: Optional[str] = None
+    if case_1_cells:
+        reason = "no_word_fits"
+    elif dead:
+        reason = "no_word_of_length"
+
+    off_list_slots = [model.slots[slot_id] for slot_id in report.off_list_fixed]
+    return PreflightResult(
+        reason=reason,
+        blocked_cells=cell_list(case_1_cells) if reason == "no_word_fits" else [],
+        blocked_slots=blocked_slots,
+        off_list_cells=cell_list((cell // size, cell % size) for slot in off_list_slots for cell in slot.cells),
+        off_list_words=["".join(fixed[cell] for cell in slot.cells) for slot in off_list_slots],
+        index=index,
+    )
+
+
+def off_list_warning(words: Sequence[str]) -> str:
+    """The case-2 warning text (spec §2.1): the prefix and the words, comma-separated."""
+    return OFF_LIST_WARNING_PREFIX + ", ".join(words)
+
+
+def blocked_text_lines(result: PreflightResult) -> List[str]:
+    """
+    Text-mode lines of a blocked result (spec §2.1; ``PD-2-OUT``).
+
+    ``no_word_fits``: one line per blocked slot. ``no_word_of_length``: one line
+    per distinct slot length, ascending. Not blocked: no lines.
+    """
+    if result.reason == "no_word_fits":
+        return [
+            f"Blocked: no word fits {s['pattern']} at {s['row']},{s['col']} {s['direction']}" for s in result.blocked_slots
+        ]
+    if result.reason == "no_word_of_length":
+        lengths = sorted({int(s["length"]) for s in result.blocked_slots})  # type: ignore[call-overload]
+        return [f"Blocked: the selected word lists have no words of length {n}" for n in lengths]
+    return []

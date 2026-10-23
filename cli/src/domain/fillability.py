@@ -49,9 +49,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from src.domain.letter_bitset import LetterBitsetIndex
-from src.domain.propagator import MinScore, propagate
-from src.domain.slot_model import SlotModel, pattern
+
+from .letter_bitset import LetterBitsetIndex
+from .propagator import MinScore, propagate
+from .slot_model import SlotModel, pattern
 
 
 @dataclass(frozen=True, eq=False)  # decision 16's family rule; __eq__ below

@@ -16,7 +16,15 @@ from .core.numbering import GridNumbering
 from .core.validator import GridValidator
 from .export.html_exporter import HTMLExporter
 from .fill.autofill import Autofill
-from .fill.locked_letters import POSTCONDITION_MESSAGE, apply_lock_mode, changed_locked_cells, input_lock_letters
+from .fill.locked_letters import (
+    POSTCONDITION_MESSAGE,
+    apply_lock_mode,
+    blocked_text_lines,
+    changed_locked_cells,
+    input_lock_letters,
+    off_list_warning,
+    preflight,
+)
 from .fill.pattern_matcher import PatternMatcher
 from .fill.word_list import WordList
 
@@ -1106,6 +1114,44 @@ def fill(
             else:
                 click.echo(click.style("\n✓ Grid is already completely filled!", fg="green"))
             return
+
+        # novice-readiness spec 0.2.4 §2.1 (C1, C4, C6, B2): pre-flight, fresh runs
+        # only. A block returns from inside the `try`, so the `finally` clears the
+        # pause markers, and before check (a) and every output write.
+        if not resume_state_file:
+            preflight_result = preflight(grid, word_list)
+            if preflight_result.reason is not None:
+                if json_output:
+                    click.echo(
+                        json.dumps(
+                            {
+                                "success": False,
+                                "blocked": True,
+                                "reason": preflight_result.reason,
+                                "blocked_cells": preflight_result.blocked_cells,
+                                "blocked_slots": preflight_result.blocked_slots,
+                                "off_list_cells": preflight_result.off_list_cells,
+                                "stuck_cells": [],
+                                "grid": grid.to_dict()["grid"],
+                            }
+                        )
+                    )
+                else:
+                    for line in blocked_text_lines(preflight_result):
+                        click.echo(click.style(line, fg="red"))
+                sys.exit(3)
+            if preflight_result.off_list_words:
+                off_list_text = off_list_warning(preflight_result.off_list_words)
+                warnings.append(off_list_text)
+                if json_output:
+                    progress.update(
+                        35,
+                        off_list_text,
+                        "running",
+                        {"off_list_cells": preflight_result.off_list_cells, "warning": off_list_text},
+                    )
+                else:
+                    click.echo(click.style(f"Warning: {off_list_text}", fg="yellow"))
 
         if not json_output:
             click.echo(f"\nFilling {len(empty_slots)} empty slots...")
