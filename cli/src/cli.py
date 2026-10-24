@@ -20,6 +20,7 @@ from .fill.locked_letters import (
     POSTCONDITION_MESSAGE,
     apply_lock_mode,
     blocked_text_lines,
+    candidate_index,
     changed_locked_cells,
     input_lock_letters,
     off_list_warning,
@@ -1129,8 +1130,11 @@ def fill(
         # A block returns from inside the `try`, so the `finally` clears the
         # pause markers, and before check (a) and every output write.
         preflight_result = None  # stays None on --resume and --adaptive: no pre-flight, no index
+        theme_words = list((theme_entries_dict or {}).values())
+        # --adaptive skips pre-flight but case 3 (stuck_cells (a)) still needs the index.
+        stuck_index = candidate_index(word_list, theme_words) if adaptive and not resume_state_file else None
         if not resume_state_file and not adaptive:
-            preflight_result = preflight(grid, word_list, list((theme_entries_dict or {}).values()))
+            preflight_result = preflight(grid, word_list, theme_words)
             if preflight_result.reason is not None:
                 if json_output:
                     click.echo(
@@ -1447,7 +1451,7 @@ def fill(
                 result.grid,
                 input_letters.keys(),
                 result.problematic_slots,
-                preflight_result.index if preflight_result else None,
+                preflight_result.index if preflight_result else stuck_index,
                 min_score,
             ),
         }
