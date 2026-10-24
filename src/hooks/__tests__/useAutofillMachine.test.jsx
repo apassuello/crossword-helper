@@ -15,8 +15,9 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { useState } from 'react';
 import { renderHook, act } from '@testing-library/react';
-import { useAutofillMachine, mergeGridPreserveThemeLocked } from '../useAutofillMachine';
+import { useAutofillMachine, mergeGridPreserveThemeLocked, LIVE_STATES } from '../useAutofillMachine';
 import { api } from '../../api/client';
 import { toCliStrings } from '../../api/gridCodec';
 import { gridFromRows } from './gridFixtures';
@@ -29,6 +30,13 @@ const flush = () =>
   });
 
 const WHITE_4 = ['....', '....', '....', '....'];
+
+const CLI_FULL_4 = [
+  ['A', 'B', 'C', 'D'],
+  ['E', 'F', 'G', 'H'],
+  ['I', 'J', 'K', 'L'],
+  ['M', 'N', 'O', 'P'],
+];
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -176,11 +184,12 @@ describe('useAutofillMachine', () => {
     });
 
     expect(result.current.state).toBe('done');
-    expect(result.current.message).toBe(
-      'Partial: 5/8 slots (62%) - try a different wordlist'
-    );
-    // Start's clear-red write + the final merge.
+    // Spec 0.2.6 section 2.3: `Partial: X/Y slots (P%)` exactly, no suggestion suffix.
+    expect(result.current.message).toBe('Partial: 5/8 slots (62%)');
+    // Start's clear-red write + the restore of the Start snapshot.
     expect(onGridUpdate).toHaveBeenCalledTimes(2);
+    const restored = onGridUpdate.mock.calls[1][0](grid);
+    expect(restored).toEqual(result.current.startSnapshot);
   });
 
   // 4b/4c guard main's fix, dropped when the inline App.jsx block was ported to
@@ -203,12 +212,7 @@ describe('useAutofillMachine', () => {
       global.EventSource.sendMessage({
         status: 'complete',
         data: {
-          grid: [
-            ['A', 'B', '.', '.'],
-            ['.', '.', '.', '.'],
-            ['.', '.', '.', '.'],
-            ['.', '.', '.', '.'],
-          ],
+          grid: CLI_FULL_4,
           success: false,
           slots_filled: 8,
           total_slots: 8,
@@ -244,12 +248,7 @@ describe('useAutofillMachine', () => {
       global.EventSource.sendMessage({
         status: 'complete',
         data: {
-          grid: [
-            ['A', 'B', '.', '.'],
-            ['.', '.', '.', '.'],
-            ['.', '.', '.', '.'],
-            ['.', '.', '.', '.'],
-          ],
+          grid: CLI_FULL_4,
           success: false,
           slots_filled: 8,
           total_slots: 8,
@@ -282,8 +281,9 @@ describe('useAutofillMachine', () => {
 
     expect(result.current.state).toBe('failed');
     expect(result.current.errorCard).toEqual({ message: 'No solution found' });
-    // Only Start's clear-red write; no merge without a result grid.
-    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    // Start's clear-red write + the restore of the Start snapshot; no merge without a result grid.
+    expect(onGridUpdate).toHaveBeenCalledTimes(2);
+    expect(onGridUpdate.mock.calls[1][0](gridFromRows(WHITE_4))).toEqual(result.current.startSnapshot);
   });
 
   it('6. error event -> failed + errorCard content from data.message', async () => {
@@ -303,6 +303,23 @@ describe('useAutofillMachine', () => {
 
     expect(result.current.state).toBe('failed');
     expect(result.current.errorCard).toEqual({ message: 'Solver crashed' });
+  });
+
+  it('6b. error event restores the Start snapshot (Start clear-red write + one restore)', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-6b' });
+    const onGridUpdate = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, onGridUpdate })
+    );
+    act(() => {
+      result.current.start({});
+    });
+    await flush();
+    act(() => {
+      global.EventSource.sendMessage({ status: 'error', message: 'Solver crashed' });
+    });
+    expect(onGridUpdate).toHaveBeenCalledTimes(2);
+    expect(onGridUpdate.mock.calls[1][0](gridFromRows(WHITE_4))).toEqual(result.current.startSnapshot);
   });
 
   it('7. cancel() -> api.cancelFill called + stream closed + cancelled', async () => {
@@ -639,13 +656,6 @@ function gridWith(rows, edits) {
   return g;
 }
 
-const CLI_FULL_4 = [
-  ['A', 'B', 'C', 'D'],
-  ['E', 'F', 'G', 'H'],
-  ['I', 'J', 'K', 'L'],
-  ['M', 'N', 'O', 'P'],
-];
-
 describe('useAutofillMachine Task 5.2: Start, snapshot, lock list, document id, running branch', () => {
   it('S1. start snapshots a red-free copy, sends locked_cells, clears red on the grid, calls onStart once, in order', async () => {
     const grid = gridWith(WHITE_4, {
@@ -854,5 +864,443 @@ describe('useAutofillMachine Task 5.2: Start, snapshot, lock list, document id, 
     });
     expect(onGridUpdate).toHaveBeenCalledTimes(1);
     expect(onToast).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5.3: terminal outcomes, restore, red cells, the Keep offers.
+// A stateful harness applies every onGridUpdate updater to a real grid, so the
+// rows assert the grid the user would see (restore lands first, red on top).
+// ---------------------------------------------------------------------------
+
+const CLI_PART_4 = [
+  ['.', 'B', '.', '.'],
+  ['.', '.', '.', '.'],
+  ['.', '.', '.', '.'],
+  ['.', '.', '.', '.'],
+];
+const CLI_USER_AT_00 = [
+  ['U', '.', '.', '.'],
+  ['.', '.', '.', '.'],
+  ['.', '.', '.', '.'],
+  ['.', '.', '.', '.'],
+];
+
+function userGrid() {
+  return gridWith(WHITE_4, { '0,0': { letter: 'U' } });
+}
+
+/** Mounts the hook over a real grid state; start({}, 'doc-1') has been called and the run is `running`. */
+async function runningMachine({ docId = 'doc-1', grid = userGrid() } = {}) {
+  vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-53' });
+  vi.spyOn(api, 'cancelFill').mockResolvedValue({});
+  const hook = renderHook(
+    (props) => {
+      const [g, setG] = useState(grid);
+      const m = useAutofillMachine({
+        grid: g,
+        gridSize: 4,
+        docId: props.docId,
+        onGridUpdate: setG,
+        onStart: vi.fn(),
+        onToast: vi.fn(),
+      });
+      return { ...m, grid: g, setGrid: setG };
+    },
+    { initialProps: { docId } }
+  );
+  act(() => {
+    hook.result.current.start({}, 'doc-1');
+  });
+  await flush();
+  expect(hook.result.current.state).toBe('running');
+  return hook;
+}
+
+const send = (msg) =>
+  act(() => {
+    global.EventSource.sendMessage(msg);
+  });
+const complete = (data) => send({ status: 'complete', data });
+const lettersOf = (g) => g.map((row) => row.map((c) => c.letter).join(''));
+const redOf = (g) => {
+  const out = [];
+  g.forEach((row, r) => row.forEach((c, k) => c.isBlocked && out.push([r, k])));
+  return out;
+};
+
+describe('useAutofillMachine Task 5.3: terminal outcomes (spec 0.2.6 section 2.3 table)', () => {
+  it('row 1. success merges onto the current grid; the user letter stays; no offer', async () => {
+    const { result } = await runningMachine();
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    expect(result.current.state).toBe('done');
+    expect(result.current.message).toBe('Successfully filled 8/8 slots!');
+    expect(result.current.offer).toBeNull();
+    expect(result.current.grid[0][0].letter).toBe('U');
+    expect(result.current.grid[0][0].isAutofilled).toBeFalsy();
+    expect(result.current.grid[0][1].letter).toBe('B');
+    expect(result.current.grid[0][1].isAutofilled).toBe(true);
+  });
+
+  it('row 2. every slot filled, success:false: snapshot restored, keepFill offer, counted message', async () => {
+    const { result } = await runningMachine();
+    complete({ success: false, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8, problematic_slots_count: 2 });
+    expect(result.current.state).toBe('done');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toMatchObject({ kind: 'keepFill' });
+    expect(result.current.message).toBe(
+      'Filled 8/8 slots — 2 entries may be invalid (use Verify Words to check)'
+    );
+  });
+
+  it('row 2b. as row 2 without problematic_slots_count: the no-count text (PD-5G)', async () => {
+    const { result } = await runningMachine();
+    complete({ success: false, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    expect(result.current.offer).toMatchObject({ kind: 'keepFill' });
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.message).toBe(
+      'Filled 8/8 slots — some entries may need review (use Verify Words to check)'
+    );
+  });
+
+  it('row 2c. counts say 8/8 but the grid has empty cells: the grid decides -> partial offer', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 8, total_slots: 8, fill_percentage: 100,
+    });
+    expect(result.current.state).toBe('done');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: 8, totalSlots: 8 });
+    expect(result.current.message).toBe('Partial: 8/8 slots (100%)');
+  });
+
+  it('row 3. partial: snapshot restored, keepPartialFill offer with counts, suggestion suffix dropped', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+      stuck_cells: [], suggestions: [{ message: 'x' }],
+    });
+    expect(result.current.state).toBe('done');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: 5, totalSlots: 8 });
+    expect(result.current.message).toBe('Partial: 5/8 slots (62%)');
+  });
+
+  it('row 4. stuck_cells non-empty: stuck message, those cells red on the restored grid', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+      stuck_cells: [[0, 0]], suggestions: [{ message: 'x' }],
+    });
+    expect(result.current.message).toBe('Autofill could not fill around the highlighted letters.');
+    expect(result.current.grid[0][0].isBlocked).toBe(true);
+    expect(redOf(result.current.grid)).toEqual([[0, 0]]);
+    expect(lettersOf(result.current.grid)).toEqual(lettersOf(result.current.startSnapshot));
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: 5, totalSlots: 8 });
+  });
+
+  it('row 4 (sources). red is the union of blocked_cells, stuck_cells and off_list_cells', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+      blocked_cells: [[1, 1]], stuck_cells: [[0, 0]], off_list_cells: [[2, 2]],
+    });
+    expect(redOf(result.current.grid)).toEqual([[0, 0], [1, 1], [2, 2]]);
+  });
+
+  it('row 5. blocked no_word_fits: failed + error card, snapshot restored, red cells, no offer (PD-5C)', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, blocked: true, reason: 'no_word_fits', blocked_cells: [[0, 0]],
+      blocked_slots: [{ row: 0, col: 0, direction: 'across', length: 4, pattern: 'U???' }],
+      off_list_cells: [], stuck_cells: [], grid: CLI_USER_AT_00,
+    });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'No word fits the highlighted letters.' });
+    expect(result.current.grid[0][0].isBlocked).toBe(true);
+    expect(lettersOf(result.current.grid)).toEqual(lettersOf(result.current.startSnapshot));
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('row 5 (B3). blocked is checked before success: blocked:true wins over success:true', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: true, blocked: true, reason: 'no_word_fits', blocked_cells: [[0, 0]],
+      blocked_slots: [], grid: CLI_FULL_4, slots_filled: 8, total_slots: 8,
+    });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'No word fits the highlighted letters.' });
+    expect(lettersOf(result.current.grid)).toEqual(lettersOf(result.current.startSnapshot));
+  });
+
+  it('row 6. blocked no_word_of_length: length message, no red', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: false, blocked: true, reason: 'no_word_of_length', blocked_cells: [],
+      blocked_slots: [{ row: 0, col: 0, direction: 'across', length: 4, pattern: 'U???' }],
+      off_list_cells: [], stuck_cells: [], grid: CLI_USER_AT_00,
+    });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'The selected word lists have no words of length 4.' });
+    expect(redOf(result.current.grid)).toEqual([]);
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('row 6 (PD-5F). several lengths: distinct, ascending, joined by ", "', async () => {
+    const { result } = await runningMachine();
+    const slot = (length) => ({ row: 0, col: 0, direction: 'across', length, pattern: '?' });
+    complete({
+      success: false, blocked: true, reason: 'no_word_of_length', blocked_cells: [],
+      blocked_slots: [slot(5), slot(4), slot(5), slot(10)], grid: CLI_USER_AT_00,
+    });
+    // Numeric ascending (10 after 5), duplicates removed.
+    expect(result.current.errorCard).toEqual({
+      message: 'The selected word lists have no words of length 4, 5, 10.',
+    });
+  });
+
+  it('row 7. complete without a grid: failed, snapshot restored, no offer', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    send({ status: 'complete' });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'No solution found' });
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('row 8. progress grid filled a cell, then cancel: restored, keepPartialFill without counts', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    expect(result.current.grid[0][1].letter).toBe('B'); // the running merge landed
+    act(() => {
+      result.current.cancel();
+    });
+    expect(result.current.state).toBe('cancelled');
+    expect(result.current.message).toBe('Cancelled by user');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: null, totalSlots: null });
+  });
+
+  it('row 8 (predicate). a progress grid that fills no cell makes no offer', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 5, data: { grid: CLI_USER_AT_00 } });
+    act(() => {
+      result.current.cancel();
+    });
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('row 8b. cancelled with no progress grid: restored, no offer', async () => {
+    const { result } = await runningMachine();
+    act(() => {
+      result.current.cancel();
+    });
+    expect(result.current.state).toBe('cancelled');
+    expect(result.current.message).toBe('Cancelled by user');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('row 9. paused with data.grid: paused, taskId kept, restored, offer, fixed text', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'paused', progress: 30, data: { grid: CLI_PART_4 } });
+    expect(result.current.state).toBe('paused');
+    expect(result.current.taskId).toBe('t-53');
+    expect(result.current.message).toBe('Autofill was paused outside the app.');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: null, totalSlots: null });
+  });
+
+  it('row 10. error after a progress grid: failed with the error text, restored, offer', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    send({ status: 'error', message: 'CLI Error (code 1): boom' });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: 'CLI Error (code 1): boom' });
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: null, totalSlots: null });
+  });
+
+  // Row 11 (lost contact, `Lost contact with the autofill run.`) is driven by Task 5.4's watchdog;
+  // its test is written there against this task's shared terminal routine.
+
+  it('row 12. success with off_list_cells: merged, those cells red, user letter intact', async () => {
+    const { result } = await runningMachine();
+    complete({
+      success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8, off_list_cells: [[0, 0]],
+    });
+    expect(result.current.state).toBe('done');
+    expect(result.current.grid[0][0].isBlocked).toBe(true);
+    expect(result.current.grid[0][0].letter).toBe('U');
+    expect(result.current.grid[0][1].letter).toBe('B');
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('order. restore and red are ONE updater: red lands on the restored grid', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-ord' });
+    const onGridUpdate = vi.fn();
+    const grid = userGrid();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, docId: 'doc-1', onGridUpdate, onStart: vi.fn(), onToast: vi.fn() })
+    );
+    act(() => {
+      result.current.start({}, 'doc-1');
+    });
+    await flush();
+    onGridUpdate.mockClear();
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+      stuck_cells: [[0, 0]],
+    });
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    // Applied to a grid that has diverged (a merged cell), the single updater still yields snapshot + red.
+    const dirty = mergeGridPreserveThemeLocked(grid, CLI_PART_4);
+    const out = onGridUpdate.mock.calls[0][0](dirty);
+    expect(lettersOf(out)).toEqual(lettersOf(result.current.startSnapshot));
+    expect(out[0][0].isBlocked).toBe(true);
+  });
+
+  it('PD-5D. docId changed since Start: restore and red are skipped, state still terminal, offer null', async () => {
+    const { result, rerender } = await runningMachine();
+    rerender({ docId: 'doc-2' });
+    const before = result.current.grid;
+    complete({
+      success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+      stuck_cells: [[0, 0]],
+    });
+    expect(result.current.state).toBe('done');
+    expect(result.current.grid).toBe(before);
+    expect(result.current.offer).toBeNull();
+  });
+});
+
+describe('useAutofillMachine Task 5.3: keepFill, reset, discardRun', () => {
+  const partial = {
+    success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+  };
+
+  it('keepFill(docId) merges the last grid onto the current grid and clears the offer; state unchanged', async () => {
+    const { result } = await runningMachine();
+    complete(partial);
+    expect(result.current.grid[0][1].letter).toBe('');
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(result.current.grid[0][1].letter).toBe('B');
+    expect(result.current.grid[0][1].isAutofilled).toBe(true);
+    expect(result.current.grid[0][0].letter).toBe('U');
+    expect(result.current.offer).toBeNull();
+    expect(result.current.state).toBe('done');
+  });
+
+  it('keepFill uses the LAST grid received on any event (a paused grid)', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 1, data: { grid: CLI_USER_AT_00 } });
+    send({ status: 'paused', progress: 2, data: { grid: CLI_PART_4 } });
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(result.current.grid[0][1].letter).toBe('B');
+  });
+
+  it('a letter typed into an empty cell after the run survives keepFill', async () => {
+    const { result } = await runningMachine();
+    complete(partial);
+    // The user types 'Q' into (0,1), which the kept grid would fill with 'B'.
+    act(() => {
+      result.current.setGrid((g) =>
+        g.map((row, r) => row.map((c, k) => (r === 0 && k === 1 ? { ...c, letter: 'Q' } : c)))
+      );
+    });
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(result.current.grid[0][1].letter).toBe('Q');
+    expect(result.current.grid[0][2].letter).toBe(''); // sanity: merge ran, only (0,1) is user-held
+    expect(result.current.offer).toBeNull();
+  });
+
+  it('docId changed: offer is null and keepFill is a no-op', async () => {
+    const { result, rerender } = await runningMachine();
+    complete(partial);
+    expect(result.current.offer).not.toBeNull();
+    rerender({ docId: 'doc-2' });
+    expect(result.current.offer).toBeNull();
+    const before = result.current.grid;
+    act(() => {
+      result.current.keepFill('doc-2');
+    });
+    expect(result.current.grid).toBe(before);
+    // And back on the original document the offer returns (derived, not consumed).
+    rerender({ docId: 'doc-1' });
+    expect(result.current.offer).not.toBeNull();
+  });
+
+  it('keepFill with a docId other than the start id is a no-op', async () => {
+    const { result } = await runningMachine();
+    complete(partial);
+    const before = result.current.grid;
+    act(() => {
+      result.current.keepFill('doc-9');
+    });
+    expect(result.current.grid).toBe(before);
+    expect(result.current.offer).not.toBeNull();
+  });
+
+  it('keepFill with no offer showing is a no-op', async () => {
+    const { result } = await runningMachine();
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    const before = result.current.grid;
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(result.current.grid).toBe(before);
+  });
+
+  it('reset(): idle, offer null, startSnapshot kept', async () => {
+    const { result } = await runningMachine();
+    complete(partial);
+    const snap = result.current.startSnapshot;
+    act(() => {
+      result.current.reset();
+    });
+    expect(result.current.state).toBe('idle');
+    expect(result.current.offer).toBeNull();
+    expect(result.current.startSnapshot).toBe(snap);
+    expect(snap).not.toBeNull();
+  });
+
+  it('discardRun(): idle, offer null, startSnapshot null, and keepFill can no longer apply', async () => {
+    const { result } = await runningMachine();
+    complete(partial);
+    act(() => {
+      result.current.discardRun();
+    });
+    expect(result.current.state).toBe('idle');
+    expect(result.current.taskId).toBeNull();
+    expect(result.current.progress).toBe(0);
+    expect(result.current.message).toBe('');
+    expect(result.current.errorCard).toBeNull();
+    expect(result.current.offer).toBeNull();
+    expect(result.current.startSnapshot).toBeNull();
+    const before = result.current.grid;
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(result.current.grid).toBe(before);
+  });
+
+  it('discardRun() while running (or submitting) changes nothing', async () => {
+    const { result } = await runningMachine();
+    expect(LIVE_STATES.has(result.current.state)).toBe(true);
+    const snap = result.current.startSnapshot;
+    act(() => {
+      result.current.discardRun();
+    });
+    expect(result.current.state).toBe('running');
+    expect(result.current.taskId).toBe('t-53');
+    expect(result.current.startSnapshot).toBe(snap);
   });
 });
