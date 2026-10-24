@@ -60,27 +60,78 @@ function initialSnapshot() {
 }
 
 /**
- * Map a CLI-string result grid onto the canonical grid, never overwriting a
- * theme-locked cell. Identical logic to today's inline mapping in
- * App.jsx:253-269 — ported verbatim (including the non-uppercased letter
- * passthrough), not redesigned.
+ * Merge a CLI-string result grid into the CURRENT canonical grid
+ * (novice-readiness spec 0.2.6 §2.3 (G12), §3.7). A cell is writable iff it is
+ * not theme-locked and is either an empty white cell or already autofilled; a
+ * user's letter is never changed. Writable cells take the CLI value:
+ *   letter -> {letter, isAutofilled: true} (passed through, not uppercased)
+ *   '.' / '' -> {letter: '', isAutofilled: false}
+ *   '#' -> {isBlack: true, letter: '', isAutofilled: false}
+ * A non-writable cell is returned as the same object. `isBlocked` and
+ * `isError` are never changed.
  *
  * TODO: `gridCodec.js` is nominally the only CLI-string <-> canonical-grid
  * decoder in the app; this function duplicates a slice of that decoding
- * inline instead of calling into it. Left as-is per the brief (port, don't
- * redesign) — noting it here for whoever eventually consolidates.
+ * inline instead of calling into it. Noting it here for whoever eventually
+ * consolidates.
  */
-function mergeGridPreserveThemeLocked(prevGrid, cliGrid) {
-  return prevGrid.map((row, r) =>
+export function mergeGridPreserveThemeLocked(currentGrid, cliGrid) {
+  return currentGrid.map((row, r) =>
     row.map((cell, c) => {
-      if (cell.isThemeLocked) return cell;
+      const writable =
+        !cell.isThemeLocked && !cell.isBlack && (cell.letter === '' || cell.isAutofilled);
+      if (!writable) return cell;
       const cliCell = cliGrid[r][c];
       if (cliCell === '#') {
-        return { ...cell, isBlack: true };
-      } else if (cliCell === '.' || cliCell === '') {
-        return { ...cell, letter: '' };
+        return { ...cell, isBlack: true, letter: '', isAutofilled: false };
       }
-      return { ...cell, letter: cliCell };
+      if (cliCell === '.' || cliCell === '') {
+        return { ...cell, letter: '', isAutofilled: false };
+      }
+      return { ...cell, letter: cliCell, isAutofilled: true };
+    })
+  );
+}
+
+/** [row, col] of every white lettered cell that is theme-locked or not autofilled (§2.3 Lock list). */
+export function lockedCellsOf(grid) {
+  const out = [];
+  grid.forEach((row, r) =>
+    row.forEach((cell, c) => {
+      if (!cell.isBlack && cell.letter !== '' && (cell.isThemeLocked || !cell.isAutofilled)) {
+        out.push([r, c]);
+      }
+    })
+  );
+  return out;
+}
+
+/** Listed [r, c] cells become new objects with isBlocked true; the rest keep their object (§2.3 Red cells). */
+export function markBlocked(grid, cells) {
+  const keys = new Set(cells.map(([r, c]) => `${r},${c}`));
+  return grid.map((row, r) =>
+    row.map((cell, c) => (keys.has(`${r},${c}`) ? { ...cell, isBlocked: true } : cell))
+  );
+}
+
+/** Every cell a new object with isBlocked false. */
+export function clearBlocked(grid) {
+  return grid.map((row) => row.map((cell) => ({ ...cell, isBlocked: false })));
+}
+
+/** True iff no CLI cell is '.' or '' ('#' counts as filled). */
+export function resultGridIsFull(cliGrid) {
+  return cliGrid.every((row) => row.every((v) => v !== '.' && v !== ''));
+}
+
+/** True iff the CLI holds a letter where the snapshot cell is white, empty and not theme-locked (§2.3 table). */
+export function fillsAnyCell(snapshotGrid, cliGrid) {
+  return snapshotGrid.some((row, r) =>
+    row.some((cell, c) => {
+      const v = cliGrid[r][c];
+      return (
+        v !== '#' && v !== '.' && v !== '' && !cell.isBlack && cell.letter === '' && !cell.isThemeLocked
+      );
     })
   );
 }
