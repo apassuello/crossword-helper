@@ -107,19 +107,30 @@ export function writePatternWord(grid, selectedCell, word) {
 }
 
 /**
- * Merge the apply-theme route's grid: a cell is written when `letter`,
- * `isBlack` or `isThemeLocked` differs from `prevGrid`'s; others keep
- * `prevGrid`'s object.
+ * novice-readiness spec 0.2.8 §3.8 (F4, F1b): merge the apply-theme route's reply
+ * against the grid the request was built from. A cell is written only where the
+ * reply differs from `sentGrid` (`letter`, `isBlack` or `isThemeLocked`) **and**
+ * the live grid (`prevGrid`) still equals `sentGrid` there; a cell the user changed
+ * since the send keeps its live object. Under Apply All `sentGrid` is the chained
+ * previous reply, so an edit made during earlier words is kept even inside a later
+ * word's own cells. When the three grids are not all the same size the live grid
+ * is returned unchanged (never throws).
  */
-export function writeAppliedTheme(prevGrid, updatedGrid) {
+export function writeAppliedTheme(prevGrid, replyGrid, sentGrid) {
+  const size = prevGrid.length;
+  if (replyGrid.length !== size || sentGrid.length !== size) return prevGrid;
+  const differs = (a, b) =>
+    (a.letter || '') !== (b.letter || '') ||
+    !!a.isBlack !== !!b.isBlack ||
+    !!a.isThemeLocked !== !!b.isThemeLocked;
   return prevGrid.map((row, r) =>
-    row.map((prev, c) => {
-      const upd = updatedGrid[r][c];
-      const changed =
-        (upd.letter || '') !== (prev.letter || '') ||
-        !!upd.isBlack !== !!prev.isBlack ||
-        !!upd.isThemeLocked !== !!prev.isThemeLocked;
-      return changed ? written(normalizeCell(upd), {}) : prev;
+    row.map((live, c) => {
+      const reply = replyGrid[r] && replyGrid[r][c];
+      const sent = sentGrid[r] && sentGrid[r][c];
+      if (!reply || !sent) return live;
+      return differs(reply, sent) && !differs(live, sent)
+        ? written(normalizeCell(reply), {})
+        : live;
     })
   );
 }

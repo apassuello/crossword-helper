@@ -47,7 +47,7 @@ function gridSigOf(grid, gridSize) {
 
 const SUPERSEDED_MSG = 'Suggestions updated for the changed grid.';
 
-function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPaused = false }) {
+function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, editingPaused = false }) {
   const [file, setFile] = useState(null);
   const [themeWords, setThemeWords] = useState([]);
   const [suggestions, setSuggestions] = useState(null);
@@ -64,6 +64,16 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
   gridSigRef.current = gridSig;
   const listSigRef = useRef(null);
   const requestTokenRef = useRef(0);
+
+  // novice-readiness spec 0.2.8 §3.8 (F1): Apply All stops sending once the panel
+  // is closed (unmounted).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -130,7 +140,9 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
   // `silent` is the grid-change refetch (PD-6-G16): no loading overlay, no success toast.
   const analyzePlacements = async (words, { silent = false } = {}) => {
-    const requestSig = gridSigRef.current;
+    // novice-readiness spec 0.2.8 §3.8 (G#77-ThemeWordsPanel.jsx:133): the signature
+    // comes from the grid this request sends, not from a ref read after an await.
+    const requestSig = gridSigOf(grid, gridSize);
     const token = ++requestTokenRef.current;
     if (!silent) setLoading(true);
 
@@ -218,10 +230,13 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
       return;
     }
 
+    // novice-readiness spec 0.2.8 §3.8 (F1, F4): the grid and document this request is sent under.
+    const sentGrid = grid;
+    const requestDocId = docId;
     try {
       // Apply placement to grid
       const data = await api.themeApplyPlacement({
-        grid: grid,
+        grid: sentGrid,
         placement: {
           word: suggestion.word,
           row: suggestion.row,
@@ -232,7 +247,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
       // Update parent grid
       if (onApplyPlacement) {
-        onApplyPlacement(data.grid, suggestion);
+        onApplyPlacement(data.grid, suggestion, { sentGrid, docId: requestDocId });
       }
 
       toast.success(`Applied ${suggestion.word} to grid`);
@@ -259,10 +274,12 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
     let successCount = 0;
     const skipped = []; // `WORD (reason)`, in suggestion order
     let currentGrid = grid; // Track grid state through applications
+    const requestDocId = docId;
 
     toast.loading('Applying all theme words...', { id: 'apply-all' });
 
     for (const wordData of suggestions) {
+      if (!mountedRef.current) break; // panel closed: send nothing further
       // Skip words with no valid placements
       if (!wordData.suggestions || wordData.suggestions.length === 0) {
         skipped.push(`${wordData.word} (no valid placement)`);
@@ -294,11 +311,12 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
         if (response && response.grid) {
           successCount++;
+          const sentGrid = currentGrid; // the grid this word's request was built from
           currentGrid = response.grid; // Update grid for next placement
 
           // Update parent grid
           if (onApplyPlacement) {
-            onApplyPlacement(currentGrid, bestSuggestion);
+            onApplyPlacement(currentGrid, bestSuggestion, { sentGrid, docId: requestDocId });
           }
         }
       } catch (error) {

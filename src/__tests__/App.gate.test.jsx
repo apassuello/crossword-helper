@@ -398,14 +398,16 @@ describe('App D1 gate: handlers called directly while a run is live', () => {
       return g;
     };
     await user.click(screen.getByRole('button', { name: /^theme$/i }));
-    await call(captured.theme.onApplyPlacement, filled(), { word: 'QUX' });
+    // Task 6.16: the callback takes the sent grid and the docId the request was sent under.
+    const ctx = () => ({ sentGrid: captured.grid.grid, docId: captured.theme.docId });
+    await call(captured.theme.onApplyPlacement, filled(), { word: 'QUX' }, ctx());
     expect(letters(container)).toEqual(['Q']);
     expect(screen.getByText('Applied "QUX" to grid!')).toBeInTheDocument();
 
     await startAutofill(user);
     const g2 = captured.grid.grid.map((row) => row.map((c) => ({ ...c })));
     g2[4][0] = { ...g2[4][0], letter: 'W', isThemeLocked: true };
-    await call(captured.theme.onApplyPlacement, g2, { word: 'WEE' });
+    await call(captured.theme.onApplyPlacement, g2, { word: 'WEE' }, ctx());
     expect(letters(container)).toEqual(['Q']);
     expect(screen.queryByText('Applied "WEE" to grid!')).not.toBeInTheDocument();
   });
