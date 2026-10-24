@@ -401,7 +401,18 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     vi.unstubAllGlobals();
   });
 
+  // Records `inside` for every getItem too: a read hoisted out of the lock must fail.
+  let reads;
+  const readsInsideLock = () => {
+    reads = [];
+    localStorage.getItem.mockImplementation((k) => {
+      reads.push({ k, inside });
+      return store.has(k) ? store.get(k) : null;
+    });
+  };
+
   const writesInsideLock = () => {
+    readsInsideLock();
     const seen = [];
     localStorage.setItem.mockImplementation((k, v) => {
       seen.push(inside);
@@ -415,6 +426,16 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     await save({ id: 'a', size: 5, grid: g });
     expect(calls).toEqual([SAVE_KEY]);
     expect(seen).toEqual([true]);
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((r) => r.inside)).toBe(true);
+  });
+
+  it('with the lock present a throwing setItem still rejects save', async () => {
+    localStorage.setItem.mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    await expect(save({ id: 'a', size: 5, grid: g })).rejects.toThrow('QuotaExceededError');
+    expect(calls).toEqual([SAVE_KEY]);
   });
 
   it('remove runs its read-and-write inside one lock callback', async () => {
@@ -424,6 +445,8 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     await remove('a');
     expect(calls).toEqual([SAVE_KEY]);
     expect(seen).toEqual([true]);
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((r) => r.inside)).toBe(true);
   });
 
   it('the legacy migration write runs inside the lock', async () => {
@@ -432,6 +455,10 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     await list();
     expect(calls).toEqual([SAVE_KEY]);
     expect(seen).toEqual([true]);
+    // The first unlocked read only decides whether a migration is pending; the
+    // read the write is built from must be re-done inside the lock.
+    const inRead = reads.filter((r) => r.inside).map((r) => r.k);
+    expect(inRead).toEqual(expect.arrayContaining([SAVE_KEY, LEGACY_SAVE_KEY]));
   });
 
   it('a plain list() with nothing to migrate takes no lock', async () => {
