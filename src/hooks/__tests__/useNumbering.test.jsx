@@ -413,4 +413,36 @@ describe('useNumbering hook', () => {
     expect(numberGrid).toHaveBeenCalledTimes(1);
     expect(validateGrid).toHaveBeenCalledTimes(1);
   });
+
+  it('10. invalidate() makes an already-issued numbering resolution fail its token guard', async () => {
+    const setGrid = vi.fn();
+    const pushToast = vi.fn();
+    const dNum = d();
+    vi.spyOn(api, 'numberGrid').mockReturnValue(dNum.p);
+    vi.spyOn(api, 'validateGrid').mockResolvedValue({ warnings: [], suggestions: [] });
+
+    const gA = gridFromRows(WHITE_5);
+    const { result, rerender } = renderHook((props) => useNumbering(props), {
+      initialProps: { grid: null, gridSize: 5, setGrid, pushToast },
+    });
+    rerender({ grid: gA, gridSize: 5, setGrid, pushToast });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    // Request in flight; only the optimistic paint has called setGrid so far.
+    expect(setGrid).toHaveBeenCalledTimes(1);
+    expect(result.current.unverified).toBe(true);
+
+    act(() => {
+      result.current.invalidate();
+    });
+    await act(async () => {
+      dNum.r({ numbering: { '(0,0)': 42 } });
+      await Promise.resolve();
+    });
+
+    expect(setGrid).toHaveBeenCalledTimes(1); // no reconciling setGrid
+    expect(result.current.unverified).toBe(true);
+    expect(result.current.numbering).toEqual({});
+  });
 });

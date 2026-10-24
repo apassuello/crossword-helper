@@ -9,7 +9,8 @@
 // the options FORM state + the one-time wordlist fetch on mount. All
 // start/cancel/reset/progress state comes from `machine`, shaped exactly like
 // `useAutofillMachine()`'s return value (Task 11A, binding contract):
-//   { state, taskId, progress, message, errorCard, start, cancel, reset }
+//   { state, taskId, progress, message, errorCard, offer, startSnapshot, start, cancel, reset }
+// `start(options, docId)`: this panel passes its `docId` prop through (spec 0.2.6 section 2.3, M1).
 // `state` is one of idle|submitting|running|done|failed|cancelled|paused.
 // This component never touches SSE/EventSource/the API client directly,
 // except for `api.getWordlists()` (read-only, display purposes).
@@ -144,7 +145,7 @@ function SuggestBlackSquareButton() {
   );
 }
 
-export function AutofillPanel({ machine, grid }) {
+export function AutofillPanel({ machine, grid, docId }) {
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [availableWordlists, setAvailableWordlists] = useState({ built_in: [], custom: [] });
   const [wordlistsLoading, setWordlistsLoading] = useState(true);
@@ -188,7 +189,7 @@ export function AutofillPanel({ machine, grid }) {
   const themeCount = Object.keys(getThemeEntries(grid)).length;
 
   const handleStart = () => {
-    machine.start({ ...options, themeEntries: getThemeEntries(grid) });
+    machine.start({ ...options, themeEntries: getThemeEntries(grid) }, docId);
   };
 
   const { state } = machine;

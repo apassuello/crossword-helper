@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAutofillMachine } from '../useAutofillMachine';
+import { useAutofillMachine, mergeGridPreserveThemeLocked } from '../useAutofillMachine';
 import { api } from '../../api/client';
 import { toCliStrings } from '../../api/gridCodec';
 import { gridFromRows } from './gridFixtures';
@@ -67,6 +67,7 @@ describe('useAutofillMachine', () => {
       min_score: 30,
       algorithm: 'hybrid',
       theme_entries: {},
+      locked_cells: [],
       adaptive_mode: undefined,
       max_adaptations: undefined,
       partial_fill: undefined,
@@ -133,8 +134,9 @@ describe('useAutofillMachine', () => {
 
     expect(result.current.state).toBe('done');
     expect(result.current.message).toBe('Successfully filled 8/8 slots!');
-    expect(onGridUpdate).toHaveBeenCalledTimes(1);
-    const updater = onGridUpdate.mock.calls[0][0];
+    // Call 1 is Start's clear-red write; call 2 is the final merge.
+    expect(onGridUpdate).toHaveBeenCalledTimes(2);
+    const updater = onGridUpdate.mock.calls[1][0];
     const nextGrid = updater(grid);
     expect(nextGrid[0][0].letter).toBe('A');
     expect(nextGrid[3][3].letter).toBe('P');
@@ -177,7 +179,8 @@ describe('useAutofillMachine', () => {
     expect(result.current.message).toBe(
       'Partial: 5/8 slots (62%) - try a different wordlist'
     );
-    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    // Start's clear-red write + the final merge.
+    expect(onGridUpdate).toHaveBeenCalledTimes(2);
   });
 
   // 4b/4c guard main's fix, dropped when the inline App.jsx block was ported to
@@ -279,7 +282,8 @@ describe('useAutofillMachine', () => {
 
     expect(result.current.state).toBe('failed');
     expect(result.current.errorCard).toEqual({ message: 'No solution found' });
-    expect(onGridUpdate).not.toHaveBeenCalled();
+    // Only Start's clear-red write; no merge without a result grid.
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('6. error event -> failed + errorCard content from data.message', async () => {
@@ -622,5 +626,233 @@ describe('useAutofillMachine', () => {
     );
 
     await flush();
+  });
+});
+
+/** Grid with per-cell overrides: edits = { 'r,c': {...cellFields} }. */
+function gridWith(rows, edits) {
+  const g = gridFromRows(rows);
+  for (const [k, v] of Object.entries(edits)) {
+    const [r, c] = k.split(',').map(Number);
+    g[r][c] = { ...g[r][c], ...v };
+  }
+  return g;
+}
+
+const CLI_FULL_4 = [
+  ['A', 'B', 'C', 'D'],
+  ['E', 'F', 'G', 'H'],
+  ['I', 'J', 'K', 'L'],
+  ['M', 'N', 'O', 'P'],
+];
+
+describe('useAutofillMachine Task 5.2: Start, snapshot, lock list, document id, running branch', () => {
+  it('S1. start snapshots a red-free copy, sends locked_cells, clears red on the grid, calls onStart once, in order', async () => {
+    const grid = gridWith(WHITE_4, {
+      '0,0': { letter: 'A', isBlocked: true },
+      '0,1': { letter: 'B', isAutofilled: true },
+    });
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s1' });
+    const onGridUpdate = vi.fn();
+    const onStart = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, docId: 'doc-1', onGridUpdate, onStart, onToast: vi.fn() })
+    );
+    expect(result.current.startSnapshot).toBeNull();
+
+    act(() => {
+      result.current.start({}, 'doc-1');
+    });
+
+    expect(startFill).toHaveBeenCalledWith(expect.objectContaining({ locked_cells: [[0, 0]] }));
+    const snap = result.current.startSnapshot;
+    expect(snap).not.toBeNull();
+    expect(snap[0][0].isBlocked).toBe(false);
+    expect(snap[0][0]).not.toBe(grid[0][0]); // a full copy, every cell a new object
+    expect(grid[0][0].isBlocked).toBe(true); // the input is untouched
+    expect(startFill.mock.calls[0][0].grid).toEqual(toCliStrings(snap));
+
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    const cleared = onGridUpdate.mock.calls[0][0](grid);
+    expect(cleared[0][0].isBlocked).toBe(false);
+    expect(cleared[0][0].letter).toBe('A');
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    // Order: clear red, then onStart (token bump), then the request.
+    expect(onGridUpdate.mock.invocationCallOrder[0]).toBeLessThan(onStart.mock.invocationCallOrder[0]);
+    expect(onStart.mock.invocationCallOrder[0]).toBeLessThan(startFill.mock.invocationCallOrder[0]);
+
+    await flush();
+  });
+
+  it('S2. every letter autofilled -> locked_cells is present and []', async () => {
+    const edits = {};
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) edits[`${r},${c}`] = { letter: 'X', isAutofilled: true };
+    }
+    const grid = gridWith(WHITE_4, edits);
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s2' });
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, docId: 'd', onGridUpdate: vi.fn(), onStart: vi.fn(), onToast: vi.fn() })
+    );
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    const req = startFill.mock.calls[0][0];
+    expect(Object.prototype.hasOwnProperty.call(req, 'locked_cells')).toBe(true);
+    expect(req.locked_cells).toEqual([]);
+    await flush();
+  });
+
+  it('S3. start while submitting makes no second request and no second onStart', async () => {
+    const startFill = vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s3' });
+    const onStart = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({
+        grid: gridFromRows(WHITE_4), gridSize: 4, docId: 'd', onGridUpdate: vi.fn(), onStart, onToast: vi.fn(),
+      })
+    );
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    expect(result.current.state).toBe('submitting');
+    expect(startFill).toHaveBeenCalledTimes(1);
+    expect(onStart).toHaveBeenCalledTimes(1);
+    await flush();
+  });
+
+  it('S4. same document id: a running event with data.grid applies the merge', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s4' });
+    const grid = gridFromRows(WHITE_4);
+    const onGridUpdate = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, docId: 'doc-1', onGridUpdate, onStart: vi.fn(), onToast: vi.fn() })
+    );
+    act(() => {
+      result.current.start({}, 'doc-1');
+    });
+    await flush();
+    onGridUpdate.mockClear();
+
+    act(() => {
+      global.EventSource.sendMessage({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    });
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    expect(onGridUpdate.mock.calls[0][0](grid)).toEqual(mergeGridPreserveThemeLocked(grid, CLI_FULL_4));
+  });
+
+  it('S5. docId changed after Start: running merge, C4 red-mark and complete merge are all dropped', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s5' });
+    const grid = gridFromRows(WHITE_4);
+    const onGridUpdate = vi.fn();
+    const onToast = vi.fn();
+    const { result, rerender } = renderHook((props) => useAutofillMachine(props), {
+      initialProps: { grid, gridSize: 4, docId: 'doc-1', onGridUpdate, onStart: vi.fn(), onToast },
+    });
+    act(() => {
+      result.current.start({}, 'doc-1');
+    });
+    await flush();
+    rerender({ grid, gridSize: 4, docId: 'doc-2', onGridUpdate, onStart: vi.fn(), onToast });
+    onGridUpdate.mockClear();
+
+    act(() => {
+      global.EventSource.sendMessage({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    });
+    expect(onGridUpdate).not.toHaveBeenCalled();
+
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'running',
+        progress: 20,
+        data: { off_list_cells: [[2, 0]], warning: 'Typed words not in the selected word lists: QZX' },
+      });
+    });
+    expect(onGridUpdate).not.toHaveBeenCalled();
+
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'complete',
+        data: { grid: CLI_FULL_4, success: true, slots_filled: 8, total_slots: 8 },
+      });
+    });
+    expect(onGridUpdate).not.toHaveBeenCalled();
+  });
+
+  it('S6. C4 running event marks the off-list cells red, toasts the warning, run continues', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s6' });
+    const grid = gridFromRows(WHITE_4);
+    const onGridUpdate = vi.fn();
+    const onToast = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid, gridSize: 4, docId: 'd', onGridUpdate, onStart: vi.fn(), onToast })
+    );
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    await flush();
+    onGridUpdate.mockClear();
+
+    const warning = 'Typed words not in the selected word lists: QZX';
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'running',
+        progress: 5,
+        data: { off_list_cells: [[2, 0], [2, 1]], warning },
+      });
+    });
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    const marked = onGridUpdate.mock.calls[0][0](grid);
+    expect(marked[2][0].isBlocked).toBe(true);
+    expect(marked[2][1].isBlocked).toBe(true);
+    expect(marked[2][2].isBlocked).toBeFalsy();
+    expect(onToast).toHaveBeenCalledTimes(1);
+    expect(onToast).toHaveBeenCalledWith({ kind: 'info', message: warning });
+    expect(result.current.state).toBe('running');
+  });
+
+  it('S7. an empty off_list_cells list neither marks nor toasts', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s7' });
+    const onGridUpdate = vi.fn();
+    const onToast = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, docId: 'd', onGridUpdate, onStart: vi.fn(), onToast })
+    );
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    await flush();
+    onGridUpdate.mockClear();
+    act(() => {
+      global.EventSource.sendMessage({
+        status: 'running',
+        progress: 5,
+        data: { off_list_cells: [], warning: 'w' },
+      });
+    });
+    expect(onGridUpdate).not.toHaveBeenCalled();
+    expect(onToast).not.toHaveBeenCalled();
+  });
+
+  it('S8. a C4 event without a warning marks red but does not toast', async () => {
+    vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-s8' });
+    const onGridUpdate = vi.fn();
+    const onToast = vi.fn();
+    const { result } = renderHook(() =>
+      useAutofillMachine({ grid: gridFromRows(WHITE_4), gridSize: 4, docId: 'd', onGridUpdate, onStart: vi.fn(), onToast })
+    );
+    act(() => {
+      result.current.start({}, 'd');
+    });
+    await flush();
+    onGridUpdate.mockClear();
+    act(() => {
+      global.EventSource.sendMessage({ status: 'running', progress: 5, data: { off_list_cells: [[1, 1]] } });
+    });
+    expect(onGridUpdate).toHaveBeenCalledTimes(1);
+    expect(onToast).not.toHaveBeenCalled();
   });
 });

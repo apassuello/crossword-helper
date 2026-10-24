@@ -96,10 +96,16 @@ function App() {
   // cancelled/paused; App only threads grid/gridSize in and applies the
   // machine's grid updates back via onGridUpdate. Must precede `useNumbering`
   // below, which gates on `autofill.state`.
+  // `invalidateNumberingRef` lets onStart reach useNumbering's `invalidate` although the
+  // hook is called after this one (see above); it is filled in right after useNumbering.
+  const invalidateNumberingRef = useRef(() => {});
   const autofill = useAutofillMachine({
     grid,
     gridSize,
+    docId,
     onGridUpdate: (updater) => setGrid(updater),
+    onStart: () => invalidateNumberingRef.current(),
+    onToast: pushToast,
   });
 
   // D1 (novice-readiness spec 0.2.6 section 2.3): while a run is live no grid writer
@@ -122,13 +128,14 @@ function App() {
   // violations against a grid that's deliberately incomplete mid-run. Flipping
   // back to enabled on completion re-fires against the grid as it stands then
   // (useNumbering's own [sig, enabled] dep array handles the catch-up).
-  const { numbering, violations, unverified } = useNumbering({
+  const { numbering, violations, unverified, invalidate } = useNumbering({
     grid,
     gridSize,
     setGrid,
     pushToast,
     enabled: !editingPaused,
   });
+  invalidateNumberingRef.current = invalidate;
 
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
   // (saved verbatim); `isDirty` is derived by comparing the current content
@@ -483,7 +490,7 @@ function App() {
 
           {currentTool === 'autofill' && (
             <div className="xw-inspector">
-              <AutofillPanel machine={autofill} grid={grid} />
+              <AutofillPanel machine={autofill} grid={grid} docId={docId} />
             </div>
           )}
 

@@ -10,8 +10,13 @@
  * Contract (binding — Tasks 16/17/18 extend this hook, they do not rewrite
  * it, per `.superpowers/sdd/task-11A-brief.md`):
  *
- *   useAutofillMachine({ grid, gridSize, onGridUpdate })
- *   -> { state, taskId, progress, message, errorCard, start, cancel, reset }
+ *   useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast })
+ *   -> { state, taskId, progress, message, errorCard, offer, startSnapshot,
+ *        start, cancel, reset }
+ *   start(options = {}, docId): `docId` is the document id at Start; it is stored
+ *   with the snapshot, and every merge and red-marking write is skipped when the
+ *   hook's CURRENT `docId` param differs from it (novice-readiness spec 0.2.6
+ *   section 2.3 (M1)). `offer` is `null` until Task 5.3 gives it behaviour.
  *
  * FLAT return (no nested `context`), per the Phase-3 contract in
  * `.superpowers/sdd/phase2-scoping-2026-07-14.md` "Task 11".
@@ -56,6 +61,7 @@ function initialSnapshot() {
     progress: 0,
     message: '',
     errorCard: null,
+    startSnapshot: null,
   };
 }
 
@@ -137,9 +143,9 @@ export function fillsAnyCell(snapshotGrid, cliGrid) {
 }
 
 /**
- * @param {{grid: object[][], gridSize: number, onGridUpdate: (updater: (prevGrid: object[][]) => object[][]) => void}} params
+ * @param {{grid: object[][], gridSize: number, docId: string, onGridUpdate: (updater: (prevGrid: object[][]) => object[][]) => void, onStart?: () => void, onToast?: (t: {kind: string, message: string}) => void}} params
  */
-export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
+export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
 
   // Latest props, read at fire time (mirrors useSaveMachine's docRef).
@@ -149,6 +155,15 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
   gridRef.current = grid;
   gridSizeRef.current = gridSize;
   onGridUpdateRef.current = onGridUpdate;
+  // The CURRENT document id, compared at event time against the id stored at Start.
+  const docIdRef = useRef(docId);
+  docIdRef.current = docId;
+  const onStartRef = useRef(onStart);
+  const onToastRef = useRef(onToast);
+  onStartRef.current = onStart;
+  onToastRef.current = onToast;
+  const startDocIdRef = useRef(null); // document id at the accepted start()
+  const lastGridRef = useRef(null); // latest CLI result grid of the current run (Task 5.3 reads it)
 
   // Synchronous state-guard — see the module doc comment above. Updated the
   // instant a transition happens, never lagging behind React's batched
@@ -185,6 +200,10 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
     setSnapshot((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  // novice-readiness spec 0.2.6 section 2.3 (M1): a merge or red-marking write is
+  // skipped when the document was replaced since Start.
+  const sameDocument = () => docIdRef.current === startDocIdRef.current;
+
   const handleEvent = useCallback(
     (data) => {
       if (!mountedRef.current) return;
@@ -201,7 +220,19 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
         });
         if (data.data && data.data.grid) {
           const cliGrid = data.data.grid;
-          onGridUpdateRef.current((prevGrid) => mergeGridPreserveThemeLocked(prevGrid, cliGrid));
+          lastGridRef.current = cliGrid;
+          if (sameDocument()) {
+            onGridUpdateRef.current((prevGrid) => mergeGridPreserveThemeLocked(prevGrid, cliGrid));
+          }
+        }
+        // Case 2 (spec 0.2.6 section 2.3 Red cells, C4): off-list typed words are
+        // marked red and the run continues.
+        const offList = data.data && data.data.off_list_cells;
+        if (Array.isArray(offList) && offList.length > 0 && sameDocument()) {
+          onGridUpdateRef.current((prevGrid) => markBlocked(prevGrid, offList));
+          if (typeof data.data.warning === 'string' && onToastRef.current) {
+            onToastRef.current({ kind: 'info', message: data.data.warning });
+          }
         }
         return;
       }
@@ -210,7 +241,9 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
         closeStream();
         if (data.data && data.data.grid) {
           const cliGrid = data.data.grid;
-          onGridUpdateRef.current((prevGrid) => mergeGridPreserveThemeLocked(prevGrid, cliGrid));
+          if (sameDocument()) {
+            onGridUpdateRef.current((prevGrid) => mergeGridPreserveThemeLocked(prevGrid, cliGrid));
+          }
 
           if (data.data.success) {
             transition({
@@ -316,7 +349,7 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
   );
 
   const start = useCallback(
-    (options = {}) => {
+    (options = {}, startDocId) => {
       // Re-entrancy guard, gated to `idle` only — the brief's transition
       // table is exhaustive and lists `idle --start()--> submitting` as the
       // only start edge. Notably this also blocks start() from `paused`:
@@ -327,18 +360,31 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
       if (stateRef.current !== 'idle') return;
 
       closeStream();
+
+      // The snapshot is a red-free full copy of the grid at Start; the lock list
+      // is computed from it. Any retained last grid from a previous run is dropped.
+      const startGrid = clearBlocked(gridRef.current);
+      startDocIdRef.current = startDocId;
+      lastGridRef.current = null;
       transition({
         state: 'submitting',
         taskId: null,
         progress: 0,
         message: 'Starting autofill…',
         errorCard: null,
+        startSnapshot: startGrid,
       });
+      // Start clears all red on the live grid (spec 0.2.6 section 2.3 Red cells).
+      onGridUpdateRef.current((prev) => clearBlocked(prev));
+      // Bumps useNumbering's token so an in-flight reconcile cannot land mid-run.
+      if (onStartRef.current) onStartRef.current();
 
       api
         .startFill({
           size: gridSizeRef.current,
-          grid: toCliStrings(gridRef.current),
+          grid: toCliStrings(startGrid),
+          // Always present, [] included (spec 0.2.6 section 2.3 Lock list, M3).
+          locked_cells: lockedCellsOf(startGrid),
           wordlists: options.wordlists,
           timeout: options.timeout,
           min_score: options.minScore,
@@ -393,6 +439,8 @@ export function useAutofillMachine({ grid, gridSize, onGridUpdate }) {
     progress: snapshot.progress,
     message: snapshot.message,
     errorCard: snapshot.errorCard,
+    offer: null, // Task 5.3
+    startSnapshot: snapshot.startSnapshot,
     start,
     cancel,
     reset,
