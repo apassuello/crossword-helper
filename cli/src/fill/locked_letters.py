@@ -5,6 +5,7 @@ novice-readiness spec 0.2.4 §2.1 (C12): ``Grid.from_dict`` writes ``Grid.cells`
 directly and applies only an explicit ``"locked"`` key, so the CLI decides the
 rest here, once, on a fresh run. On ``--resume`` only ``changed_locked_cells`` and
 ``stuck_cells`` run, with an empty lock set; ``apply_lock_mode`` and ``preflight`` never do.
+``preflight`` is also skipped under ``--adaptive`` (spec 0.2.7 §2.1).
 """
 
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Tuple
@@ -77,9 +78,16 @@ class PreflightResult(NamedTuple):
     index: LetterBitsetIndex
 
 
-def preflight(grid: Grid, word_list: WordList) -> PreflightResult:
+def preflight(grid: Grid, word_list: WordList, extra_words: Iterable[str] = ()) -> PreflightResult:
     """
-    Pre-flight for a fresh ``fill`` run; never mutates ``grid``.
+    Pre-flight for a fresh, non-adaptive ``fill`` run; never mutates ``grid``
+    or ``word_list``.
+
+    novice-readiness spec 0.2.7 §2.1: ``fill`` skips this under ``--resume`` and
+    ``--adaptive``. ``extra_words`` are the ``--theme-entries`` words: candidate
+    words for this check only, for any slot, not only the one they are keyed to.
+    They count for dead-slot detection and for case 2. The index is built from a
+    copy of the list plus them; the solver's list is untouched.
 
     novice-readiness spec 0.2.4 §2.1 (C1, C4, M2, B2): only locked letters
     constrain the fill, so the unlocked ones are cleared on a clone first.
@@ -94,6 +102,10 @@ def preflight(grid: Grid, word_list: WordList) -> PreflightResult:
     - case 2: every cell of every typed (fixed) word that is not in the lists.
     """
     model = SlotModel.from_grid(grid)
+    extras = list(extra_words)
+    if extras:
+        word_list = WordList([(w.text, w.score) for w in word_list.words])
+        word_list.add_words(extras)
     index = LetterBitsetIndex.from_word_list(word_list)
     cleared = grid.clone()
     cleared.clear_unlocked()

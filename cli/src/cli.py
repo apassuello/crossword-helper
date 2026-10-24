@@ -1123,11 +1123,14 @@ def fill(
             return
 
         # novice-readiness spec 0.2.4 §2.1 (C1, C4, C6, B2): pre-flight, fresh runs
-        # only. A block returns from inside the `try`, so the `finally` clears the
+        # only; spec 0.2.7 §2.1: not under --adaptive (it adds black squares to
+        # repair exactly what pre-flight blocks on), and --theme-entries words are
+        # candidate words for it (position-agnostic; the solver's list is unchanged).
+        # A block returns from inside the `try`, so the `finally` clears the
         # pause markers, and before check (a) and every output write.
-        preflight_result = None  # stays None on --resume: no pre-flight, no index
-        if not resume_state_file:
-            preflight_result = preflight(grid, word_list)
+        preflight_result = None  # stays None on --resume and --adaptive: no pre-flight, no index
+        if not resume_state_file and not adaptive:
+            preflight_result = preflight(grid, word_list, list((theme_entries_dict or {}).values()))
             if preflight_result.reason is not None:
                 if json_output:
                     click.echo(

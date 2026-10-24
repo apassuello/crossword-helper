@@ -899,9 +899,9 @@ def test_pf16_control_fresh_run_calls_preflight(tmp_path, monkeypatch):
     calls = []
     real = cli_module.preflight
 
-    def _spy(grid, word_list):
+    def _spy(grid, word_list, *args, **kwargs):
         calls.append(1)
-        return real(grid, word_list)
+        return real(grid, word_list, *args, **kwargs)
 
     monkeypatch.setattr(cli_module, "preflight", _spy)
     grid_path = tmp_path / "g33.json"
@@ -1041,3 +1041,118 @@ def test_fill_keys_absent_from_fail_fill_error(tmp_path):
     assert result is not None and result["success"] is False, (stdout, stderr)
     for key in RESULT_KEYS:
         assert key not in result
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight vs --adaptive and --theme-entries: novice-readiness spec 0.2.7 §2.1
+# ---------------------------------------------------------------------------
+
+G77_ROWS = [["."] * 7 for _ in range(7)]
+CA_ROWS = _rows(G33_ROWS, c00="C", c01="A")
+TYPED_XYZ_ROWS = _rows(G33_ROWS, c00="X", c01="Y", c02="Z")
+# XYZ is not in this list, but every down slot (X??, Y??, Z??) has a word, so no slot is dead.
+XYZ_LINES = "XAB;50\nYOB;50\nZIT;50\n"
+
+
+def _theme_file(tmp_path, entries):
+    path = tmp_path / "theme.json"
+    path.write_text(json.dumps(entries))
+    return str(path)
+
+
+def test_pf19_adaptive_never_calls_preflight(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    calls = []
+
+    def _spy(*args, **kwargs):
+        calls.append(1)
+        raise AssertionError("preflight must not run under --adaptive")
+
+    monkeypatch.setattr(cli_module, "preflight", _spy)
+    grid_path = tmp_path / "g77.json"
+    grid_path.write_text(json.dumps({"size": 7, "grid": G77_ROWS}))
+    words = tmp_path / "l2.txt"
+    words.write_text(L2_LINES)
+    args = ["fill", str(grid_path), "-w", str(words), "-a", "beam", "--adaptive", "--max-adaptations", "1"]
+    CliRunner().invoke(cli_module.cli, args + ["-t", "2", "--allow-nonstandard", "--json-output"])
+    assert calls == []
+
+
+def test_pf19_adaptive_does_not_exit_3_on_a_length_block(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, G77_ROWS, L2_LINES, "--adaptive", "--max-adaptations", "1", run_args=())
+    assert code != 3, (stdout, stderr)
+    assert '"blocked": true' not in stdout
+
+
+def test_pf19_adaptive_emits_no_preflight_progress_event(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(
+        tmp_path, _rows(G33_ROWS, c00="C", c01="A", c02="B"), L5_LINES, "--adaptive", "--max-adaptations", "1"
+    )
+    assert code != 3, (stdout, stderr)
+    assert not [e for e in _progress_events(stderr) if "off_list_cells" in (e.get("data") or {})]
+    assert not any("Typed words not in" in w for w in json.loads(stdout).get("warnings", []))
+
+
+def test_pf19_control_without_adaptive_a_length_block_still_exits_3(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, G77_ROWS, L2_LINES)
+    assert code == 3, (stdout, stderr)
+    assert json.loads(stdout)["reason"] == "no_word_of_length"
+
+
+def test_pf20_theme_entry_rescues_a_dead_slot(tmp_path):
+    theme = _theme_file(tmp_path, {"(0,0,across)": "CAB"})
+    stdout, stderr, code, _ = _pf_fill(tmp_path, CA_ROWS, L5_LINES, "--theme-entries", theme)
+    assert code != 3, (stdout, stderr)
+
+
+def test_pf20_control_without_theme_entries_the_slot_is_dead(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, CA_ROWS, L5_LINES)
+    assert code == 3, (stdout, stderr)
+    result = json.loads(stdout)
+    assert result["reason"] == "no_word_fits"
+    assert result["blocked_cells"] == [[0, 0], [0, 1]]
+
+
+def test_pf21_theme_entry_equal_to_a_typed_word_is_not_off_list(tmp_path):
+    theme = _theme_file(tmp_path, {"(0,0,across)": "xyz"})
+    stdout, stderr, code, _ = _pf_fill(tmp_path, TYPED_XYZ_ROWS, XYZ_LINES, "--theme-entries", theme)
+    assert code != 3, (stdout, stderr)
+    assert not any("Typed words not in" in w for w in json.loads(stdout).get("warnings", []))
+    assert not [e for e in _progress_events(stderr) if "off_list_cells" in (e.get("data") or {})]
+    assert json.loads(stdout)["off_list_cells"] == []
+
+
+def test_pf21_control_without_theme_entry_the_typed_word_is_off_list(tmp_path):
+    stdout, stderr, code, _ = _pf_fill(tmp_path, TYPED_XYZ_ROWS, XYZ_LINES)
+    assert code != 3, (stdout, stderr)
+    assert "Typed words not in the selected word lists: XYZ" in json.loads(stdout)["warnings"]
+    events = [e for e in _progress_events(stderr) if "off_list_cells" in (e.get("data") or {})]
+    assert events[0]["data"]["off_list_cells"] == [[0, 0], [0, 1], [0, 2]]
+
+
+def test_pf22_theme_words_do_not_reach_the_solver_word_list(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+
+    seen = []
+    real = cli_module.preflight
+
+    def _spy(grid, word_list, *args, **kwargs):
+        before = len(word_list)
+        result = real(grid, word_list, *args, **kwargs)
+        seen.append((before, len(word_list)))
+        return result
+
+    monkeypatch.setattr(cli_module, "preflight", _spy)
+    grid_path = tmp_path / "ca.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": CA_ROWS}))
+    words = tmp_path / "l5.txt"
+    words.write_text(L5_LINES)
+    theme = _theme_file(tmp_path, {"(0,0,across)": "CAB"})
+    args = ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "-a", "trie", "-t", "5"]
+    CliRunner().invoke(cli_module.cli, args + ["--theme-entries", theme])
+    assert seen == [(5, 5)]
