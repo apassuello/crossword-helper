@@ -229,10 +229,18 @@ function App() {
   const gridSizeRef = useRef(gridSize);
   gridSizeRef.current = gridSize;
   const [restoredBanner, setRestoredBanner] = useState(null); // { name, savedAt, sig } | null
-  useEffect(() => {
-    let cancelled = false;
-    storage.load().then((entry) => {
-      if (cancelled || !entry) return;
+  // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): the one place a saved entry becomes
+  // the live document, shared by restore-on-load and Open saved. It reads the current size
+  // through `gridSizeRef` and applies the S3 skip-flag rule exactly once. An entry whose
+  // `grid` is not an array of arrays is adopted by nothing (`normalizeSavedGrid` would
+  // throw): one console.error, no state change, no user-visible text (the spec defines none).
+  // `banner` true shows the restore banner for the entry; false dismisses it.
+  const adoptSavedEntry = useCallback(
+    (entry, { banner }) => {
+      if (!Array.isArray(entry.grid) || !entry.grid.every(Array.isArray)) {
+        console.error('Ignoring a saved grid whose cells are malformed:', entry.id);
+        return false;
+      }
       const restored = normalizeSavedGrid(entry.grid);
       if (entry.size !== gridSizeRef.current) {
         skipNextInitRef.current = true;
@@ -245,7 +253,16 @@ function App() {
       setSavedSig(sig);
       adoptSavedAt(entry.savedAt);
       setSelectedCell(null);
-      setRestoredBanner({ name: entry.name, savedAt: entry.savedAt, sig });
+      setRestoredBanner(banner ? { name: entry.name, savedAt: entry.savedAt, sig } : null);
+      return true;
+    },
+    [adoptSavedAt]
+  );
+  useEffect(() => {
+    let cancelled = false;
+    storage.load().then((entry) => {
+      if (cancelled || !entry) return;
+      adoptSavedEntry(entry, { banner: true });
     });
     return () => {
       cancelled = true;
@@ -307,6 +324,19 @@ function App() {
     setSelectedCell(null);
     setSymmetryEnabled(true);
   }, [gridSize, autofill.discardRun]);
+
+  // novice-readiness spec 0.2.7 §3.4 (S3, M1): Open saved. Gated at write time (D1) as well as
+  // at the buttons, because the autofill machine's doc-id guard assumes `docId` cannot change
+  // mid-run. The shared adoption does the S3 skip-flag rule, the docId and savedAt adoption;
+  // only on success does the run get discarded (no retained snapshot or Keep offer) and the
+  // restore banner close (adoption with `banner: false` dismisses it).
+  const openSavedEntry = useCallback(
+    (entry) => {
+      if (editingPausedRef.current) return;
+      if (adoptSavedEntry(entry, { banner: false })) autofill.discardRun();
+    },
+    [adoptSavedEntry, autofill.discardRun]
+  );
 
   const toggleBlackSquare = useCallback((row, col) => {
     if (editingPausedRef.current) return;
@@ -610,6 +640,7 @@ function App() {
                 editingPaused={editingPaused}
                 onToggleBlack={toggleBlackSquare}
                 onNewGrid={createNewGrid}
+                onOpenSaved={openSavedEntry}
               />
             </div>
           )}
