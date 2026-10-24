@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.8** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.9** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -551,7 +551,9 @@ scope here.
   keeping its document id. A save whose entry no longer exists writes that entry; it does not fork.
 - **Leaving the page (0.2.8, review Q3).** On `pagehide`, a document with unsaved changes is saved at
   once through the autosave path, so during a run it writes the Start snapshot (S2). A failure there
-  shows nothing, since the page is going away.
+  shows nothing, since the page is going away. That write is synchronous and outside the Web Lock that
+  serialises other saves (§3.4 M1/M2 storage, PR #77): a lock grant needs a round trip that a closing page
+  may not survive, so on this one path the two-tab race is accepted (0.2.9).
 - **Storage never throws on read (0.2.8, review M1).** `list()` never rejects either. When the browser
   refuses localStorage access, `list()` and `load()` read as no saves.
 - **A fork during a named Save (0.2.8, review M2).** If the user confirmed replacing a *different*
@@ -948,3 +950,8 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   grid, drops a reply for a replaced document, and Apply All stops when the panel closes (F1, F4). Beat:
   for Q1, minting a new document id (it would orphan the label from the user's grid for no gain); for Q3,
   no flush (up to 30 s of typing lost on every reload); for F2, gating saves during a run (S2 requires them).
+- 0.2.9 (2026-10-25): §3.4 Leaving the page: the `pagehide` write is synchronous and bypasses the Web Lock.
+  Two rulings of 0.2.8 collided: Q3 says unsaved changes are saved "at once" on `pagehide`, and the PR #77
+  two-tab fix put every save behind `navigator.locks.request`, whose grant is asynchronous and may never run
+  on a closing tab. Resolved for Q3: a lost reload is the common case; the two-tab race on that one path is
+  rare. Found by the Task 6.20 review; to be measured in the Phase 6R browser drive (close the tab, reopen).
