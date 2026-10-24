@@ -2777,7 +2777,7 @@ Run `python3 run.py` and `npm run dev`; drive the real browser on `127.0.0.1` (n
 
 Owner ruling 2026-10-24: go as recommended. Every task is frontend, runs under Phase 6's conventions (`phase-6-context.md`), and cites `novice-readiness spec 0.2.8 §<section> (<review id>)`. The review's reproducing tests are in the report's `.json` beside it (`repro.test_code` per finding). A task may adapt them as its RED, but the RED must fail on the claimed defect itself, at the asserting line. Tasks run in order. 6.16, 6.17, 6.18 and 6.20 all touch `App.jsx`.
 
-PR #77's six Greptile comments (at `f7579b9`) are folded into these tasks, marked `G#77-<file>:<line>`, and each is answered by the commit that fixes it (Task 6.21, last step). PR #76's three were fixed in `abcb015`, `a413ebc` and `71899b7`; their threads have no reply yet, so 6.21 drafts those replies too.
+PR #77's six Greptile comments (at `f7579b9`) are folded into these tasks, marked `G#77-<file>:<line>`, and each is answered by the commit that fixes it (Task 6.22, last step). PR #76's three were fixed in `abcb015`, `a413ebc` and `71899b7`; their threads have no reply yet, so 6.22 drafts those replies too.
 
 ### Task 6.16: theme apply merges against the sent grid and drops a reply for a replaced document (§3.8, PD-6-G12; review F1, F4)
 
@@ -2868,7 +2868,8 @@ PR #77's six Greptile comments (at `f7579b9`) are folded into these tasks, marke
 - Test: `src/hooks/__tests__/useSaveMachine.test.jsx`, App-level test
 
 **Interfaces:**
-- `useSaveMachine` returns `forget()`. It clears the pending autosave timer and makes `savedLabel` read `unsaved changes` (today's dirty label; `pristine` would show an empty label) **without arming** the autosave. It leaves `savedSig` and the stored `savedAt` expectation alone, so `isDirty` stays false and nothing is armed. The next real edit flips `isDirty` and arms as usual. `App` calls it when Delete removes the entry whose id is the current `docId`.
+- `useSaveMachine` returns `forget()`. It clears the pending autosave timer and makes `savedLabel` read `unsaved changes` (today's dirty label; `pristine` would show an empty label) **without arming** the autosave. It leaves `savedSig` and the stored `savedAt` expectation alone, so `isDirty` stays false and nothing is armed. The next real edit flips `isDirty` and arms as usual. `App` calls it when Delete removes the entry whose id is the current `docId`. After `forget()`, the next change to `doc` arms the autosave **whether or not `isDirty` was already true**: a document that was dirty when its entry was deleted has no clean→dirty edge to arm on. (Amended after review of `5fa06ee`.)
+- `storage.js` gains a **separate synchronous** write entry point used only by the `pagehide` handler (name is the implementer's). It writes outside `navigator.locks` (spec 0.2.9 §3.4 Leaving the page), so `save`/`remove`/migration keep Task 6.19's lock and its read-inside-lock tests stay unchanged. It writes `docRef.current`, so S2's Start snapshot during a run is unchanged. It keeps S4's fork-on-`savedAt`-mismatch rule. (Amended after review of `5fa06ee`.)
 
 **Behavioral criteria:**
 - Deleting the entry whose id equals the current `docId` makes the document unsaved: the label leaves `saved locally` for its unsaved state. The delete arms no autosave. The next grid edit arms the autosave, which writes the entry again under the default name with the same `docId` (6.19's missing-entry rule). Deleting any other entry leaves the open document's status alone.
@@ -2882,7 +2883,30 @@ PR #77's six Greptile comments (at `f7579b9`) are folded into these tasks, marke
 
 - [ ] Steps as in 6.16. Commit `fix(saves): deleting the open grid's entry makes it unsaved; pagehide saves unsaved changes`.
 
-### Task 6.21: Phase 6R browser drive (no code)
+### Task 6.21: a save's resolution only acts on the document it wrote (§3.4 S4, §2.3 M1; review of 6.20, after 6.19's lock)
+
+Before Task 6.19, `storage.save` resolved within microtasks, so no click could land between `useSaveMachine` reading `docRef.current` and the save's resolution. Two earlier dispositions rested on that, and both were true at `f7579b9` and false after `439f570`: the Phase 4–6 review's "`onSaved` without a `written.id === docId` guard is unreachable", and Task 6.17's "(c) New grid during an in-flight save that then forks is unreachable". A Web Lock grant is asynchronous, so the window is now a few ms.
+
+**Files:**
+- Modify: `src/hooks/useSaveMachine.js` (the save resolution: `onSaved`, `knownSavedAt`, `onForked`)
+- Test: `src/hooks/__tests__/useSaveMachine.test.jsx`, and an App-level test with a deferred lock stub
+
+**Behavioral criteria:**
+- A save's resolution acts on the current document only if the document it wrote is still the current one (`written.id === docRef.current.id`): `onSaved`, the stored `savedAt` expectation (`knownSavedAt`) and `onForked` are all skipped for a save of a document that has since been replaced (New grid, Open saved, import). The entry itself is still written; only the in-memory bookkeeping for the current document is protected.
+- Tests use a deferred, FIFO `navigator.locks` stub (`request = (n, fn) => new Promise(r => setTimeout(() => r(fn()), 0))` with fake timers) so the ordering is observable in jsdom.
+
+**Normative cases:**
+
+| situation | expected |
+|---|---|
+| autosave fires, Delete of the open grid's entry confirmed before the lock flushes, then flush (forward order) | entry deleted, label `unsaved changes` (control; passes today) |
+| Delete confirmed, the autosave timer fires before `remove` flushes, then flush (reverse order) | pinned as observed; record the outcome in the report (accepted by the spec's "a save whose entry no longer exists writes that entry") |
+| autosave of doc A fires, New grid (doc B) before flush, then flush | B's clean signature and `savedAt` expectation untouched; B's next save does not fork `(copy)` |
+| autosave of A fires and will fork (second tab moved `savedAt`), New grid (B) before flush, then flush | `docId` stays B's fresh id |
+
+- [ ] Steps as in 6.16. Commit `fix(saves): a save's resolution only acts on the document it wrote`.
+
+### Task 6.22: Phase 6R browser drive (no code)
 
 Run `python3 run.py` (`PORT=5050` if 5000 is busy) and `npm run dev`. Drive `127.0.0.1:3000`:
 - export, then re-import: numbers present;
@@ -2891,7 +2915,8 @@ Run `python3 run.py` (`PORT=5050` if 5000 is busy) and `npm run dev`. Drive `127
 - type while one Apply is in flight: the letter stays;
 - two tabs on one save, Start in tab A, save in tab B, then let tab A's autosave fork mid-run: the run ends with its normal outcome;
 - Delete the open grid's entry: label unsaved, the entry returns only after an edit;
-- type, then reload within 10 s: the letter is restored.
+- type, then reload within 10 s: the letter is restored;
+- type, then **close the tab** within 10 s, reopen `127.0.0.1:3000`: the letter is restored. This is the measurement for spec 0.2.9's synchronous `pagehide` write; until it runs, that change rests on reasoning about Web Locks.
 
 Phase-end gates as Phase 6, each run alone.
 
