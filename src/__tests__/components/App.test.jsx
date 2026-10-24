@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { ToastProvider } from '../../components/bench/Toast';
@@ -887,5 +887,267 @@ describe('App restore on load (§3.4)', () => {
     expect(screen.getByRole('button', { name: '11×11' })).toBeInTheDocument();
     // it does not create a grid by itself (PD-6-G9)
     expect(letters(container)).toEqual(['Q']);
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4, PD-6-G20): Open saved. `storage.list` and
+// `storage.load` are mocked; the Grid panel, the save machine and the grid are real.
+describe('App Open saved (§3.4)', () => {
+  const idx = (size) => (r, c) => r * size + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const docIdNow = () => probe.autofillArgs.docId;
+  const REPLACE = 'Replace the current grid? Unsaved changes are lost.';
+  const SAVED_AT = new Date(2026, 9, 22, 9, 30).toISOString();
+  const OTHER_AT = new Date(2026, 9, 21, 8, 0).toISOString();
+
+  const savedCells = (size, edits = {}) =>
+    Array.from({ length: size }, (_, r) =>
+      Array.from({ length: size }, (_, c) => ({
+        letter: '',
+        isBlack: false,
+        isThemeLocked: false,
+        number: null,
+        isError: false,
+        isAutofilled: false,
+        ...(edits[`${r},${c}`] || {}),
+      }))
+    );
+  const entryOf = (id, name, size, edits, over = {}) => ({
+    id,
+    name,
+    savedAt: SAVED_AT,
+    size,
+    grid: savedCells(size, edits),
+    numbering: {},
+    symmetryEnabled: true,
+    ...over,
+  });
+  const E15 = () => entryOf('e15', 'Fifteen', 15, { '1,1': { letter: 'F' } });
+  const E21 = () => entryOf('e21', 'Twenty-one', 21, { '4,5': { letter: 'Z' }, '20,20': { letter: 'K' } });
+  const listing = (...entries) => vi.spyOn(storage, 'list').mockResolvedValue(entries);
+  const rowOf = (name) => screen.getByText(name).closest('li');
+  const openFromList = async (user, name) => {
+    await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    await screen.findByText(name);
+    await user.click(within(rowOf(name)).getByRole('button', { name: 'Open' }));
+  };
+  const typeLetter = async (user, container, r, c, ch) => {
+    await user.click(cells(container)[idx(15)(r, c)]);
+    fireEvent.keyDown(focusEl(container), { key: ch });
+  };
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+    probe.saveArgs = null;
+    vi.spyOn(storage, 'load').mockResolvedValue(null);
+    vi.spyOn(storage, 'list').mockResolvedValue([]);
+    vi.spyOn(storage, 'save').mockResolvedValue({
+      savedAt: '2026-10-24T10:00:00.000Z', id: 'e15', name: 'Fifteen', forked: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a blank grid opens an entry at once: its letters, its docId, no confirm', async () => {
+    listing(E15());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await openFromList(user, 'Fifteen');
+    expect(screen.queryByText(REPLACE)).toBeNull();
+    expect(letters(container)).toEqual(['F']);
+    expect(docIdNow()).toBe('e15');
+  });
+
+  it('a grid with a letter asks first: Cancel leaves grid and docId, Replace opens', async () => {
+    listing(E15());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    const idBefore = docIdNow();
+
+    await openFromList(user, 'Fifteen');
+    expect(screen.getByText(REPLACE)).toBeInTheDocument();
+    expect(letters(container)).toEqual(['A']);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(letters(container)).toEqual(['A']);
+    expect(docIdNow()).toBe(idBefore);
+
+    await user.click(within(rowOf('Fifteen')).getByRole('button', { name: 'Open' }));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+    expect(letters(container)).toEqual(['F']);
+    expect(docIdNow()).toBe('e15');
+  });
+
+  it('after a same-size restore, Open a 21x21 entry: a 21x21 grid with its letters (S3)', async () => {
+    vi.spyOn(storage, 'load').mockResolvedValue(entryOf('r15', 'Restored one', 15, { '2,3': { letter: 'Q' } }));
+    listing(E21());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Restored one"/);
+    expect(letters(container)).toEqual(['Q']);
+
+    await openFromList(user, 'Twenty-one');
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(cells(container)).toHaveLength(441));
+    expect(letters(container)).toEqual(['Z', 'K']);
+    await act(async () => {});
+    expect(letters(container)).toEqual(['Z', 'K']);
+    expect(docIdNow()).toBe('e21');
+  });
+
+  it('Open a same-size entry, then New grid -> 11x11 gives a blank 11x11 (no stray skip flag)', async () => {
+    listing(E15());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await openFromList(user, 'Fifteen');
+    expect(letters(container)).toEqual(['F']);
+
+    await user.click(screen.getByRole('button', { name: '11×11' }));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(cells(container)).toHaveLength(121));
+    expect(letters(container)).toEqual([]);
+    expect(docIdNow()).not.toBe('e15');
+  });
+
+  it('adopts the entry id and savedAt: the next autosave updates entry e, expecting its savedAt', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    listing(E15());
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await openFromList(user, 'Fifteen');
+    await typeLetter(user, container, 5, 5, 'W');
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+    });
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.save.mock.calls[0][0].id).toBe('e15');
+    expect(storage.save.mock.calls[0][1]).toMatchObject({ expectedSavedAt: SAVED_AT });
+  });
+
+  it('the opened grid is born clean, selection is cleared and the restore banner is dismissed', async () => {
+    vi.spyOn(storage, 'load').mockResolvedValue(entryOf('r15', 'Restored one', 15, {}));
+    listing(E15());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Restored one"/);
+    await user.click(cells(container)[idx(15)(4, 4)]);
+    await waitFor(() => expect(probe.panelProps.selectedCell).toMatchObject({ row: 4, col: 4 }));
+
+    await openFromList(user, 'Fifteen');
+
+    expect(screen.queryByText(/^Restored /)).toBeNull();
+    expect(probe.panelProps.selectedCell).toBeNull();
+    await act(async () => {});
+    expect(probe.saveArgs.isDirty).toBe(false);
+  });
+
+  it('Open discards the retained run exactly once, and loads isAutofilled as saved with isBlocked false', async () => {
+    const discardRun = vi.fn();
+    probe.autofillOverride = { discardRun };
+    listing(
+      entryOf('ea', 'Auto', 15, {
+        '0,0': { letter: 'A', isAutofilled: true },
+        '0,1': { letter: 'B' },
+        '0,2': { isBlack: true, isBlocked: true },
+      })
+    );
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await openFromList(user, 'Auto');
+    const g = probe.panelProps.grid;
+    expect(discardRun).toHaveBeenCalledTimes(1);
+    expect(g[0][0].isAutofilled).toBe(true);
+    expect(g[0][1].isAutofilled).toBe(false);
+    expect(g.flat().some((c) => c.isBlocked)).toBe(false);
+  });
+
+  it('while a run is live the Open saved button and the rows are disabled', async () => {
+    listing(E15());
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    await screen.findByText('Fifteen');
+
+    probe.autofillOverride = { state: 'running' };
+    await user.click(screen.getByText('Symmetry')); // any re-render picks up the override
+    await user.click(screen.getByText('Symmetry'));
+
+    expect(screen.getByRole('button', { name: 'Open saved' })).toBeDisabled();
+    expect(within(rowOf('Fifteen')).getByRole('button', { name: 'Open' })).toBeDisabled();
+    expect(within(rowOf('Fifteen')).getByRole('button', { name: 'Delete' })).toBeDisabled();
+  });
+
+  it('openSavedEntry called directly while a run is live changes neither grid nor docId (D1)', async () => {
+    const discardRun = vi.fn();
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    const idBefore = docIdNow();
+    probe.autofillOverride = { state: 'running', discardRun };
+    await user.click(screen.getByText('Symmetry'));
+    await user.click(screen.getByText('Symmetry'));
+
+    act(() => probe.panelProps.onOpenSaved(E21()));
+
+    expect(cells(container)).toHaveLength(225);
+    expect(letters(container)).toEqual(['A']);
+    expect(docIdNow()).toBe(idBefore);
+    expect(discardRun).not.toHaveBeenCalled();
+  });
+
+  describe('a malformed entry (grid not an array of arrays) is adopted by nothing', () => {
+    // React's act() warnings also arrive through console.error; count only the guard's own.
+    const guardErrors = (spy) => spy.mock.calls.filter((c) => /malformed/.test(String(c[0])));
+    const MALFORMED = [
+      ['null grid', { grid: null }],
+      ['a flat array', { grid: ['A', 'B'] }],
+      ['a missing grid', { grid: undefined }],
+    ];
+
+    it.each(MALFORMED)('Open: %s leaves grid, docId and banner unchanged; one console.error', async (_n, over) => {
+      vi.spyOn(storage, 'load').mockResolvedValue(entryOf('r15', 'Restored one', 15, { '2,3': { letter: 'Q' } }));
+      listing(entryOf('bad', 'Broken', 15, {}, over));
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const user = userEvent.setup();
+      const { container } = renderApp();
+      await screen.findByText(/^Restored "Restored one"/);
+
+      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+      await screen.findByText('Broken');
+      await user.click(within(rowOf('Broken')).getByRole('button', { name: 'Open' }));
+      await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+      expect(guardErrors(err)).toHaveLength(1);
+      expect(letters(container)).toEqual(['Q']);
+      expect(docIdNow()).toBe('r15');
+      expect(screen.getByText(/^Restored "Restored one"/)).toBeInTheDocument();
+    });
+
+    it.each(MALFORMED)('restore: %s leaves the blank grid and minted docId; one console.error', async (_n, over) => {
+      vi.spyOn(storage, 'load').mockResolvedValue(entryOf('bad', 'Broken', 15, {}, over));
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { container } = renderApp();
+      await waitFor(() => expect(storage.load).toHaveBeenCalled());
+      await act(async () => {});
+      expect(guardErrors(err)).toHaveLength(1);
+      expect(cells(container)).toHaveLength(225);
+      expect(letters(container)).toEqual([]);
+      expect(docIdNow()).toMatch(/^doc-\d+$/);
+      expect(screen.queryByText(/^Restored /)).toBeNull();
+    });
   });
 });
