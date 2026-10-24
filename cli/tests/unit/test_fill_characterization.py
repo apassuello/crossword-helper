@@ -102,6 +102,27 @@ def test_ch2_unlocked_unfillable_letter_is_replaced_by_repair_and_hybrid(tmp_pat
     assert grid == [["C", "A", "T"], ["O", "R", "E"], ["W", "E", "D"]]
 
 
+def test_ch2b_unlocked_letter_with_a_word_through_it_is_rewritten_by_beam(tmp_path):
+    """CH2b, observed 2026-10-24: `O` at (0,0), `"locked": []`, list L6, beam.
+
+    `O` fits ORE but no complete fill of L6 starts with it, so beam rewrites (0,0): row 0
+    came back `CAT` and `COW` in two runs, so only "not `O`" and "complete" are pinned.
+    This is what CH2's `Q` could not show: beam keeps an unlocked letter only when no word
+    passes through that cell. Spec 0.2.6 §2.3 `[NOTE]`.
+    """
+    grid = _fill(tmp_path, _seeded("O"), L6, "beam", _timeout("beam"), locked=[])
+    assert grid[0][0] != "O"
+    assert all(cell != "." for row in grid for cell in row)
+
+
+@pytest.mark.parametrize("algorithm", ["regex", "trie"])
+def test_ch2b_control_regex_and_trie_keep_the_same_unlocked_letter(tmp_path, algorithm):
+    """CH2b control: the same row under regex/trie keeps `O` and fills nothing, so the
+    beam row above discriminates the algorithms rather than passing on any outcome."""
+    grid = _fill(tmp_path, _seeded("O"), L6, algorithm, _timeout(algorithm), locked=[])
+    assert grid == _seeded("O")
+
+
 def test_ch3_beam_fills_around_a_locked_off_list_word(tmp_path):
     """CH3, observed 2026-10-23: beam, row 0 `CAB` locked (key absent), list L5.
 
