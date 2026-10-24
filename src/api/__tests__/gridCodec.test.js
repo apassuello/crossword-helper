@@ -7,6 +7,7 @@ import {
   applyNumbering,
   normalizeCell,
   toSavedGrid,
+  normalizeSavedGrid,
 } from '../gridCodec';
 
 describe('gridCodec', () => {
@@ -160,6 +161,30 @@ describe('gridCodec', () => {
       expect(out[0]).not.toBe(grid[0]);
       expect(out[0][0]).not.toBe(grid[0][0]);
       expect(grid[0][0]).toEqual({ letter: 'A', isAutofilled: true, isBlocked: true });
+    });
+  });
+  describe('normalizeSavedGrid', () => {
+    it('fills missing cell fields from makeCell and reads an absent isAutofilled as false', () => {
+      const out = normalizeSavedGrid([[{ letter: 'A' }]]);
+      expect(out[0][0]).toEqual({ ...makeCell(), letter: 'A' });
+      expect(out[0][0].isAutofilled).toBe(false);
+      expect(out[0][0].isBlocked).toBe(false);
+      expect(out[0][0].isBlack).toBe(false);
+      expect(out[0][0].isThemeLocked).toBe(false);
+    });
+
+    it('keeps a saved isAutofilled true but never a saved isBlocked', () => {
+      const out = normalizeSavedGrid([[{ letter: 'A', isAutofilled: true, isBlocked: true }]]);
+      expect(out[0][0].isAutofilled).toBe(true);
+      expect(out[0][0].isBlocked).toBe(false);
+    });
+
+    it('returns a new grid and does not mutate the input', () => {
+      const grid = [[{ letter: 'A', isBlocked: true }]];
+      const out = normalizeSavedGrid(grid);
+      expect(out).not.toBe(grid);
+      expect(out[0][0]).not.toBe(grid[0][0]);
+      expect(grid[0][0]).toEqual({ letter: 'A', isBlocked: true });
     });
   });
 });
