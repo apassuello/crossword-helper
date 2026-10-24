@@ -236,3 +236,37 @@ def test_first_terminal_event_is_the_one_recorded(task_id):
     pr.send_progress(task_id, 100, "Complete", "complete")  # trailing sentinel
 
     assert pr.get_terminal_event(task_id)["status"] == "paused"
+
+
+def test_subscriber_whose_tracker_was_retired_ends_at_its_next_timeout(app, task_id):
+    gen = _subscribe(app, task_id)
+    assert next(gen) == ": heartbeat\n\n"  # connected and waiting, no terminal yet
+    pr.send_progress(task_id, 100, "done", "complete")
+    pr.progress_queues[task_id].get_nowait()  # another subscriber took the queued copy
+    pr.sweep_expired_trackers(now=float("inf"))  # a later subscription retires tracker and record
+    assert task_id not in pr.progress_queues
+
+    with pytest.raises(StopIteration):  # get() times out; no record, no tracker: ends, no heartbeat
+        next(gen)
+
+
+def test_subscriber_with_a_live_tracker_keeps_heartbeating(app, task_id):
+    gen = _subscribe(app, task_id)
+
+    assert [next(gen), next(gen), next(gen)] == [": heartbeat\n\n"] * 3
+    assert task_id in pr.progress_queues
+
+
+def test_record_in_hand_is_sent_even_when_this_timeouts_sweep_retires_the_tracker(app, task_id):
+    gen = _subscribe(app, task_id)
+    assert next(gen) == ": heartbeat\n\n"
+    pr.send_progress(task_id, 100, "done", "complete")
+    pr.progress_queues[task_id].get_nowait()  # only the record remains
+    event, _ = pr.terminal_events[task_id]
+    pr.terminal_events[task_id] = (event, event["timestamp"] - 61)  # this timeout's sweep retires it
+
+    assert _data(next(gen))["status"] == "complete"
+
+    assert task_id not in pr.progress_queues
+    with pytest.raises(StopIteration):
+        next(gen)
