@@ -1,6 +1,6 @@
 /**
  * storage — async persistence transport for the save machine.
- * novice-readiness spec 0.2.7 §3.4 (M1, S4, G3).
+ * novice-readiness spec 0.2.8 §3.4 (M1, M2, S4, G3).
  *
  * The save machine (useSaveMachine) must reach persistence ONLY through these
  * functions — never `localStorage` directly — so that M2 can swap the
@@ -13,8 +13,8 @@
  * Failure contract (the machine depends on it):
  *   - save() REJECTS if a write throws (quota / serialize) → drives the
  *     machine's error path (toast + retry).
- *   - list() and load() NEVER reject: a missing or corrupt array blob resolves
- *     `[]` / `null` so a bad save can't crash boot.
+ *   - list() and load() NEVER reject: a missing or corrupt array blob, or a
+ *     throwing getItem, resolves `[]` / `null` so a bad save can't crash boot.
  *   - remove() rewrites the array; an unknown id resolves and changes nothing.
  *
  * Legacy migration (novice-readiness spec 0.2.7 §3.4, PD-6-G1): a blob under
@@ -109,23 +109,44 @@ function dropLegacyKey() {
 }
 
 /**
- * All saved grids, newest first. Never rejects.
+ * Run `fn` (a whole synchronous read-and-write) inside the cross-tab lock
+ * `SAVE_KEY` when `navigator.locks` exists, so two tabs' read-modify-writes
+ * serialise (novice-readiness spec 0.2.8 §3.4; Greptile #77 storage.js:171).
+ * Without it (older browsers, jsdom) the call runs as before and two tabs can
+ * still lose each other's entry — a known residual, not closed here.
+ */
+function withLock(fn) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (locks && typeof locks.request === 'function') return locks.request(SAVE_KEY, fn);
+  return Promise.resolve().then(fn);
+}
+
+/**
+ * All saved grids, newest first. Never rejects: any read failure resolves `[]`
+ * (novice-readiness spec 0.2.8 §3.4, M1). A legacy migration whose write fails
+ * still returns the merged readable entries and keeps the legacy key, so a later
+ * read retries it (Greptile #77 storage.js:126).
  * @returns {Promise<object[]>}
  */
 export function list() {
-  return Promise.resolve().then(() => {
-    try {
-      const { entries, pending, needsWrite } = readState();
-      if (pending) {
-        if (needsWrite) localStorage.setItem(SAVE_KEY, JSON.stringify(entries));
-        dropLegacyKey();
-      }
-      return entries;
-    } catch {
-      // A failed migration write leaves the legacy key in place; list() never rejects.
-      return readArray();
-    }
-  });
+  return Promise.resolve()
+    .then(() => {
+      const first = readState();
+      if (!first.pending) return first.entries;
+      return withLock(() => {
+        // Re-read inside the lock: another tab may have migrated meanwhile.
+        const { entries, pending, needsWrite } = readState();
+        if (!pending) return entries;
+        try {
+          if (needsWrite) localStorage.setItem(SAVE_KEY, JSON.stringify(entries));
+          dropLegacyKey();
+        } catch {
+          // Near the quota: keep the legacy key; the merged entries are still readable.
+        }
+        return entries;
+      });
+    })
+    .catch(() => []);
 }
 
 /**
@@ -140,46 +161,50 @@ export function load() {
  * Upsert `doc` by `doc.id` (stamped with a fresh ISO `savedAt`) at the front.
  * Name: `opts.name`, else the stored entry's, else the default name. When
  * `opts.expectedSavedAt` is a string and the stored entry's `savedAt` differs,
- * a new entry `<name> (copy)` is written under a fresh id instead (S4, P16).
+ * a new entry `<name> (copy)` (the chosen name) is written under a fresh id
+ * instead (S4, P16) and `opts.replaceEntryId` is NOT applied, so the other entry
+ * survives (novice-readiness spec 0.2.8 §3.4, M2). A save whose entry no longer
+ * exists writes it under its own id; it does not fork (Q1). The whole
+ * read-and-write runs inside the cross-tab lock when available.
  * @param {object} doc  serializable grid document carrying a stable `id`
  * @param {{name?: string, expectedSavedAt?: string|null, replaceEntryId?: string}} [opts]
  * @returns {Promise<{savedAt: string, id: string, name: string, forked: boolean}>}
  *   rejects if a write throws
  */
 export function save(doc, opts = {}) {
-  return Promise.resolve().then(() => {
+  return withLock(() => {
     const now = new Date();
     const savedAt = now.toISOString();
     const { entries, pending } = readState();
     const stored = entries.find((e) => e.id === doc.id);
 
     let id = doc.id;
-    let name;
+    const name = opts.name ?? stored?.name ?? defaultName(doc.size, now);
+    let finalName = name;
     let forked = false;
     if (typeof opts.expectedSavedAt === 'string' && stored && stored.savedAt !== opts.expectedSavedAt) {
       forked = true;
       id = mintDocId();
-      name = `${stored.name} (copy)`;
-    } else {
-      name = opts.name ?? stored?.name ?? defaultName(doc.size, now);
+      finalName = `${name} (copy)`;
     }
 
-    const rest = entries.filter((e) => e.id !== id && e.id !== opts.replaceEntryId);
+    const rest = entries.filter((e) => e.id !== id && (forked || e.id !== opts.replaceEntryId));
     // A throw here (quota exceeded, unserializable value) rejects the returned
     // promise — intentional; the machine's error path relies on it. The legacy
     // key is then left in place.
-    localStorage.setItem(SAVE_KEY, JSON.stringify([{ ...doc, id, name, savedAt }, ...rest]));
+    localStorage.setItem(SAVE_KEY, JSON.stringify([{ ...doc, id, name: finalName, savedAt }, ...rest]));
     if (pending) dropLegacyKey();
-    return { savedAt, id, name, forked };
+    return { savedAt, id, name: finalName, forked };
   });
 }
 
 /**
  * Delete the entry with `id`. An unknown id resolves and changes nothing.
+ * Runs inside the cross-tab lock when available.
  * @returns {Promise<void>}
  */
 export function remove(id) {
-  return Promise.resolve().then(() => {
+  return withLock(() => {
     const { entries, pending } = readState();
     const rest = entries.filter((e) => e.id !== id);
     if (rest.length === entries.length && !pending) return;
