@@ -1,5 +1,5 @@
 /**
- * gridEdits — pure grid writers (novice-readiness spec 0.2.6 §3.7 (S5); §2.3
+ * gridEdits — pure grid writers (novice-readiness spec 0.2.7 §3.7 (S5); §2.3
  * "Red cells").
  *
  * Common rule: every cell a writer WRITES is a new object with
@@ -83,8 +83,12 @@ export function writeToggleThemeLock(grid, row, col) {
 }
 
 /**
- * Write `word` into the in-bounds cells from `selectedCell` along its
- * direction. (Phase 6 narrows the set of cells written.)
+ * novice-readiness spec 0.2.7 §3.5 (#62, G6): place a Search result. Walks
+ * `word[i]` along `selectedCell.direction` from (row, col), stopping at the first
+ * black square or the grid edge. A theme-locked cell is skipped (it keeps its
+ * content and consumes `word[i]`) and the walk continues past it. Every other
+ * cell is written as a new object (the common rule above); the input grid and its
+ * cells are never mutated. Nothing written -> the input grid itself.
  */
 export function writePatternWord(grid, selectedCell, word) {
   const { row, col, direction } = selectedCell;
@@ -93,9 +97,11 @@ export function writePatternWord(grid, selectedCell, word) {
   for (let i = 0; i < word.length; i++) {
     const r = direction === 'across' ? row : row + i;
     const c = direction === 'across' ? col + i : col;
-    if (r < size && c < size) {
-      updates.push([r, c, written(grid[r][c], { letter: word[i] })]);
-    }
+    if (r >= size || c >= size) break;
+    const cell = grid[r][c];
+    if (cell.isBlack) break;
+    if (cell.isThemeLocked) continue;
+    updates.push([r, c, written(cell, { letter: word[i] })]);
   }
   return updates.length ? withCells(grid, updates) : grid;
 }

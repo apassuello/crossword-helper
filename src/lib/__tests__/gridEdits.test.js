@@ -187,6 +187,103 @@ describe('writePatternWord', () => {
   });
 });
 
+// novice-readiness spec 0.2.7 §3.5 (#62, G6): the normative table, row 0 of a 5x5.
+// `.` empty, `#` black, `X*` theme-locked holding X, any other letter a user letter.
+describe('writePatternWord protects cells (§3.5 #62, G6)', () => {
+  const parse = (text) => {
+    const over = {};
+    const re = /#|[A-Z]\*|[A-Z]|\./g;
+    let m;
+    let c = 0;
+    while ((m = re.exec(text))) {
+      const t = m[0];
+      if (t === '#') over[`0,${c}`] = { isBlack: true };
+      else if (t.endsWith('*')) over[`0,${c}`] = { letter: t[0], isThemeLocked: true };
+      else if (t !== '.') over[`0,${c}`] = { letter: t };
+      c += 1;
+    }
+    return over;
+  };
+  // Render row 0 back to the table's notation. A black cell that holds a letter shows
+  // it (`#T`), so a write into a black square cannot hide behind the `#`.
+  const show = (g) =>
+    g[0]
+      .map((x) =>
+        x.isBlack
+          ? '#' + x.letter
+          : (x.letter || '.') + (x.isThemeLocked ? '*' : '')
+      )
+      .join('');
+  const across = (row, col) => ({ row, col, direction: 'across' });
+
+  it.each([
+    [0, 'CAT', '.....', 'CAT..'],
+    [0, 'CAT', '..#..', 'CA#..'],
+    // A word longer than the slot: the walk must END at the black square, not skip it.
+    [0, 'CATER', '..#..', 'CA#..'],
+    [0, 'CAT', '.X*..', 'CX*T..'],
+    [3, 'CAT', '.....', '...CA'],
+    [0, 'CAT', 'Z....', 'CAT..'],
+  ])('start col %i, %s: %s -> %s', (col, word, before, after) => {
+    const g = freeze(mk(5, parse(before)));
+    expect(show(writePatternWord(g, across(0, col), word))).toBe(after);
+  });
+
+  it('a first-cell black square writes nothing and returns the input grid itself', () => {
+    const g = freeze(mk(5, parse('#....')));
+    const out = writePatternWord(g, across(0, 0), 'CAT');
+    expect(out).toBe(g);
+    expect(show(out)).toBe('#....');
+  });
+
+  it('a theme-locked cell is skipped (kept as the same object) and the walk continues past it', () => {
+    const g = freeze(mk(5, parse('.X*..')));
+    const out = writePatternWord(g, across(0, 0), 'CAT');
+    expect(out[0][1]).toBe(g[0][1]);
+    expect(out[0][2].letter).toBe('T');
+    expect(out[0][0].letter).toBe('C');
+  });
+
+  it('an autofilled same-letter cell is rewritten as a new object with isAutofilled false', () => {
+    const g = freeze(mk(5, { '0,0': { letter: 'C', isAutofilled: true } }));
+    const out = writePatternWord(g, across(0, 0), 'CAT');
+    expect(show(out)).toBe('CAT..');
+    expect(out[0][0]).not.toBe(g[0][0]);
+    expect(out[0][0].isAutofilled).toBe(false);
+  });
+
+  it('down: stops at the black square in column 0', () => {
+    const g = freeze(
+      mk(5, { '0,0': {}, '2,0': { isBlack: true } })
+    );
+    const out = writePatternWord(g, { row: 0, col: 0, direction: 'down' }, 'CATER');
+    expect(out.map((r) => (r[0].isBlack ? '#' : r[0].letter || '.') + (r[0].isBlack ? r[0].letter : ''))).toEqual([
+      'C', 'A', '#', '.', '.',
+    ]);
+  });
+
+  it('down: skips a theme-locked cell and writes past it', () => {
+    const g = freeze(mk(5, { '1,0': { letter: 'X', isThemeLocked: true } }));
+    const out = writePatternWord(g, { row: 0, col: 0, direction: 'down' }, 'CAT');
+    expect(out.map((r) => r[0].letter)).toEqual(['C', 'X', 'T', '', '']);
+  });
+
+  it('G6: the input grid deep-equals its pre-call snapshot, isAutofilled included', () => {
+    const g = freeze(
+      mk(5, {
+        '0,0': { letter: 'C', isAutofilled: true },
+        '0,1': { letter: 'X', isThemeLocked: true, isAutofilled: true },
+        '0,3': { isBlack: true },
+      })
+    );
+    const snapshot = JSON.parse(JSON.stringify(g));
+    const out = writePatternWord(g, across(0, 0), 'CAT');
+    expect(out).not.toBe(g);
+    expect(JSON.parse(JSON.stringify(g))).toEqual(snapshot);
+    expect(g[0][0].isAutofilled).toBe(true);
+  });
+});
+
 describe('writeAppliedTheme', () => {
   it('a newly theme-locked cell is written and loses autofill', () => {
     const prev = freeze(mk(3, { '0,0': { letter: 'A', isAutofilled: true } }));

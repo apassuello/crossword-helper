@@ -1215,3 +1215,59 @@ describe('App Open saved over corrupt stored data (§3.4)', () => {
     expect(probe.autofillArgs.docId).toBe('e15');
   });
 });
+
+// novice-readiness spec 0.2.7 §3.5 (#62), §6 SR-PLACE: placing a Search result through the UI
+// skips a theme-locked cell, stops at a black square, and leaves cells beyond it alone.
+describe('App Search placement (§3.5 #62, SR-PLACE)', () => {
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+  });
+
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const shownWords = () =>
+    Array.from(document.querySelectorAll('.word-display')).map((el) => el.textContent);
+
+  it('writes C, keeps the locked X, writes A, stops at the black square', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(SIZE * SIZE));
+
+    // Row 0: col 1 holds X and is locked with Ctrl+L; col 3 is black (Space).
+    await user.click(cells(container)[idx(0, 1)]);
+    fireEvent.keyDown(focusEl(container), { key: 'x' });
+    await user.click(cells(container)[idx(0, 1)]);
+    fireEvent.keyDown(focusEl(container), { key: 'l', ctrlKey: true });
+    await user.click(cells(container)[idx(0, 3)]);
+    fireEvent.keyDown(focusEl(container), { key: ' ' });
+    expect(letters(container)).toEqual(['X']);
+    const blackBefore = blackCells(container).length;
+    expect(blackBefore).toBeGreaterThan(0);
+
+    // Select (0,0), open Search, run a search and pick the result.
+    await user.click(cells(container)[idx(0, 0)]);
+    await user.click(screen.getAllByRole('button', { name: /^search$/i })[0]);
+    await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C????');
+    const before = global.EventSource.instances.length;
+    await user.click(document.querySelector('.search-btn'));
+    await waitFor(() => expect(global.EventSource.instances.length).toBe(before + 1));
+    await act(async () => {
+      global.EventSource.instances[before].onmessage({
+        data: JSON.stringify({
+          status: 'complete',
+          progress: 100,
+          message: 'Search complete',
+          data: { results: [{ word: 'CRATE', score: 90 }] },
+        }),
+      });
+    });
+    await waitFor(() => expect(shownWords()).toEqual(['CRATE']));
+    await user.click(document.querySelector('.result-item'));
+
+    // C at col 0; the locked X consumed the R; A at col 2; the black square at col 3
+    // stops the walk, so T and E are never written.
+    await waitFor(() => expect(letters(container)).toEqual(['C', 'X', 'A']));
+    expect(blackCells(container)).toHaveLength(blackBefore);
+  });
+});
