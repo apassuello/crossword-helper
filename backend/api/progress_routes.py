@@ -26,7 +26,7 @@ max_progress_per_task: Dict[str, int] = {}
 
 # Terminal-event record (novice-readiness spec 0.2.5 section 2.4, #41). `progress_queues`
 # is a single-consumer queue, so a second subscriber (or a reconnect) cannot read what the
-# first one consumed. The last terminal event is therefore kept here, with its enqueue
+# first one consumed. The first terminal event is therefore kept here, with its enqueue
 # time, and re-sent by `generate()`. A tracker whose terminal event is older than
 # TRACKER_RETENTION_SECONDS is swept lazily (no timer thread: P3, PD-3-SWEEP).
 TERMINAL_STATUSES = ("complete", "error", "paused")
@@ -231,11 +231,13 @@ def stream_progress(task_id: str):
 
             except queue.Empty:
                 # Another subscriber may have taken the terminal event from the queue.
+                # Read the record BEFORE sweeping: the sweep may retire this very tracker,
+                # and the record must already be in hand to be sent.
                 recorded = get_terminal_event(task_id)
+                sweep_expired_trackers()
                 if recorded is not None:
                     yield f"data: {json.dumps(recorded)}\n\n"
                     return
-                sweep_expired_trackers()
                 # Send heartbeat to keep connection alive
                 yield ": heartbeat\n\n"
 
