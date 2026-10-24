@@ -60,7 +60,7 @@ function nextWordStart(slots, focus, dir, forward) {
  * @returns {{preventDefault:boolean, actions:Array<object>}}
  */
 export function dispatchGridKey(key, state) {
-  const { grid, size, focus, selectedDir, slots } = state;
+  const { grid, size, focus, selectedDir, slots, editingPaused = false } = state;
   const actions = [];
   const result = { preventDefault: false, actions };
 
@@ -73,6 +73,20 @@ export function dispatchGridKey(key, state) {
   const ctrl = !!key.ctrlKey;
   const meta = !!key.metaKey;
   const shift = !!key.shiftKey;
+
+  // D1: while a run is live every writing key is swallowed. Navigation keys (arrows,
+  // Tab, Enter) fall through below and behave as today.
+  const writes =
+    ((ctrl || meta) && k.toLowerCase() === 'l') ||
+    k === ' ' ||
+    k === '.' ||
+    k === 'Backspace' ||
+    k === 'Delete' ||
+    (/^[A-Za-z]$/.test(k) && !meta && !ctrl);
+  if (editingPaused && writes) {
+    result.preventDefault = true;
+    return result;
+  }
 
   // Ctrl/Cmd+L — toggle theme lock
   if ((ctrl || meta) && k.toLowerCase() === 'l') {
@@ -193,6 +207,7 @@ function CrosswordGrid({
   onToggleLock,
   onRotateDir,
   onMoveFocus,
+  editingPaused = false,
 }) {
   const size = grid.length;
   const W = size * CELL_PX + 2 * PAD;
@@ -226,6 +241,7 @@ function CrosswordGrid({
     focus,
     selectedDir,
     slots,
+    editingPaused,
     handlers: { onSetLetter, onToggleBlack, onToggleLock, onRotateDir, onMoveFocus },
   };
 
@@ -249,7 +265,7 @@ function CrosswordGrid({
 
   const handleCellClick = (r, c, e) => {
     if (e.shiftKey || e.altKey) {
-      onToggleBlack(r, c);
+      if (!editingPaused) onToggleBlack(r, c);
       return;
     }
     // Clicking the already-focused cell rotates direction.
@@ -260,7 +276,7 @@ function CrosswordGrid({
 
   const handleRightClick = (r, c, e) => {
     e.preventDefault();
-    onToggleLock(r, c);
+    if (!editingPaused) onToggleLock(r, c);
   };
 
   const constraintShade = (r, c) => {
@@ -273,7 +289,15 @@ function CrosswordGrid({
   };
 
   return (
-    <div className="xw-grid-wrap">
+    <div className="xw-grid-wrap" style={{ flexWrap: 'wrap' }}>
+      {editingPaused && (
+        <div
+          role="status"
+          style={{ flex: '0 0 100%', textAlign: 'center', fontSize: 12, padding: '4px 0' }}
+        >
+          Editing is paused while autofill runs.
+        </div>
+      )}
       <div ref={containerRef} className="xw-grid-focus" tabIndex={0}>
         <svg
           width={W}

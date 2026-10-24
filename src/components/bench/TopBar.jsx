@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark }) {
+export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false }) {
   const offline = !status.online;
   const kind = offline ? 'err' : status.degraded ? 'warn' : 'ok';
   const label = offline ? 'offline' : status.degraded ? 'degraded' : 'online';
@@ -53,7 +53,7 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
         <button
           className="xw-icon-btn"
           onClick={onVerify}
-          disabled={offline}
+          disabled={offline || editingPaused}
           title={offline ? 'Backend offline' : 'Verify words against wordlists'}
         >
           <svg width="14" height="14" viewBox="0 0 16 16">
@@ -65,7 +65,7 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
         <button
           className="xw-icon-btn"
           onClick={onClean}
-          disabled={offline}
+          disabled={offline || editingPaused}
           title={offline ? 'Backend offline' : 'Clean grid of invalid entries'}
         >
           <svg width="14" height="14" viewBox="0 0 16 16">

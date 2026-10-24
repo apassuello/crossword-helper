@@ -7,7 +7,7 @@ import { api } from './api/client';
 import { useHealth } from './hooks/useHealth';
 import { usePersistentState } from './hooks/usePersistentState';
 import { useSaveMachine } from './hooks/useSaveMachine';
-import { useAutofillMachine } from './hooks/useAutofillMachine';
+import { useAutofillMachine, LIVE_STATES } from './hooks/useAutofillMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering } from './hooks/useNumbering';
@@ -102,6 +102,14 @@ function App() {
     onGridUpdate: (updater) => setGrid(updater),
   });
 
+  // D1 (novice-readiness spec 0.2.6 section 2.3): while a run is live no grid writer
+  // runs except the machine's own onGridUpdate. `editingPaused` drives the disabled
+  // controls at render time; `editingPausedRef` is the same value read by the write
+  // handlers and by async handlers after their `await`, refreshed every render.
+  const editingPaused = LIVE_STATES.has(autofill.state);
+  const editingPausedRef = useRef(false);
+  editingPausedRef.current = editingPaused;
+
   // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
   // client-only word-start numbering pass and the validation stub: fires on
   // STRUCTURAL edits only (size / black-square layout — never letter edits),
@@ -119,7 +127,7 @@ function App() {
     gridSize,
     setGrid,
     pushToast,
-    enabled: !['submitting', 'running'].includes(autofill.state),
+    enabled: !editingPaused,
   });
 
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
@@ -187,6 +195,7 @@ function App() {
   };
 
   const toggleBlackSquare = useCallback((row, col) => {
+    if (editingPausedRef.current) return;
     if (!grid) return;
 
     setGrid(writeToggleBlack(grid, row, col, symmetryEnabled));
@@ -195,12 +204,14 @@ function App() {
   }, [grid, symmetryEnabled]);
 
   const toggleThemeLock = useCallback((row, col) => {
+    if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
     setGrid(writeToggleThemeLock(grid, row, col));
   }, [grid]);
 
   const setLetter = useCallback((row, col, letter) => {
+    if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
     setGrid(writeLetter(grid, row, col, letter));
@@ -229,6 +240,7 @@ function App() {
 
   const handlePatternSelect = useCallback((word) => {
     // Fill word into grid at selected position
+    if (editingPausedRef.current) return;
     if (!selectedCell || !grid) return;
 
     setGrid(writePatternWord(grid, selectedCell, word));
@@ -236,6 +248,7 @@ function App() {
   }, [selectedCell, grid]);
 
   const handleVerifyWords = useCallback(async () => {
+    if (editingPausedRef.current) return;
     if (!grid) return;
 
     try {
@@ -247,6 +260,9 @@ function App() {
         size: gridSize,
         wordlists: VALIDATION_WORDLISTS
       });
+
+      // D1: a response that lands after Start writes nothing (no grid, no toast).
+      if (editingPausedRef.current) return;
 
       // Build set of cells that belong to invalid words
       const errorCells = new Set();
@@ -287,6 +303,7 @@ function App() {
   }, [grid, gridSize, pushToast]);
 
   const handleCleanGrid = useCallback(async () => {
+    if (editingPausedRef.current) return;
     if (!grid) return;
 
     try {
@@ -298,6 +315,9 @@ function App() {
         size: gridSize,
         wordlists: VALIDATION_WORDLISTS
       });
+
+      // D1: a response that lands after Start writes nothing (no grid, no toast).
+      if (editingPausedRef.current) return;
 
       if (removed_count === 0) {
         pushToast({ kind: 'info', message: 'Grid is clean — all words are valid!' });
@@ -314,6 +334,7 @@ function App() {
   }, [grid, gridSize, pushToast]);
 
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
+    if (editingPausedRef.current) return;
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
     setGrid((prev) => writeAppliedTheme(prev, updatedGrid));
@@ -322,6 +343,7 @@ function App() {
   }, [pushToast]);
 
   const handleGridImport = useCallback((importedData) => {
+    if (editingPausedRef.current) return;
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different (skip the re-init effect so the
@@ -397,6 +419,7 @@ function App() {
         savedLabel={savedLabel}
         onVerify={handleVerifyWords}
         onClean={handleCleanGrid}
+        editingPaused={editingPaused}
         onSave={saveDoc}
         onToggleTheme={() => setDark((v) => !v)}
         dark={dark}
@@ -430,6 +453,7 @@ function App() {
               onSetLetter={setLetter}
               onToggleBlack={toggleBlackSquare}
               onToggleLock={toggleThemeLock}
+              editingPaused={editingPaused}
             />
           ) : (
             <div className="grid-editor-loading">Initializing grid...</div>
@@ -452,6 +476,7 @@ function App() {
               <PatternMatcher
                 selectedCell={selectedCell}
                 onSelectWord={handlePatternSelect}
+                editingPaused={editingPaused}
               />
             </div>
           )}
@@ -481,6 +506,7 @@ function App() {
               <ImportPanel
                 onImport={handleGridImport}
                 currentGridSize={gridSize}
+                editingPaused={editingPaused}
               />
             </div>
           )}
@@ -503,6 +529,7 @@ function App() {
           grid={grid}
           gridSize={gridSize}
           onApplyPlacement={handleThemeWordApplied}
+          editingPaused={editingPaused}
           onClose={() => setShowThemePanel(false)}
         />
       )}

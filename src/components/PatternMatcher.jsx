@@ -5,7 +5,7 @@ import './PatternMatcher.scss';
 import ProgressIndicator from './ProgressIndicator';
 import { useSSEProgress } from '../hooks/useSSEProgress';
 
-function PatternMatcher({ selectedCell, onSelectWord }) {
+function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
   const [pattern, setPattern] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -256,7 +256,10 @@ function PatternMatcher({ selectedCell, onSelectWord }) {
               <div
                 key={idx}
                 className="result-item"
-                onClick={() => onSelectWord(result.word)}
+                aria-disabled={editingPaused ? 'true' : undefined}
+                onClick={() => {
+                  if (!editingPaused) onSelectWord(result.word);
+                }}
               >
                 <div className="word-display">
                   {renderLetterQuality(result.word)}

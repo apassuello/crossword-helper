@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import './ImportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 
-function ImportPanel({ onImport, currentGridSize }) {
+function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
   const [importMethod, setImportMethod] = useState('file'); // 'file' or 'paste'
   const [jsonInput, setJsonInput] = useState('');
   const [preview, setPreview] = useState(null);
@@ -333,7 +333,7 @@ function ImportPanel({ onImport, currentGridSize }) {
               <button
                 onClick={handleImport}
                 className="import-btn"
-                disabled={isProcessing}
+                disabled={isProcessing || editingPaused}
               >
                 {isProcessing ? 'Importing...' : 'Import Grid'}
               </button>
