@@ -365,7 +365,7 @@ function App() {
     // neither the cell nor its partner changes.
     if (!canToggleBlack(grid, row, col, symmetryEnabled)) return;
 
-    setGrid(writeToggleBlack(grid, row, col, symmetryEnabled));
+    setGrid((prev) => writeToggleBlack(prev, row, col, symmetryEnabled));
     // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
     // black-square layout change. No manual renumber/validate here.
   }, [grid, symmetryEnabled]);
@@ -374,14 +374,14 @@ function App() {
     if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
-    setGrid(writeToggleThemeLock(grid, row, col));
+    setGrid((prev) => writeToggleThemeLock(prev, row, col));
   }, [grid]);
 
   const setLetter = useCallback((row, col, letter) => {
     if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
-    setGrid(writeLetter(grid, row, col, letter));
+    setGrid((prev) => writeLetter(prev, row, col, letter));
     // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
   }, [grid]);
 
@@ -410,7 +410,7 @@ function App() {
     if (editingPausedRef.current) return;
     if (!selectedCell || !grid) return;
 
-    setGrid(writePatternWord(grid, selectedCell, word));
+    setGrid((prev) => writePatternWord(prev, selectedCell, word));
     // Letter fill — no renumber/validate (structural signature unchanged).
   }, [selectedCell, grid]);
 

@@ -13,8 +13,9 @@
  * plain mocks (the hook takes them as params), so no provider wrapper is needed.
  */
 
+import { useEffect, useState } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { render, renderHook, act } from '@testing-library/react';
 import { localNumber, structuralSigOf, useNumbering } from '../useNumbering';
 import { allSlots } from '../useGridGeometry';
 import { api } from '../../api/client';
@@ -81,6 +82,10 @@ const d = () => {
   return { p, r };
 };
 
+// The hook's grid writes are functional updaters. Resolve call `i` (default: last) of a mock
+// setGrid against `prev`, the grid the update would be applied to.
+const writtenGrid = (setGrid, prev, i = -1) => setGrid.mock.calls.at(i)[0](prev);
+
 const WHITE_5 = ['.....', '.....', '.....', '.....', '.....'];
 
 describe('useNumbering hook', () => {
@@ -113,7 +118,7 @@ describe('useNumbering hook', () => {
 
     // Optimistic paint happened synchronously (effect flushed inside act by rerender).
     expect(setGrid).toHaveBeenCalledTimes(1);
-    expect(setGrid).toHaveBeenCalledWith(localNumber(gA).grid);
+    expect(writtenGrid(setGrid, gA, 0)).toEqual(localNumber(gA).grid);
     // ...but the server calls are still parked behind the debounce.
     expect(numberGrid).not.toHaveBeenCalled();
     expect(validateGrid).not.toHaveBeenCalled();
@@ -151,7 +156,7 @@ describe('useNumbering hook', () => {
     expect(result.current.unverified).toBe(false);
 
     // ...and the reconciled grid setGrid received carries the server numbers.
-    const lastGrid = setGrid.mock.calls.at(-1)[0];
+    const lastGrid = writtenGrid(setGrid, gA);
     expect(lastGrid[0][0].number).toBe(42);
     expect(lastGrid[0][1].number).toBe(7);
   });
@@ -232,7 +237,7 @@ describe('useNumbering hook', () => {
       await Promise.resolve();
     });
 
-    const lastGrid = setGrid.mock.calls.at(-1)[0];
+    const lastGrid = writtenGrid(setGrid, gTyped);
     expect(lastGrid[0][0].letter).toBe('Q'); // typed letter survived the reconcile
     expect(lastGrid[0][0].number).toBe(1); // and the server number was applied
   });
@@ -305,7 +310,7 @@ describe('useNumbering hook', () => {
 
     // The optimistic paint is the only setGrid so far.
     expect(setGrid).toHaveBeenCalledTimes(1);
-    const optimisticGrid = setGrid.mock.calls[0][0];
+    const optimisticUpdater = setGrid.mock.calls[0][0];
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(150);
@@ -316,7 +321,7 @@ describe('useNumbering hook', () => {
     expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ kind: 'error' }));
     // No reconcile setGrid — the optimistic pass remains the latest grid write.
     expect(setGrid).toHaveBeenCalledTimes(1);
-    expect(setGrid.mock.calls[0][0]).toBe(optimisticGrid);
+    expect(setGrid.mock.calls[0][0]).toBe(optimisticUpdater);
   });
 
   it('8. per-edit token: a stale in-flight call from edit 1 is rejected once a slower edit 2 lands (before edit 2 fires)', async () => {
@@ -363,7 +368,7 @@ describe('useNumbering hook', () => {
     // have advanced the token, call 1's guard would pass, and all three fail.
     expect(result.current.unverified).toBe(true);
     expect(result.current.numbering['4,4']).toBeUndefined();
-    expect(setGrid.mock.calls.at(-1)[0][4][4].number).toBeNull();
+    expect(writtenGrid(setGrid, g2)[4][4].number).toBeNull();
   });
 
   it('9. enabled=false suppresses the effect entirely; flipping back to true reconciles against the grid as it stands', async () => {
@@ -405,7 +410,7 @@ describe('useNumbering hook', () => {
     rerender({ grid: gB, gridSize: 5, setGrid, pushToast, enabled: true });
 
     expect(setGrid).toHaveBeenCalledTimes(1);
-    expect(setGrid).toHaveBeenCalledWith(localNumber(gB).grid);
+    expect(writtenGrid(setGrid, gB)).toEqual(localNumber(gB).grid);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(150);
@@ -444,5 +449,78 @@ describe('useNumbering hook', () => {
     expect(setGrid).toHaveBeenCalledTimes(1); // no reconciling setGrid
     expect(result.current.unverified).toBe(true);
     expect(result.current.numbering).toEqual({});
+  });
+});
+
+// Task 6.15 regression: the hook's two grid writes must be functional updates. A write
+// computed from `gridRef` (the last RENDER's grid) is queued after any update still pending
+// from this tick, so it silently discards that update -- a reload's restore was lost this way.
+// The harness uses a REAL useState so the update queue is real; `pending` is queued by an
+// effect declared before useNumbering's, so it lands in the queue ahead of the hook's write.
+describe('useNumbering grid writes do not discard a pending update', () => {
+  const lettersOf = (g) => g.flat().map((c) => c.letter).join('');
+
+  const mountHarness = () => {
+    const pending = { current: null };
+    const out = { grid: null, setGrid: null, hook: null };
+    const Harness = () => {
+      const [grid, setGrid] = useState(gridFromRows(WHITE_5));
+      out.grid = grid;
+      out.setGrid = setGrid;
+      useEffect(() => {
+        if (pending.current) {
+          const g = pending.current;
+          pending.current = null;
+          setGrid(g);
+        }
+      }, [grid]);
+      out.hook = useNumbering({ grid, gridSize: 5, setGrid, pushToast: vi.fn() });
+      return null;
+    };
+    return { out, pending, ui: <Harness /> };
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(api, 'validateGrid').mockResolvedValue({ warnings: [], suggestions: [] });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('the optimistic paint keeps a letter update queued in the same tick as the structural edit', async () => {
+    vi.spyOn(api, 'numberGrid').mockResolvedValue({ numbering: {} });
+    const { out, pending, ui } = mountHarness();
+    render(ui);
+
+    // A structural edit (a black square) arrives together with an update that carries letters.
+    pending.current = gridFromRows(['Z#...', '.....', '.....', '.....', '.....']);
+    act(() => out.setGrid(gridFromRows(['.#...', '.....', '.....', '.....', '.....'])));
+
+    expect(lettersOf(out.grid)).toBe('Z');
+    expect(out.grid[0][1].isBlack).toBe(true);
+    expect(out.grid[0][0].number).toBe(1); // ...and it was still numbered by the paint
+  });
+
+  it('the server reconcile keeps a letter edit queued in the same tick as its resolution', async () => {
+    const dNum = d();
+    vi.spyOn(api, 'numberGrid').mockReturnValue(dNum.p);
+    const { out, ui } = mountHarness();
+    render(ui);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+
+    await act(async () => {
+      out.setGrid(gridFromRows(['Q....', '.....', '.....', '.....', '.....']));
+      dNum.r({ numbering: { '(0,0)': 42 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(lettersOf(out.grid)).toBe('Q');
+    expect(out.grid[0][0].number).toBe(42);
+    expect(out.hook.numbering).toEqual({ '0,0': 42 });
   });
 });
