@@ -11,6 +11,8 @@ import { useAutofillMachine } from './hooks/useAutofillMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering } from './hooks/useNumbering';
+import { mintDocId } from './lib/docId';
+import { toSavedGrid } from './api/gridCodec';
 import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
@@ -37,10 +39,16 @@ const VALIDATION_WORDLISTS = ['comprehensive'];
 // own key via usePersistentState, so toggling it stays silent as it did before
 // the save machine (it still rides along in the saved `doc`). Called in every
 // place that establishes or compares dirtiness so the strings are byte-identical.
-function contentSigOf(size, grid) {
+// `isAutofilled` is authored provenance and is part of the signature (absent counts
+// as false); `isBlocked` is runtime-only and is not.
+export function contentSigOf(size, grid) {
   return JSON.stringify({
     size,
-    cells: grid ? grid.map((row) => row.map((c) => [c.letter, c.isBlack, c.isThemeLocked])) : null,
+    cells: grid
+      ? grid.map((row) =>
+          row.map((c) => [c.letter, c.isBlack, c.isThemeLocked, c.isAutofilled === true])
+        )
+      : null,
   });
 }
 
@@ -55,12 +63,14 @@ function App() {
   // mount-race reset it to true on every load).
   const [symmetryEnabled, setSymmetryEnabled] = usePersistentState('crossword_symmetry_enabled', true);
   const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
-  // Save machine (Task 7). `gridId` is the doc's stable identity: it changes
-  // only when a whole new grid is created (init/resize/import), never on an
-  // edit, so the machine's F10 reset fires for "new grid" but not for typing.
+  // Save machine (Task 7). `docId` is the doc's stable identity: minted at app
+  // start and re-minted when a whole new grid is created (init/resize/import),
+  // never on an edit, so the machine's F10 reset fires for "new grid" but not
+  // for typing. It is a minted id, not a counter: a counter restarts on every
+  // load and so cannot key a save.
   // `savedSig` is the content signature considered clean (set on fresh grids and
   // after a successful save); dirtiness is `contentSig !== savedSig`.
-  const [gridId, setGridId] = useState(1);
+  const [docId, setDocId] = useState(mintDocId);
   const [savedSig, setSavedSig] = useState(null);
   // UI dark mode (Task 6), persisted as 'dark'/'light'. usePersistentState owns
   // the lazy-init + persistence (see its mount-race note); the effect below only
@@ -109,8 +119,8 @@ function App() {
   const contentSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
   const isDirty = grid != null && contentSig !== savedSig;
   const doc = useMemo(
-    () => ({ id: gridId, size: gridSize, grid, numbering, symmetryEnabled }),
-    [gridId, gridSize, grid, numbering, symmetryEnabled]
+    () => ({ id: docId, size: gridSize, grid: toSavedGrid(grid), numbering, symmetryEnabled }),
+    [docId, gridSize, grid, numbering, symmetryEnabled]
   );
   const { savedLabel, save: saveDoc, status: saveStatus } = useSaveMachine({ doc, isDirty });
 
@@ -154,14 +164,16 @@ function App() {
         number: null,
         isError: false,
         isHighlighted: false,
-        isThemeLocked: false  // Phase 3: Theme entry locking
+        isThemeLocked: false,  // Phase 3: Theme entry locking
+        isAutofilled: false,
+        isBlocked: false
       }))
     );
     setGrid(newGrid);
     // Numbering is now hook-driven (useNumbering): setting the grid changes the
     // structural signature, which fires the optimistic renumber + server reconcile.
     // A fresh grid is a new document (F10) and is born clean.
-    setGridId((n) => n + 1);
+    setDocId(mintDocId());
     setSavedSig(contentSigOf(size, newGrid));
   };
 
@@ -379,7 +391,7 @@ function App() {
     }
 
     // A freshly imported grid is a new document (F10) and is born clean.
-    setGridId((n) => n + 1);
+    setDocId(mintDocId());
     setSavedSig(contentSigOf(size, importedGrid));
 
     // Switch to edit tool to show the imported grid
