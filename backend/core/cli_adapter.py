@@ -18,7 +18,8 @@ from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
 # trie, and (for resume) inflating the gzipped state.
 #
 # The subprocess ceiling applied at the _run_command() call sites in
-# fill() and fill_with_resume() is an ADDEND, not a multiplier:
+# fill() and fill_with_resume(), and by routes.py's fill_with_progress
+# (thread arg and 202 "ceiling_seconds"), is an ADDEND, not a multiplier:
 #     ceiling = timeout_seconds + CLI_STARTUP_BUDGET_SECONDS
 # A run that goes to exhaustion has wall = startup + timeout_seconds.
 # timeout_seconds cancels out of "does wall stay under ceiling" — the run

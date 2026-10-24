@@ -1864,6 +1864,12 @@ components:
           type: string
           format: uri
           example: "/api/progress/abc123-def456"
+        ceiling_seconds:
+          type: integer
+          description: >-
+            Returned by `/fill/with-progress` only. The subprocess ceiling in
+            seconds: the request `timeout` (default 300) plus the CLI startup
+            budget. Clients use it as their watchdog bound.
 
     ProgressEvent:
       type: object

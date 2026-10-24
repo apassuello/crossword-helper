@@ -20,7 +20,7 @@ from backend.api.validators import (
     validate_normalize_request,
     validate_pattern_request,
 )
-from backend.core.cli_adapter import get_adapter
+from backend.core.cli_adapter import CLI_STARTUP_BUDGET_SECONDS, get_adapter
 from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR, is_valid_task_id
 from backend.core.wordlist_resolver import (
     get_default_wordlist_paths,
@@ -688,16 +688,26 @@ def fill_with_progress():
         if theme_entries_file:
             temp_files.append(theme_entries_file)
 
+        # The CLI's --timeout excludes startup, so the ceiling is an addend
+        # (novice-readiness spec 0.2.5 section 2.2 B4, P7).
+        ceiling_seconds = data.get("timeout", 300) + CLI_STARTUP_BUDGET_SECONDS
         thread = threading.Thread(
             target=run_cli_with_progress,
-            args=(task_id, cmd_args, data.get("timeout", 300) + 10, temp_files),
+            args=(task_id, cmd_args, ceiling_seconds, temp_files),
             daemon=True,
         )
         thread.start()
 
-        # Return task ID for SSE connection
+        # Return task ID for SSE connection; ceiling_seconds feeds the
+        # frontend watchdog (novice-readiness spec 0.2.5 section 2.2).
         return (
-            jsonify({"task_id": task_id, "progress_url": f"/api/progress/{task_id}"}),
+            jsonify(
+                {
+                    "task_id": task_id,
+                    "progress_url": f"/api/progress/{task_id}",
+                    "ceiling_seconds": ceiling_seconds,
+                }
+            ),
             202,
         )
 
