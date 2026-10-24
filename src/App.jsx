@@ -529,14 +529,16 @@ function App() {
 
   // novice-readiness spec 0.2.8 §3.8 (F1, F4, PD-6-G12): a reply for a replaced document is
   // dropped, as Verify and Clean do; the rest is merged against the grid it was sent from.
+  // Returns true when it wrote the grid, false when a gate dropped the reply.
   const handleThemeWordApplied = useCallback((updatedGrid, placement, { sentGrid, docId: requestDocId }) => {
-    if (editingPausedRef.current) return;
-    if (requestDocId !== docIdRef.current) return;
+    if (editingPausedRef.current) return false;
+    if (requestDocId !== docIdRef.current) return false;
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
     setGrid((prev) => writeAppliedTheme(prev, updatedGrid, sentGrid));
 
     pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
+    return true;
   }, [pushToast]);
 
   const handleGridImport = useCallback((importedData) => {

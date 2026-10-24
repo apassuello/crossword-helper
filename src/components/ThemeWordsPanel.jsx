@@ -246,8 +246,11 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, edi
       });
 
       // Update parent grid
+      // A `false` return means App dropped the reply (novice-readiness spec 0.2.8 §3.8,
+      // PD-6-G12); a caller that returns nothing is treated as applied.
       if (onApplyPlacement) {
-        onApplyPlacement(data.grid, suggestion, { sentGrid, docId: requestDocId });
+        const applied = onApplyPlacement(data.grid, suggestion, { sentGrid, docId: requestDocId });
+        if (applied === false) return;
       }
 
       toast.success(`Applied ${suggestion.word} to grid`);
@@ -310,14 +313,23 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, edi
         });
 
         if (response && response.grid) {
-          successCount++;
           const sentGrid = currentGrid; // the grid this word's request was built from
           currentGrid = response.grid; // Update grid for next placement
 
-          // Update parent grid
+          // Update parent grid. `false` = App dropped the reply: the document the summary
+          // would describe is gone, so stop and say nothing (spec 0.2.8 §3.8, PD-6-G12).
           if (onApplyPlacement) {
-            onApplyPlacement(currentGrid, bestSuggestion, { sentGrid, docId: requestDocId });
+            const applied = onApplyPlacement(currentGrid, bestSuggestion, {
+              sentGrid,
+              docId: requestDocId,
+            });
+            if (applied === false) {
+              toast.dismiss('apply-all');
+              setApplyingAll(false);
+              return;
+            }
           }
+          successCount++;
         }
       } catch (error) {
         skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);

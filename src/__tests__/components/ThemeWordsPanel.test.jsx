@@ -20,6 +20,7 @@ vi.mock('react-hot-toast', () => ({
     success: vi.fn(),
     error: vi.fn(),
     loading: vi.fn(),
+    dismiss: vi.fn(),
   }),
 }));
 
@@ -983,5 +984,88 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     });
     expect(suggest).toHaveBeenCalledTimes(2);
     expect(suggest.mock.calls[1][0].existingGrid[7][7]).toBe('Q');
+  });
+
+  // novice-readiness spec 0.2.8 §3.8 (PD-6-G12): onApplyPlacement returns false when
+  // App dropped the reply; the panel honours it and never re-derives App's gates.
+  describe('when onApplyPlacement returns false (reply dropped by App)', () => {
+    const setup = async (words, onApply) => {
+      vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+      vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+      const applySpy = vi
+        .spyOn(api, 'themeApplyPlacement')
+        .mockImplementation(async () => ({ grid: gridWith(1) }));
+      render(
+        <ThemeWordsPanel
+          grid={createEmptyGrid(15)}
+          gridSize={15}
+          docId="doc-1"
+          onApplyPlacement={onApply}
+          onClose={vi.fn()}
+        />
+      );
+      upload(words);
+      await waitFor(() =>
+        expect(document.querySelectorAll('.apply-btn').length).toBe(words.length)
+      );
+      return applySpy;
+    };
+    const applyAll = () =>
+      act(async () => {
+        screen.getByRole('button', { name: /apply all best placements/i }).click();
+      });
+
+    it('single Apply: no "Applied X to grid" toast', async () => {
+      const onApply = vi.fn().mockReturnValue(false);
+      await setup(['ALPHA'], onApply);
+      await act(async () => {
+        screen.getByRole('button', { name: /apply this placement/i }).click();
+      });
+      await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
+      await flush();
+      expect(toast.success).not.toHaveBeenCalledWith('Applied ALPHA to grid');
+    });
+
+    it('single Apply: control, a true return toasts it', async () => {
+      const onApply = vi.fn().mockReturnValue(true);
+      await setup(['ALPHA'], onApply);
+      await act(async () => {
+        screen.getByRole('button', { name: /apply this placement/i }).click();
+      });
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Applied ALPHA to grid'));
+    });
+
+    it('Apply All: the dropped word is not counted, the loop stops, and no summary toast shows', async () => {
+      const onApply = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+      const applySpy = await setup(['ALPHA', 'BETA', 'GAMMA'], onApply);
+      await applyAll();
+      await flush();
+      await flush();
+      // word 1 applied (true), word 2 dropped (false) -> no request for word 3
+      expect(applySpy).toHaveBeenCalledTimes(2);
+      expect(onApply).toHaveBeenCalledTimes(2);
+      const summary = (fn) => fn.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all');
+      // only the "Applying..." loading toast carries the id; no success/error summary
+      expect(summary(toast.success)).toEqual([]);
+      expect(summary(toast.error)).toEqual([]);
+      expect(toast.dismiss).toHaveBeenCalledWith('apply-all'); // the loading toast does not linger
+    });
+
+    it('Apply All: a first-word drop sends nothing further and counts nothing', async () => {
+      const onApply = vi.fn().mockReturnValue(false);
+      const applySpy = await setup(['ALPHA', 'BETA'], onApply);
+      await applyAll();
+      await flush();
+      await flush();
+      expect(applySpy).toHaveBeenCalledTimes(1);
+      expect(toast.success).not.toHaveBeenCalledWith(
+        expect.stringContaining('Applied'),
+        expect.anything()
+      );
+      expect(toast.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('Could not apply'),
+        expect.anything()
+      );
+    });
   });
 });

@@ -61,9 +61,11 @@ describe('App handleThemeWordApplied (Task 6.16)', () => {
     const user = userEvent.setup();
     const { container } = await openThemePanel(user);
     const { grid, docId, onApplyPlacement } = probe.props;
+    let result;
     await act(async () => {
-      onApplyPlacement(replyWith(grid, 'CAT'), { word: 'CAT' }, { sentGrid: grid, docId });
+      result = onApplyPlacement(replyWith(grid, 'CAT'), { word: 'CAT' }, { sentGrid: grid, docId });
     });
+    expect(result).toBe(true);
     expect(letters(container)).toEqual(['C', 'A', 'T']);
     expect(await screen.findByText('Applied "CAT" to grid!')).toBeInTheDocument();
   });
@@ -86,9 +88,11 @@ describe('App handleThemeWordApplied (Task 6.16)', () => {
     const { grid, docId, onApplyPlacement } = probe.props;
     await user.click(screen.getByRole('button', { name: '15×15' }));
     await waitFor(() => expect(probe.props.docId).not.toBe(docId));
+    let result;
     await act(async () => {
-      onApplyPlacement(replyWith(grid, 'CAT'), { word: 'CAT' }, { sentGrid: grid, docId });
+      result = onApplyPlacement(replyWith(grid, 'CAT'), { word: 'CAT' }, { sentGrid: grid, docId });
     });
+    expect(result).toBe(false);
     expect(letters(container)).toEqual([]);
     expect(screen.queryByText('Applied "CAT" to grid!')).toBeNull();
   });
@@ -96,7 +100,7 @@ describe('App handleThemeWordApplied (Task 6.16)', () => {
   it('a reply from a smaller document does not throw into a larger live grid', async () => {
     const user = userEvent.setup();
     const { container } = await openThemePanel(user);
-    const { grid, docId, onApplyPlacement } = probe.props;
+    const { grid, onApplyPlacement } = probe.props;
     await user.click(screen.getByRole('button', { name: '21×21' }));
     await waitFor(() => expect(cells(container)).toHaveLength(441));
     // even with a (wrongly) current docId the merge must not throw
@@ -109,6 +113,5 @@ describe('App handleThemeWordApplied (Task 6.16)', () => {
     expect(cells(container)).toHaveLength(441);
     expect(blacks(container)).toBe(0);
     expect(letters(container)).toEqual([]);
-    void docId;
   });
 });
