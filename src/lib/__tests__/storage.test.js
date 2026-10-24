@@ -52,7 +52,7 @@ describe('storage keys', () => {
 
   it('the default export carries the whole API', () => {
     expect(Object.keys(storage).sort()).toEqual(
-      ['LEGACY_SAVE_KEY', 'SAVE_KEY', 'defaultName', 'formatStamp', 'list', 'load', 'remove', 'save'].sort()
+      ['LEGACY_SAVE_KEY', 'SAVE_KEY', 'defaultName', 'formatStamp', 'list', 'load', 'remove', 'save', 'saveSync'].sort()
     );
   });
 });
@@ -477,5 +477,39 @@ describe('a failed migration write still returns the legacy entry (novice-readin
     expect(entries.map((e) => e.id)).toEqual([`legacy-${T(0)}`]);
     expect((await load()).name).toBe('Saved grid');
     expect(store.has(LEGACY_SAVE_KEY)).toBe(true);
+  });
+});
+
+describe('saveSync — the pagehide write, outside the lock (novice-readiness spec 0.2.9 §3.4)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      locks: { request: vi.fn(() => new Promise(() => {})) }, // never grants
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('has written the entry when it returns, with a lock that never grants', () => {
+    const res = storage.saveSync({ id: 'a', size: 5, grid: g });
+    expect(navigator.locks.request).not.toHaveBeenCalled();
+    expect(readArray().map((e) => e.id)).toEqual(['a']);
+    expect(res).toMatchObject({ id: 'a', forked: false });
+  });
+
+  it('keeps the S4 fork rule: a savedAt mismatch writes "<name> (copy)" under a new id', () => {
+    store.set(SAVE_KEY, JSON.stringify([{ id: 'a', name: 'Mine', size: 5, grid: g, savedAt: T(1) }]));
+    const res = storage.saveSync({ id: 'a', size: 5, grid: g }, { expectedSavedAt: T(2) });
+    expect(res.forked).toBe(true);
+    expect(res.id).not.toBe('a');
+    expect(readArray().map((e) => e.name).sort()).toEqual(['Mine', 'Mine (copy)']);
+  });
+
+  it('throws if the write throws', () => {
+    localStorage.setItem.mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(() => storage.saveSync({ id: 'a', size: 5, grid: g })).toThrow('quota');
   });
 });

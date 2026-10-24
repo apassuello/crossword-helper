@@ -59,6 +59,7 @@ beforeEach(() => {
   vi.spyOn(storage, 'save').mockImplementation((doc) =>
     Promise.resolve({ savedAt: new Date().toISOString(), id: doc.id, name: 'n', forked: false })
   );
+  vi.spyOn(storage, 'saveSync').mockImplementation(() => ({ savedAt: new Date().toISOString() }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -219,7 +220,7 @@ describe('pagehide (§3.4 Q3)', () => {
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
     await pagehide();
-    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.saveSync).not.toHaveBeenCalled();
   });
 
   it('a dirty document is saved at once', async () => {
@@ -227,10 +228,10 @@ describe('pagehide (§3.4 Q3)', () => {
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
     await typeLetter(user, container, 3, 3, 'A');
-    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.saveSync).not.toHaveBeenCalled();
     await pagehide();
-    expect(storage.save).toHaveBeenCalledTimes(1);
-    expect(storage.save.mock.calls[0][0].grid[3][3].letter).toBe('A');
+    expect(storage.saveSync).toHaveBeenCalledTimes(1);
+    expect(storage.saveSync.mock.calls[0][0].grid[3][3].letter).toBe('A');
   });
 
   it('a live run, dirty: pagehide saves the Start snapshot, not the merged grid', async () => {
@@ -245,8 +246,8 @@ describe('pagehide (§3.4 Q3)', () => {
     act(() => handlers.onEvent({ status: 'running', progress: 10, data: { grid: g } }));
     expect(letters(container).sort()).toEqual(['A', 'B']);
     await pagehide();
-    expect(storage.save).toHaveBeenCalledTimes(1);
-    const saved = storage.save.mock.calls[0][0].grid;
+    expect(storage.saveSync).toHaveBeenCalledTimes(1);
+    const saved = storage.saveSync.mock.calls[0][0].grid;
     expect(saved[3][3].letter).toBe('A');
     expect(saved[0][0].letter).toBe('');
   });

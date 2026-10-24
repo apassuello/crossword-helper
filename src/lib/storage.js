@@ -172,30 +172,44 @@ export function load() {
  *   rejects if a write throws
  */
 export function save(doc, opts = {}) {
-  return withLock(() => {
-    const now = new Date();
-    const savedAt = now.toISOString();
-    const { entries, pending } = readState();
-    const stored = entries.find((e) => e.id === doc.id);
+  return withLock(() => writeEntry(doc, opts));
+}
 
-    let id = doc.id;
-    const name = opts.name ?? stored?.name ?? defaultName(doc.size, now);
-    let finalName = name;
-    let forked = false;
-    if (typeof opts.expectedSavedAt === 'string' && stored && stored.savedAt !== opts.expectedSavedAt) {
-      forked = true;
-      id = mintDocId();
-      finalName = `${name} (copy)`;
-    }
+/**
+ * The synchronous variant for the `pagehide` handler ONLY: the same read, S4 fork rule and
+ * write as `save`, but outside `navigator.locks` and completed before it returns (a lock
+ * grant needs a round trip a closing page may not survive; the two-tab race on this one
+ * path is accepted). novice-readiness spec 0.2.9 §3.4 (Leaving the page). Throws if a
+ * write throws.
+ * @returns {{savedAt: string, id: string, name: string, forked: boolean}}
+ */
+export function saveSync(doc, opts = {}) {
+  return writeEntry(doc, opts);
+}
 
-    const rest = entries.filter((e) => e.id !== id && (forked || e.id !== opts.replaceEntryId));
-    // A throw here (quota exceeded, unserializable value) rejects the returned
-    // promise — intentional; the machine's error path relies on it. The legacy
-    // key is then left in place.
-    localStorage.setItem(SAVE_KEY, JSON.stringify([{ ...doc, id, name: finalName, savedAt }, ...rest]));
-    if (pending) dropLegacyKey();
-    return { savedAt, id, name: finalName, forked };
-  });
+function writeEntry(doc, opts) {
+  const now = new Date();
+  const savedAt = now.toISOString();
+  const { entries, pending } = readState();
+  const stored = entries.find((e) => e.id === doc.id);
+
+  let id = doc.id;
+  const name = opts.name ?? stored?.name ?? defaultName(doc.size, now);
+  let finalName = name;
+  let forked = false;
+  if (typeof opts.expectedSavedAt === 'string' && stored && stored.savedAt !== opts.expectedSavedAt) {
+    forked = true;
+    id = mintDocId();
+    finalName = `${name} (copy)`;
+  }
+
+  const rest = entries.filter((e) => e.id !== id && (forked || e.id !== opts.replaceEntryId));
+  // A throw here (quota exceeded, unserializable value) rejects the returned
+  // promise — intentional; the machine's error path relies on it. The legacy
+  // key is then left in place.
+  localStorage.setItem(SAVE_KEY, JSON.stringify([{ ...doc, id, name: finalName, savedAt }, ...rest]));
+  if (pending) dropLegacyKey();
+  return { savedAt, id, name: finalName, forked };
 }
 
 /**
@@ -213,4 +227,4 @@ export function remove(id) {
   });
 }
 
-export default { list, load, save, remove, defaultName, formatStamp, SAVE_KEY, LEGACY_SAVE_KEY };
+export default { list, load, save, saveSync, remove, defaultName, formatStamp, SAVE_KEY, LEGACY_SAVE_KEY };
