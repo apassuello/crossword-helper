@@ -50,12 +50,17 @@ export function defaultName(size, date) {
   return `${size}×${size} ${formatStamp(date)}`;
 }
 
+/** A usable stored entry: a non-null object with a string `id`. The one home for this rule. */
+function isEntry(e) {
+  return e !== null && typeof e === 'object' && typeof e.id === 'string';
+}
+
 function readArray() {
   const raw = localStorage.getItem(SAVE_KEY);
   if (raw == null) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter(isEntry) : [];
   } catch {
     return [];
   }
@@ -86,11 +91,11 @@ function readState() {
   const entries = readArray();
   const legacy = readLegacyEntry();
   if (!legacy) return { entries, pending: false, needsWrite: false };
-  if (entries.some((e) => e && e.id === legacy.id)) {
+  if (entries.some((e) => e.id === legacy.id)) {
     // Interrupted earlier: the entry is already in the array; only the removal is left.
     return { entries, pending: true, needsWrite: false };
   }
-  const at = entries.findIndex((e) => !e || typeof e.savedAt !== 'string' || e.savedAt < legacy.savedAt);
+  const at = entries.findIndex((e) => typeof e.savedAt !== 'string' || e.savedAt < legacy.savedAt);
   const merged = at === -1 ? [...entries, legacy] : [...entries.slice(0, at), legacy, ...entries.slice(at)];
   return { entries: merged, pending: true, needsWrite: true };
 }
@@ -146,7 +151,7 @@ export function save(doc, opts = {}) {
     const now = new Date();
     const savedAt = now.toISOString();
     const { entries, pending } = readState();
-    const stored = entries.find((e) => e && e.id === doc.id);
+    const stored = entries.find((e) => e.id === doc.id);
 
     let id = doc.id;
     let name;
@@ -159,7 +164,7 @@ export function save(doc, opts = {}) {
       name = opts.name ?? stored?.name ?? defaultName(doc.size, now);
     }
 
-    const rest = entries.filter((e) => e && e.id !== id && e.id !== opts.replaceEntryId);
+    const rest = entries.filter((e) => e.id !== id && e.id !== opts.replaceEntryId);
     // A throw here (quota exceeded, unserializable value) rejects the returned
     // promise — intentional; the machine's error path relies on it. The legacy
     // key is then left in place.
@@ -176,7 +181,7 @@ export function save(doc, opts = {}) {
 export function remove(id) {
   return Promise.resolve().then(() => {
     const { entries, pending } = readState();
-    const rest = entries.filter((e) => e && e.id !== id);
+    const rest = entries.filter((e) => e.id !== id);
     if (rest.length === entries.length && !pending) return;
     localStorage.setItem(SAVE_KEY, JSON.stringify(rest));
     if (pending) dropLegacyKey();
