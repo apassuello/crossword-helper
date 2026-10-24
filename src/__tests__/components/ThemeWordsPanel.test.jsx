@@ -931,7 +931,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
         grid={createEmptyGrid(15)}
         gridSize={15}
         docId="doc-1"
-        onApplyPlacement={vi.fn()}
+        onApplyPlacement={vi.fn().mockReturnValue(true)}
         onClose={vi.fn()}
       />
     );
