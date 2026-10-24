@@ -184,7 +184,16 @@ function App() {
   );
   // A fork replaces the document id (S4). Must never throw: the machine calls it inside
   // its success handler, where a throw would make saveNamed reject.
-  const onForked = useCallback((info) => setDocId(info.id), []);
+  // A save fork is the same document under a new id: the autofill machine follows it before
+  // App's docId changes (novice-readiness spec 0.2.8 §2.3 (F2)).
+  const onForked = useCallback(
+    (info) => {
+      autofill.adoptForkedDocId(docIdRef.current, info.id);
+      setDocId(info.id);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [autofill.adoptForkedDocId]
+  );
   // novice-readiness spec 0.2.7 §3.4 (S2): the single writer of savedSig after a save. The
   // machine hands back the exact document it wrote (the Start snapshot during a run), so
   // the clean signature is that document's, whatever the live grid did between the write

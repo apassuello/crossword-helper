@@ -12,7 +12,7 @@
  *
  *   useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast })
  *   -> { state, taskId, progress, message, errorCard, offer, startSnapshot,
- *        cancelPending, start, cancel, reset, keepFill, discardRun }
+ *        cancelPending, start, cancel, reset, keepFill, discardRun, adoptForkedDocId }
  *   start(options = {}, docId): `docId` is the document id at Start; it is stored
  *   with the snapshot, and every merge and red-marking write is skipped when the
  *   hook's CURRENT `docId` param differs from it (novice-readiness spec 0.2.6
@@ -671,6 +671,16 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     [transition]
   );
 
+  /**
+   * A save fork mints a new id for the SAME document (novice-readiness spec 0.2.8 §2.3 (F2)).
+   * Replace the stored Start id only when it is `oldId`; otherwise a no-op, so a replaced
+   * document (New grid, Open saved, import) still reads as a different one. Between this call
+   * and the render that commits App's `setDocId`, one merge is dropped (one progress frame).
+   */
+  const adoptForkedDocId = useCallback((oldId, newId) => {
+    if (startDocIdRef.current === oldId) startDocIdRef.current = newId;
+  }, []);
+
   /** New grid / Open saved: drop the run's retained snapshot and offer (spec 0.2.6 §3.2). No-op while live. */
   const discardRun = useCallback(() => {
     if (LIVE_STATES.has(stateRef.current)) return;
@@ -705,6 +715,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     reset,
     keepFill,
     discardRun,
+    adoptForkedDocId,
   };
 }
 
