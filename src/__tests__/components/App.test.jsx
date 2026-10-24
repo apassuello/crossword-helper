@@ -13,6 +13,7 @@ import App from '../../App';
 import { ToastProvider } from '../../components/bench/Toast';
 import { localNumber } from '../../hooks/useNumbering';
 import storage from '../../lib/storage';
+import { api } from '../../api/client';
 import { contentSigOf } from '../../App';
 
 // Probes for the New grid rows (novice-readiness spec 0.2.7 §3.2). Each wraps the
@@ -24,6 +25,7 @@ const probe = vi.hoisted(() => ({
   panelProps: null,
   autofillArgs: null,
   autofillOverride: null,
+  saveArgs: null,
 }));
 
 vi.mock('../../lib/docId', () => ({
@@ -38,6 +40,19 @@ vi.mock('../../components/bench/GridPanel', async (importOriginal) => {
     default: (props) => {
       probe.panelProps = props;
       return <Real {...props} />;
+    },
+  };
+});
+
+// Records the `isDirty` App hands the save machine, so a test can assert the dirty flag
+// itself rather than only the label the machine derives from it.
+vi.mock('../../hooks/useSaveMachine', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useSaveMachine: (args) => {
+      probe.saveArgs = args;
+      return actual.useSaveMachine(args);
     },
   };
 });
@@ -286,6 +301,10 @@ describe('App New grid (§3.2)', () => {
     probe.panelProps = null;
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const typeLetter = async (user, container, r, c, ch) => {
     await user.click(cells(container)[idx(r, c)]);
     fireEvent.keyDown(focusEl(container), { key: ch });
@@ -348,9 +367,20 @@ describe('App New grid (§3.2)', () => {
   });
 
   it('same size, letters only: the blank grid is numbered as localNumber numbers it', async () => {
+    // The mount's server reconcile (150 ms debounce, then /api/number) is still in flight
+    // when a fast test reaches New grid. A New grid over the same size and black layout does
+    // not change the structural signature, so that reconcile is not superseded and, landing
+    // after New grid, rewrites every number from the response (the MSW handler answers with
+    // `numbered`, not `numbering`, so that is every number -> null). Let it land first, so
+    // the numbers asserted below are the ones New grid itself applied.
+    const numberGrid = vi.spyOn(api, 'numberGrid');
     const user = userEvent.setup();
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await waitFor(() => expect(numberGrid).toHaveBeenCalled());
+    await act(async () => {
+      await numberGrid.mock.results[0].value;
+    });
     await typeLetter(user, container, 3, 3, 'A');
     const idBefore = docIdNow();
     const mintsBefore = probe.mintCalls;
@@ -359,6 +389,7 @@ describe('App New grid (§3.2)', () => {
     await user.click(screen.getByRole('button', { name: 'Replace' }));
 
     await waitFor(() => expect(letters(container)).toEqual([]));
+    await waitFor(() => expect(probe.panelProps.grid[0][0].number).toBe(1));
     expect(docIdNow()).not.toBe(idBefore);
     expect(probe.mintCalls - mintsBefore).toBe(1);
     const expected = localNumber(probe.panelProps.grid).grid;
@@ -609,5 +640,50 @@ describe('App save wiring (§3.4)', () => {
     await user.click(screen.getByText('Symmetry'));
     await user.click(screen.getByText('Symmetry'));
     await waitFor(() => expect(screen.getByText('unsaved changes')).toBeInTheDocument());
+  });
+
+  // novice-readiness spec 0.2.7 §3.4 (S2): savedSig is the signature of the document the
+  // machine WROTE, however the live grid moved between the write and its `saved` status.
+  describe('a save whose write lands after the grid moved on', () => {
+    const deferSave = () => {
+      let resolve;
+      storage.save.mockImplementation(() => new Promise((r) => (resolve = r)));
+      return () => resolve(result());
+    };
+    const confirmSave = async (user) => {
+      await user.click(saveBtn());
+      await nameInput();
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    };
+
+    it('an edit between the write and `saved` leaves the document dirty', async () => {
+      const user = userEvent.setup();
+      const { container } = renderApp();
+      await waitFor(() => expect(cells(container)).toHaveLength(225));
+      await typeLetter(user, container, 3, 3, 'A');
+      const release = deferSave();
+      await confirmSave(user);
+      await typeLetter(user, container, 4, 4, 'B');
+      await act(async () => release());
+      await waitFor(() => expect(screen.getByText('unsaved changes')).toBeInTheDocument());
+      expect(screen.queryByText(/saved locally/)).toBeNull();
+      expect(probe.saveArgs.isDirty).toBe(true);
+    });
+
+    it('the run ending between the write and `saved` leaves the document dirty', async () => {
+      const user = userEvent.setup();
+      const { container } = renderApp();
+      await startLiveRunWithMergedLetter(user, container);
+      const release = deferSave();
+      await confirmSave(user);
+      probe.autofillOverride = null; // the run ends with the merged grid
+      await user.click(screen.getByText('Symmetry'));
+      await user.click(screen.getByText('Symmetry'));
+      await act(async () => release());
+      await waitFor(() => expect(screen.getByText('unsaved changes')).toBeInTheDocument());
+      expect(screen.queryByText(/saved locally/)).toBeNull();
+      expect(probe.saveArgs.isDirty).toBe(true);
+    });
   });
 });

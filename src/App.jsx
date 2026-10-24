@@ -164,22 +164,13 @@ function App() {
   // A fork replaces the document id (S4). Must never throw: the machine calls it inside
   // its success handler, where a throw would make saveNamed reject.
   const onForked = useCallback((info) => setDocId(info.id), []);
-  const {
-    savedLabel,
-    saveNamed,
-    status: saveStatus,
-  } = useSaveMachine({ doc, isDirty, onForked });
-
-  // When a save lands, snapshot the content that was WRITTEN as clean: `contentSig` is
-  // computed from the same grid `doc` carries (the Start snapshot during a run), so a
-  // save during a run records the snapshot's signature, never the live grid's. Keyed on
-  // saveStatus ONLY (adding contentSig here would re-mark clean on every edit
-  // while 'saved' and dirtiness would never re-trigger) — sig read from a ref.
-  const contentSigRef = useRef(contentSig);
-  contentSigRef.current = contentSig;
-  useEffect(() => {
-    if (saveStatus === 'saved') setSavedSig(contentSigRef.current);
-  }, [saveStatus]);
+  // novice-readiness spec 0.2.7 §3.4 (S2): the single writer of savedSig after a save. The
+  // machine hands back the exact document it wrote (the Start snapshot during a run), so
+  // the clean signature is that document's, whatever the live grid did between the write
+  // and the `saved` status. If the grid moved on, isDirty stays true and the machine
+  // returns to `dirty` (see useSaveMachine).
+  const onSaved = useCallback((written) => setSavedSig(contentSigOf(written.size, written.grid)), []);
+  const { savedLabel, saveNamed } = useSaveMachine({ doc, isDirty, onForked, onSaved });
 
   // The Save button opens the name prompt (§3.4 G3); autosave never does. The prompt
   // mounts only once list() has resolved, so it never shows a prefill the user could
