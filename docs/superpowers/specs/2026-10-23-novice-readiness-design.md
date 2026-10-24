@@ -814,7 +814,7 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | ★ PD-5H | §2.4 | Submit timeout: duration, message, a late 202 | 30 s; `Lost contact with the autofill run.`; a 202 arriving later is ignored and its task cancelled best effort. |
 | PD-5I | §2.4 | Cancel while `submitting` | Recorded; posted as soon as the 202 brings the task id. |
 | PD-5J | §2.4 | A cancel rejection other than 200 or 404 | Treated as 404 (keep waiting for the terminal event or the watchdog). |
-| PD-6-G1 | §3.4 | Id of the migrated legacy entry | `legacy-<savedAt>`, so an interrupted migration does not duplicate. |
+| PD-6-G1 | §3.4 | Id and `savedAt` of the migrated legacy entry | `legacy-<savedAt>`, so an interrupted migration does not duplicate. `savedAt` is the blob's `savedAt` if it is a string, else its `timestamp` if a string (the shape written before the save machine, `f380a4f^:src/App.jsx`, carries `timestamp` and no `savedAt`), else `1970-01-01T00:00:00.000Z` (age unknown, sorts last). Beat: an id of `legacy-undefined`; refusing to migrate a blob without `savedAt`. Controller, 2026-10-24. |
 | PD-6-G2 | §3.4 | `<time>` in the banner, list and prompt; local or UTC | `YYYY-MM-DD HH:MM`, local time, the default name's shape. |
 | PD-6-G3 | §3.4 | Name-collision match | Trimmed, case-sensitive equality. |
 | PD-6-G4 | §3.2, §3.4 | Selected cell after New grid, restore, Open saved | None. |
