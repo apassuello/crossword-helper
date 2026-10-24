@@ -132,28 +132,62 @@ export function writeImportedGrid(importedGrid) {
 }
 
 /**
- * Apply Clean's response (planning default PD-4A): letter/isBlack come from
- * the response and `isError` clears everywhere; only a cell whose letter or
- * isBlack changes is written (autofill and red cleared), the rest keep
- * `isAutofilled`/`isBlocked`.
+ * novice-readiness spec 0.2.7 §2.3 (S1): Verify's response as a functional update.
+ * A new grid in which only `isError` changes (true for a "row,col" key in
+ * `errorKeys`, false elsewhere); letters, locks and provenance are `prev`'s.
  */
-export function writeCleanedGrid(prevGrid, cleanedGrid) {
-  return prevGrid.map((row, r) =>
-    row.map((cell, c) => {
-      const cleaned = cleanedGrid[r][c];
-      const rawLetter =
-        typeof cleaned === 'object'
-          ? cleaned.letter || ''
-          : cleaned === '#' || cleaned === '.'
-            ? ''
-            : cleaned;
-      const isBlack =
-        typeof cleaned === 'object' ? cleaned.isBlack : cleaned === '#';
-      const letter = isBlack ? '' : rawLetter;
-      const changes = { letter, isBlack, isError: false };
-      return letter !== cell.letter || isBlack !== cell.isBlack
-        ? written(cell, changes)
-        : { ...cell, ...changes };
+export function applyVerifyErrors(prev, errorKeys) {
+  return prev.map((row, r) =>
+    row.map((cell, c) => ({ ...cell, isError: errorKeys.has(`${r},${c}`) }))
+  );
+}
+
+/**
+ * novice-readiness spec 0.2.7 §3.5 (G5) and §2.3 (S1): the cells Clean may
+ * blank, judged against `prev`, the grid as it is when the response lands.
+ * `sentLetters` / `cleanedLetters` are string[][] ('' for blank or black). A
+ * cell qualifies when the request carried a letter there, the server removed
+ * it, `prev` still holds that same letter (a letter typed since is the user's),
+ * and the cell is white and not theme-locked.
+ */
+export function planClean(prev, sentLetters, cleanedLetters) {
+  const blanks = [];
+  prev.forEach((row, r) =>
+    row.forEach((cell, c) => {
+      if (
+        sentLetters[r][c] &&
+        !cleanedLetters[r][c] &&
+        !cell.isBlack &&
+        !cell.isThemeLocked &&
+        cell.letter === sentLetters[r][c]
+      ) {
+        blanks.push([r, c]);
+      }
     })
   );
+  return { blanks };
+}
+
+/**
+ * novice-readiness spec 0.2.7 §3.5 (G5, PD-4A): apply Clean's response. Only
+ * the cells in `blanks` (from `planClean`) are written, each as a new object
+ * with the server's letter (always '' for a blank), `isError`, `isAutofilled`
+ * and `isBlocked` cleared. Every other cell is `prevGrid`'s own object, its
+ * `isError` as it was. `isBlack` never changes: `cleanedGrid`'s is not applied.
+ */
+export function writeCleanedGrid(prevGrid, cleanedGrid, blanks) {
+  const updates = blanks.map(([r, c]) => [
+    r,
+    c,
+    written(prevGrid[r][c], {
+      letter: cleanedGrid[r][c].letter || '',
+      isError: false,
+    }),
+  ]);
+  return updates.length ? withCells(prevGrid, updates) : prevGrid;
+}
+
+/** novice-readiness spec 0.2.7 §3.5 (G5 step 3, #63): a new grid with `isError` false everywhere. */
+export function clearAllErrors(prev) {
+  return prev.map((row) => row.map((cell) => ({ ...cell, isError: false })));
 }

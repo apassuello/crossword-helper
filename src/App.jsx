@@ -22,6 +22,9 @@ import {
   writeAppliedTheme,
   writeImportedGrid,
   writeCleanedGrid,
+  applyVerifyErrors,
+  planClean,
+  clearAllErrors,
   canToggleBlack,
 } from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
@@ -29,6 +32,7 @@ import SaveNamePrompt from './components/bench/SaveNamePrompt';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
 import RestoreBanner from './components/bench/RestoreBanner';
+import InlineConfirm from './components/bench/InlineConfirm';
 import GridHintLine from './components/bench/GridHintLine';
 import GridPanel from './components/bench/GridPanel';
 import PatternMatcher from './components/PatternMatcher';
@@ -153,6 +157,22 @@ function App() {
   // own signature, kept for the live-grid consumers (Tasks 6.8 and 6.11).
   const savedGrid = editingPaused && autofill.startSnapshot ? autofill.startSnapshot : grid;
   const liveSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
+  // novice-readiness spec 0.2.7 §2.3 (S1): Verify and Clean responses land after an await, so
+  // they read the grid, document id and live signature as they are NOW, through refs
+  // refreshed every render (like `editingPausedRef`), never through the handler's closure.
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+  const docIdRef = useRef(docId);
+  docIdRef.current = docId;
+  const liveSigRef = useRef(liveSig);
+  liveSigRef.current = liveSig;
+  // novice-readiness spec 0.2.7 §3.5 (G5): Clean's pending confirm, { blanks, cleaned, message, sig }.
+  const [pendingClean, setPendingClean] = useState(null);
+  // Dismissed, applying nothing, when the live signature leaves the one recorded at open (an
+  // isError-only change is not a signature change, PD-6-G11) or a run starts (editingPaused).
+  useEffect(() => {
+    if (pendingClean && (editingPaused || liveSig !== pendingClean.sig)) setPendingClean(null);
+  }, [pendingClean, liveSig, editingPaused]);
   const contentSig = useMemo(
     () => (savedGrid === grid ? liveSig : contentSigOf(gridSize, savedGrid)),
     [gridSize, savedGrid, grid, liveSig]
@@ -397,6 +417,7 @@ function App() {
   const handleVerifyWords = useCallback(async () => {
     if (editingPausedRef.current) return;
     if (!grid) return;
+    const requestDocId = docIdRef.current;
 
     try {
       const { invalid_words, invalid_count, total_checked, wordlist_size } = await api.verifyWords({
@@ -410,6 +431,8 @@ function App() {
 
       // D1: a response that lands after Start writes nothing (no grid, no toast).
       if (editingPausedRef.current) return;
+      // novice-readiness spec 0.2.7 §2.3 (PD-6-G12): a response for another document writes nothing.
+      if (docIdRef.current !== requestDocId) return;
 
       // Build set of cells that belong to invalid words
       const errorCells = new Set();
@@ -417,14 +440,8 @@ function App() {
         cells.forEach(([r, c]) => errorCells.add(`${r},${c}`));
       });
 
-      // Update grid: set isError on invalid cells, clear on valid ones
-      const newGrid = grid.map((row, r) =>
-        row.map((cell, c) => ({
-          ...cell,
-          isError: errorCells.has(`${r},${c}`)
-        }))
-      );
-      setGrid(newGrid);
+      // novice-readiness spec 0.2.7 §2.3 (S1): only isError changes, on the grid as it is now.
+      setGrid(prev => applyVerifyErrors(prev, errorCells));
 
       if (invalid_count === 0) {
         pushToast({ kind: 'info', message: `All ${total_checked} words valid!` });
@@ -452,33 +469,63 @@ function App() {
   const handleCleanGrid = useCallback(async () => {
     if (editingPausedRef.current) return;
     if (!grid) return;
+    const requestDocId = docIdRef.current;
+    const sent = grid.map(row => row.map(cell => ({
+      letter: cell.letter || '',
+      isBlack: cell.isBlack || false
+    })));
 
     try {
-      const { grid: cleanedGrid, removed_count, valid_count, cleared_cells, message } = await api.cleanGrid({
-        grid: grid.map(row => row.map(cell => ({
-          letter: cell.letter || '',
-          isBlack: cell.isBlack || false
-        }))),
+      const { grid: cleanedGrid, removed_count, message } = await api.cleanGrid({
+        grid: sent,
         size: gridSize,
         wordlists: VALIDATION_WORDLISTS
       });
 
       // D1: a response that lands after Start writes nothing (no grid, no toast).
       if (editingPausedRef.current) return;
+      // novice-readiness spec 0.2.7 §2.3 (PD-6-G12): a response for another document writes nothing.
+      if (docIdRef.current !== requestDocId) return;
 
-      if (removed_count === 0) {
-        pushToast({ kind: 'info', message: 'Grid is clean — all words are valid!' });
+      // The server echoes the cell shape it was sent ({ letter, isBlack }); a string cell
+      // ('#', '.', a letter) is normalised once here so nothing below branches on shape.
+      const cleaned = cleanedGrid.map(row => row.map(x =>
+        typeof x === 'object'
+          ? x
+          : { letter: x === '#' || x === '.' ? '' : x, isBlack: x === '#' }
+      ));
+      const sentLetters = sent.map(row => row.map(x => (x.isBlack ? '' : x.letter)));
+      const cleanedLetters = cleaned.map(row => row.map(x => (x.isBlack ? '' : x.letter || '')));
+      // S1: planned against the grid as it is NOW, not the one the request was built from.
+      const { blanks } = planClean(gridRef.current, sentLetters, cleanedLetters);
+
+      if (blanks.length > 0) {
+        // novice-readiness spec 0.2.7 §3.5 (G5 step 2, PD-6-G10): ask first; nothing is written yet.
+        setPendingClean({ blanks, cleaned, message, sig: liveSigRef.current });
         return;
       }
 
-      // Update grid with cleaned result
-      setGrid(writeCleanedGrid(grid, cleanedGrid));
-      pushToast({ kind: 'info', message });
+      // G5 step 3 / #63: nothing to blank, so the red flags clear and the toast says why.
+      setGrid(prev => clearAllErrors(prev));
+      pushToast({
+        kind: 'info',
+        message: removed_count === 0
+          ? 'Grid is clean — all words are valid!'
+          : 'Nothing removed: theme-locked letters are kept.',
+      });
     } catch (error) {
       console.error('Clean grid failed:', error);
       pushToast({ kind: 'error', message: 'Failed to clean grid: ' + (error.message || error.code) });
     }
   }, [grid, gridSize, pushToast]);
+
+  const acceptClean = useCallback(() => {
+    if (editingPausedRef.current || !pendingClean) return;
+    const { blanks, cleaned, message } = pendingClean;
+    setPendingClean(null);
+    setGrid(prev => writeCleanedGrid(prev, cleaned, blanks));
+    pushToast({ kind: 'info', message });
+  }, [pendingClean, pushToast]);
 
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     if (editingPausedRef.current) return;
@@ -605,6 +652,15 @@ function App() {
                 setRestoredBanner(null);
               }}
               onDismiss={() => setRestoredBanner(null)}
+            />
+          )}
+          {pendingClean && (
+            <InlineConfirm
+              message={`Clean will remove ${pendingClean.blanks.length} letter${pendingClean.blanks.length === 1 ? '' : 's'}`}
+              confirmLabel="Clean"
+              cancelLabel="Cancel"
+              onConfirm={acceptClean}
+              onCancel={() => setPendingClean(null)}
             />
           )}
           {grid ? (
