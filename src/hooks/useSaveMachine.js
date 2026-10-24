@@ -130,6 +130,12 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
       : storage.save(written, opts);
     return write.then(
       (res) => {
+        // The entry is written. Only the in-memory bookkeeping for the CURRENT document is
+        // guarded: a save of a document that New grid, Open saved or an import has since
+        // replaced must not set the new document's clean signature, its known savedAt, its
+        // docId (fork) or its status label (novice-readiness spec 0.2.9 §3.4 (S4), §2.3 (M1)).
+        // Reachable since Task 6.19: a Web Lock grant is asynchronous.
+        if (written.id !== docRef.current?.id) return true;
         knownSavedAtRef.current = res.savedAt;
         // A throwing callback must not reject the save (the write already happened)
         // nor skip the `saved` transition below.
@@ -152,7 +158,10 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
       },
       () => {
         if (!mountedRef.current) return false;
-        setStatus('error');
+        // A failed save of a replaced document says nothing about the current one: no
+        // `offline` label and no retry timer for it (the toast below still reports the loss).
+        const current = written.id === docRef.current?.id;
+        if (current) setStatus('error');
         // novice-readiness spec 0.2.8 §3.4 (Q3): a pagehide save fails without a toast.
         if (!silent) {
           pushToast({
@@ -160,7 +169,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
             message: explicit ? QUOTA_MESSAGE : 'Couldn’t save — will retry.',
           });
         }
-        armAutosave(); // error is a dirty-variant: re-arm the 30s retry
+        if (current) armAutosave(); // error is a dirty-variant: re-arm the 30s retry
         return false;
       }
     );
@@ -186,8 +195,9 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   /**
    * novice-readiness spec 0.2.8 §3.4 (Q1): the open document's stored entry was deleted.
    * Clear any pending autosave and read `unsaved changes`, WITHOUT arming and without
-   * touching `isDirty`/`savedSig`/the known `savedAt`: the next real edit flips `isDirty`
-   * and arms as usual, and its save recreates the entry under the same id (storage.save).
+   * touching `isDirty`/`savedSig`/the known `savedAt`: the next real edit arms as usual (a clean
+   * document flips `isDirty`; a dirty one arms on its next `doc` change, spec 0.2.9 §3.4 (Q1)),
+   * and its save recreates the entry under the same id (storage.save).
    */
   const forget = useCallback(() => {
     clearAutosave();

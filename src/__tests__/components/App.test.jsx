@@ -688,6 +688,101 @@ describe('App save wiring (§3.4)', () => {
   });
 });
 
+// novice-readiness spec 0.2.9 §3.4 (S4), §2.3 (M1): a save resolves only after its Web Lock is
+// granted, so New grid can land between the write and its resolution. The REAL storage runs
+// behind a deferred FIFO lock: requests queue until the test flushes them, in order.
+describe('App: a save resolution only acts on the document it wrote (§3.4 S4, §2.3 M1)', () => {
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const docIdNow = () => probe.autofillArgs.docId;
+  const SAVE_KEY = storage.SAVE_KEY;
+  let store;
+  let queue;
+
+  const typeLetter = async (user, container, r, c, ch) => {
+    await user.click(cells(container)[idx(r, c)]);
+    fireEvent.keyDown(focusEl(container), { key: ch });
+  };
+  const flushLocks = () =>
+    act(async () => {
+      while (queue.length) {
+        queue.shift()();
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+  const newGrid21 = async (user) => {
+    await user.click(screen.getByRole('button', { name: '21\u00d721' }));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+  };
+
+  beforeEach(() => {
+    store = new Map();
+    queue = [];
+    global.localStorage.getItem.mockImplementation((k) => (store.has(k) ? store.get(k) : null));
+    global.localStorage.setItem.mockImplementation((k, v) => {
+      store.set(k, String(v));
+    });
+    global.localStorage.removeItem.mockImplementation((k) => {
+      store.delete(k);
+    });
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: (n, fn) => new Promise((r) => queue.push(() => r(fn()))) },
+    });
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+    probe.saveArgs = null;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete navigator.locks;
+    vi.restoreAllMocks();
+  });
+
+  it("autosave of A, New grid (B) before the flush: B's clean signature is untouched", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    await act(async () => vi.advanceTimersByTime(30000));
+    expect(queue).toHaveLength(1); // A's autosave is waiting for the lock
+    await newGrid21(user);
+    await waitFor(() => expect(cells(container)).toHaveLength(441));
+    await flushLocks();
+    expect(JSON.parse(store.get(SAVE_KEY))).toHaveLength(1); // A's entry IS written
+    expect(probe.saveArgs.isDirty).toBe(false);
+    expect(screen.queryByText('unsaved changes')).toBeNull();
+    expect(screen.queryByText(/saved locally/)).toBeNull();
+  });
+
+  it("autosave of A that will fork, New grid (B) before the flush: docId stays B's fresh id", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    await act(async () => vi.advanceTimersByTime(30000));
+    await flushLocks(); // first autosave: A's entry exists, its savedAt is known
+    // A second tab moves A's stored savedAt, so A's next autosave forks.
+    const moved = JSON.parse(store.get(SAVE_KEY)).map((e) => ({ ...e, savedAt: '2001-01-01T00:00:00.000Z' }));
+    store.set(SAVE_KEY, JSON.stringify(moved));
+    await typeLetter(user, container, 4, 4, 'B');
+    await act(async () => vi.advanceTimersByTime(30000));
+    expect(queue).toHaveLength(1);
+    const idA = docIdNow();
+    await newGrid21(user);
+    await waitFor(() => expect(cells(container)).toHaveLength(441));
+    const idB = docIdNow();
+    expect(idB).not.toBe(idA);
+    await flushLocks();
+    expect(JSON.parse(store.get(SAVE_KEY)).some((e) => e.name.endsWith('(copy)'))).toBe(true); // the fork was written
+    expect(docIdNow()).toBe(idB);
+  });
+});
+
 // novice-readiness spec 0.2.7 §3.4 (S3, PD-6-G4, PD-6-G9): restore on load, the banner, and
 // restore across sizes. `storage.load` is mocked; everything else is the real App.
 describe('App restore on load (§3.4)', () => {
