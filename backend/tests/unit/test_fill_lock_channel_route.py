@@ -85,3 +85,29 @@ def test_null_locked_cells_is_400_and_starts_nothing(client, mocker):
     assert "locked_cells" in payload["error"]["message"]
     assert not thread.called
     assert spy.call_count == 0
+
+
+# --- Ceiling (novice-readiness spec 0.2.5 section 2.2 B4, P7) ---------------
+
+
+def _ceiling_cases():
+    from backend.core.cli_adapter import CLI_STARTUP_BUDGET_SECONDS as B
+
+    return [(60, 60 + B), (_UNSET, 300 + B)]
+
+
+@pytest.mark.parametrize("timeout,expected_idx", [(60, 0), (_UNSET, 1)])
+def test_thread_ceiling_and_ceiling_seconds_use_startup_budget(client, mocker, timeout, expected_idx):
+    thread = mocker.patch("backend.api.routes.threading.Thread")
+    body = _body()
+    if timeout is not _UNSET:
+        body["timeout"] = timeout
+    expected = _ceiling_cases()[expected_idx][1]
+
+    resp = _post(client, body)
+
+    assert resp.status_code == 202, resp_diag(resp)
+    assert thread.call_args.kwargs["args"][2] == expected
+    payload = resp.get_json()
+    assert payload["ceiling_seconds"] == expected
+    assert set(payload) == {"task_id", "progress_url", "ceiling_seconds"}

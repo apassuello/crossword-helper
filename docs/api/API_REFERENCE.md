@@ -132,6 +132,7 @@ was sent when returning the modified grid.
 Long-running operations follow a start/stream split:
 1. `POST` the operation's `/with-progress` variant (e.g. `/fill/with-progress`,
    `/pattern/with-progress`) → `202 {"task_id": "...", "progress_url": "/api/progress/<id>"}`
+   (`/fill/with-progress` also returns `"ceiling_seconds"`: request `timeout` + the CLI startup budget)
 2. `GET /progress/<task_id>` → SSE stream. Each event: `data: {"progress": 0-100, "message":
    "...", "status": "running"|"complete"|"error", "data": {...}}`. The stream closes itself on
    `complete`, `error`, or `paused`; a `: heartbeat` comment keeps idle connections alive.
@@ -237,7 +238,7 @@ curl -X POST http://localhost:5000/api/fill \
 ```bash
 curl -X POST http://localhost:5000/api/fill/with-progress \
   -H "Content-Type: application/json" -d '{"grid": [...], "size": 15}'
-# → {"task_id": "abc123", "progress_url": "/api/progress/abc123"}
+# → {"task_id": "abc123", "progress_url": "/api/progress/abc123", "ceiling_seconds": 480}
 
 # Optional "locked_cells": [[0, 0], [4, 4]] fixes those cells' pre-placed letters during the
 # fill. Absent = none, [] = none, null = 400 INVALID_REQUEST. Schema: openapi.yaml AutofillRequest.
