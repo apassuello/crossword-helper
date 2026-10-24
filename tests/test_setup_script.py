@@ -205,3 +205,26 @@ def test_created_venv_with_pip_continues(tmp_path):
     assert PIP_MARKER in output
     assert VENV_MISSING not in output
     assert (project / "venv" / "bin" / "pip").exists()
+
+
+# --- npm ci failure (novice-readiness spec 0.2.6 §5) ---
+
+NPM_CI_ERROR = "npm ERR! package.json and package-lock.json are not in sync"
+# The error comes first and a log-path line last, as npm prints them: ``tail -1`` kept only the latter.
+NPM_CI_FAILS = (
+    'if [ "$1" = "ci" ]; then echo "%s" >&2; echo "npm ERR! A complete log is in /x/debug.log" >&2; exit 1; fi\n'
+    'echo "npm shim"\n' % NPM_CI_ERROR
+)
+
+
+def test_failing_npm_ci_shows_its_error_and_stops(tmp_path):
+    path = make_path(tmp_path, python3=python_shim(3, 9), node=node_shim(18), npm=NPM_CI_FAILS)
+    project = make_project(tmp_path)
+    (project / "venv" / "bin").mkdir(parents=True)
+    _write_shim(project / "venv" / "bin" / "pip", "exit 0\n")
+    result = run_setup(project, path)
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert NPM_CI_ERROR in output
+    assert "[ok] Node.js dependencies installed" not in output
+    assert "Building frontend" not in output

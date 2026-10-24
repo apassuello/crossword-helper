@@ -4,6 +4,7 @@ novice-readiness spec 0.2.4 §5 (I6, SERVE-1): debug is off unless FLASK_DEBUG=1
 the port comes from PORT, and run.py explains a port that is already in use.
 """
 
+import errno
 import os
 import runpy
 import socket
@@ -28,6 +29,7 @@ def clean_env(monkeypatch):
     # run.py probes the port before app.run; keep patched-run cases independent
     # of whatever is listening on this machine.
     monkeypatch.setattr(socket.socket, "bind", lambda self, addr: None)
+    monkeypatch.setattr(socket.socket, "connect_ex", lambda self, addr: errno.ECONNREFUSED)
     return monkeypatch
 
 
@@ -67,6 +69,12 @@ def test_port_env_is_an_int(clean_env, launch):
     clean_env.setenv("PORT", "5057")
     port = launch()["port"]
     assert port == 5057 and isinstance(port, int)
+
+
+def test_empty_port_is_unset(clean_env, launch):
+    """novice-readiness spec 0.2.6 §5: the Vite proxy treats PORT="" as unset."""
+    clean_env.setenv("PORT", "")
+    assert launch()["port"] == 5000
 
 
 def test_non_integer_port_propagates(clean_env):
@@ -109,6 +117,43 @@ def test_port_in_use_is_explained(debug):
     assert f"Port {port} is in use. Start with PORT=<other> python3 run.py" in out
     assert "Traceback" not in out
     assert proc.returncode == 1
+
+
+def _probe_in_use(family, bind_addr):
+    if not socket.has_ipv6 and family == socket.AF_INET6:
+        pytest.skip("host has no IPv6")
+    held = socket.socket(family)
+    try:
+        held.bind((bind_addr, 0))
+    except OSError:
+        held.close()
+        pytest.skip(f"cannot bind {bind_addr}")
+    held.listen()
+    port = held.getsockname()[1]
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(RUN_PY)],
+            cwd=str(ROOT),
+            env=_env(PORT=str(port)),
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    finally:
+        held.close()
+    out = proc.stdout + proc.stderr
+    assert f"Port {port} is in use. Start with PORT=<other> python3 run.py" in out
+    assert proc.returncode == 1
+
+
+def test_wildcard_ipv4_listener_is_in_use():
+    """macOS lets a localhost bind succeed beside a 0.0.0.0 listener (AirPlay
+    Receiver's case); the probe must still report the port in use."""
+    _probe_in_use(socket.AF_INET, "0.0.0.0")
+
+
+def test_wildcard_ipv6_listener_is_in_use():
+    _probe_in_use(socket.AF_INET6, "::")
 
 
 def test_probe_ignores_time_wait_leftovers():

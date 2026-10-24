@@ -88,7 +88,12 @@ echo ""
 echo "Installing Node.js dependencies..."
 cd "$SCRIPT_DIR"
 # novice-readiness spec 0.2.4 §5 (#49): ci installs from the lock file and never rewrites it
-npm ci --silent 2>&1 | tail -1
+# 0.2.6 §5: a failing ci shows npm's own output (it was cut to one line, or none) and stops
+if ! npm_out=$(npm ci --silent 2>&1); then
+    echo "$npm_out"
+    echo "Error: npm ci failed (output above). Check that package-lock.json matches package.json and your network works, then run ./setup.sh again"
+    exit 1
+fi
 echo "[ok] Node.js dependencies installed"
 
 # --- Build frontend ---
