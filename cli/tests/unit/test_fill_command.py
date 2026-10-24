@@ -489,6 +489,17 @@ def _g33_c_at_origin(tmp_path):
     return grid_path, words
 
 
+def _g33_letter_at_origin(tmp_path, letter, locked=None):
+    data = {"size": 3, "grid": [[letter, ".", "."], [".", ".", "."], [".", ".", "."]]}
+    if locked is not None:
+        data["locked"] = locked
+    grid_path = tmp_path / "g33.json"
+    grid_path.write_text(json.dumps(data))
+    words = tmp_path / "l6.txt"
+    words.write_text(L6_LINES)
+    return grid_path, words
+
+
 def test_pc6_changed_locked_letter_json_writes_nothing(tmp_path, monkeypatch):
     from click.testing import CliRunner
 
@@ -609,14 +620,45 @@ def test_pc8_changed_locked_letter_on_paused_result_clears_markers(tmp_path, mon
     ids=["regex", "trie", "beam", "repair", "hybrid", "adaptive"],
 )
 def test_pc9_subprocess_keeps_locked_letter(tmp_path, extra, timeout):
-    grid_path, words = _g33_c_at_origin(tmp_path)
+    """`O` at (0,0) fits ORE (so pre-flight passes) but no complete fill of L6 keeps it:
+    only the lock can make the solver leave it. `C` could not express that."""
+    grid_path, words = _g33_letter_at_origin(tmp_path, "O")
     stdout, stderr, code = run_fill(
         [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", timeout] + extra
     )
     assert code != 1, (stdout, stderr)
     result = last_json(stdout)
     assert result is not None, (stdout, stderr)
-    assert result["grid"][0][0] == "C"
+    assert result["grid"][0][0] == "O"
+
+
+@pytest.mark.slow
+def test_pc9_control_unlocked_letter_is_rewritten_by_beam(tmp_path):
+    """Same fixture with `"locked": []`: beam rewrites (0,0). Shows pc9's fixture
+    can tell a kept lock from a letter nothing happened to change."""
+    grid_path, words = _g33_letter_at_origin(tmp_path, "O", locked=[])
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", "10"] + ["--algorithm", "beam"]
+    )
+    assert code == 0, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    assert result["grid"][0][0] != "O"
+
+
+@pytest.mark.slow
+def test_fill_repair_reports_the_unfittable_locked_cell_as_stuck(tmp_path):
+    """End to end: a locked `O` that no complete fill keeps is reported in stuck_cells."""
+    grid_path, words = _g33_letter_at_origin(tmp_path, "O")
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", "10"]
+        + ["--algorithm", "repair"]
+    )
+    assert code == 0, (stdout, stderr)
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    assert result["stuck_cells"] == [[0, 0]]
+    assert result["grid"][0][0] == "O"
 
 
 # ---------------------------------------------------------------------------
