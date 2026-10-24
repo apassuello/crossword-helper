@@ -18,7 +18,7 @@ import { render, fireEvent, act } from '@testing-library/react';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AutofillPanel } from '../AutofillPanel';
+import { AutofillPanel, getThemeEntries } from '../AutofillPanel';
 import { api } from '../../../api/client';
 import { gridFromRows } from '../../../hooks/__tests__/gridFixtures';
 
@@ -45,9 +45,19 @@ const OPEN_4 = ['....', '....', '....', '....'];
 
 function themedGrid() {
   const grid = gridFromRows(OPEN_4);
-  // Theme-locked "AB" across row 0 (cols 0-1); rest stays empty/unlocked.
-  grid[0][0] = { ...grid[0][0], letter: 'A', isThemeLocked: true };
-  grid[0][1] = { ...grid[0][1], letter: 'B', isThemeLocked: true };
+  // Theme-locked "ABCD" across row 0 (the whole slot, spec 0.2.7 section 2.3 Theme entries);
+  // the rest stays empty/unlocked.
+  'ABCD'.split('').forEach((letter, c) => {
+    grid[0][c] = { ...grid[0][c], letter, isThemeLocked: true };
+  });
+  return grid;
+}
+
+/** Lock the listed [row, col] cells of `grid` as theme-locked (letters already in the rows). */
+function lockCells(grid, cells) {
+  cells.forEach(([r, c]) => {
+    grid[r][c] = { ...grid[r][c], isThemeLocked: true };
+  });
   return grid;
 }
 
@@ -61,6 +71,9 @@ function baseMachine(overrides = {}) {
     start: vi.fn(),
     cancel: vi.fn(),
     reset: vi.fn(),
+    keepFill: vi.fn(),
+    offer: null,
+    cancelPending: false,
     ...overrides,
   };
 }
@@ -104,7 +117,7 @@ describe('AutofillPanel (mounted, controlled)', () => {
 
     expect(machine.start).toHaveBeenCalledTimes(1);
     expect(machine.start).toHaveBeenCalledWith(
-      expect.objectContaining({ themeEntries: { '(0,0,across)': 'AB' } }),
+      expect.objectContaining({ themeEntries: { '(0,0,across)': 'ABCD' } }),
       'doc-9'
     );
   });
@@ -121,13 +134,13 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(arg).toMatchObject({
       algorithm: 'repair',
       timeout: 300,
-      minScore: 50,
+      minScore: 30,
       wordlists: ['comprehensive'],
       adaptiveMode: false,
       maxAdaptations: 3,
       partialFill: false,
       cleanup: false,
-      themeEntries: { '(0,0,across)': 'AB' },
+      themeEntries: { '(0,0,across)': 'ABCD' },
     });
   });
 
@@ -244,13 +257,30 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(btn).toHaveAttribute('title', 'lands in Task 20');
   });
 
-  it('submitting state has no Cancel button (no cancel/reset edge)', async () => {
+  it('submitting state shows Cancel and the click calls machine.cancel (spec 0.2.7 section 2.4)', async () => {
     const machine = baseMachine({ state: 'submitting', progress: 0, message: 'Starting autofill…' });
-    const { queryByRole, getByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    const { getByRole, getByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
     await flush();
 
     expect(getByText('Starting autofill…')).toBeInTheDocument();
-    expect(queryByRole('button', { name: /cancel/i })).toBeNull();
+    fireEvent.click(getByRole('button', { name: /cancel/i }));
+    expect(machine.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('running with cancelPending: Cancel is shown and disabled', async () => {
+    const machine = baseMachine({ state: 'running', progress: 10, message: 'Working…', cancelPending: true });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(getByRole('button', { name: /cancel/i })).toBeDisabled();
+  });
+
+  it('running without cancelPending: Cancel is enabled', async () => {
+    const machine = baseMachine({ state: 'running', progress: 10, message: 'Working…' });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(getByRole('button', { name: /cancel/i })).toBeEnabled();
   });
 
   it('failed state renders machine.errorCard.message and Reset calls machine.reset', async () => {
@@ -273,12 +303,13 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(machine.reset).toHaveBeenCalledTimes(1);
   });
 
-  it('paused state renders the exact stub text and Reset, with no Pause/Resume/Discard controls', async () => {
-    const machine = baseMachine({ state: 'paused', message: 'Autofill paused - state saved' });
-    const { getByText, getByRole, queryByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+  it('paused state shows machine.message and Reset, with no Pause/Resume/Discard controls', async () => {
+    const machine = baseMachine({ state: 'paused', message: 'Autofill was paused outside the app.' });
+    const { getByText, queryByText, getByRole, queryByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
     await flush();
 
-    expect(getByText('paused — resume support lands with F11')).toBeInTheDocument();
+    expect(getByText('Autofill was paused outside the app.')).toBeInTheDocument();
+    expect(queryByText(/resume support lands/)).toBeNull();
     expect(queryByRole('button', { name: /pause/i })).toBeNull();
     expect(queryByRole('button', { name: /resume/i })).toBeNull();
     expect(queryByRole('button', { name: /discard/i })).toBeNull();
@@ -368,5 +399,159 @@ describe('AutofillPanel (mounted, controlled)', () => {
     const source = readFileSync(path.join(here, '../AutofillPanel.jsx'), 'utf-8');
     const importLines = source.split('\n').filter((line) => /^\s*import\b/.test(line));
     expect(importLines.join('\n')).not.toMatch(/ProgressIndicator/);
+  });
+});
+
+// allSlots (src/hooks/useGridGeometry.js) assumes a square grid, so each 1xN / Nx1 case from the
+// brief is embedded in a black-padded square grid; the padding adds no slot.
+describe('getThemeEntries (spec 0.2.7 section 2.3 Theme entries)', () => {
+  it('1x5 row: a full theme-locked slot CAT then a black cell yields CAT, the lone white cell none', () => {
+    const grid = lockCells(gridFromRows(['CAT#.', '#####', '#####', '#####', '#####']), [[0, 0], [0, 1], [0, 2]]);
+    expect(getThemeEntries(grid)).toEqual({ '(0,0,across)': 'CAT' });
+  });
+
+  it('1x5 row: a partial theme-locked run (CAT then empty white cells) yields no entry', () => {
+    const grid = lockCells(gridFromRows(['CAT..', '#####', '#####', '#####', '#####']), [[0, 0], [0, 1], [0, 2]]);
+    expect(getThemeEntries(grid)).toEqual({});
+  });
+
+  it('1x3 row fully theme-locked but with an empty cell yields no entry', () => {
+    const grid = lockCells(gridFromRows(['C.T', '###', '###']), [[0, 0], [0, 1], [0, 2]]);
+    expect(getThemeEntries(grid)).toEqual({});
+  });
+
+  it('3x1 column fully theme-locked DOG yields a down entry', () => {
+    const grid = lockCells(gridFromRows(['D##', 'O##', 'G##']), [[0, 0], [1, 0], [2, 0]]);
+    expect(getThemeEntries(grid)).toEqual({ '(0,0,down)': 'DOG' });
+  });
+});
+
+describe('AutofillPanel Start gating and hints (spec 0.2.7 section 2.3 I5, P18)', () => {
+  const NO_LISTS = 'Select at least one word list';
+  const NO_SLOTS = 'Clear some cells to run autofill again';
+
+  it('Start with defaults sends minScore 30, and the slider shows 30', async () => {
+    const machine = baseMachine();
+    const { getByRole, getByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(getByText(/Min Score/).textContent).toBe('Min Score: 30');
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    expect(machine.start.mock.calls[0][0].minScore).toBe(30);
+  });
+
+  it('all word lists unticked: Start disabled, the word-list hint shown, the slot hint not', async () => {
+    const machine = baseMachine();
+    const { getByRole, getByText, queryByText, findByLabelText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} />
+    );
+    fireEvent.click(await findByLabelText(/Comprehensive/));
+
+    expect(getByRole('button', { name: /start autofill/i })).toBeDisabled();
+    expect(getByText(NO_LISTS)).toBeInTheDocument();
+    expect(queryByText(NO_SLOTS)).toBeNull();
+  });
+
+  it('with a word list ticked the word-list hint is absent and Start is enabled', async () => {
+    const machine = baseMachine();
+    const { getByRole, queryByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(queryByText(NO_LISTS)).toBeNull();
+    expect(getByRole('button', { name: /start autofill/i })).toBeEnabled();
+  });
+
+  it('no empty slot: Start disabled, the slot hint shown, the word-list hint not', async () => {
+    const machine = baseMachine();
+    const { getByRole, getByText, queryByText } = render(
+      <AutofillPanel machine={machine} grid={gridFromRows(['ABCD', 'EFGH', 'IJKL', 'MNOP'])} />
+    );
+    await flush();
+
+    expect(getByRole('button', { name: /start autofill/i })).toBeDisabled();
+    expect(getByText(NO_SLOTS)).toBeInTheDocument();
+    expect(queryByText(NO_LISTS)).toBeNull();
+  });
+
+  it('with an empty slot the slot hint is absent', async () => {
+    const machine = baseMachine();
+    const { queryByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(queryByText(NO_SLOTS)).toBeNull();
+  });
+
+  it('both conditions at once show both hints', async () => {
+    const machine = baseMachine();
+    const { getByText, findByLabelText } = render(
+      <AutofillPanel machine={machine} grid={gridFromRows(['ABCD', 'EFGH', 'IJKL', 'MNOP'])} />
+    );
+    fireEvent.click(await findByLabelText(/Comprehensive/));
+
+    expect(getByText(NO_LISTS)).toBeInTheDocument();
+    expect(getByText(NO_SLOTS)).toBeInTheDocument();
+  });
+});
+
+describe('AutofillPanel Keep offer (spec 0.2.7 section 2.3 table)', () => {
+  it('keepPartialFill with counts: label "Keep partial fill (5/8 slots)", click calls keepFill(docId)', async () => {
+    const machine = baseMachine({
+      state: 'done',
+      message: 'Partial: 5/8 slots (62%)',
+      offer: { kind: 'keepPartialFill', slotsFilled: 5, totalSlots: 8 },
+    });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    fireEvent.click(getByRole('button', { name: 'Keep partial fill (5/8 slots)' }));
+    expect(machine.keepFill).toHaveBeenCalledTimes(1);
+    expect(machine.keepFill).toHaveBeenCalledWith('d');
+  });
+
+  it('keepPartialFill without counts: label "Keep partial fill"', async () => {
+    const machine = baseMachine({
+      state: 'cancelled',
+      message: 'Cancelled by user',
+      offer: { kind: 'keepPartialFill', slotsFilled: null, totalSlots: null },
+    });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    expect(getByRole('button', { name: 'Keep partial fill' })).toBeInTheDocument();
+  });
+
+  it('keepFill: label "Keep fill"', async () => {
+    const machine = baseMachine({
+      state: 'done',
+      message: 'Filled 8/8 slots',
+      offer: { kind: 'keepFill', slotsFilled: null, totalSlots: null },
+    });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    expect(getByRole('button', { name: 'Keep fill' })).toBeInTheDocument();
+  });
+
+  it('no offer: no Keep button', async () => {
+    const machine = baseMachine({ state: 'done', message: 'Successfully filled 8/8 slots!' });
+    const { queryByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    expect(queryByRole('button', { name: /keep/i })).toBeNull();
+  });
+
+  it('paused with an offer: the message, the Keep button and Reset', async () => {
+    const machine = baseMachine({
+      state: 'paused',
+      message: 'Autofill was paused outside the app.',
+      offer: { kind: 'keepPartialFill', slotsFilled: null, totalSlots: null },
+    });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    fireEvent.click(getByRole('button', { name: 'Keep partial fill' }));
+    expect(machine.keepFill).toHaveBeenCalledWith('d');
+    fireEvent.click(getByRole('button', { name: /reset/i }));
+    expect(machine.reset).toHaveBeenCalledTimes(1);
   });
 });

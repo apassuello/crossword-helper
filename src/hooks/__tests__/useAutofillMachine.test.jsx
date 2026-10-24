@@ -1794,3 +1794,83 @@ describe('useAutofillMachine Task 5.4: early Cancel (PD-5I)', () => {
     expect(m.cancelFill).not.toHaveBeenCalled();
   });
 });
+
+describe('useAutofillMachine Task 5.5: cancelPending is state (spec 0.2.7 section 2.4 C7)', () => {
+  it('P1. false before any cancel', async () => {
+    const m = await runningWithCeiling();
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+
+  it('P2. cancel() in running: true while the post is pending; false after the 200 (cancelled)', async () => {
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.result.current.state).toBe('running');
+    expect(m.result.current.cancelPending).toBe(true);
+    await act(async () => {
+      pending.resolve({});
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('cancelled');
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+
+  it('P3. a 404 rejection: false again, still running', async () => {
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.result.current.cancelPending).toBe(true);
+    await act(async () => {
+      pending.reject(err(404));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('running');
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+
+  it('P4. a terminal event while the cancel is pending: false', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(new Promise(() => {}));
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.result.current.cancelPending).toBe(true);
+    send({ status: 'paused', progress: 10 });
+    expect(m.result.current.state).toBe('paused');
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+
+  it('P5. an early Cancel in submitting: true at once; false after the replayed post gets its 200', async () => {
+    const m = submittingMachine();
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.result.current.state).toBe('submitting');
+    expect(m.result.current.cancelPending).toBe(true);
+    await m.accept({ task_id: 't2', ceiling_seconds: 70 });
+    await flush();
+    expect(m.result.current.state).toBe('cancelled');
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+
+  it('P6. an early Cancel on a rejected start: false (non-live state)', async () => {
+    const m = submittingMachine();
+    act(() => {
+      m.result.current.cancel();
+    });
+    await act(async () => {
+      m.submit.reject(Object.assign(new Error('nope'), { code: 'X' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('failed');
+    expect(m.result.current.cancelPending).toBe(false);
+  });
+});
