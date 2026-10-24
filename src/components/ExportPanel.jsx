@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
+// PDF, .puz and Include-clues are not rendered (novice-readiness spec 0.2.7 §3.1 (G10)).
 import './ExportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 
 function ExportPanel({ grid, gridSize, numbering }) {
   const [exportFormat, setExportFormat] = useState('json');
-  const [includeClues, setIncludeClues] = useState(false);
   const [preview, setPreview] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -154,22 +154,7 @@ function ExportPanel({ grid, gridSize, numbering }) {
             <option value="json">JSON (for reimport)</option>
             <option value="html">HTML (printable)</option>
             <option value="text">Text (simple)</option>
-            <option value="pdf" disabled>PDF (coming soon)</option>
-            <option value="puz" disabled>.puz (coming soon)</option>
           </select>
-        </div>
-
-        <div className="export-settings">
-          <label htmlFor="include-clues">
-            <input
-              id="include-clues"
-              type="checkbox"
-              checked={includeClues}
-              onChange={(e) => setIncludeClues(e.target.checked)}
-              disabled
-            />
-            Include clues (if available)
-          </label>
         </div>
 
         <div className="export-actions">
@@ -213,12 +198,6 @@ function ExportPanel({ grid, gridSize, numbering }) {
 
           <dt>Text</dt>
           <dd>Simple text representation using ■ for black squares</dd>
-
-          <dt>PDF</dt>
-          <dd>Professional print-ready format (coming soon)</dd>
-
-          <dt>.puz</dt>
-          <dd>Compatible with crossword solving software (coming soon)</dd>
         </dl>
       </div>
     </div>

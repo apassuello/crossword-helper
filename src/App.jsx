@@ -44,7 +44,7 @@ const VALIDATION_WORDLISTS = ['comprehensive'];
 // tracking. Deliberately array-shaped and limited to durable authored fields:
 // it EXCLUDES `number` (derived by auto-renumbering, would spuriously mark
 // dirty), the transient isError/isHighlighted flags, and `symmetryEnabled` —
-// symmetry is a VIEW construction aid (grouped with Heatmap), persisted on its
+// symmetry is a VIEW construction aid (a VIEW toggle), persisted on its
 // own key via usePersistentState, so toggling it stays silent as it did before
 // the save machine (it still rides along in the saved `doc`). Called in every
 // place that establishes or compares dirtiness so the strings are byte-identical.
@@ -65,13 +65,12 @@ function App() {
   const [gridSize, setGridSize] = useState(15);
   const [grid, setGrid] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
+  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, lists, import, export
   const [showThemePanel, setShowThemePanel] = useState(false);
   // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
   // lazy-inits from storage, so a stored `false` survives reload (previously a
   // mount-race reset it to true on every load).
   const [symmetryEnabled, setSymmetryEnabled] = usePersistentState('crossword_symmetry_enabled', true);
-  const [heatmapOn, setHeatmapOn] = useState(false); // ToolRail VIEW heatmap on-state (real data is Task 22)
   // Save machine (Task 7). `docId` is the doc's stable identity: minted at app
   // start and re-minted when a whole new grid is created (init/resize/import),
   // never on an edit, so the machine's F10 reset fires for "new grid" but not
@@ -436,12 +435,8 @@ function App() {
         <ToolRail
           tool={showThemePanel ? 'theme' : currentTool}
           onSelectTool={selectTool}
-          viewToggles={{ symmetry: symmetryEnabled, heatmap: heatmapOn }}
-          onToggleView={(which) =>
-            which === 'symmetry'
-              ? setSymmetryEnabled((v) => !v)
-              : setHeatmapOn((v) => !v)
-          }
+          viewToggles={{ symmetry: symmetryEnabled }}
+          onToggleView={() => setSymmetryEnabled((v) => !v)}
           stats={railStats}
           violations={violations}
           unverified={unverified}
@@ -491,14 +486,6 @@ function App() {
           {currentTool === 'autofill' && (
             <div className="xw-inspector">
               <AutofillPanel machine={autofill} grid={grid} docId={docId} />
-            </div>
-          )}
-
-          {currentTool === 'clues' && (
-            <div className="xw-inspector-empty">
-              <div className="xw-empty-mark">§</div>
-              <div className="xw-empty-title">Clue list</div>
-              <div className="xw-empty-sub">Arrives in a later task.</div>
             </div>
           )}
 
