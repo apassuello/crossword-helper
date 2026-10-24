@@ -280,6 +280,22 @@ def validate_fill_request(data: dict) -> dict:
         if not 0 <= data["min_score"] <= 100:
             raise ValueError("Field 'min_score' must be between 0 and 100")
 
+    # Validate locked_cells (novice-readiness spec 0.2.5 section 2.2). Presence of
+    # the key is tested, not truthiness: null is refused, only absence is valid.
+    if "locked_cells" in data:
+        locked = data["locked_cells"]
+        if not isinstance(locked, list):
+            raise ValueError("Field 'locked_cells' must be array of [row, col] pairs")
+        size = data["size"]
+        for cell in locked:
+            if not isinstance(cell, list) or len(cell) != 2:
+                raise ValueError("Field 'locked_cells' entries must be [row, col] pairs")
+            # bool is an int subclass; the CLI's Grid._parse_locked rejects it, so mirror that
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in cell):
+                raise ValueError("Field 'locked_cells' coordinates must be integers")
+            if not all(0 <= v < size for v in cell):
+                raise ValueError(f"Field 'locked_cells' coordinates must be within 0..{size - 1}")
+
     # Validate theme_entries (Phase 3.2)
     if "theme_entries" in data:
         if not isinstance(data["theme_entries"], dict):

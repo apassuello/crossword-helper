@@ -294,3 +294,42 @@ class TestValidateFillRequest:
     def test_theme_entries_key_too_many_parts_raises(self):
         with pytest.raises(ValueError, match="must have format"):
             validate_fill_request(self._valid(theme_entries={"(0,0,across,extra)": "CAT"}))
+
+
+class TestValidateFillRequestLockedCells:
+    """locked_cells (novice-readiness spec 0.2.5 section 2.2): absent is valid,
+    present must be a list of in-range [row, col] integer pairs."""
+
+    def _valid(self, **overrides):
+        base = {"grid": [["" for _ in range(5)] for _ in range(5)], "size": 5}
+        base.update(overrides)
+        return base
+
+    def test_absent_is_valid(self):
+        data = self._valid()
+        assert validate_fill_request(data) is data
+
+    @pytest.mark.parametrize("locked", [[], [[0, 0], [4, 4]]])
+    def test_valid_lists(self, locked):
+        data = self._valid(locked_cells=locked)
+        assert validate_fill_request(data) is data
+
+    @pytest.mark.parametrize(
+        "locked",
+        [
+            [[5, 0]],
+            [[0, 5]],
+            [[-1, 0]],
+            [[0.5, 1]],
+            [["0", 1]],
+            [[True, 0]],
+            [[1]],
+            [[1, 2, 3]],
+            ["0,0"],
+            "0,0",
+            None,
+        ],
+    )
+    def test_invalid_raises_naming_field(self, locked):
+        with pytest.raises(ValueError, match="locked_cells"):
+            validate_fill_request(self._valid(locked_cells=locked))
