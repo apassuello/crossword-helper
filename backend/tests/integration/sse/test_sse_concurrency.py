@@ -262,12 +262,13 @@ class TestSSEResourceCleanup:
 
     def test_sse_stream_closes_after_completion(self, client):
         """
-        Verify SSE stream closes after operation completes and cleanup happens.
+        Verify SSE stream closes after operation completes and the tracker is kept.
 
         Stream should:
         1. Send completion message
         2. Close connection
-        3. Clean up task tracker (subsequent connections return 404)
+        3. Keep the task tracker for 60 s so a later connection is re-sent the terminal
+           event (novice-readiness spec 0.2.5 section 2.4, #41)
         """
         # Start pattern search (fast operation)
         response = client.post(
@@ -291,11 +292,12 @@ class TestSSEResourceCleanup:
         # Stream should contain data
         assert len(sse_response.data) > 0
 
-        # Get stream again - after cleanup, task should be gone (404)
+        # Get stream again - the tracker is retained, so the terminal event is re-sent
         sse_response_2 = client.get(f"/api/progress/{task_id}")
 
-        # After SSE stream completes and cleanup happens, task is removed
-        assert sse_response_2.status_code == 404, resp_diag(sse_response_2)
+        assert sse_response_2.status_code == 200, resp_diag(sse_response_2)
+        first_frames = [f for f in sse_response.data.split(b"\n\n") if f.startswith(b"data: ")]
+        assert sse_response_2.data == first_frames[-1] + b"\n\n"  # exactly the terminal frame
 
     def test_multiple_sse_connections_to_same_task(self, client):
         """
