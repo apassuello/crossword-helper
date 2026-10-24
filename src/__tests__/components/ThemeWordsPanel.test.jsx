@@ -11,7 +11,8 @@ import toast from 'react-hot-toast';
 import ThemeWordsPanel, { SUGGESTION_REFETCH_DEBOUNCE_MS } from '../../components/ThemeWordsPanel';
 import { api } from '../../api/client';
 import { createEmptyGrid, emptyGrid15x15 } from '../fixtures/gridFixtures';
-import { mockApiEndpoint } from '../fixtures/apiMocks';
+import { http, HttpResponse } from 'msw';
+import { mockApiEndpoint, server } from '../fixtures/apiMocks';
 
 // Mock react-hot-toast
 vi.mock('react-hot-toast', () => ({
@@ -621,5 +622,199 @@ describe('ThemeWordsPanel refetch on grid change (Task 6.13, TH2b)', () => {
     expect(suggestSpy).toHaveBeenCalledTimes(2);
     expect(screen.getAllByText('Second list')).toHaveLength(3);
     expect(screen.queryByText('First list')).not.toBeInTheDocument();
+  });
+});
+
+describe('ThemeWordsPanel Apply All reports each word\'s real failure (Task 6.14, TH3)', () => {
+  const UPLOAD_OK = (words) => ({
+    words,
+    count: words.length,
+    validation: { valid: true, errors: [], warnings: [] },
+  });
+
+  // One entry per word; `sugs` overrides the single default suggestion.
+  const listFor = (words, overrides = {}) =>
+    words.map((w, i) => ({
+      word: w,
+      length: w.length,
+      suggestions: overrides[w] || [
+        { word: w, row: i * 2, col: 0, direction: 'across', score: 90, reasoning: 'Good placement' },
+      ],
+    }));
+
+  const gridWith = (n) => {
+    const g = createEmptyGrid(15);
+    for (let i = 0; i < n; i++) g[i][0].letter = 'A';
+    return g;
+  };
+
+  // Real client + real fetch: the apply endpoint answers per word. 'network' makes
+  // fetch reject, so the component sees the client's own status-0 ApiError.
+  let requested;
+  const answerApply = (byWord) => {
+    requested = [];
+    let applied = 0;
+    server.use(
+      http.post('/api/theme/apply-placement', async ({ request }) => {
+        const body = await request.json();
+        const word = body.placement.word;
+        requested.push(word);
+        const a = byWord[word];
+        if (a === 'network') return HttpResponse.error();
+        if (a && a.empty) return new HttpResponse(null, { status: a.status });
+        if (a) return HttpResponse.json(a.body, { status: a.status });
+        applied += 1;
+        return HttpResponse.json({ grid: gridWith(applied) });
+      })
+    );
+  };
+
+  const Host = ({ initial }) => {
+    const [g, setG] = useState(initial);
+    return <ThemeWordsPanel grid={g} gridSize={15} onApplyPlacement={setG} onClose={vi.fn()} />;
+  };
+
+  const showList = async (words, overrides) => {
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({
+      suggestions: listFor(words, overrides),
+    });
+    const utils = render(<Host initial={createEmptyGrid(15)} />);
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [new File([words.join('\n')], 'theme.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBeGreaterThan(0));
+    return utils;
+  };
+
+  const clickApplyAll = async () => {
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+  };
+
+  // The summary toasts Apply All pushed (it addresses them with { id: 'apply-all' }).
+  const summariesNow = (fn) =>
+    fn.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all').map((c) => c[0]);
+  const summaries = async (fn) => {
+    await waitFor(() => expect(summariesNow(fn).length).toBeGreaterThan(0));
+    return summariesNow(fn);
+  };
+
+  const CONFLICT_400 = {
+    status: 400,
+    body: { error: 'Placement conflicts detected', conflicts: ['ALPHA at (0,0) overlaps R'] },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a 400 conflict, a 500 and a network failure give three different reasons; N counts only the one apply', async () => {
+    answerApply({
+      ALPHA: CONFLICT_400,
+      BETA: { status: 500, body: { error: 'boom' } },
+      GAMMA: 'network',
+    });
+    await showList(['ALPHA', 'BETA', 'GAMMA', 'DELTA']);
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual([
+      'Applied 1 theme words successfully! Skipped: ' +
+        'ALPHA (skipped due to conflicts: ALPHA at (0,0) overlaps R); ' +
+        'BETA (boom); GAMMA (Could not reach the server)',
+    ]);
+    expect(requested).toEqual(['ALPHA', 'BETA', 'GAMMA', 'DELTA']);
+  });
+
+  it('two conflict details read as the first plus (+1 more)', async () => {
+    answerApply({
+      ALPHA: { status: 400, body: { error: 'Placement conflicts detected', conflicts: ['a', 'b'] } },
+    });
+    await showList(['ALPHA', 'BETA']);
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual([
+      'Applied 1 theme words successfully! Skipped: ALPHA (skipped due to conflicts: a (+1 more))',
+    ]);
+  });
+
+  it('all four fail: the error toast keeps all four reasons, including an empty-body 500 as the fallback, never HTTP_500', async () => {
+    answerApply({
+      ALPHA: CONFLICT_400,
+      BETA: { status: 500, body: { error: 'boom' } },
+      GAMMA: 'network',
+      DELTA: { status: 500, empty: true },
+    });
+    await showList(['ALPHA', 'BETA', 'GAMMA', 'DELTA']);
+    await clickApplyAll();
+    expect(await summaries(toast.error)).toEqual([
+      'Could not apply any theme words Skipped: ' +
+        'ALPHA (skipped due to conflicts: ALPHA at (0,0) overlaps R); ' +
+        'BETA (boom); GAMMA (Could not reach the server); DELTA (Failed to apply placement)',
+    ]);
+    expect(summariesNow(toast.success)).toEqual([]);
+  });
+
+  it('words skipped without a request: no suggestions and a WARNING best suggestion give their own reasons', async () => {
+    answerApply({});
+    await showList(['ONE', 'TWO', 'THREE'], {
+      ONE: [],
+      TWO: [
+        { word: 'TWO', row: 2, col: 0, direction: 'across', score: 50, reasoning: 'WARNING: crosses R' },
+      ],
+    });
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual([
+      'Applied 1 theme words successfully! Skipped: ' +
+        'ONE (no valid placement); TWO (skipped due to conflicts: WARNING: crosses R)',
+    ]);
+    expect(requested).toEqual(['THREE']);
+  });
+
+  it('one placement applied earlier by Apply This Placement is not counted by the Apply All that follows', async () => {
+    const words = ['ALPHA', 'BETA'];
+    const suggestSpy = vi.spyOn(api, 'themeSuggestPlacements');
+    suggestSpy.mockResolvedValueOnce({ suggestions: listFor(words) });
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    const applySpy = vi
+      .spyOn(api, 'themeApplyPlacement')
+      .mockResolvedValueOnce({ grid: gridWith(1) })
+      .mockResolvedValueOnce({ grid: gridWith(2) });
+    render(<Host initial={createEmptyGrid(15)} />);
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [new File([words.join('\n')], 'theme.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+    vi.useFakeTimers();
+
+    // The single apply changes the grid prop, so the list is superseded (6.13).
+    await act(async () => {
+      screen.getAllByRole('button', { name: /apply this placement/i })[0].click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+
+    // The refetched list (BETA only) lands after the debounce; only then does Apply All run.
+    suggestSpy.mockResolvedValueOnce({ suggestions: listFor(['BETA']) });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SUGGESTION_REFETCH_DEBOUNCE_MS);
+    });
+    expect(suggestSpy).toHaveBeenCalledTimes(2);
+
+    await clickApplyAll();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(applySpy).toHaveBeenCalledTimes(2);
+    // Fake timers are on here, so read the toast calls directly instead of polling.
+    expect(summariesNow(toast.success)).toEqual(['Applied 1 theme words successfully!']);
   });
 });

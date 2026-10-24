@@ -7,6 +7,26 @@ import './ThemeWordsPanel.scss';
 // "debounced" and gives no value.
 export const SUGGESTION_REFETCH_DEBOUNCE_MS = 400;
 
+// apply-placement's 400 body carries the conflict reasons in `details` (client.js
+// rule 5); `details` is polymorphic across endpoints, so guard the shape before
+// reading it as a conflicts array. First detail, plus a count of the rest.
+function conflictText(details) {
+  if (!Array.isArray(details) || details.length === 0) return null;
+  const [first, ...rest] = details;
+  return rest.length > 0 ? `${first} (+${rest.length} more)` : first;
+}
+
+// novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G17): the reason Apply All gives for
+// one word whose apply request failed. "skipped due to conflicts" only for a real
+// conflicts array; status 0 (no response) is unreachable; anything else is the
+// error's own message. The synthesised HTTP_<status> code never reaches the user.
+function describeApplyFailure(error) {
+  const conflicts = conflictText(error.details);
+  if (conflicts) return `skipped due to conflicts: ${conflicts}`;
+  if (error.status === 0) return 'Could not reach the server';
+  return error.message || 'Failed to apply placement';
+}
+
 // novice-readiness spec 0.2.7 §3.8 (TH2b): the per-cell [letter, isBlack] plus
 // gridSize. Deliberately local: isError, number, isHighlighted, isThemeLocked and
 // isAutofilled must not trigger a refetch, so App's contentSigOf is not reused.
@@ -219,15 +239,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
     } catch (error) {
       console.error('Error applying placement:', error);
-      // apply-placement's 400 body carries the conflict reasons in `details`
-      // (client.js rule 5); `details` is polymorphic across endpoints, so
-      // guard the shape before reading it as a conflicts array.
-      if (Array.isArray(error.details) && error.details.length > 0) {
-        const [first, ...rest] = error.details;
-        toast.error(rest.length > 0 ? `${first} (+${rest.length} more)` : first);
-      } else {
-        toast.error(error.message || 'Failed to apply placement');
-      }
+      toast.error(conflictText(error.details) || error.message || 'Failed to apply placement');
     }
   };
 
@@ -245,7 +257,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
     setApplyingAll(true);
     let successCount = 0;
-    let skipCount = 0;
+    const skipped = []; // `WORD (reason)`, in suggestion order
     let currentGrid = grid; // Track grid state through applications
 
     toast.loading('Applying all theme words...', { id: 'apply-all' });
@@ -253,7 +265,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
     for (const wordData of suggestions) {
       // Skip words with no valid placements
       if (!wordData.suggestions || wordData.suggestions.length === 0) {
-        skipCount++;
+        skipped.push(`${wordData.word} (no valid placement)`);
         continue;
       }
 
@@ -262,7 +274,9 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
       // Skip if it has conflicts (WARNING in reasoning)
       if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
-        skipCount++;
+        skipped.push(
+          `${wordData.word} (skipped due to conflicts: ${bestSuggestion.reasoning})`
+        );
         continue;
       }
 
@@ -288,20 +302,21 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
           }
         }
       } catch (error) {
-        skipCount++;
+        skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);
       }
     }
 
     setApplyingAll(false);
 
-    // Show results
+    // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
+    // the words this action applied; every skipped word is listed with its reason.
+    const skippedText = skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}` : '';
     if (successCount > 0) {
-      toast.success(
-        `Applied ${successCount} theme words successfully!${skipCount > 0 ? ` (${skipCount} skipped due to conflicts)` : ''}`,
-        { id: 'apply-all' }
-      );
+      toast.success(`Applied ${successCount} theme words successfully!${skippedText}`, {
+        id: 'apply-all',
+      });
     } else {
-      toast.error('Could not apply any theme words', { id: 'apply-all' });
+      toast.error(`Could not apply any theme words${skippedText}`, { id: 'apply-all' });
     }
   };
 
