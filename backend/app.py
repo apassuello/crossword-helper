@@ -135,9 +135,9 @@ app = create_app()
 
 if __name__ == "__main__":
     # novice-readiness spec 0.2.4 §5 (I6, SERVE-1): debug only when FLASK_DEBUG=1;
-    # PORT overrides 5000. run.py is the launcher that explains a port in use.
+    # PORT overrides 5000 (empty counts as unset, spec 0.2.6 §5). run.py is the launcher that explains a port in use.
     app.run(
         host="localhost",
-        port=int(os.environ.get("PORT", "5000")),
+        port=int(os.environ.get("PORT") or "5000"),
         debug=os.environ.get("FLASK_DEBUG") == "1",
     )
