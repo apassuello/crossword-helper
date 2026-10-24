@@ -1,13 +1,23 @@
 import React, { useState, useRef } from 'react';
 import './ImportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
+import InlineConfirm from './bench/InlineConfirm';
 
-function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
+// novice-readiness spec 0.2.8 §3.2 Import (Q2): same text as New grid and Open saved.
+const REPLACE_MESSAGE = 'Replace the current grid? Unsaved changes are lost.';
+
+function ImportPanel({
+  onImport,
+  currentGridSize,
+  editingPaused = false,
+  gridHasContent = false,
+}) {
   const [importMethod, setImportMethod] = useState('file'); // 'file' or 'paste'
   const [jsonInput, setJsonInput] = useState('');
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
   const fileInputRef = useRef(null);
 
   /**
@@ -196,6 +206,14 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
       return;
     }
 
+    // Q2: over a grid with any letter or black square, ask in-panel first. Cancel keeps
+    // the preview so the import can still be confirmed or the input edited.
+    if (gridHasContent && !confirmingReplace) {
+      setConfirmingReplace(true);
+      return;
+    }
+    setConfirmingReplace(false);
+
     setIsProcessing(true);
 
     // Small delay to show processing state
@@ -232,6 +250,7 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
    * Clear all state
    */
   const handleClear = () => {
+    setConfirmingReplace(false);
     setJsonInput('');
     setPreview(null);
     setError(null);
@@ -326,6 +345,15 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
             <pre className="preview-content">
               {preview.text}
             </pre>
+            {confirmingReplace && (
+              <InlineConfirm
+                message={REPLACE_MESSAGE}
+                confirmLabel="Replace"
+                cancelLabel="Cancel"
+                onConfirm={handleImport}
+                onCancel={() => setConfirmingReplace(false)}
+              />
+            )}
             <div className="import-actions">
               <button onClick={handleClear} className="clear-btn">
                 Clear
