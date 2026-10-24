@@ -31,8 +31,10 @@ pytest -m slow                  # slow suite
 npx vitest run                  # frontend
 npm run build                   # must stay clean
 bash scripts/docs-check.sh      # doc guard
-bash scripts/check-guards.sh    # repo guards
+bash scripts/check-guards.sh --full-tree    # repo guards; bare mode with nothing staged scans no files
 ```
+
+Phase-end gates: every command above, each run alone and in sequence, `pytest -m slow` included (owner 2026-10-24, after the slow suite caught a Phase 2 regression that the default `pytest` deselects).
 
 ## Sequencing: priority versus dependency
 
@@ -818,6 +820,8 @@ git commit -m "feat(fill): fail closed when a locked letter changed; write nothi
 ---
 
 ### Task 2.9: Pre-flight: dead slots, case 1, B2, case 2 and the blocked result, exit 3 (§2.1 Pre-flight, C1, C4, C9, M2, B2)
+
+**Amended by spec 0.2.7 (owner 2026-10-24):** pre-flight does not run under `--adaptive`, and `--theme-entries` words are candidate words of its checks (§2.1 "Theme entries are candidate words"). Implemented after Phase 5 Task 5.3, not in this task's commits.
 
 **Files:**
 - Modify: `cli/src/domain/fillability.py`, `cli/src/domain/letter_bitset.py`, `cli/src/domain/propagator.py`, `cli/src/domain/slot_model.py`, `cli/src/domain/wordorder.py`: absolute `from src.…` imports become relative (C9; see the decision below)

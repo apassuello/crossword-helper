@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.6** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.7** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -153,8 +153,12 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
   `_forward_check` never consults `_is_valid_word`, and the trie the repair matcher searches holds only
   list words and is searched at the run's floor, so a theme entry that is off-list or below the floor rejects every
   CSP placement crossing it. This rule fixes it (#74).
-- **Pre-flight** runs on every fresh run (not `--resume`), after the word lists load and after the
-  `empty_slots` early return, before the solver runs. Its length check (B2, below) runs whatever the
+- **Pre-flight** runs on every fresh run (not `--resume`, not `--adaptive`), after the word lists load
+  and after the `empty_slots` early return, before the solver runs. Under `--adaptive` it does not run:
+  adaptive mode adds black squares that change the slots, so a slot dead in the input grid is what
+  adaptive exists to remove, and refusing it first defeats the flag (0.2.7; found by the slow test
+  `test_adaptive_mode_adds_black_squares`). Adaptive runs then behave as on `main`; the locked-letter
+  postcondition below still guards them. Its length check (B2, below) runs whatever the
   lock set, including an empty one; the locked-cell checks (case 1 and case 2) need a non-empty lock set,
   because an unrelated typed letter must not decide whether the same grid is refused:
   - `model = SlotModel.from_grid(grid)` (not `from_blacks`, which passes NumPy integers through);
@@ -174,7 +178,7 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
     cells inside them. Text output prints `Blocked: no word fits <pattern> at <row>,<col>
     <direction>`, one line per slot.
   - **Dead slots, none containing a locked cell (B2):** the selected lists have no word of that length.
-    This check runs on every fresh run, with or without locked cells (M2). Same result shape and exit 3, with `"reason": "no_word_of_length"` and `"blocked_cells": []`; text
+    This check runs on every run pre-flight covers, with or without locked cells (M2). Same result shape and exit 3, with `"reason": "no_word_of_length"` and `"blocked_cells": []`; text
     output prints `Blocked: the selected word lists have no words of length <n>`, one line per length.
     Without this split, an empty grid on a list with no long words was blocked with nothing to
     highlight. With an empty lock set the fixed letters are none, so every dead slot is a
@@ -187,9 +191,18 @@ new work, together with named saves and a list (owner, 2026-10-23: "All 3").
     `"Typed words not in the selected word lists: <WORD>, ..."`. Pre-flight also emits one stderr
     progress event, status `running`, whose `data` carries `"off_list_cells"` and that warning, so the UI
     can show it while the run continues (C4); today `warnings` reaches only the final stdout JSON.
-  - Pre-flight sees only letters in the input grid. On the bare CLI, entries given with
-    `--theme-entries` are placed later, inside the solver, so pre-flight does not check them. From the
-    UI they are in the grid and in the lock list.
+  - **Theme entries are candidate words (0.2.7).** Entries given with `--theme-entries` are placed
+    later, inside the solver, so pre-flight cannot see where they go. Their words are added to the
+    words `index` is built from, so a slot one of them could fill is not dead, and a fully locked word
+    that is a theme entry is not off-list (case 2), matching B1's rule that a theme entry is valid
+    whatever the lists hold. The check stays position-agnostic: a theme word makes any slot of its
+    length and pattern live, which can only let more runs through, never refuse one. Bare CLI: without
+    this, a compatible theme entry was refused with exit 3 (`CA.` locked, theme `CAB` across row 0, a
+    list without `CAB`; PR #76 review). UI: theme words are already theme-locked letters in the grid
+    and in the lock list, so they never caused a block there; the change shows only as no off-list
+    warning and no red cells for a theme word missing from the lists. Tests: that CLI case proceeds; the
+    same grid without `--theme-entries` still exits 3; a typed theme word missing from the lists is not
+    in `"off_list_cells"`.
   - **Imports (C9).** `cli/src/domain/*` use absolute `from src.…` imports, which fail under the
     README's `python -m cli.src.cli` from the repo root (`ModuleNotFoundError: No module named
     'src.domain'`). Pre-flight must import under both entry points (relative imports in
@@ -754,7 +767,7 @@ Owner approval of 0.2.2 on 2026-10-23 ruled every row's default as written; P17 
 | P5 | Accent folding scope | Every word-list load: the shared `WordList.from_file → parse_line → add_words` path of §4, so upload preview and solver fold alike; `pattern` input is already A–Z and `?`. `[?]` `verify_words` and `clean_grid` in `backend/api/routes.py` read lists with their own parser; whether they fold is for the plan to check. |
 | P6 | Case 2 (a typed word not in the lists): stop the run, or mark it red and continue | Mark red, warn, continue. The owner rule stops the run when the solver *blocks*; an off-list typed word does not block it, since the solver fills around a fixed slot (B1 makes a fully locked slot valid in repair and hybrid; beam fills around it, observed in §2.1). Stopping would refuse every grid with a deliberate proper noun. |
 | P7 | The UI route's ceiling addend (§2.2) | `CLI_STARTUP_BUDGET_SECONDS`, the adapter's addend, replacing `+ 10`, so startup and pre-flight cannot kill a run before it reports. Cost: a stuck run lives longer before `error`. |
-| P8 | Lists with no word of a slot's length, whatever the lock set (§2.1) | Refuse with `"no_word_of_length"` and no red cells, on every fresh run, with or without typed letters, so one unrelated typed letter never changes the outcome. It is a new block that no user letter causes. |
+| P8 | Lists with no word of a slot's length, whatever the lock set (§2.1) | Refuse with `"no_word_of_length"` and no red cells, on every fresh run, with or without typed letters, so one unrelated typed letter never changes the outcome. It is a new block that no user letter causes. 0.2.7, owner 2026-10-24: not under `--adaptive`, where pre-flight does not run (§2.1). |
 | P9 | Every slot filled but `success: false` (§2.3) | Restore the snapshot and offer "Keep fill". The owner ruling covers failed and partial runs; this grid is complete but may hold invalid entries. |
 | P10 | A refutation only `assess`'s cascade finds, no dead slot (§2.1) | Proceed; case 3 reports. Its red set is ill-defined. |
 | P11 | Text of a failed **autosave** (§3.4) | Keep today's `Couldn’t save — will retry.` and the 30 s re-arm; only an explicit Save shows the quota text. Existing tests pin today's text, and a retry cannot fix a full quota. |
@@ -861,7 +874,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   the clearing).
 - 0.2.1 (2026-10-23): amended from a cold review of 0.2.0 (findings M1 to M6 re-checked against
   `a72be24`, plus minors). M1: a unique string document id replaces `gridId` as the save key and the
-  machine's stale-merge guard (§2.3, §3.4). M2: the length block runs on every fresh run (§2.1, P8).
+  machine's stale-merge guard (§2.3, §3.4). M2: the length block runs on every fresh run except `--adaptive` (§2.1, P8; 0.2.7).
   M3: `start` always sends `"locked_cells"`, `[]` meaning lock nothing (§2.2, §2.3). M4: G12 now
   guarantees only that autofilled letters are not locked; whether a solver changes them is `[?]`. M5:
   §6 gains AF-REFILL, AF-LOCKED-CROSS and AF-GATE. M6: the tracker records its terminal event and
@@ -894,3 +907,10 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
 - 0.2.6 (2026-10-24): §2.3's `[NOTE]` corrected. Beam is not like regex and trie: it rewrites an unlocked
   pre-placed letter when some word passes through that cell (CH2b) and keeps it only when none does (CH2).
   Owner ruling 2026-10-24: option A stands (record, no product change; #75). Found by the Phase 2 cross-task review.
+- 0.2.7 (2026-10-24): §2.1 pre-flight narrowed, owner ruling 2026-10-24 (option A). Pre-flight does not run
+  under `--adaptive`, and `--theme-entries` words are candidate words of its checks. Beat: (B) skip pre-flight
+  under either flag, which loses red cells on a genuinely dead theme run; (C) run it after theme placement and
+  after each adaptive pass, inside four solvers, mid-phase; (D) keep it and mark the slow test xfail, leaving
+  `--adaptive` unusable on a list without some slot length. Found by CI's slow suite on PR #76 and its review.
+  P8 and the §9 M2 line amended to match. Pre-flight only lets more runs through; the lock guarantee is the
+  postcondition, unchanged.
