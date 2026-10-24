@@ -2,6 +2,9 @@
 
 import json
 import logging
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -166,7 +169,7 @@ class TestCancelAutofill:
     def test_cancel_returns_200_and_honest_state_saved(self, client, mock_pause_controller, mocker):
         """Regression: cancel must NOT claim state_saved: true — killing the
         subprocess saves nothing."""
-        mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed", create=True)
+        mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed")
 
         resp = client.post("/api/fill/cancel/task_c1")
         data = resp.get_json()
@@ -179,7 +182,7 @@ class TestCancelAutofill:
 
     def test_cancel_kills_process_and_clears_flags(self, client, mock_pause_controller, mocker):
         _, mock_pc = mock_pause_controller
-        mock_cancel = mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed", create=True)
+        mock_cancel = mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed")
 
         client.post("/api/fill/cancel/task_c2")
 
@@ -192,7 +195,7 @@ class TestCancelAutofill:
     def test_cancel_nonexistent_task_returns_404(self, client, mock_pause_controller, mocker):
         """Regression: cancelling an unknown/finished task must 404 with JSON,
         not return 200 success."""
-        mocker.patch("backend.api.progress_routes.request_cancel", return_value="not_running", create=True)
+        mocker.patch("backend.api.progress_routes.request_cancel", return_value="not_running")
 
         resp = client.post("/api/fill/cancel/no_such_task")
         data = resp.get_json()
@@ -201,7 +204,7 @@ class TestCancelAutofill:
         assert "error" in data
 
     def test_cancel_exception_returns_error(self, client, mocker):
-        mocker.patch("backend.api.progress_routes.request_cancel", side_effect=RuntimeError("boom"), create=True)
+        mocker.patch("backend.api.progress_routes.request_cancel", side_effect=RuntimeError("boom"))
 
         resp = client.post("/api/fill/cancel/task_err")
         data = resp.get_json()
@@ -799,10 +802,6 @@ class TestTaskIdValidation:
 # Real trackers and real sleeping children; nothing on the cancel path is mocked.
 # ---------------------------------------------------------------------------
 
-import subprocess  # noqa: E402
-import sys  # noqa: E402
-import time  # noqa: E402
-
 SLEEPER = [sys.executable, "-c", "import time; time.sleep(3600)"]
 
 
@@ -830,6 +829,17 @@ def fresh_task():
 
 
 class TestEarlyCancel:
+    def test_cleanup_process_clears_a_stale_pending_cancel(self, fresh_task):
+        """A fill that fails before Popen never registers; its recorded cancel must not leak."""
+        from backend.api import progress_routes as pr
+
+        assert pr.request_cancel(fresh_task) == "recorded"
+        assert fresh_task in pr.pending_cancels
+
+        pr.cleanup_process(fresh_task)
+
+        assert fresh_task not in pr.pending_cancels
+
     def test_cx1_cancel_before_registration_is_recorded(self, client, mock_pause_controller, fresh_task):
         from backend.api import progress_routes as pr
 
@@ -838,6 +848,27 @@ class TestEarlyCancel:
         assert resp.status_code == 200, resp_diag(resp)
         assert resp.get_json()["state_saved"] is False
         assert fresh_task in pr.pending_cancels
+
+    def test_cx1_recorded_200_body_equals_the_killed_200_body(self, client, mock_pause_controller, fresh_task, children):
+        from backend.api import progress_routes as pr
+
+        recorded = client.post(f"/api/fill/cancel/{fresh_task}")
+        assert recorded.status_code == 200, resp_diag(recorded)
+
+        live_task = pr.create_progress_tracker()
+        try:
+            child = subprocess.Popen(SLEEPER)
+            children.append(child)
+            pr.register_process(live_task, child)
+            killed = client.post(f"/api/fill/cancel/{live_task}")
+        finally:
+            pr.cleanup_progress_tracker(live_task)
+            with pr.running_processes_lock:
+                pr.running_processes.pop(live_task, None)
+
+        assert killed.status_code == 200, resp_diag(killed)
+        keys = ("success", "message", "state_saved")
+        assert {k: recorded.get_json()[k] for k in keys} == {k: killed.get_json()[k] for k in keys}
 
     def test_cx1_clears_pause_markers(self, client, mock_pause_controller, fresh_task):
         _, mock_pc = mock_pause_controller
