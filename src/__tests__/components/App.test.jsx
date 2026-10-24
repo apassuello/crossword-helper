@@ -138,3 +138,54 @@ describe('App tool rail', () => {
     expect(screen.queryByText('Heatmap')).toBeNull();
   });
 });
+
+// novice-readiness spec 0.2.7 §3.3 (G7): black-square guard through the UI, and
+// the always-visible key hint line.
+describe('App black squares and hint line (§3.3)', () => {
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+  });
+
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+
+  it('refuses a theme-locked cell and its mirror partner, but toggles an unlocked one', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(SIZE * SIZE));
+    const baseline = blackCells(container).length;
+    const A = [2, 3];
+    const partner = [SIZE - 1 - A[0], SIZE - 1 - A[1]];
+
+    // Lock A with Ctrl+L.
+    await user.click(cells(container)[idx(...A)]);
+    fireEvent.keyDown(focusEl(container), { key: 'l', ctrlKey: true });
+
+    // Space on the locked cell: refused.
+    fireEvent.keyDown(focusEl(container), { key: ' ' });
+    expect(blackCells(container)).toHaveLength(baseline);
+
+    // Space on the locked cell's mirror partner: refused, no partial write.
+    await user.click(cells(container)[idx(...partner)]);
+    fireEvent.keyDown(focusEl(container), { key: ' ' });
+    expect(blackCells(container)).toHaveLength(baseline);
+
+    // Control: an unrelated cell still toggles (cell and its partner: +2).
+    await user.click(cells(container)[idx(5, 6)]);
+    fireEvent.keyDown(focusEl(container), { key: ' ' });
+    expect(blackCells(container)).toHaveLength(baseline + 2);
+  });
+
+  it('shows the key hint under the grid in more than one tool', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(SIZE * SIZE));
+    const hint = () => container.querySelector('p.xw-grid-hint');
+    expect(hint()).not.toBeNull();
+    expect(hint().textContent).toMatch(/^Type letters · Arrows move/);
+    await user.click(screen.getByRole('button', { name: /^import$/i }));
+    expect(hint()).not.toBeNull();
+    expect(container.querySelectorAll('p.xw-grid-hint')).toHaveLength(1);
+  });
+});

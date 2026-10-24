@@ -10,6 +10,7 @@
  * returns its input grid (same reference).
  */
 import { normalizeCell } from '../api/gridCodec';
+import { mirrorOf } from '../hooks/useGridGeometry';
 
 /** A user-written copy of `cell`: `changes` applied, autofill and red cleared. */
 function written(cell, changes) {
@@ -29,6 +30,23 @@ export function writeLetter(grid, row, col, letter) {
   return withCells(grid, [
     [row, col, written(grid[row][col], { letter: letter.toUpperCase() })],
   ]);
+}
+
+/**
+ * novice-readiness spec 0.2.7 §3.3 (G7): false when the cell, or with symmetry
+ * its mirror partner, is theme-locked. Out of range -> false. With symmetry off
+ * the partner is never consulted; the centre cell's partner is itself.
+ */
+export function canToggleBlack(grid, row, col, symmetryEnabled) {
+  const at = (r, c) => grid[r] && grid[r][c];
+  const cell = at(row, col);
+  if (!cell || cell.isThemeLocked) return false;
+  if (symmetryEnabled) {
+    const [pr, pc] = mirrorOf(row, col, grid.length);
+    const partner = at(pr, pc);
+    if (!partner || partner.isThemeLocked) return false;
+  }
+  return true;
 }
 
 /** Flip black on (row, col) and, with symmetry, on its 180-degree partner. */
