@@ -1220,7 +1220,8 @@ def fill(
         # Clean up pause/running marker files. On a real pause the flag is cleared
         # by whoever durably wrote the state (CSP in _handle_pause, the others in
         # the DD6 block below), so this only has to cover NON-paused exits —
-        # anything left here is stale. See #21.2.
+        # anything left here is stale — and a paused result that fails the
+        # postcondition (PD-2-C6P), which was never saved. See #21.2.
         if pause_controller:
             pause_controller.clear_running()
             if result is None or not result.paused or locked_letter_changed:

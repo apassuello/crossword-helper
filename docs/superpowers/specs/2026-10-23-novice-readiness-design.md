@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.5** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.6** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -299,11 +299,13 @@ before relying on case 3 (b) outside repair and hybrid.
   locked.
 - **Theme entries (`getThemeEntries`).** The UI sends a theme entry (`--theme-entries`) only for a
   theme-locked run that fills a whole slot. A partial theme-locked run goes only in the lock list.
-- **[NOTE]** Observed (Task 2.11, CH1/CH2, pinned by `cli/tests/unit/test_fill_characterization.py`): repair
-  and hybrid may rewrite an unlocked pre-placed letter, which is intended under G12. Regex, trie and beam keep
-  it as a fixed constraint; when it fits no word they fill nothing, and no red cell shows, because
-  `stuck_cells` covers locked cells only. This is a known limitation (owner ruling 2026-10-23), tracked as
-  issue #75. This spec adds no mechanism.
+- **[NOTE]** Observed (Task 2.11, CH1/CH2/CH2b, pinned by `cli/tests/unit/test_fill_characterization.py`):
+  repair and hybrid may rewrite an unlocked pre-placed letter, which is intended under G12. Beam rewrites it
+  when some word passes through that cell (CH2b: `O` fits `ORE`, no complete fill keeps it) and keeps it,
+  filling nothing, when none does (CH2). Regex and trie keep it as a fixed constraint and fill nothing when it
+  fits no word. No red cell shows in the fill-nothing cases, because `stuck_cells` covers locked cells only.
+  This is a known limitation (owner ruling 2026-10-23, re-affirmed 2026-10-24 with the corrected beam
+  premise), tracked as issue #75. This spec adds no mechanism.
 - **Document id (M1).** The machine receives the document id as an argument to `start` and stores it
   with the snapshot. `App` passes its current document id (§3.4) with every merge and with "Keep
   partial fill"; each compares it with the stored one.
@@ -889,3 +891,6 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   §2.3's `[?]` on pre-placed unlocked letters and §2.1's `[?]` on beam with a locked off-list word are closed by
   observation (`cli/tests/unit/test_fill_characterization.py`); the `problematic_slots` half of §2.1's `[?]`
   stays open. §7 P6 now cites the observation. Known limitation filed as issue #75.
+- 0.2.6 (2026-10-24): §2.3's `[NOTE]` corrected. Beam is not like regex and trie: it rewrites an unlocked
+  pre-placed letter when some word passes through that cell (CH2b) and keeps it only when none does (CH2).
+  Owner ruling 2026-10-24: option A stands (record, no product change; #75). Found by the Phase 2 cross-task review.

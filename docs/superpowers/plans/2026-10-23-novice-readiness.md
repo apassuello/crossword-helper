@@ -1020,9 +1020,10 @@ git commit -m "feat(fill): blocked/off-list/stuck cell lists on every fill resul
   |---|---|---|---|---|---|
   | CH1: G33, `C` at (0,0), `"locked": []`, L6 | C kept | C kept | C kept (fills the transpose) | C kept | C kept (square or transpose varies; (0,0) does not) |
   | CH2: as CH1 with `Q` | Q kept, nothing filled | same | same | rewritten to C, full CAT/ORE/WED | rewritten to C, full CAT/ORE/WED |
+  | CH2b: as CH1 with `O` (fits `ORE`, no complete fill keeps it), added 2026-10-24 | `O` kept, nothing filled | same | rewritten (row 0 `CAT` or `COW`; a complete fill) | not recorded | not recorded |
   | CH3: beam, G33, row 0 `CAB` locked, L5 | | | fills: rows OLE/DEE, downs COD/ALE/BEE | | |
 
-  Step 2 STOP gate fired (CH2: repair and hybrid rewrite an unlocked `Q`); owner ruled 2026-10-23: record, no product change (beat: clear unlocked letters before regex/trie/beam; hide Beam/Classic CSP). Step 3 not triggered: beam fills around a locked off-list word.
+  Step 2 STOP gate fired (CH2: repair and hybrid rewrite an unlocked `Q`); owner ruled 2026-10-23: record, no product change (beat: clear unlocked letters before regex/trie/beam; hide Beam/Classic CSP). Correction 2026-10-24 (spec 0.2.6): CH2's `Q` fits no word, so it could not show that beam rewrites an unlocked letter when some word passes through the cell (CH2b); beam is not like regex and trie. Owner re-affirmed option A with the corrected premise. Step 3 not triggered: beam fills around a locked off-list word.
 - [ ] **Step 5: Commit.**
 
 ```bash

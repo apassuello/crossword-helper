@@ -262,8 +262,9 @@ plus `hint` only when one applies) carries none of them.
 - A caller must never infer fill quality from the exit code. Parse the JSON
   `success` field for that. A grid the solver could not complete is a result,
   not an error.
-- This is deliberate, not an oversight. `backend/core/cli_adapter.py` raises
-  `CalledProcessError` on any non-zero exit, and the web UI renders a partial
+- This is deliberate, not an oversight. `CLIAdapter.fill` in `backend/core/cli_adapter.py`
+  passes `check_success=False` and branches on exit 3 itself; `_run_command`
+  otherwise raises `CalledProcessError` on a non-zero exit. The web UI renders a partial
   fill as a normal outcome; exiting non-zero on an unsuccessful fill would turn
   that outcome into an error at the seam.
 - Pinned by `cli/tests/unit/test_fill_command.py`. Reproduce with:

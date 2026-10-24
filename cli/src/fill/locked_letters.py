@@ -3,7 +3,8 @@ Which input letters ``fill`` locks, and the cell lists that report them.
 
 novice-readiness spec 0.2.4 §2.1 (C12): ``Grid.from_dict`` writes ``Grid.cells``
 directly and applies only an explicit ``"locked"`` key, so the CLI decides the
-rest here, once, on a fresh run. ``--resume`` never reaches this module.
+rest here, once, on a fresh run. On ``--resume`` only ``changed_locked_cells`` and
+``stuck_cells`` run, with an empty lock set; ``apply_lock_mode`` and ``preflight`` never do.
 """
 
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Tuple
