@@ -334,3 +334,56 @@ def test_sc8_resume_empty_lock_set_never_touches_the_index():
     grid = _grid(SC_ROWS_OPEN, locked=set())
     assert stuck_cells(grid, set(), [SC_INVALID], None, 30) == []
     assert stuck_cells(grid, set(), [SC_INVALID], _Untouchable(), 30) == []
+
+
+# ---------------------------------------------------------------------------
+# preflight with theme words: novice-readiness spec 0.2.7 §2.1
+# "Theme entries are candidate words" -- position-agnostic extra words.
+# ---------------------------------------------------------------------------
+
+G33_CA = [["C", "A", "."], [".", ".", "."], [".", ".", "."]]
+
+
+def test_preflight_theme_word_rescues_a_dead_slot():
+    """Case 1 control above: CA? is dead on L5 alone; CAB as a theme word makes it live."""
+    grid = _grid(G33_CA)
+    assert preflight(grid, _wl(L5)).reason == "no_word_fits"
+    result = preflight(grid, _wl(L5), extra_words=["CAB"])
+    assert result.reason is None
+    assert result.blocked_slots == []
+
+
+def test_preflight_theme_word_counts_for_any_slot_not_only_its_own():
+    """Position-agnostic: CAB rescues CA? whichever slot the caller keyed it to."""
+    result = preflight(_grid(G33_CA), _wl(L5), extra_words=["cab"])
+    assert result.reason is None
+
+
+def test_preflight_theme_word_fixes_a_length_block():
+    """B2: a list with no 3-letter words is no length block once a theme word has length 3."""
+    result = preflight(_grid(G33_EMPTY), _wl(L2), extra_words=["CAB"])
+    assert result.reason is None
+
+
+def test_preflight_theme_word_is_not_off_list():
+    rows = [["X", "Y", "Z"], [".", ".", "."], [".", ".", "."]]
+    grid = _grid(rows)
+    assert preflight(grid, _wl(L5)).off_list_cells == [[0, 0], [0, 1], [0, 2]]
+    result = preflight(grid, _wl(L5), extra_words=["XYZ"])
+    assert result.off_list_cells == [] and result.off_list_words == []
+
+
+def test_preflight_extra_words_never_mutate_the_word_list():
+    words = _wl(L5)
+    before = [(w.text, w.score) for w in words.words]
+    preflight(_grid(G33_CA), words, extra_words=["CAB"])
+    assert [(w.text, w.score) for w in words.words] == before
+    assert len(words) == len(L5)
+    assert words.get_by_length(3) and all(w.text != "CAB" for w in words.get_by_length(3))
+
+
+def test_preflight_without_extra_words_is_unchanged():
+    grid = _grid(G33_CA)
+    base = preflight(grid, _wl(L5))
+    again = preflight(grid, _wl(L5), extra_words=())
+    assert again[:5] == base[:5]
