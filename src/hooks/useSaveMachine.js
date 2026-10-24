@@ -8,9 +8,13 @@
  *   pristine → dirty → saving → saved
  *              saving --fail--> error   (dirty-variant; auto-retries)
  *
- * It reaches persistence ONLY through `storage.save` (never localStorage
- * directly) so M2 can swap the transport to `POST /api/grid/save` without
- * touching this file. It is driven by two controlled props:
+ * It reaches persistence ONLY through `storage.save(doc, opts)` (never
+ * localStorage directly) so M2 can swap the transport to `POST /api/grid/save`
+ * without touching this file. `opts` is `{ name?, expectedSavedAt?,
+ * replaceEntryId? }`: autosave sends only `expectedSavedAt` (the machine's
+ * `knownSavedAt`), `saveNamed` adds `name`/`replaceEntryId`.
+ * novice-readiness spec 0.2.7 §3.4 (G3, G4, S4, PD-6-G6): a fork result calls
+ * `onForked`, a failed explicit save shows the quota message and re-arms autosave. It is driven by two controlled props:
  *   - `doc`     : the serializable grid document, carrying a stable `id`.
  *   - `isDirty` : parent-owned "there are unsaved changes" flag.
  *
@@ -42,11 +46,17 @@ function savedFreshnessLabel(savedAt, now) {
   return `saved locally · ${Math.floor(ageMs / SAVED_TICK_MS)}m ago`;
 }
 
+const QUOTA_MESSAGE =
+  'Could not save: browser storage is full. Delete a saved grid or export this one.';
+
 /**
- * @param {{doc: {id: string}, isDirty: boolean}} params
- * @returns {{status: 'pristine'|'dirty'|'saving'|'saved'|'error', savedLabel: string, save: () => Promise<void>}}
+ * @param {{doc: {id: string}, isDirty: boolean, onForked?: (info: {id: string, name: string}) => void}} params
+ * @returns {{status: 'pristine'|'dirty'|'saving'|'saved'|'error', savedLabel: string,
+ *   save: () => Promise<void>,
+ *   saveNamed: (name: string, opts?: {replaceEntryId?: string}) => Promise<boolean>,
+ *   adoptSavedAt: (savedAt: string|null) => void}}
  */
-export function useSaveMachine({ doc, isDirty }) {
+export function useSaveMachine({ doc, isDirty, onForked }) {
   const { pushToast } = useToasts();
 
   const [status, setStatus] = useState('pristine');
@@ -59,8 +69,15 @@ export function useSaveMachine({ doc, isDirty }) {
   const prevIdRef = useRef(undefined); // previous doc.id (F10 detection)
   const prevDirtyRef = useRef(false); // previous isDirty (edge detection)
   const runSaveRef = useRef(() => {}); // latest runSave, called by timer + button
+  const onForkedRef = useRef(onForked); // latest fork callback, read at resolve time
+  // The savedAt this tab loaded or last wrote (S4). Deliberately NOT reset on a
+  // doc.id change: Open saved / restore call setDocId and adoptSavedAt in one
+  // handler, and an effect-time reset would overwrite the adopted value. A stale
+  // value for a brand-new id is harmless (storage.save finds no entry to compare).
+  const knownSavedAtRef = useRef(null);
 
   docRef.current = doc;
+  onForkedRef.current = onForked;
 
   function clearAutosave() {
     if (timerRef.current !== null) {
@@ -73,24 +90,37 @@ export function useSaveMachine({ doc, isDirty }) {
     clearAutosave();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      runSaveRef.current();
+      runSaveRef.current({}, false);
     }, AUTOSAVE_MS);
   }
 
-  function runSave() {
+  /**
+   * The one write path. `explicit` (saveNamed) differs only in the opts sent,
+   * the failure toast, and resolving a boolean; the write, the knownSavedAt
+   * update, the fork callback and the status transitions are shared.
+   */
+  function runSave(extra, explicit) {
     clearAutosave(); // this attempt consumes any pending timer
     setStatus('saving');
-    return storage.save(docRef.current).then(
-      ({ savedAt: at }) => {
-        if (!mountedRef.current) return;
-        setSavedAt(at);
+    const opts = { expectedSavedAt: knownSavedAtRef.current, ...extra };
+    return storage.save(docRef.current, opts).then(
+      (res) => {
+        knownSavedAtRef.current = res.savedAt;
+        if (res.forked) onForkedRef.current?.({ id: res.id, name: res.name });
+        if (!mountedRef.current) return true;
+        setSavedAt(res.savedAt);
         setStatus('saved');
+        return true;
       },
       () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return false;
         setStatus('error');
-        pushToast({ kind: 'error', message: 'Couldn’t save — will retry.' });
+        pushToast({
+          kind: 'error',
+          message: explicit ? QUOTA_MESSAGE : 'Couldn’t save — will retry.',
+        });
         armAutosave(); // error is a dirty-variant: re-arm the 30s retry
+        return false;
       }
     );
   }
@@ -98,7 +128,19 @@ export function useSaveMachine({ doc, isDirty }) {
   runSaveRef.current = runSave;
 
   // Stable identity for the TopBar Save button; always runs the latest save.
-  const save = useCallback(() => runSaveRef.current(), []);
+  // (Autosave path: resolves void, as before.)
+  const save = useCallback(() => runSaveRef.current({}, false).then(() => undefined), []);
+
+  // Explicit named save (§3.4 G3/G4): never rejects; true saved, false failed.
+  const saveNamed = useCallback((name, opts = {}) => {
+    const extra = { name };
+    if (opts.replaceEntryId !== undefined) extra.replaceEntryId = opts.replaceEntryId;
+    return runSaveRef.current(extra, true);
+  }, []);
+
+  const adoptSavedAt = useCallback((at) => {
+    knownSavedAtRef.current = at;
+  }, []);
 
   // Transition driver: keyed on doc identity + dirtiness. Content-only edits
   // (same id, isDirty already true) do NOT re-run this effect, which is exactly
@@ -171,7 +213,7 @@ export function useSaveMachine({ doc, isDirty }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, savedAt, tick]);
 
-  return { status, savedLabel, save };
+  return { status, savedLabel, save, saveNamed, adoptSavedAt };
 }
 
 export default useSaveMachine;
