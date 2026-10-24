@@ -21,10 +21,12 @@ import {
   writeAppliedTheme,
   writeImportedGrid,
   writeCleanedGrid,
+  canToggleBlack,
 } from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
+import GridHintLine from './components/bench/GridHintLine';
 import PatternMatcher from './components/PatternMatcher';
 import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
@@ -203,6 +205,9 @@ function App() {
   const toggleBlackSquare = useCallback((row, col) => {
     if (editingPausedRef.current) return;
     if (!grid) return;
+    // novice-readiness spec 0.2.7 §3.3 (G7): refuse before any write, so
+    // neither the cell nor its partner changes.
+    if (!canToggleBlack(grid, row, col, symmetryEnabled)) return;
 
     setGrid(writeToggleBlack(grid, row, col, symmetryEnabled));
     // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
@@ -444,6 +449,7 @@ function App() {
 
         <main className="xw-canvas">
           {grid ? (
+            <>
             <CrosswordGrid
               grid={grid}
               focus={selectedCell ? { row: selectedCell.row, col: selectedCell.col } : null}
@@ -457,6 +463,8 @@ function App() {
               onToggleLock={toggleThemeLock}
               editingPaused={editingPaused}
             />
+            <GridHintLine />
+            </>
           ) : (
             <div className="grid-editor-loading">Initializing grid...</div>
           )}

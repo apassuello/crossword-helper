@@ -14,6 +14,7 @@ import {
   writeAppliedTheme,
   writeImportedGrid,
   writeCleanedGrid,
+  canToggleBlack,
 } from '../gridEdits';
 
 const cell = (over = {}) => ({ ...makeCell(), ...over });
@@ -268,5 +269,29 @@ describe('writeCleanedGrid', () => {
     ];
     const out = writeCleanedGrid(prev, cleaned);
     expect(out[1][1]).toMatchObject({ isBlack: true, letter: '', isAutofilled: false, isError: false });
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.3 (G7): the shared black-square guard.
+describe('canToggleBlack', () => {
+  const TL = { isThemeLocked: true };
+  const lockedAt = (...coords) =>
+    mk(5, Object.fromEntries(coords.map(([r, c]) => [`${r},${c}`, TL])));
+
+  it.each([
+    ['no locks, symmetry on', [], 1, 1, true, true],
+    ['selected cell locked, symmetry on', [[1, 1]], 1, 1, true, false],
+    ['selected cell locked, symmetry off', [[1, 1]], 1, 1, false, false],
+    ['partner locked, symmetry on', [[3, 3]], 1, 1, true, false],
+    ['partner locked, symmetry off', [[3, 3]], 1, 1, false, true],
+    ['centre cell locked (its own partner), symmetry on', [[2, 2]], 2, 2, true, false],
+    ['unrelated cell locked, symmetry on', [[0, 0]], 1, 1, true, true],
+  ])('%s', (_label, locks, r, c, sym, expected) => {
+    expect(canToggleBlack(lockedAt(...locks), r, c, sym)).toBe(expected);
+  });
+
+  it('is false out of range', () => {
+    expect(canToggleBlack(mk(5), 5, 0, true)).toBe(false);
+    expect(canToggleBlack(mk(5), 0, -1, false)).toBe(false);
   });
 });
