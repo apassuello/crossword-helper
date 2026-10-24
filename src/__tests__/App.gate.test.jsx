@@ -251,7 +251,7 @@ describe('App D1 gate: async Verify and Clean', () => {
     message: 'Removed 1 invalid word',
   });
 
-  it('control: with no run live, Clean removes the letter and toasts', async () => {
+  it('control: with no run live, Clean asks, then removes the letter and toasts', async () => {
     const d = deferred();
     vi.spyOn(api, 'cleanGrid').mockImplementation(() => d.promise);
     const { user, container } = await boot();
@@ -262,6 +262,8 @@ describe('App D1 gate: async Verify and Clean', () => {
     await user.click(screen.getByText('Clean grid'));
     expect(api.cleanGrid).toHaveBeenCalledTimes(1);
     await act(async () => d.resolve(cleaned()));
+    // novice-readiness spec 0.2.7 §3.5 (G5): Clean asks before it blanks; accepting writes.
+    await user.click(await screen.findByRole('button', { name: 'Clean' }));
     await waitFor(() => expect(letters(container)).toEqual([]));
     expect(screen.getByText('Removed 1 invalid word')).toBeInTheDocument();
   });
@@ -282,6 +284,53 @@ describe('App D1 gate: async Verify and Clean', () => {
     await flush();
     expect(letters(container)).toEqual(['B']);
     expect(screen.queryByText('Removed 1 invalid word')).not.toBeInTheDocument();
+  });
+
+  // The N === 0 path writes clearAllErrors and toasts directly, so only the post-await D1
+  // check stops it (the removed_count 1 row above is also stopped by the dismissal effect).
+  it('Clean resolving after Start with nothing to remove: red cells stay red, no toast', async () => {
+    const verifyD = deferred();
+    vi.spyOn(api, 'verifyWords').mockImplementation(() => verifyD.promise);
+    const d = deferred();
+    vi.spyOn(api, 'cleanGrid').mockImplementation(() => d.promise);
+    const { user, container } = await boot();
+    await act(async () => {
+      await focusCell(user, container, 0);
+      await user.keyboard('BA');
+    });
+    await act(async () => {
+      await user.click(screen.getByText('Verify words'));
+    });
+    await act(async () => verifyD.resolve(invalid));
+    await waitFor(() => expect(underlines(container)).toBe(2));
+
+    await act(async () => {
+      await user.click(screen.getByText('Clean grid'));
+    });
+    expect(api.cleanGrid).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /^autofill$/i }));
+    });
+    const startBtn = await screen.findByRole('button', { name: /start autofill/i });
+    await act(async () => {
+      await user.click(startBtn);
+    });
+    await waitFor(() => expect(screen.getByText(STATUS)).toBeInTheDocument());
+    expect(underlines(container)).toBe(2);
+
+    const keepsBA = Array.from({ length: 15 }, (_, r) =>
+      Array.from({ length: 15 }, (_, c) => ({
+        letter: r === 0 ? 'BA'[c] || '' : '',
+        isBlack: false,
+      }))
+    );
+    await act(async () =>
+      d.resolve({ grid: keepsBA, removed_count: 0, valid_count: 1, cleared_cells: 0, message: 'x' })
+    );
+    await flush();
+    expect(underlines(container)).toBe(2);
+    expect(screen.queryByText(/Grid is clean/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing removed/)).not.toBeInTheDocument();
   });
 
   it('Verify and Clean make no request when a run is already live (pre-request return)', async () => {
@@ -349,14 +398,23 @@ describe('App D1 gate: handlers called directly while a run is live', () => {
       return g;
     };
     await user.click(screen.getByRole('button', { name: /^theme$/i }));
-    await call(captured.theme.onApplyPlacement, filled(), { word: 'QUX' });
+    // Task 6.16: the callback takes the sent grid and the docId the request was sent under.
+    const ctx = () => ({ sentGrid: captured.grid.grid, docId: captured.theme.docId });
+    let returned;
+    await act(async () => {
+      returned = captured.theme.onApplyPlacement(filled(), { word: 'QUX' }, ctx());
+    });
+    expect(returned).toBe(true);
     expect(letters(container)).toEqual(['Q']);
     expect(screen.getByText('Applied "QUX" to grid!')).toBeInTheDocument();
 
     await startAutofill(user);
     const g2 = captured.grid.grid.map((row) => row.map((c) => ({ ...c })));
     g2[4][0] = { ...g2[4][0], letter: 'W', isThemeLocked: true };
-    await call(captured.theme.onApplyPlacement, g2, { word: 'WEE' });
+    await act(async () => {
+      returned = captured.theme.onApplyPlacement(g2, { word: 'WEE' }, ctx());
+    });
+    expect(returned).toBe(false);
     expect(letters(container)).toEqual(['Q']);
     expect(screen.queryByText('Applied "WEE" to grid!')).not.toBeInTheDocument();
   });

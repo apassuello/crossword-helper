@@ -2773,6 +2773,155 @@ Run `python3 run.py` and `npm run dev`; drive the real browser on `127.0.0.1` (n
 | §3.8 Apply All: 400 conflict, 500, network failure → three reasons | 6.14 |
 ---
 
+## Phase 6R: cross-task review fixes (spec 0.2.8; review `review-phase4-6-cross-task.md` at `f7579b9`)
+
+Owner ruling 2026-10-24: go as recommended. Every task is frontend, runs under Phase 6's conventions (`phase-6-context.md`), and cites `novice-readiness spec 0.2.8 §<section> (<review id>)`. The review's reproducing tests are in the report's `.json` beside it (`repro.test_code` per finding). A task may adapt them as its RED, but the RED must fail on the claimed defect itself, at the asserting line. Tasks run in order. 6.16, 6.17, 6.18 and 6.20 all touch `App.jsx`.
+
+PR #77's six Greptile comments (at `f7579b9`) are folded into these tasks, marked `G#77-<file>:<line>`, and each is answered by the commit that fixes it (Task 6.22, last step). PR #76's three were fixed in `abcb015`, `a413ebc` and `71899b7`; their threads have no reply yet, so 6.22 drafts those replies too.
+
+### Task 6.16: theme apply merges against the sent grid and drops a reply for a replaced document (§3.8, PD-6-G12; review F1, F4)
+
+**Files:**
+- Modify: `src/components/ThemeWordsPanel.jsx` (`handleApplyPlacement`, `handleApplyAllPlacements`), `src/App.jsx` (`handleThemeWordApplied`), `src/lib/gridEdits.js` (`writeAppliedTheme`)
+- Test: `src/lib/__tests__/gridEdits.test.js`, `src/__tests__/components/ThemeWordsPanel.test.jsx`, an App-level test file of the implementer's choice
+
+**Interfaces:**
+- `writeAppliedTheme(prevGrid, replyGrid, sentGrid)`: `prevGrid` is the live grid, `replyGrid` the server's reply, and `sentGrid` the grid that request was built from.
+- `ThemeWordsPanel` gains a `docId` prop. It calls `onApplyPlacement(updatedGrid, placement, { sentGrid, docId })`, where `docId` is the prop's value when the request was sent.
+- `handleThemeWordApplied(updatedGrid, placement, { sentGrid, docId })` drops the reply when `docId !== docIdRef.current`.
+- `handleThemeWordApplied` returns `true` when it wrote the grid, and `false` when a gate dropped the reply (D1 `editingPaused`, or `docId`); `onApplyPlacement` therefore returns a boolean. The panel acts on that value and never re-derives App's gates. Single Apply toasts `Applied X to grid` only on `true`; Apply All counts a word in `successCount` only on `true`. A `false` during Apply All stops the loop and suppresses the summary toast: the document the summary would describe is gone, and 6.13's refetch already marks the list superseded. No new user-visible string. (Added after review of `3bdbd81`, row 3.)
+
+**Behavioral criteria:**
+- `writeAppliedTheme` writes a cell from the reply only where the reply differs from `sentGrid`, **and** the live grid still equals `sentGrid` at that cell. A cell where the live grid differs from the sent grid (letter, black square, theme lock) keeps its live value (F4). Under Apply All, `sentGrid` for word N is the chained `currentGrid` (the previous reply). A user edit made during words 1…N-1 therefore reads as a changed cell and is kept, even inside word N's own cells. A user edit does **not** stop the Apply All loop; this merge rule is its only protection. 6.14's "the loop's own grid changes do not count as supersession" stands.
+- `handleThemeWordApplied` drops a reply for a replaced document, as Verify and Clean do (PD-6-G12). With that guard in place, a size change can no longer reach the merge. The merge must still never throw when the reply and the live grid differ in size; it returns the live grid unchanged (F1b).
+- The suggestion request and its signature come from one grid snapshot. `analyzePlacements` computes `requestSig` from the grid it sends, not from `gridSigRef.current` read after an `await`. Otherwise an edit made while `themeUpload` is pending marks the old grid's suggestions current (G#77-`ThemeWordsPanel.jsx:133`).
+- Apply All stops sending requests once the Theme panel unmounts (closed with ×). A request already in flight when the panel closes is still dropped by the guard above if the document changed.
+- Single Apply and Apply All both go through the same path. The 6.13 supersession and the 6.14 summary rules are unchanged.
+
+**Normative cases:**
+
+| situation | expected |
+|---|---|
+| reply for word at row 0, user typed `Q` at (2,2) after sending | (2,2) is `Q`; the word's cells are written |
+| user toggled a black square at (4,4) after sending | (4,4) stays black |
+| reply arrives after New grid (new `docId`, same size) | grid unchanged; no applied toast for that word |
+| live grid 21×21, reply 15×15 (any route) | no throw; grid unchanged |
+| Apply All over 3 words, panel closed after the first reply | no further `themeApplyPlacement` request is sent |
+| a grid edit while `themeUpload` is pending, then the analyze reply lands | the list shows as superseded (Apply is a no-op), and one refetch runs |
+
+- [ ] Step 1: RED tests (unit for the merge; panel or App for the guard and the stop). Step 2: run each file and confirm it fails at the asserting line. Step 3: implement. Step 4: run each file, `npx vitest run`, `npm run build`. Step 5: commit `fix(theme): apply merges against the sent grid and drops a reply for a replaced document`.
+
+### Task 6.17: the autofill machine follows a save fork (§2.3 M1; review F2)
+
+**Files:**
+- Modify: `src/hooks/useAutofillMachine.js` (the stored start document id; a new returned function), `src/App.jsx` (`onForked`)
+- Test: `src/hooks/__tests__/useAutofillMachine.test.jsx` and an App-level test (the review's `cFork` test is a template)
+
+**Interfaces:**
+- Produces: `adoptForkedDocId(oldId, newId)` returned from `useAutofillMachine`. It replaces the stored start id only when that id equals `oldId`; otherwise it is a no-op. `App`'s `onForked` calls it before `setDocId(info.id)`, with the pre-fork `docId` (read from `docIdRef`).
+- Known and accepted: between `adoptForkedDocId` and the render that commits `setDocId`, the machine's stored id is `newId` while App's `docId` prop is still `oldId`. A merge landing in that one render is dropped. That costs one progress frame; the next merge or the terminal result carries the full grid.
+- Also fixes G#77-`App.jsx:187` (the same defect, found independently by Greptile).
+
+**Behavioral criteria (§2.3 M1, 0.2.8):** after a fork mid-run, progress merges still apply, a terminal error, cancel or partial result restores the Start snapshot, a complete result is applied, and a "Keep partial fill" offer survives a later autosave fork. Replacing the document (New grid, Open saved, import) still drops everything, as today.
+
+**Normative cases:** the review's four fork rows (an error after a fork, an error after an autosave fork, a success, the Keep offer) each produce the same grid as their no-fork control; and New grid mid-run still drops a late merge.
+
+- [ ] Steps as in 6.16. Commit `fix(autofill): a save fork mid-run is the same document; the machine follows its new id`.
+
+### Task 6.18: import confirms, is born numbered and clears a finished run (§3.2 Import; review F3, M3, Q2)
+
+**Files:**
+- Modify: `src/App.jsx` (`handleGridImport`), `src/components/ImportPanel.jsx` (the confirm, if it lives in the panel)
+- Test: `src/__tests__/App.gate.test.jsx` or `src/__tests__/components/App.test.jsx`, or a new `ImportPanel` test file (none exists today)
+
+**Behavioral criteria:**
+- Over a grid with any letter or black square, import asks `Replace the current grid? Unsaved changes are lost.` with "Replace" and "Cancel", in-panel with no browser dialog, reusing `InlineConfirm` as §3.2 does. Cancel changes nothing. Over an empty grid, there is no confirm.
+- The imported grid is numbered on the first render, whatever its layout, with `localNumber` as `createNewGrid` does. The server reconcile still runs on any later structural change.
+- Import calls `autofill.discardRun()` as `createNewGrid` and `openSavedEntry` do. The D1 gate still refuses import during a run (unchanged).
+- Fix the false comment in `handleGridImport` ("setting the imported grid changes the structural signature").
+
+**Normative cases:** export a 15×15 with the default layout, wipe the letters, import the same file: 29 numbers present right after the import (the review's `App.importnum` test). A run ends `done` with a partial result, then import: no result card and no Keep offer. Import over a grid with one letter: confirm shown, Cancel keeps the letter.
+
+- [ ] Steps as in 6.16. Commit `fix(import): confirm before replacing, number the imported grid and clear a finished run`.
+
+### Task 6.19: storage reads never reject, and a fork during a named Save keeps the other entry (§3.4; review M1, M2)
+
+**Files:**
+- Modify: `src/lib/storage.js` (`readState`/`readArray` fallback, `list`, `load`, `save`'s fork branch)
+- Test: `src/lib/__tests__/storage.test.js`
+
+**Behavioral criteria:**
+- When `localStorage.getItem` throws, `list()` resolves `[]` and `load()` resolves `null`. Neither rejects (M1). `save` still rejects on a write failure.
+- `save(doc, { name, replaceEntryId, expectedSavedAt })` that forks (S4) does not remove `replaceEntryId`'s entry, and names the fork `<name> (copy)`, where `name` is the chosen name (M2). Without a fork, `replaceEntryId` behaves as today.
+- A save whose `expectedSavedAt` is set but whose entry no longer exists writes the entry under its own id, with no fork (§3.4 Q1 clause, used by 6.20).
+- Two tabs' read-modify-writes serialise. `save`, `remove` and the legacy migration each run their whole read-and-write inside `navigator.locks.request('crossword_saved_grids', …)` when `navigator.locks` exists. Without it, behaviour is as today, and the Greptile reply names that residual (G#77-`storage.js:171`).
+- A legacy migration whose write fails (near the quota) still returns the merged readable entries from `list()` and `load()`, and keeps the legacy key, so it is retried on a later read (G#77-`storage.js:126`).
+
+**Normative cases:** `getItem` throwing `SecurityError` → `list()` `[]`, `load()` `null`. A stub `navigator.locks` records that `save` and `remove` each ran inside one lock callback. A migration where `setItem` throws → `list()` returns the legacy entry, and `crossword_saved_grid` is still present. Entries `A` ('Mine', its stored `savedAt` moved on) and `B` ('Other'); save A's doc with `{name:'Other', replaceEntryId:'B', expectedSavedAt:<stale>}` → `B` still stored, and a new entry `Other (copy)`. Save of id `X` with `expectedSavedAt:'t1'` and no `X` stored → one entry `X`, `forked: false`.
+
+- [ ] Steps as in 6.16 (unit file only, plus the full gates). Commit `fix(storage): reads never reject; a forked named save keeps the other entry`.
+
+### Task 6.20: deleting the open grid's own entry, and saving on pagehide (§3.4 Q1, Q3)
+
+**Files:**
+- Modify: `src/hooks/useSaveMachine.js`, `src/App.jsx` and/or `src/components/bench/GridPanel.jsx` (the delete path, which today is `storage.remove(...).then(refreshSaved)` in `GridPanel`)
+- Test: `src/hooks/__tests__/useSaveMachine.test.jsx`, App-level test
+
+**Interfaces:**
+- `useSaveMachine` returns `forget()`. It clears the pending autosave timer and makes `savedLabel` read `unsaved changes` (today's dirty label; `pristine` would show an empty label) **without arming** the autosave. It leaves `savedSig` and the stored `savedAt` expectation alone, so `isDirty` stays false and nothing is armed. The next real edit flips `isDirty` and arms as usual. `App` calls it when Delete removes the entry whose id is the current `docId`. After `forget()`, the next change to `doc` arms the autosave **whether or not `isDirty` was already true**: a document that was dirty when its entry was deleted has no clean→dirty edge to arm on. (Amended after review of `5fa06ee`.)
+- `storage.js` gains a **separate synchronous** write entry point used only by the `pagehide` handler (name is the implementer's). It writes outside `navigator.locks` (spec 0.2.9 §3.4 Leaving the page), so `save`/`remove`/migration keep Task 6.19's lock and its read-inside-lock tests stay unchanged. It writes `docRef.current`, so S2's Start snapshot during a run is unchanged. It keeps S4's fork-on-`savedAt`-mismatch rule. (Amended after review of `5fa06ee`.)
+
+**Behavioral criteria:**
+- Deleting the entry whose id equals the current `docId` makes the document unsaved: the label leaves `saved locally` for its unsaved state. The delete arms no autosave. The next grid edit arms the autosave, which writes the entry again under the default name with the same `docId` (6.19's missing-entry rule). Deleting any other entry leaves the open document's status alone.
+- Known and accepted: a second tab holding the same document re-creates the entry on its next save. That is pre-existing behaviour, not a regression.
+- "Open" reads the entry again by id when the user confirms it, not from the list snapshot. An entry that has gone away by then shows the list refreshed, and nothing is adopted (G#77-`GridPanel.jsx:88`; the 6.9 ledger Minor).
+- Restore-on-load and Open adopt an entry only if it validates: `grid` is a `size`×`size` array of rows, every cell is a non-null object, and `size` is one of the offered sizes. An entry that fails is skipped. Restore then falls back to a blank grid, with no banner and no throw; Open shows `Could not open this saved grid.` (G#77-`App.jsx:264`; the 6.8 ledger Minor).
+- On `pagehide`, a dirty document is saved immediately through the same path the autosave timer uses, so during a live run it writes the Start snapshot (S2). The pending timer is cleared. A clean document writes nothing. A failure shows no toast. The listener is removed on unmount.
+- The `remove(...).then(refreshSaved)` chain gets a `.catch` (a ledger Minor on this exact line).
+
+**Normative cases:** a list shown, then the same grid edited and autosaved, then its row opened → the newer letters are kept. A stored entry `grid: [[{},{}],[{}]]` → reload gives a blank grid and no throw; `grid` with a `null` cell → the same. Open saved `G`, Delete `G` → label unsaved, no `storage.save` within 30 s with no edit; type a letter → after 30 s, one entry with `G`'s id and the default name. Dirty doc, dispatch `pagehide` → one `storage.save` call at once. Clean doc → none. Live run, dirty, `pagehide` → the saved grid equals the Start snapshot.
+
+- [ ] Steps as in 6.16. Commit `fix(saves): deleting the open grid's entry makes it unsaved; pagehide saves unsaved changes`.
+
+### Task 6.21: a save's resolution only acts on the document it wrote (§3.4 S4, §2.3 M1; review of 6.20, after 6.19's lock)
+
+Before Task 6.19, `storage.save` resolved within microtasks, so no click could land between `useSaveMachine` reading `docRef.current` and the save's resolution. Two earlier dispositions rested on that, and both were true at `f7579b9` and false after `439f570`: the Phase 4–6 review's "`onSaved` without a `written.id === docId` guard is unreachable", and Task 6.17's "(c) New grid during an in-flight save that then forks is unreachable". A Web Lock grant is asynchronous, so the window is now a few ms.
+
+**Files:**
+- Modify: `src/hooks/useSaveMachine.js` (the save resolution: `onSaved`, `knownSavedAt`, `onForked`)
+- Test: `src/hooks/__tests__/useSaveMachine.test.jsx`, and an App-level test with a deferred lock stub
+
+**Behavioral criteria:**
+- A save's resolution acts on the current document only if the document it wrote is still the current one (`written.id === docRef.current.id`): `onSaved`, the stored `savedAt` expectation (`knownSavedAt`) and `onForked` are all skipped for a save of a document that has since been replaced (New grid, Open saved, import). The entry itself is still written; only the in-memory bookkeeping for the current document is protected.
+- Tests use a deferred, FIFO `navigator.locks` stub (`request = (n, fn) => new Promise(r => setTimeout(() => r(fn()), 0))` with fake timers) so the ordering is observable in jsdom.
+
+**Normative cases:**
+
+| situation | expected |
+|---|---|
+| autosave fires, Delete of the open grid's entry confirmed before the lock flushes, then flush (forward order) | entry deleted, label `unsaved changes` (control; passes today) |
+| Delete confirmed, the autosave timer fires before `remove` flushes, then flush (reverse order) | pinned as observed; record the outcome in the report (accepted by the spec's "a save whose entry no longer exists writes that entry") |
+| autosave of doc A fires, New grid (doc B) before flush, then flush | B's clean signature and `savedAt` expectation untouched; B's next save does not fork `(copy)` |
+| autosave of A fires and will fork (second tab moved `savedAt`), New grid (B) before flush, then flush | `docId` stays B's fresh id |
+
+- [ ] Steps as in 6.16. Commit `fix(saves): a save's resolution only acts on the document it wrote`.
+
+### Task 6.22: Phase 6R browser drive (no code)
+
+Run `python3 run.py` (`PORT=5050` if 5000 is busy) and `npm run dev`. Drive `127.0.0.1:3000`:
+- export, then re-import: numbers present;
+- import over letters: confirm, Cancel keeps them;
+- Apply All, close the panel at once, New grid 21×21: no crash, no foreign letters;
+- type while one Apply is in flight: the letter stays;
+- two tabs on one save, Start in tab A, save in tab B, then let tab A's autosave fork mid-run: the run ends with its normal outcome;
+- Delete the open grid's entry: label unsaved, the entry returns only after an edit;
+- type, then reload within 10 s: the letter is restored;
+- type, then **close the tab** within 10 s, reopen `127.0.0.1:3000`: the letter is restored. This is the measurement for spec 0.2.9's synchronous `pagehide` write; until it runs, that change rests on reasoning about Web Locks.
+
+Phase-end gates as Phase 6, each run alone.
+
+Last step: draft one reply per Greptile thread, nine in all (six on #77, three on #76). Each reply names the fixing commit and the test that pins the fix, or the stated residual (e.g. no Web Locks). Write them all to one file in the ledger directory. **Arthur posts them;** the controller never posts to GitHub.
+
 ## Phase 7: word lists and CLI (spec §4; P5, Phase 0.3)
 
 Independent of the solver seams. Every docstring/comment implementing a rule cites `novice-readiness spec 0.2.4 §4 (L11 | SR4 | CLI-normalize)`.

@@ -1,9 +1,53 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../api/client';
 import toast from 'react-hot-toast';
 import './ThemeWordsPanel.scss';
 
-function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPaused = false }) {
+// novice-readiness spec 0.2.7 §3.8 (TH2b), plan default PD-6-G13: the spec says
+// "debounced" and gives no value.
+export const SUGGESTION_REFETCH_DEBOUNCE_MS = 400;
+
+// apply-placement's 400 body carries the conflict reasons in `details` (client.js
+// rule 5); `details` is polymorphic across endpoints, so guard the shape before
+// reading it as a conflicts array. First detail, plus a count of the rest.
+function conflictText(details) {
+  if (!Array.isArray(details) || details.length === 0) return null;
+  const [first, ...rest] = details;
+  return rest.length > 0 ? `${first} (+${rest.length} more)` : first;
+}
+
+// novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G17): the reason Apply All gives for
+// one word whose apply request failed. "skipped due to conflicts" only for a real
+// conflicts array; status 0 (no response arrived) is "could not reach the server"; anything else is the
+// error's own message. The synthesised HTTP_<status> code never reaches the user.
+function describeApplyFailure(error) {
+  const conflicts = conflictText(error.details);
+  if (conflicts) return `skipped due to conflicts: ${conflicts}`;
+  if (error.status === 0) return 'Could not reach the server';
+  return error.message || 'Failed to apply placement';
+}
+
+// novice-readiness spec 0.2.7 §3.8 (TH2b): the per-cell [letter, isBlack] plus
+// gridSize. Deliberately local: isError, number, isHighlighted, isThemeLocked and
+// isAutofilled must not trigger a refetch, so App's contentSigOf is not reused.
+function gridSigOf(grid, gridSize) {
+  if (!Array.isArray(grid)) return JSON.stringify([gridSize, null]);
+  return JSON.stringify([
+    gridSize,
+    grid.map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => {
+            if (typeof cell === 'string') return cell === '#' ? ['', true] : [cell === '.' ? '' : cell, false];
+            return [(cell && cell.letter) || '', !!(cell && cell.isBlack)];
+          })
+        : row
+    ),
+  ]);
+}
+
+const SUPERSEDED_MSG = 'Suggestions updated for the changed grid.';
+
+function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, editingPaused = false }) {
   const [file, setFile] = useState(null);
   const [themeWords, setThemeWords] = useState([]);
   const [suggestions, setSuggestions] = useState(null);
@@ -12,6 +56,24 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
   const [selectedWord, setSelectedWord] = useState(null);
   const [applyingAll, setApplyingAll] = useState(false);
   const fileInputRef = useRef(null);
+
+  // novice-readiness spec 0.2.7 §3.8 (TH2b): the signature the showing list was
+  // fetched with, the latest request's token, and the live grid signature.
+  const gridSig = gridSigOf(grid, gridSize);
+  const gridSigRef = useRef(gridSig);
+  gridSigRef.current = gridSig;
+  const listSigRef = useRef(null);
+  const requestTokenRef = useRef(0);
+
+  // novice-readiness spec 0.2.8 §3.8 (F1): Apply All stops sending once the panel
+  // is closed (unmounted).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -76,8 +138,13 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
     }
   };
 
-  const analyzePlacements = async (words) => {
-    setLoading(true);
+  // `silent` is the grid-change refetch (PD-6-G16): no loading overlay, no success toast.
+  const analyzePlacements = async (words, { silent = false } = {}) => {
+    // novice-readiness spec 0.2.8 §3.8 (G#77-ThemeWordsPanel.jsx:133): the signature
+    // comes from the grid this request sends, not from a ref read after an await.
+    const requestSig = gridSigOf(grid, gridSize);
+    const token = ++requestTokenRef.current;
+    if (!silent) setLoading(true);
 
     // Convert frontend grid format to backend format if needed
     const convertGrid = (frontendGrid) => {
@@ -110,31 +177,66 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
         maxSuggestions: 3
       });
 
+      // A response that is not for the latest request, or (refetch) not for the
+      // latest grid signature, is dropped (novice-readiness spec 0.2.7 §3.8 (TH2b)).
+      if (token !== requestTokenRef.current) return;
+      if (silent && requestSig !== gridSigRef.current) return;
+
       // Ensure suggestions are in correct format
       if (data.suggestions && Array.isArray(data.suggestions)) {
+        listSigRef.current = requestSig;
         setSuggestions(data.suggestions);
-        toast.success(`Found placement suggestions for ${data.suggestions.length} words!`);
+        if (!silent) {
+          toast.success(`Found placement suggestions for ${data.suggestions.length} words!`);
+        }
       } else {
         console.error('Invalid suggestions format:', data.suggestions);
         toast.error('Received invalid placement data');
       }
 
     } catch (error) {
+      if (token !== requestTokenRef.current) return;
       console.error('Error analyzing placements:', error);
       const errorMsg = error.message || 'Failed to analyze placements';
       toast.error(errorMsg);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  // A list is superseded while the grid signature differs from the one it was
+  // fetched with (derived, not a timer flag): novice-readiness spec 0.2.7 §3.8 (TH2b).
+  const isSuperseded = () => listSigRef.current !== gridSigRef.current;
+
+  // novice-readiness spec 0.2.7 §3.8 (TH2b, PD-6-G13/G15): while suggestions show,
+  // a grid change refetches for the same words after the debounce; suspended while
+  // Apply All runs, then one refetch if the grid differs from the list's.
+  useEffect(() => {
+    if (!suggestions || applyingAll) return undefined;
+    if (listSigRef.current === gridSig) return undefined;
+    const timer = setTimeout(() => {
+      analyzePlacements(themeWords, { silent: true });
+    }, SUGGESTION_REFETCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // analyzePlacements and themeWords are read at fire time; the triggers are these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridSig, suggestions, applyingAll]);
 
   const handleApplyPlacement = async (wordData, suggestionIndex) => {
     const suggestion = wordData.suggestions[suggestionIndex];
 
+    if (isSuperseded()) {
+      toast(SUPERSEDED_MSG);
+      return;
+    }
+
+    // novice-readiness spec 0.2.8 §3.8 (F1, F4): the grid and document this request is sent under.
+    const sentGrid = grid;
+    const requestDocId = docId;
     try {
       // Apply placement to grid
       const data = await api.themeApplyPlacement({
-        grid: grid,
+        grid: sentGrid,
         placement: {
           word: suggestion.word,
           row: suggestion.row,
@@ -144,23 +246,19 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
       });
 
       // Update parent grid
-      if (onApplyPlacement) {
-        onApplyPlacement(data.grid, suggestion);
-      }
+      // Only an explicit `true` means App wrote the grid; anything else is a dropped reply
+      // (novice-readiness spec 0.2.8 §3.8, PD-6-G12).
+      const applied = onApplyPlacement?.(data.grid, suggestion, {
+        sentGrid,
+        docId: requestDocId,
+      });
+      if (applied !== true) return;
 
       toast.success(`Applied ${suggestion.word} to grid`);
 
     } catch (error) {
       console.error('Error applying placement:', error);
-      // apply-placement's 400 body carries the conflict reasons in `details`
-      // (client.js rule 5); `details` is polymorphic across endpoints, so
-      // guard the shape before reading it as a conflicts array.
-      if (Array.isArray(error.details) && error.details.length > 0) {
-        const [first, ...rest] = error.details;
-        toast.error(rest.length > 0 ? `${first} (+${rest.length} more)` : first);
-      } else {
-        toast.error(error.message || 'Failed to apply placement');
-      }
+      toast.error(conflictText(error.details) || error.message || 'Failed to apply placement');
     }
   };
 
@@ -171,17 +269,24 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
       return;
     }
 
+    if (isSuperseded()) {
+      toast(SUPERSEDED_MSG);
+      return;
+    }
+
     setApplyingAll(true);
     let successCount = 0;
-    let skipCount = 0;
+    const skipped = []; // `WORD (reason)`, in suggestion order
     let currentGrid = grid; // Track grid state through applications
+    const requestDocId = docId;
 
     toast.loading('Applying all theme words...', { id: 'apply-all' });
 
     for (const wordData of suggestions) {
+      if (!mountedRef.current) break; // panel closed: send nothing further
       // Skip words with no valid placements
       if (!wordData.suggestions || wordData.suggestions.length === 0) {
-        skipCount++;
+        skipped.push(`${wordData.word} (no valid placement)`);
         continue;
       }
 
@@ -190,7 +295,9 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
 
       // Skip if it has conflicts (WARNING in reasoning)
       if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
-        skipCount++;
+        skipped.push(
+          `${wordData.word} (skipped due to conflicts: ${bestSuggestion.reasoning})`
+        );
         continue;
       }
 
@@ -207,29 +314,39 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
         });
 
         if (response && response.grid) {
-          successCount++;
+          const sentGrid = currentGrid; // the grid this word's request was built from
           currentGrid = response.grid; // Update grid for next placement
 
-          // Update parent grid
-          if (onApplyPlacement) {
-            onApplyPlacement(currentGrid, bestSuggestion);
+          // Update parent grid. Only an explicit `true` counts; anything else is a dropped
+          // reply: the document the summary would describe is gone, so stop and say nothing
+          // (spec 0.2.8 §3.8, PD-6-G12).
+          const applied = onApplyPlacement?.(currentGrid, bestSuggestion, {
+            sentGrid,
+            docId: requestDocId,
+          });
+          if (applied !== true) {
+            toast.dismiss('apply-all');
+            setApplyingAll(false);
+            return;
           }
+          successCount++;
         }
       } catch (error) {
-        skipCount++;
+        skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);
       }
     }
 
     setApplyingAll(false);
 
-    // Show results
+    // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
+    // the words this action applied; every skipped word is listed with its reason.
+    const skippedText = skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}` : '';
     if (successCount > 0) {
-      toast.success(
-        `Applied ${successCount} theme words successfully!${skipCount > 0 ? ` (${skipCount} skipped due to conflicts)` : ''}`,
-        { id: 'apply-all' }
-      );
+      toast.success(`Applied ${successCount} theme words successfully!${skippedText}`, {
+        id: 'apply-all',
+      });
     } else {
-      toast.error('Could not apply any theme words', { id: 'apply-all' });
+      toast.error(`Could not apply any theme words${skippedText}`, { id: 'apply-all' });
     }
   };
 

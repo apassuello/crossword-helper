@@ -13,7 +13,7 @@ button { font-family: inherit; color: inherit; background: none; border: 0; curs
 input, select, textarea { font-family: inherit; color: inherit; }
 code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-3); padding: 1px 4px; border-radius: 2px; }
 
-.xw-app { display: grid; grid-template-rows: 54px 1fr; height: 100vh; background: var(--paper); }
+.xw-app { display: grid; grid-template-rows: var(--xw-topbar-h) 1fr; height: 100vh; background: var(--paper); }
 
 /* Top bar */
 .xw-topbar {
@@ -38,6 +38,12 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 .xw-icon-btn:hover { background: var(--card); color: var(--ink); }
 .xw-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .xw-primary-btn-sm { padding: 6px 12px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.xw-save-wrap { position: relative; }
+.xw-save-prompt { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 260px; padding: 10px 12px; border: 1px solid var(--accent-60); border-radius: 3px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.xw-save-prompt-label { font-family: var(--font-ui); font-size: 12px; color: var(--ink-4); }
+.xw-save-prompt-input { font-family: var(--font-ui); font-size: 13px; padding: 5px 8px; color: var(--ink); background: var(--paper); border: 1px solid var(--accent-60); border-radius: 3px; }
+.xw-save-prompt-actions { display: flex; gap: 8px; }
+.xw-save-prompt .xw-inline-confirm { margin-top: 0; border: 0; padding: 0; }
 .xw-saved-meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); letter-spacing: 0.04em; }
 .xw-mode-btn { width: 28px; height: 28px; border-radius: 50%; color: var(--ink-3); font-size: 16px; }
 .xw-mode-btn:hover { color: var(--accent); background: var(--card); }
@@ -345,4 +351,39 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 @media (max-width: 1200px) {
   .xw-body { grid-template-columns: 92px 1fr 380px; }
   .xw-toolrail { padding: 10px 6px; }
+  /* novice-readiness spec 0.2.7 §3.6 (TH5): at 1024 px the full brand wrapped and pushed
+     Save out of the 54 px top bar; shed the subtitle and version pill instead. */
+  .xw-brand-sub, .xw-pill { display: none; }
 }
+
+/* Key hint line under the grid (novice-readiness spec 0.2.7 §3.3) */
+.xw-grid-hint {
+  margin: 10px 0 0; text-align: center;
+  font-family: var(--font-ui); font-size: 12px; color: var(--ink-3); line-height: 1.4;
+}
+
+/* Grid panel (novice-readiness spec 0.2.7 §3.2) */
+.xw-grid-panel-actions { display: flex; gap: 8px; padding: 10px 0 0; }
+.xw-grid-panel-actions .xw-ghost-btn[aria-pressed="true"] { background: var(--card); color: var(--ink); border-color: var(--ink-3); }
+.xw-grid-panel-actions .xw-ghost-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* In-panel confirm (novice-readiness spec 0.2.7 §3.2) */
+.xw-grid-panel-sub { margin: 14px 0 0; font-family: var(--font-display); font-weight: 500; font-size: 14px; color: var(--ink-2); }
+.xw-inline-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent-60); border-radius: 3px; background: var(--card); }
+.xw-inline-confirm-msg { margin: 0 0 8px; font-family: var(--font-ui); font-size: 13px; color: var(--ink); line-height: 1.4; }
+.xw-inline-confirm-actions { display: flex; gap: 8px; }
+.xw-canvas > .xw-inline-confirm { margin: 0 0 10px; }
+
+/* Restore banner above the grid (novice-readiness spec 0.2.7 §3.4) */
+.xw-restore-banner {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 8px 12px;
+  border: 1px solid var(--accent-60); border-radius: 3px; background: var(--card);
+  font-family: var(--font-ui); font-size: 13px; color: var(--ink);
+}
+.xw-restore-banner-text { flex: 1; min-width: 0; }
+.xw-saved-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.xw-saved-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--ink-08); }
+.xw-saved-name { font-family: var(--font-ui); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.xw-saved-meta { grid-column: 1; font-family: var(--font-ui); font-size: 12px; color: var(--ink-3); }
+.xw-saved-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 6px; }
+.xw-saved-actions .xw-ghost-btn:disabled { opacity: .5; cursor: not-allowed; }

@@ -38,6 +38,16 @@ export function normalizeCell(cell) {
 }
 
 /**
+ * A saved grid as the app reads it back: every cell is
+ * { ...makeCell(), ...cell, isBlocked: false }; an absent isAutofilled reads
+ * false and a saved isBlocked is never restored.
+ * novice-readiness spec 0.2.7 §3.4 (M1), §3.7.
+ */
+export function normalizeSavedGrid(grid) {
+  return grid.map((row) => row.map((cell) => normalizeCell(cell)));
+}
+
+/**
  * Cells as the save document carries them: copies without `isBlocked`
  * (runtime-only), `isAutofilled` coerced to a boolean. Input is not mutated.
  */

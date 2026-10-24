@@ -1,9 +1,9 @@
 .theme-words-panel {
   position: fixed;
-  top: 0;
+  top: var(--xw-topbar-h); // novice-readiness spec 0.2.7 §3.6 (TH5)
   right: 0;
   width: 450px;
-  height: 100vh;
+  height: calc(100vh - var(--xw-topbar-h));
   background: white;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.15);
   display: flex;

@@ -22,7 +22,8 @@
 //   - All pause/resume UI (state, handlers, resume-prompt banner, the
 //     mount-time localStorage read) and the black-square suggestion modal —
 //     pause lands in F11, black squares in Task 20. The "Suggest Black
-//     Square" button itself stays, permanently disabled.
+//     Square" button is not rendered at all (novice-readiness spec 0.2.7
+//     §3.1 (#54); the issue stays open).
 //   - ProgressIndicator: never imported. Global constraint — no spinners.
 //     Progress is always a bar (`.xw-progress-bar`/`.xw-progress-fill`).
 //
@@ -89,14 +90,6 @@ export function getThemeEntries(grid) {
   collect(across, 'across');
   collect(down, 'down');
   return entries;
-}
-
-function SuggestBlackSquareButton() {
-  return (
-    <button className="xw-ghost-btn" disabled title="lands in Task 20">
-      Suggest Black Square
-    </button>
-  );
 }
 
 export function AutofillPanel({ machine, grid, docId }) {
@@ -202,7 +195,6 @@ export function AutofillPanel({ machine, grid, docId }) {
             <button className="xw-danger-btn" onClick={machine.cancel} disabled={Boolean(machine.cancelPending)}>
               Cancel
             </button>
-            {state === 'running' && <SuggestBlackSquareButton />}
           </div>
         </div>
       )}
@@ -397,7 +389,6 @@ export function AutofillPanel({ machine, grid, docId }) {
           <button className="xw-primary-btn" onClick={handleStart} disabled={noEmptySlots || noWordlists}>
             Start Autofill
           </button>
-          {emptySlots > 0 && <SuggestBlackSquareButton />}
           {noWordlists && <div className="xw-insp-mini">Select at least one word list</div>}
           {noEmptySlots && <div className="xw-insp-mini">Clear some cells to run autofill again</div>}
         </div>

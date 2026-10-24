@@ -48,6 +48,30 @@ describe('ExportPanel Component', () => {
     expect(formatSelect).toHaveTextContent(/Text/i);
   });
 
+  // novice-readiness spec 0.2.7 §3.1 (G10): unfinished formats and the disabled checkbox are not rendered.
+  it('does not render the PDF, .puz or Include-clues controls', () => {
+    render(<ExportPanel {...defaultProps} />);
+    expect(screen.queryByText('PDF (coming soon)')).toBeNull();
+    expect(screen.queryByText('.puz (coming soon)')).toBeNull();
+    expect(screen.queryByText('Include clues (if available)')).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    const terms = Array.from(document.querySelectorAll('dt')).map((el) => el.textContent);
+    expect(terms).not.toContain('PDF');
+    expect(terms).not.toContain('.puz');
+  });
+
+  it('keeps the JSON, HTML and Text options and Format Information terms', () => {
+    render(<ExportPanel {...defaultProps} />);
+    const options = Array.from(document.querySelectorAll('option')).map((el) => el.textContent);
+    expect(options).toEqual([
+      expect.stringMatching(/JSON/),
+      expect.stringMatching(/HTML/),
+      expect.stringMatching(/Text/),
+    ]);
+    const terms = Array.from(document.querySelectorAll('dt')).map((el) => el.textContent);
+    expect(terms).toEqual(['JSON', 'HTML', 'Text']);
+  });
+
   it('generates preview when Preview button is clicked', async () => {
     const user = userEvent.setup();
     render(<ExportPanel {...defaultProps} />);

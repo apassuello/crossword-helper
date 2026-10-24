@@ -44,6 +44,18 @@ describe('TopBar (mounted, controlled)', () => {
     expect(props.onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('renders the savePrompt slot inside a relative wrapper next to the Save button', () => {
+    const props = baseProps({ savePrompt: <div data-testid="prompt">P</div> });
+    const { getByTestId, getByText } = render(<TopBar {...props} />);
+    const wrap = getByTestId('prompt').parentElement;
+    expect(wrap).toContainElement(getByText('Save grid'));
+  });
+
+  it('renders no extra node without a savePrompt', () => {
+    const { queryByTestId } = render(<TopBar {...baseProps()} />);
+    expect(queryByTestId('prompt')).toBeNull();
+  });
+
   it('clicking the theme toggle calls onToggleTheme', () => {
     const props = baseProps();
     const { getByTitle } = render(<TopBar {...props} />);

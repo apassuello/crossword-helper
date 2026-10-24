@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false }) {
+export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false, savePrompt = null }) {
   const offline = !status.online;
   const kind = offline ? 'err' : status.degraded ? 'warn' : 'ok';
   const label = offline ? 'offline' : status.degraded ? 'degraded' : 'online';
@@ -73,12 +73,15 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
           </svg>
           <span>Clean grid</span>
         </button>
-        <button className="xw-primary-btn xw-primary-btn-sm" onClick={onSave}>
-          <svg width="12" height="12" viewBox="0 0 16 16">
-            <path d="M3 3 v10 h10 V6 l-3-3 z M6 3 v3 h5 M6 10 h4" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          </svg>
-          <span>Save grid</span>
-        </button>
+        <div className="xw-save-wrap">
+          <button className="xw-primary-btn xw-primary-btn-sm" onClick={onSave}>
+            <svg width="12" height="12" viewBox="0 0 16 16">
+              <path d="M3 3 v10 h10 V6 l-3-3 z M6 3 v3 h5 M6 10 h4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+            <span>Save grid</span>
+          </button>
+          {savePrompt}
+        </div>
         {savedLabel && <span className="xw-saved-meta">{savedLabel}</span>}
         <div className="xw-topbar-divider" />
         <button className="xw-mode-btn" onClick={onToggleTheme} title="Toggle theme">

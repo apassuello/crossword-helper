@@ -1,13 +1,23 @@
 import React, { useState, useRef } from 'react';
 import './ImportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
+import InlineConfirm from './bench/InlineConfirm';
 
-function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
+// novice-readiness spec 0.2.8 §3.2 Import (Q2): same text as New grid and Open saved.
+const REPLACE_MESSAGE = 'Replace the current grid? Unsaved changes are lost.';
+
+function ImportPanel({
+  onImport,
+  currentGridSize,
+  editingPaused = false,
+  gridHasContent = false,
+}) {
   const [importMethod, setImportMethod] = useState('file'); // 'file' or 'paste'
   const [jsonInput, setJsonInput] = useState('');
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
   const fileInputRef = useRef(null);
 
   /**
@@ -190,11 +200,28 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
   /**
    * Handle import action
    */
-  const handleImport = () => {
+  const handleImportClick = () => {
     if (!preview || !preview.data) {
       setError('No valid data to import. Please validate first.');
       return;
     }
+
+    // Q2: over a grid with any letter or black square, the button only opens the confirm.
+    // The import itself (`performImport`) is reached from the confirm's Replace alone, so a
+    // second press of this button can never replace the grid. Cancel keeps the preview.
+    if (gridHasContent) {
+      setConfirmingReplace(true);
+      return;
+    }
+    performImport();
+  };
+
+  const performImport = () => {
+    if (!preview || !preview.data) {
+      setError('No valid data to import. Please validate first.');
+      return;
+    }
+    setConfirmingReplace(false);
 
     setIsProcessing(true);
 
@@ -232,6 +259,7 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
    * Clear all state
    */
   const handleClear = () => {
+    setConfirmingReplace(false);
     setJsonInput('');
     setPreview(null);
     setError(null);
@@ -326,14 +354,24 @@ function ImportPanel({ onImport, currentGridSize, editingPaused = false }) {
             <pre className="preview-content">
               {preview.text}
             </pre>
+            {confirmingReplace && (
+              <InlineConfirm
+                message={REPLACE_MESSAGE}
+                confirmLabel="Replace"
+                cancelLabel="Cancel"
+                confirmDisabled={editingPaused}
+                onConfirm={performImport}
+                onCancel={() => setConfirmingReplace(false)}
+              />
+            )}
             <div className="import-actions">
               <button onClick={handleClear} className="clear-btn">
                 Clear
               </button>
               <button
-                onClick={handleImport}
+                onClick={handleImportClick}
                 className="import-btn"
-                disabled={isProcessing || editingPaused}
+                disabled={isProcessing || editingPaused || confirmingReplace}
               >
                 {isProcessing ? 'Importing...' : 'Import Grid'}
               </button>
