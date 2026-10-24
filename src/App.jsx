@@ -26,6 +26,7 @@ import {
   planClean,
   clearAllErrors,
   canToggleBlack,
+  gridHasContent,
 } from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
 import SaveNamePrompt from './components/bench/SaveNamePrompt';
@@ -561,11 +562,13 @@ function App() {
       setGridSize(size);
     }
 
-    // Update grid state. Numbering + validation are now hook-driven: setting the
-    // imported grid changes the structural signature, so useNumbering renumbers
-    // (server-authoritative) and revalidates. The imported `numbering` field is
-    // intentionally no longer applied — the server is the source of truth.
-    const normalisedGrid = writeImportedGrid(importedGrid);
+    // novice-readiness spec 0.2.8 §3.2 Import (F3): the imported grid is born numbered.
+    // ImportPanel builds every cell with `number: null`, and useNumbering fires only on a
+    // structural-signature change (size + black layout), which an import over a grid with the
+    // same size and layout does not cause. So the numbers are applied here, as New grid does;
+    // the hook's server reconcile still runs on any real structural change. The imported
+    // `numbering` field is intentionally not applied — numbers are computed from the grid.
+    const normalisedGrid = localNumber(writeImportedGrid(importedGrid)).grid;
     setGrid(normalisedGrid);
 
     // Update symmetry setting if provided
@@ -577,9 +580,14 @@ function App() {
     setDocId(mintDocId());
     setSavedSig(contentSigOf(size, normalisedGrid));
 
+    // novice-readiness spec 0.2.8 §3.2 Import (M3): clear a finished run's result and
+    // "Keep partial fill" offer, as New grid and Open saved do.
+    autofill.discardRun();
+    setSelectedCell(null);
+
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize]);
+  }, [gridSize, autofill.discardRun]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
@@ -743,6 +751,7 @@ function App() {
                 onImport={handleGridImport}
                 currentGridSize={gridSize}
                 editingPaused={editingPaused}
+                gridHasContent={gridHasContent(grid)}
               />
             </div>
           )}

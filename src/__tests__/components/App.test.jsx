@@ -1571,3 +1571,115 @@ describe('App Theme panel and the top bar (§3.6 TH5)', () => {
     expect(container.querySelector('.theme-words-panel')).toBeNull();
   });
 });
+
+// novice-readiness spec 0.2.8 §3.2 Import (F3, M3, Q2): import confirms before replacing a
+// grid with content, is born numbered, and clears a finished run.
+describe('App import: confirm, numbering, run discard (§3.2)', () => {
+  const REPLACE = 'Replace the current grid? Unsaved changes are lost.';
+  const numberCount = (container) => container.querySelectorAll('.xw-cell-number').length;
+  const settle = () => act(async () => new Promise((r) => setTimeout(r, 400)));
+  const blank15 = () => {
+    const grid = Array.from({ length: 15 }, () => Array(15).fill('.'));
+    grid[0][0] = 'C';
+    grid[0][1] = 'A';
+    grid[0][2] = 'T';
+    return { size: 15, grid };
+  };
+  // Stops at the "Import Grid" button so a test can press it itself.
+  const preparePaste = async (user, gridJson) => {
+    await user.click(screen.getByRole('button', { name: /^import$/i }));
+    await user.click(screen.getByRole('button', { name: /paste json/i }));
+    fireEvent.change(screen.getByLabelText(/paste json data/i), {
+      target: { value: JSON.stringify(gridJson) },
+    });
+    await user.click(screen.getByRole('button', { name: /validate json/i }));
+    await screen.findByRole('button', { name: /import grid/i });
+  };
+  const typeLetter = async (user, container, r, c, ch) => {
+    await user.click(cells(container)[r * 15 + c]);
+    fireEvent.keyDown(container.querySelector('.xw-grid-focus'), { key: ch });
+  };
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+  });
+
+  afterEach(() => {
+    probe.autofillOverride = null;
+  });
+
+  it('numbers an imported grid with the same size and layout right after the import (F3)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await waitFor(() => expect(numberCount(container)).toBe(29));
+    await settle();
+
+    await importGridViaPaste(user, container, blank15());
+
+    await waitFor(() => expect(letters(container)).toEqual(expect.arrayContaining(['C', 'A', 'T'])), {
+      timeout: 3000,
+    });
+    expect(numberCount(container)).toBe(29);
+  });
+
+  it('discards the retained run when a grid is imported (M3)', async () => {
+    const user = userEvent.setup();
+    const discardRun = vi.fn();
+    probe.autofillOverride = { discardRun };
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+
+    await importGridViaPaste(user, container, blank15());
+
+    await waitFor(() => expect(letters(container)).toEqual(expect.arrayContaining(['C'])), {
+      timeout: 3000,
+    });
+    expect(discardRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks before replacing a grid with a letter; Cancel keeps it (Q2)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 5, 5, 'Q');
+    expect(letters(container)).toEqual(['Q']);
+
+    await preparePaste(user, blank15());
+    await user.click(screen.getByRole('button', { name: /import grid/i }));
+
+    expect(screen.getByText(REPLACE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replace' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await settle();
+
+    expect(screen.queryByText(REPLACE)).toBeNull();
+    expect(letters(container)).toEqual(['Q']);
+  });
+
+  it('replaces the grid once Replace is pressed (Q2)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 5, 5, 'Q');
+
+    await preparePaste(user, blank15());
+    await user.click(screen.getByRole('button', { name: /import grid/i }));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(letters(container)).toEqual(['C', 'A', 'T']), { timeout: 3000 });
+  });
+
+  it('shows no confirm over an empty grid (Q2)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+
+    await preparePaste(user, blank15());
+    await user.click(screen.getByRole('button', { name: /import grid/i }));
+
+    expect(screen.queryByText(REPLACE)).toBeNull();
+    await waitFor(() => expect(letters(container)).toEqual(['C', 'A', 'T']), { timeout: 3000 });
+  });
+});
