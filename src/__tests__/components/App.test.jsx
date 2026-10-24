@@ -1409,15 +1409,23 @@ describe('App Verify and Clean (§3.5 G5, §2.3 S1, #63)', () => {
     expect(screen.queryByText(/words flagged/)).toBeNull();
   });
 
-  it('Clean, N > 0: the confirm counts the letters, Cancel changes nothing and toasts nothing', async () => {
+  it('Clean, N > 0: the confirm counts the letters, Cancel changes nothing (red cells included) and toasts nothing', async () => {
     const { user, container } = await boot();
     await typeCat(user, container);
+    vi.spyOn(api, 'verifyWords').mockResolvedValue(flagged([0, 0], [0, 1]));
+    await clickVerify(user);
+    await waitFor(() => expect(errorsNow()).toBe(2));
+    const redAt = () =>
+      gridNow().flatMap((row, r) => row.flatMap((x, c) => (x.isError ? [`${r},${c}`] : [])));
+    const redBefore = redAt();
     const before = unnumbered(structuredClone(gridNow()));
     vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
     await clickClean(user);
     expect(await screen.findByText('Clean will remove 2 letters')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(confirmText()).toBeNull();
+    expect(redAt()).toEqual(redBefore);
+    expect(redBefore).toEqual(['0,0', '0,1']);
     expect(unnumbered(gridNow())).toEqual(before);
     expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
   });
