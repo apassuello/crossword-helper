@@ -18,7 +18,7 @@ function conflictText(details) {
 
 // novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G17): the reason Apply All gives for
 // one word whose apply request failed. "skipped due to conflicts" only for a real
-// conflicts array; status 0 (no response) is unreachable; anything else is the
+// conflicts array; status 0 (no response arrived) is "could not reach the server"; anything else is the
 // error's own message. The synthesised HTTP_<status> code never reaches the user.
 function describeApplyFailure(error) {
   const conflicts = conflictText(error.details);
