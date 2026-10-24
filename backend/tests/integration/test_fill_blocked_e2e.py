@@ -3,9 +3,11 @@ Real-subprocess seam test for a blocked fill (novice-readiness spec 0.2.5
 section 2.2, B3 and C4).
 
 POST /api/fill/with-progress runs the real CLI; the task's SSE queue is read
-until a terminal event. E4 also covers Task 3.1's lock channel end to end:
-`locked_cells` in the body is the only thing that makes the CLI see Q and X as
-locked. E5 pins that the CLI's off-list ("C4") stderr event crosses
+until a terminal event. E4 pins that a blocked result (exit 3) arrives as
+a `complete` event carrying the blocked payload. E4b pins the lock channel:
+the route's `"locked"` key is the only thing that stops the CLI treating Q and
+X as free (`--lock-filled` alone locks every letter when the key is absent, so
+E4 cannot tell). E5 pins that the CLI's off-list ("C4") stderr event crosses
 `_pump_stderr` as a `running` event.
 
 Deliberately UNMARKED (no `slow`): it must run in the default suite.
@@ -96,3 +98,21 @@ def test_e5_off_list_event_crosses_the_stderr_pump_as_running(client, tmp_path, 
     expected = {"off_list_cells": [[0, 0], [0, 1], [0, 2]], "warning": "Typed words not in the selected word lists: CAB"}
     off_list = [e for e in events[:-1] if e.get("status") == "running" and e.get("data") == expected]
     assert off_list, events
+
+
+def test_e4b_empty_locked_cells_reaches_the_cli_and_nothing_is_locked(client):
+    grid = [["."] * 5 for _ in range(5)]
+    grid[0][0], grid[0][1] = "Q", "X"
+    task_id = _post(
+        client,
+        {"size": 5, "grid": grid, "locked_cells": [], "wordlists": ["comprehensive"], "timeout": 10},
+    )
+
+    terminal = _events_until_terminal(task_id)[-1]
+
+    assert terminal["status"] == "complete", terminal
+    data = terminal["data"]
+    assert data["blocked"] is False, data
+    assert data["success"] is True, data
+    assert data["all_slots_filled"] is True, data
+    assert data["grid"][0][:2] != ["Q", "X"], data["grid"]
