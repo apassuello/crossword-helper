@@ -357,3 +357,9 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 .xw-grid-panel-actions { display: flex; gap: 8px; padding: 10px 0 0; }
 .xw-grid-panel-actions .xw-ghost-btn[aria-pressed="true"] { background: var(--card); color: var(--ink); border-color: var(--ink-3); }
 .xw-grid-panel-actions .xw-ghost-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* In-panel confirm (novice-readiness spec 0.2.7 §3.2) */
+.xw-grid-panel-sub { margin: 14px 0 0; font-family: var(--font-display); font-weight: 500; font-size: 14px; color: var(--ink-2); }
+.xw-inline-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent-60); border-radius: 3px; background: var(--card); }
+.xw-inline-confirm-msg { margin: 0 0 8px; font-family: var(--font-ui); font-size: 13px; color: var(--ink); line-height: 1.4; }
+.xw-inline-confirm-actions { display: flex; gap: 8px; }

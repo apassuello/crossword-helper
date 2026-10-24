@@ -21,6 +21,7 @@ const sel = (row, col) => ({ row, col, direction: 'across' });
 
 const setup = (over = {}) => {
   const onToggleBlack = vi.fn();
+  const onNewGrid = vi.fn();
   const props = {
     grid: makeGrid(),
     gridSize: SIZE,
@@ -28,10 +29,11 @@ const setup = (over = {}) => {
     symmetryEnabled: true,
     editingPaused: false,
     onToggleBlack,
+    onNewGrid,
     ...over,
   };
   render(<GridPanel {...props} />);
-  return { onToggleBlack, button: screen.getByRole('button', { name: 'Black square' }) };
+  return { onToggleBlack, onNewGrid, button: screen.getByRole('button', { name: 'Black square' }) };
 };
 
 describe('GridPanel Black square (§3.3)', () => {
@@ -85,5 +87,87 @@ describe('GridPanel Black square (§3.3)', () => {
   it('aria-pressed is false for a white cell and for no selection', () => {
     const { button } = setup();
     expect(button).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.2 (#55): New grid with an in-panel confirm.
+describe('GridPanel New grid (§3.2)', () => {
+  const withContent = () => makeGrid({ '0,0': { letter: 'A' } });
+  const sizeBtn = (label) => screen.getByRole('button', { name: label });
+
+  it('offers exactly 11×11, 15×15 and 21×21 (× is U+00D7)', () => {
+    setup();
+    for (const label of ['11\u00d711', '15\u00d715', '21\u00d721']) {
+      expect(sizeBtn(label)).toBeInTheDocument();
+    }
+  });
+
+  it('on a grid with no letter and no black square, calls onNewGrid(size) with no confirm', async () => {
+    const { onNewGrid } = setup();
+    await userEvent.setup().click(sizeBtn('11\u00d711'));
+    expect(onNewGrid).toHaveBeenCalledTimes(1);
+    expect(onNewGrid).toHaveBeenCalledWith(11);
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('on a grid with a letter, shows the confirm and does not call onNewGrid yet', async () => {
+    const { onNewGrid } = setup({ grid: withContent() });
+    await userEvent.setup().click(sizeBtn('21\u00d721'));
+    expect(onNewGrid).not.toHaveBeenCalled();
+    expect(screen.getByRole('group')).toHaveTextContent(
+      'Replace the current grid? Unsaved changes are lost.'
+    );
+  });
+
+  it('a black square alone also needs the confirm', async () => {
+    const { onNewGrid } = setup({ grid: makeGrid({ '2,2': { isBlack: true } }) });
+    await userEvent.setup().click(sizeBtn('15\u00d715'));
+    expect(onNewGrid).not.toHaveBeenCalled();
+    expect(screen.getByRole('group')).toBeInTheDocument();
+  });
+
+  it('Replace calls onNewGrid with the chosen size and closes the confirm', async () => {
+    const user = userEvent.setup();
+    const { onNewGrid } = setup({ grid: withContent() });
+    await user.click(sizeBtn('21\u00d721'));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+    expect(onNewGrid).toHaveBeenCalledTimes(1);
+    expect(onNewGrid).toHaveBeenCalledWith(21);
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('Cancel closes the confirm and changes nothing', async () => {
+    const user = userEvent.setup();
+    const { onNewGrid } = setup({ grid: withContent() });
+    await user.click(sizeBtn('15\u00d715'));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onNewGrid).not.toHaveBeenCalled();
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('disables all three size buttons while editing is paused', () => {
+    setup({ editingPaused: true });
+    for (const label of ['11\u00d711', '15\u00d715', '21\u00d721']) {
+      expect(sizeBtn(label)).toBeDisabled();
+    }
+  });
+
+  it('drops an open confirm when the panel unmounts', async () => {
+    const user = userEvent.setup();
+    const props = {
+      grid: withContent(),
+      gridSize: SIZE,
+      selectedCell: null,
+      symmetryEnabled: true,
+      editingPaused: false,
+      onToggleBlack: vi.fn(),
+      onNewGrid: vi.fn(),
+    };
+    const { unmount } = render(<GridPanel {...props} />);
+    await user.click(sizeBtn('15\u00d715'));
+    expect(screen.getByRole('group')).toBeInTheDocument();
+    unmount();
+    render(<GridPanel {...props} />);
+    expect(screen.queryByRole('group')).toBeNull();
   });
 });

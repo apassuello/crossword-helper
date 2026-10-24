@@ -15,6 +15,7 @@ import {
   writeImportedGrid,
   writeCleanedGrid,
   canToggleBlack,
+  gridHasContent,
 } from '../gridEdits';
 
 const cell = (over = {}) => ({ ...makeCell(), ...over });
@@ -293,5 +294,24 @@ describe('canToggleBlack', () => {
   it('is false out of range', () => {
     expect(canToggleBlack(mk(5), 5, 0, true)).toBe(false);
     expect(canToggleBlack(mk(5), 0, -1, false)).toBe(false);
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.2 (#55): does New grid need a confirm?
+describe('gridHasContent', () => {
+  it('is false for a null grid', () => {
+    expect(gridHasContent(null)).toBe(false);
+  });
+
+  it('is false for an all-empty white grid, even with theme-locked cells', () => {
+    expect(gridHasContent(mk(3, { '1,1': { isThemeLocked: true } }))).toBe(false);
+  });
+
+  it('is true with one letter', () => {
+    expect(gridHasContent(mk(3, { '2,0': { letter: 'A' } }))).toBe(true);
+  });
+
+  it('is true with one black square and no letters', () => {
+    expect(gridHasContent(mk(3, { '0,2': { isBlack: true } }))).toBe(true);
   });
 });
