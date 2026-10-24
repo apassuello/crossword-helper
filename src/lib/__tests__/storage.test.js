@@ -25,6 +25,7 @@ let store;
 const T = (n) => new Date(Date.UTC(2026, 9, 1, 10, 0, n)).toISOString();
 const g = [[{ letter: 'A' }]];
 const readArray = () => JSON.parse(store.get(SAVE_KEY));
+const legacyBlob = (extra) => JSON.stringify({ size: 5, grid: g, ...extra });
 
 beforeEach(() => {
   store = new Map();
@@ -326,6 +327,128 @@ describe('legacy migration (§3.4, PD-6-G1)', () => {
       throw new Error('QuotaExceededError');
     });
     await expect(list()).resolves.toBeInstanceOf(Array);
+    expect(store.has(LEGACY_SAVE_KEY)).toBe(true);
+  });
+});
+
+describe('storage never throws on read (novice-readiness spec 0.2.8 §3.4, M1)', () => {
+  it('getItem throwing SecurityError: list() resolves [] and load() resolves null', async () => {
+    localStorage.getItem.mockImplementation(() => {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    });
+    await expect(list()).resolves.toEqual([]);
+    await expect(load()).resolves.toBeNull();
+  });
+});
+
+describe('a fork during a named Save keeps the other entry (novice-readiness spec 0.2.8 §3.4, M2)', () => {
+  it('does not remove replaceEntryId and names the fork "<chosen name> (copy)"', async () => {
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 1, 10, 0, 1)));
+    const a = await save({ id: 'A', size: 5, grid: g }, { name: 'Mine' });
+    await save({ id: 'B', size: 5, grid: g }, { name: 'Other' });
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 1, 10, 0, 9)));
+    await save({ id: 'A', size: 5, grid: g }, {}); // another tab moved A's savedAt on
+    const res = await save(
+      { id: 'A', size: 5, grid: g },
+      { name: 'Other', replaceEntryId: 'B', expectedSavedAt: a.savedAt }
+    );
+    expect(res.forked).toBe(true);
+    expect(res.name).toBe('Other (copy)');
+    const entries = await list();
+    expect(entries.map((e) => e.id)).toContain('B');
+    expect(entries.find((e) => e.id === 'B').name).toBe('Other');
+    expect(entries.find((e) => e.id === res.id).name).toBe('Other (copy)');
+    expect(entries.find((e) => e.id === 'A').name).toBe('Mine');
+  });
+
+  it('without a fork replaceEntryId still removes that entry', async () => {
+    await save({ id: 'B', size: 5, grid: g }, { name: 'Other' });
+    const res = await save({ id: 'A', size: 5, grid: g }, { name: 'Other', replaceEntryId: 'B' });
+    expect(res.forked).toBe(false);
+    expect((await list()).map((e) => e.id)).toEqual(['A']);
+  });
+
+  it('Q1: a save whose entry no longer exists writes that entry and does not fork', async () => {
+    const res = await save({ id: 'X', size: 5, grid: g }, { expectedSavedAt: 't1' });
+    expect(res.forked).toBe(false);
+    expect(res.id).toBe('X');
+    expect(readArray().map((e) => e.id)).toEqual(['X']);
+  });
+});
+
+describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2.8 §3.4; Greptile #77 storage.js:171)', () => {
+  let calls;
+  let inside;
+  beforeEach(() => {
+    calls = [];
+    inside = false;
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      locks: {
+        request: vi.fn(async (name, cb) => {
+          calls.push(name);
+          inside = true;
+          try {
+            return await cb();
+          } finally {
+            inside = false;
+          }
+        }),
+      },
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const writesInsideLock = () => {
+    const seen = [];
+    localStorage.setItem.mockImplementation((k, v) => {
+      seen.push(inside);
+      store.set(k, String(v));
+    });
+    return seen;
+  };
+
+  it('save runs its whole read-and-write inside one lock callback', async () => {
+    const seen = writesInsideLock();
+    await save({ id: 'a', size: 5, grid: g });
+    expect(calls).toEqual([SAVE_KEY]);
+    expect(seen).toEqual([true]);
+  });
+
+  it('remove runs its read-and-write inside one lock callback', async () => {
+    await save({ id: 'a', size: 5, grid: g });
+    calls.length = 0;
+    const seen = writesInsideLock();
+    await remove('a');
+    expect(calls).toEqual([SAVE_KEY]);
+    expect(seen).toEqual([true]);
+  });
+
+  it('the legacy migration write runs inside the lock', async () => {
+    store.set(LEGACY_SAVE_KEY, legacyBlob({ savedAt: T(0) }));
+    const seen = writesInsideLock();
+    await list();
+    expect(calls).toEqual([SAVE_KEY]);
+    expect(seen).toEqual([true]);
+  });
+
+  it('a plain list() with nothing to migrate takes no lock', async () => {
+    await list();
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('a failed migration write still returns the legacy entry (novice-readiness spec 0.2.8 §3.4; Greptile #77 storage.js:126)', () => {
+  it('list() returns the legacy entry, load() too, and the legacy key stays', async () => {
+    store.set(LEGACY_SAVE_KEY, legacyBlob({ savedAt: T(0) }));
+    localStorage.setItem.mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const entries = await list();
+    expect(entries.map((e) => e.id)).toEqual([`legacy-${T(0)}`]);
+    expect((await load()).name).toBe('Saved grid');
     expect(store.has(LEGACY_SAVE_KEY)).toBe(true);
   });
 });
