@@ -3,7 +3,7 @@
 // The bundle's algorithm list (back/random), preferPersonal checkbox, preset
 // cards, and progress-ticker are fiction; real fields/behavior come from the
 // OLD `src/components/AutofillPanel.jsx` (options shape; getThemeEntries was
-// rewritten over allSlots in Task 5.5) minus everything pause/resume/black-square-modal related.
+// rewritten over allSlots, spec 0.2.7 §2.3) minus everything pause/resume/black-square-modal related.
 //
 // Presentational / fully controlled for lifecycle: this component owns only
 // the options FORM state + the one-time wordlist fetch on mount. All

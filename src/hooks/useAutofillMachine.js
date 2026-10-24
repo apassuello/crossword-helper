@@ -51,7 +51,8 @@
  * `cancelPending` is React state (a ref change does not re-render, and the panel disables
  * Cancel on it): true from cancel()'s post, and from an early Cancel recorded in `submitting`,
  * until the 200, a rejection, or any transition to a non-live state. `cancelPendingRef` stays
- * for the synchronous guards; the two are kept in sync.
+ * for the synchronous guards. The state is true while either the ref or an early Cancel
+ * (`earlyCancelRef`, set in `submitting` before the ref is) is pending.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
