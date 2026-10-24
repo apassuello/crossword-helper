@@ -91,7 +91,7 @@ def test_tr2_subscriber_that_lost_the_queue_race_gets_the_record_on_timeout(app,
 def test_tr3_disconnect_mid_run_keeps_the_tracker(app, task_id):
     gen = _subscribe(app, task_id)
     assert next(gen) == ": heartbeat\n\n"
-    gen.close()  # client goes away; runs generate()'s finally
+    gen.close()  # client goes away; generate() has no finally, so nothing is cleaned up
 
     assert task_id in pr.progress_queues
     assert app.test_client().get(f"/api/progress/{task_id}").status_code == 200
@@ -212,6 +212,21 @@ def test_queue_timeout_sweeps_expired_trackers(app, task_id):
     pr.terminal_events[old] = (event, event["timestamp"] - 61)
 
     assert next(gen) == ": heartbeat\n\n"  # get() times out -> Empty -> sweep
+
+    assert old not in pr.progress_queues
+
+
+def test_queue_timeout_that_finds_the_record_still_sweeps_expired_trackers(app, task_id):
+    gen = _subscribe(app, task_id)
+    assert next(gen) == ": heartbeat\n\n"  # no terminal event yet; waiting on the queue
+    old = pr.create_progress_tracker()
+    pr.send_progress(old, 100, "done", "complete")
+    event, _ = pr.terminal_events[old]
+    pr.terminal_events[old] = (event, event["timestamp"] - 61)
+    pr.send_progress(task_id, 100, "Complete", "complete")
+    pr.progress_queues[task_id].get_nowait()  # another subscriber took it; only the record remains
+
+    assert _data(next(gen))["status"] == "complete"  # Empty -> record found -> ends
 
     assert old not in pr.progress_queues
 
