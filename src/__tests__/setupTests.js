@@ -9,9 +9,16 @@
  */
 
 import '@testing-library/jest-dom';
-import { cleanup } from '@testing-library/react';
+import { act, cleanup } from '@testing-library/react';
+import { configure } from '@testing-library/dom';
 import { afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { server } from './fixtures/apiMocks';
+
+// @testing-library/react 14 bundles its own @testing-library/dom (9.x), so the dom copy that
+// user-event drives (10.x, top level) never gets React's act() event wrapper, and every
+// `user.click` that sets state printed "not wrapped in act(...)". Install the wrapper on
+// that copy. (Awaiting the resolution in a test cannot fix this: the update is the click's.)
+configure({ eventWrapper: (cb) => { let r; act(() => { r = cb(); }); return r; } });
 
 // Establish API mocking before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));

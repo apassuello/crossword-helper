@@ -167,6 +167,34 @@ describe('save', () => {
   });
 });
 
+describe('corrupt elements in the array key', () => {
+  const valid = { id: 'a', name: 'A', size: 5, grid: g, savedAt: T(1) };
+  const seed = () => store.set(SAVE_KEY, JSON.stringify([null, 5, valid]));
+
+  it('list() returns only the valid entry and load() returns it', async () => {
+    seed();
+    expect((await list()).map((e) => e.id)).toEqual(['a']);
+    expect((await load()).id).toBe('a');
+  });
+
+  it('an object without a string id is dropped too', async () => {
+    store.set(SAVE_KEY, JSON.stringify([{ name: 'no id' }, { id: 7 }, 'x', valid]));
+    expect((await list()).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('save writes back only valid entries', async () => {
+    seed();
+    await save({ id: 'b', size: 5, grid: g });
+    expect(readArray().map((e) => e.id)).toEqual(['b', 'a']);
+  });
+
+  it('remove writes back only valid entries', async () => {
+    store.set(SAVE_KEY, JSON.stringify([null, 5, valid, { ...valid, id: 'c' }]));
+    await remove('c');
+    expect(readArray().map((e) => e.id)).toEqual(['a']);
+  });
+});
+
 describe('remove', () => {
   it('removes the entry; an unknown id resolves and changes nothing', async () => {
     await save({ id: 'a', size: 5, grid: g });

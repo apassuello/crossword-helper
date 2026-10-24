@@ -1,6 +1,6 @@
 // novice-readiness spec 0.2.7 §3.3 (G7) / §3.2: the Grid panel's Black square toggle.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GridPanel from '../GridPanel';
 import storage from '../../../lib/storage';
@@ -197,7 +197,10 @@ describe('GridPanel Open saved (§3.4)', () => {
   };
   const rowOf = (name) => screen.getByText(name).closest('li');
   const showList = async (user) => {
-    await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    // list() resolves after the click; flush it inside act so the state update is wrapped.
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    });
     await screen.findByText('First');
   };
 
@@ -237,7 +240,9 @@ describe('GridPanel Open saved (§3.4)', () => {
     await showList(user);
     await user.click(within(rowOf('First')).getByRole('button', { name: 'Delete' }));
     const confirm = screen.getByRole('group', { name: 'Delete "First"?' });
-    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    await act(async () => {
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    });
     expect(removeSpy).toHaveBeenCalledTimes(1);
     expect(removeSpy).toHaveBeenCalledWith('one');
     await waitFor(() => expect(screen.queryByText('First')).toBeNull());

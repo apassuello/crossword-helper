@@ -237,8 +237,8 @@ function App() {
   // `banner` true shows the restore banner for the entry; false dismisses it.
   const adoptSavedEntry = useCallback(
     (entry, { banner }) => {
-      if (!Array.isArray(entry.grid) || !entry.grid.every(Array.isArray)) {
-        console.error('Ignoring a saved grid whose cells are malformed:', entry.id);
+      if (!entry || !Array.isArray(entry.grid) || !entry.grid.every(Array.isArray)) {
+        console.error('Ignoring a saved grid whose cells are malformed:', entry?.id);
         return false;
       }
       const restored = normalizeSavedGrid(entry.grid);

@@ -926,11 +926,18 @@ describe('App Open saved (§3.4)', () => {
   const E21 = () => entryOf('e21', 'Twenty-one', 21, { '4,5': { letter: 'Z' }, '20,20': { letter: 'K' } });
   const listing = (...entries) => vi.spyOn(storage, 'list').mockResolvedValue(entries);
   const rowOf = (name) => screen.getByText(name).closest('li');
+  // list() resolves after the click; flush it inside act so the state update is wrapped.
+  const pressOpenSaved = (user) =>
+    act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    });
   const openFromList = async (user, name) => {
-    await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    await pressOpenSaved(user);
     await screen.findByText(name);
     await user.click(within(rowOf(name)).getByRole('button', { name: 'Open' }));
   };
+  // Let the numbering reconcile that follows a grid change land inside act (150 ms debounce).
+  const settle = () => act(async () => new Promise((r) => setTimeout(r, 400)));
   const typeLetter = async (user, container, r, c, ch) => {
     await user.click(cells(container)[idx(15)(r, c)]);
     fireEvent.keyDown(focusEl(container), { key: ch });
@@ -970,6 +977,7 @@ describe('App Open saved (§3.4)', () => {
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
     await typeLetter(user, container, 3, 3, 'A');
+    await settle();
     const idBefore = docIdNow();
 
     await openFromList(user, 'Fifteen');
@@ -983,6 +991,7 @@ describe('App Open saved (§3.4)', () => {
     await user.click(screen.getByRole('button', { name: 'Replace' }));
     expect(letters(container)).toEqual(['F']);
     expect(docIdNow()).toBe('e15');
+    await settle();
   });
 
   it('after a same-size restore, Open a 21x21 entry: a 21x21 grid with its letters (S3)', async () => {
@@ -991,6 +1000,7 @@ describe('App Open saved (§3.4)', () => {
     const user = userEvent.setup();
     const { container } = renderApp();
     await screen.findByText(/^Restored "Restored one"/);
+    await settle();
     expect(letters(container)).toEqual(['Q']);
 
     await openFromList(user, 'Twenty-one');
@@ -1001,6 +1011,7 @@ describe('App Open saved (§3.4)', () => {
     await act(async () => {});
     expect(letters(container)).toEqual(['Z', 'K']);
     expect(docIdNow()).toBe('e21');
+    await settle();
   });
 
   it('Open a same-size entry, then New grid -> 11x11 gives a blank 11x11 (no stray skip flag)', async () => {
@@ -1008,6 +1019,7 @@ describe('App Open saved (§3.4)', () => {
     const user = userEvent.setup();
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await settle();
     await openFromList(user, 'Fifteen');
     expect(letters(container)).toEqual(['F']);
 
@@ -1017,6 +1029,7 @@ describe('App Open saved (§3.4)', () => {
     await waitFor(() => expect(cells(container)).toHaveLength(121));
     expect(letters(container)).toEqual([]);
     expect(docIdNow()).not.toBe('e15');
+    await settle();
   });
 
   it('adopts the entry id and savedAt: the next autosave updates entry e, expecting its savedAt', async () => {
@@ -1078,7 +1091,7 @@ describe('App Open saved (§3.4)', () => {
     const user = userEvent.setup();
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
-    await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    await pressOpenSaved(user);
     await screen.findByText('Fifteen');
 
     probe.autofillOverride = { state: 'running' };
@@ -1110,8 +1123,9 @@ describe('App Open saved (§3.4)', () => {
   });
 
   describe('a malformed entry (grid not an array of arrays) is adopted by nothing', () => {
-    // React's act() warnings also arrive through console.error; count only the guard's own.
-    const guardErrors = (spy) => spy.mock.calls.filter((c) => /malformed/.test(String(c[0])));
+    // The mount's numbering reconcile (150 ms debounce, then a request) sets state when it
+    // lands; let it land inside act so the only console.error left is the guard's own.
+    const settle = () => act(async () => new Promise((r) => setTimeout(r, 400)));
     const MALFORMED = [
       ['null grid', { grid: null }],
       ['a flat array', { grid: ['A', 'B'] }],
@@ -1125,13 +1139,14 @@ describe('App Open saved (§3.4)', () => {
       const user = userEvent.setup();
       const { container } = renderApp();
       await screen.findByText(/^Restored "Restored one"/);
+      await settle();
 
-      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+      await pressOpenSaved(user);
       await screen.findByText('Broken');
       await user.click(within(rowOf('Broken')).getByRole('button', { name: 'Open' }));
       await user.click(screen.getByRole('button', { name: 'Replace' }));
 
-      expect(guardErrors(err)).toHaveLength(1);
+      expect(err).toHaveBeenCalledTimes(1);
       expect(letters(container)).toEqual(['Q']);
       expect(docIdNow()).toBe('r15');
       expect(screen.getByText(/^Restored "Restored one"/)).toBeInTheDocument();
@@ -1143,11 +1158,60 @@ describe('App Open saved (§3.4)', () => {
       const { container } = renderApp();
       await waitFor(() => expect(storage.load).toHaveBeenCalled());
       await act(async () => {});
-      expect(guardErrors(err)).toHaveLength(1);
+      expect(err).toHaveBeenCalledTimes(1);
       expect(cells(container)).toHaveLength(225);
       expect(letters(container)).toEqual([]);
       expect(docIdNow()).toMatch(/^doc-\d+$/);
       expect(screen.queryByText(/^Restored /)).toBeNull();
     });
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.4: a corrupt element in the stored array must not crash Open
+// saved. Real `storage.list` over the localStorage mock; only `load` is stubbed (null) so the
+// restore-on-load does not adopt the entry before the test opens it.
+describe('App Open saved over corrupt stored data (§3.4)', () => {
+  const pressOpenSaved = (user) =>
+    act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+    });
+  const SAVED_AT = new Date(2026, 9, 22, 9, 30).toISOString();
+  const cellsOf = (size) =>
+    Array.from({ length: size }, (_, r) =>
+      Array.from({ length: size }, (_, c) => ({
+        letter: r === 1 && c === 1 ? 'F' : '',
+        isBlack: false,
+        isThemeLocked: false,
+        number: null,
+        isError: false,
+        isAutofilled: false,
+      }))
+    );
+  const valid = { id: 'e15', name: 'Fifteen', savedAt: SAVED_AT, size: 15, grid: cellsOf(15), numbering: {}, symmetryEnabled: true };
+
+  beforeEach(() => {
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+    global.localStorage.getItem.mockImplementation((k) =>
+      k === storage.SAVE_KEY ? JSON.stringify([null, valid]) : null
+    );
+    vi.spyOn(storage, 'load').mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    global.localStorage.getItem.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('lists the one valid entry and Open adopts it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await pressOpenSaved(user);
+    await screen.findByText('Fifteen');
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    await user.click(within(screen.getByRole('listitem')).getByRole('button', { name: 'Open' }));
+    expect(letters(container)).toEqual(['F']);
+    expect(probe.autofillArgs.docId).toBe('e15');
   });
 });
