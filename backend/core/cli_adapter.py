@@ -360,6 +360,39 @@ class CLIAdapter:
         finally:
             Path(temp_path).unlink(missing_ok=True)
 
+    @staticmethod
+    def _last_json_object(text: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Return the last line of ``text`` that parses as a JSON object, else None."""
+        for line in reversed((text or "").splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return value
+        return None
+
+    @staticmethod
+    def _blocked_message(blocked: Dict[str, Any]) -> str:
+        """
+        Text lines of a blocked result, joined by newline.
+
+        Mirrors ``blocked_text_lines`` in ``cli/src/fill/locked_letters.py``; the backend
+        imports nothing from ``cli/``, so keep the two formats in step by hand.
+        """
+        slots = blocked.get("blocked_slots") or []
+        if blocked.get("reason") == "no_word_fits":
+            lines = [f"Blocked: no word fits {s['pattern']} at {s['row']},{s['col']} {s['direction']}" for s in slots]
+        elif blocked.get("reason") == "no_word_of_length":
+            lengths = sorted({int(s["length"]) for s in slots})
+            lines = [f"Blocked: the selected word lists have no words of length {n}" for n in lengths]
+        else:
+            lines = []
+        return "\n".join(lines) or "Blocked"
+
     def fill(
         self,
         grid_data: Dict[str, Any],
@@ -424,6 +457,7 @@ class CLIAdapter:
                 str(min_score),
                 "--algorithm",
                 algorithm,
+                "--json-output",
             ]
 
             if allow_nonstandard:
@@ -436,15 +470,32 @@ class CLIAdapter:
                 args.extend(["--wordlists", wordlist_path])
 
             # Run command (with extended timeout)
-            stdout, stderr, _ = self._run_command(
+            stdout, stderr, returncode = self._run_command(
                 args,
                 timeout=timeout_seconds + CLI_STARTUP_BUDGET_SECONDS,
                 check_success=False,  # Partial fills are OK
             )
 
+            # novice-readiness spec 0.2.5 §2.2: exit 3 is a blocked run (PD-3-MSG).
+            stdout_json = self._last_json_object(stdout)
+            if returncode == 3 and stdout_json is not None and stdout_json.get("blocked") is True:
+                return {
+                    "success": False,
+                    "error": self._blocked_message(stdout_json),
+                    **{k: v for k, v in stdout_json.items() if k not in ("success", "error")},
+                }
+
             # Read filled grid from output file
             if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
-                return {"success": False, "error": "CLI produced no output"}
+                # PD-3-ERR: the CLI's own message, else stderr's non-JSON lines.
+                message = stdout_json.get("error") if stdout_json else None
+                if not message:
+                    message = "\n".join(
+                        line.strip()
+                        for line in (stderr or "").splitlines()
+                        if line.strip() and self._last_json_object(line) is None
+                    )
+                return {"success": False, "error": message or "CLI produced no output"}
 
             try:
                 with open(output_path, "r") as f:
