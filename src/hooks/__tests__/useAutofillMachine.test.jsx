@@ -9,15 +9,22 @@
  * .sendMessage(...)` / `.sendError(...)` broadcast to whatever instance the
  * hook opened.
  *
- * No fake timers: this hook has no internal timers (unlike useNumbering's
- * debounce), just promise microtasks from api.startFill/api.cancelFill. The
- * `flush()` helper below drains those between `act()` calls.
+ * Fake timers are used only by the Task 5.4 block (submit timeout, watchdog); the rest
+ * drive promise microtasks from api.startFill/api.cancelFill. The `flush()` helper below
+ * drains those between `act()` calls.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useState } from 'react';
 import { renderHook, act } from '@testing-library/react';
-import { useAutofillMachine, mergeGridPreserveThemeLocked, LIVE_STATES } from '../useAutofillMachine';
+import {
+  useAutofillMachine,
+  mergeGridPreserveThemeLocked,
+  LIVE_STATES,
+  SUBMIT_TIMEOUT_MS,
+  WATCHDOG_GRACE_MS,
+  isKillError,
+} from '../useAutofillMachine';
 import { api } from '../../api/client';
 import { toCliStrings } from '../../api/gridCodec';
 import { gridFromRows } from './gridFixtures';
@@ -39,6 +46,7 @@ const CLI_FULL_4 = [
 ];
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -322,7 +330,7 @@ describe('useAutofillMachine', () => {
     expect(onGridUpdate.mock.calls[1][0](gridFromRows(WHITE_4))).toEqual(result.current.startSnapshot);
   });
 
-  it('7. cancel() -> api.cancelFill called + stream closed + cancelled', async () => {
+  it('7. cancel() -> api.cancelFill called, stream stays open until the 200, then cancelled (C7)', async () => {
     vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 'task-7' });
     const cancelFill = vi.spyOn(api, 'cancelFill').mockResolvedValue({});
     const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
@@ -340,9 +348,13 @@ describe('useAutofillMachine', () => {
       result.current.cancel();
     });
 
+    expect(cancelFill).toHaveBeenCalledWith('task-7');
+    expect(result.current.state).toBe('running'); // cancel pending, not yet cancelled
+    expect(closeSpy).not.toHaveBeenCalled();
+    await flush(); // the 200
+
     expect(result.current.state).toBe('cancelled');
     expect(result.current.message).toBe('Cancelled by user');
-    expect(cancelFill).toHaveBeenCalledWith('task-7');
     expect(closeSpy).toHaveBeenCalled();
   });
 
@@ -410,6 +422,7 @@ describe('useAutofillMachine', () => {
         act(() => {
           result.current.cancel();
         });
+        await flush();
       } else if (targetState === 'paused') {
         act(() => {
           global.EventSource.sendMessage({ status: 'paused', progress: 10 });
@@ -452,6 +465,7 @@ describe('useAutofillMachine', () => {
     act(() => {
       result.current.cancel();
     });
+    await flush();
     expect(result.current.state).toBe('cancelled');
 
     // Stray EventSource onerror arrives after cancel() — must NOT flip to 'failed'.
@@ -1077,6 +1091,7 @@ describe('useAutofillMachine Task 5.3: terminal outcomes (spec 0.2.6 section 2.3
     act(() => {
       result.current.cancel();
     });
+    await flush();
     expect(result.current.state).toBe('cancelled');
     expect(result.current.message).toBe('Cancelled by user');
     expect(result.current.grid).toEqual(result.current.startSnapshot);
@@ -1089,6 +1104,7 @@ describe('useAutofillMachine Task 5.3: terminal outcomes (spec 0.2.6 section 2.3
     act(() => {
       result.current.cancel();
     });
+    await flush();
     expect(result.current.offer).toBeNull();
   });
 
@@ -1097,6 +1113,7 @@ describe('useAutofillMachine Task 5.3: terminal outcomes (spec 0.2.6 section 2.3
     act(() => {
       result.current.cancel();
     });
+    await flush();
     expect(result.current.state).toBe('cancelled');
     expect(result.current.message).toBe('Cancelled by user');
     expect(result.current.grid).toEqual(result.current.startSnapshot);
@@ -1123,8 +1140,7 @@ describe('useAutofillMachine Task 5.3: terminal outcomes (spec 0.2.6 section 2.3
     expect(result.current.offer).toEqual({ kind: 'keepPartialFill', slotsFilled: null, totalSlots: null });
   });
 
-  // Row 11 (lost contact, `Lost contact with the autofill run.`) is driven by Task 5.4's watchdog;
-  // its test is written there against this task's shared terminal routine.
+  // Row 11 (lost contact, `Lost contact with the autofill run.`) is pinned in the Task 5.4 block.
 
   it('row 12. success with off_list_cells: merged, those cells red, user letter intact', async () => {
     const { result } = await runningMachine();
@@ -1302,5 +1318,477 @@ describe('useAutofillMachine Task 5.3: keepFill, reset, discardRun', () => {
     expect(result.current.state).toBe('running');
     expect(result.current.taskId).toBe('t-53');
     expect(result.current.startSnapshot).toBe(snap);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5.4: the panel never strands (spec 0.2.7 section 2.4: submit timeout, watchdog,
+// C8 lost stream, C7 cancel-then-200, early Cancel). Fake timers; Start is t = 0.
+// ---------------------------------------------------------------------------
+
+const LOST = 'Lost contact with the autofill run.';
+const OFFER_PARTIAL = { kind: 'keepPartialFill', slotsFilled: null, totalSlots: null };
+const DEADLINE_70 = 70 * 1000 + WATCHDOG_GRACE_MS; // 100 000 ms
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const advance = (ms) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+
+/** Mounts over a real grid; start() called, startFill pending on `submit` (a deferred). */
+function submittingMachine() {
+  vi.useFakeTimers();
+  const submit = deferred();
+  vi.spyOn(api, 'startFill').mockReturnValue(submit.promise);
+  const cancelFill = vi.spyOn(api, 'cancelFill').mockResolvedValue({});
+  const hook = renderHook(
+    (props) => {
+      const [g, setG] = useState(userGrid());
+      const m = useAutofillMachine({
+        grid: g,
+        gridSize: 4,
+        docId: props.docId,
+        onGridUpdate: setG,
+        onStart: vi.fn(),
+        onToast: vi.fn(),
+      });
+      return { ...m, grid: g };
+    },
+    { initialProps: { docId: 'doc-1' } }
+  );
+  act(() => {
+    hook.result.current.start({}, 'doc-1');
+  });
+  const accept = async (value) => {
+    await act(async () => {
+      submit.resolve(value);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+  return { ...hook, submit, accept, cancelFill };
+}
+
+async function runningWithCeiling(ceiling = 70, taskId = 't') {
+  const m = submittingMachine();
+  await m.accept({ task_id: taskId, ceiling_seconds: ceiling });
+  expect(m.result.current.state).toBe('running');
+  return m;
+}
+
+/** Timers left once the mock EventSource's own setTimeout(0) onopen has run. */
+const timersLeft = async () => {
+  await advance(0);
+  return vi.getTimerCount();
+};
+
+const err = (status) => Object.assign(new Error(`HTTP ${status}`), { status });
+
+describe('useAutofillMachine Task 5.4: constants and isKillError', () => {
+  it('exports the pinned timer values', () => {
+    expect(SUBMIT_TIMEOUT_MS).toBe(30000);
+    expect(WATCHDOG_GRACE_MS).toBe(30000);
+  });
+
+  it('isKillError: a signal-killed child (code -N) only (PD-3-KILL)', () => {
+    expect(isKillError('CLI Error (code -9): killed')).toBe(true);
+    expect(isKillError('CLI Error (code -15)')).toBe(true);
+    expect(isKillError('CLI Error (code 1): boom')).toBe(false);
+    expect(isKillError('Autofill changed a locked letter; nothing was written.')).toBe(false);
+    expect(isKillError('')).toBe(false);
+    expect(isKillError(undefined)).toBe(false);
+  });
+});
+
+describe('useAutofillMachine Task 5.4: watchdog (B4, P4)', () => {
+  it('W1. ceiling 70 s: still running at 99 999 ms, cancelFill not called', async () => {
+    const { result, cancelFill } = await runningWithCeiling();
+    await advance(DEADLINE_70 - 1);
+    expect(result.current.state).toBe('running');
+    expect(cancelFill).not.toHaveBeenCalled();
+  });
+
+  it('W2. at 100 000 ms: failed, lost contact, cancelFill(t) once, stream closed, grid restored', async () => {
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const { result, cancelFill } = await runningWithCeiling();
+    await advance(DEADLINE_70);
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: LOST });
+    expect(cancelFill).toHaveBeenCalledTimes(1);
+    expect(cancelFill).toHaveBeenCalledWith('t');
+    expect(closeSpy).toHaveBeenCalled();
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('W3. a 202 at t = 5 000 still fires at t = 100 000 (keyed to Start, not to the 202)', async () => {
+    const m = submittingMachine();
+    await advance(5000);
+    await m.accept({ task_id: 't', ceiling_seconds: 70 });
+    expect(m.result.current.state).toBe('running');
+    await advance(DEADLINE_70 - 5000 - 1); // t = 99 999
+    expect(m.result.current.state).toBe('running');
+    await advance(1); // t = 100 000
+    expect(m.result.current.state).toBe('failed');
+    expect(m.cancelFill).toHaveBeenCalledTimes(1);
+  });
+
+  it('W4. row 1 complete at t = 10 000: done, and the watchdog never fires (no timers left)', async () => {
+    const { result, cancelFill } = await runningWithCeiling();
+    await advance(10000);
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    expect(result.current.state).toBe('done');
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(DEADLINE_70 * 2);
+    expect(result.current.state).toBe('done');
+    expect(cancelFill).not.toHaveBeenCalled();
+  });
+
+  it('W5. unmount while running: no timer survives, cancelFill never called', async () => {
+    const { unmount, cancelFill } = await runningWithCeiling();
+    unmount();
+    expect(await timersLeft()).toBe(0);
+    await advance(DEADLINE_70 * 2);
+    expect(cancelFill).not.toHaveBeenCalled();
+  });
+
+  it('W6. a cancelFill rejection on firing is swallowed; the panel still ends failed', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockRejectedValue(err(500));
+    await advance(DEADLINE_70);
+    expect(m.result.current.state).toBe('failed');
+  });
+
+  it('row 11. lost contact after a progress grid: failed, grid S restored, offer as row 8', async () => {
+    const { result } = await runningWithCeiling();
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    expect(result.current.grid[0][1].letter).toBe('B');
+    await advance(DEADLINE_70);
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: LOST });
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(result.current.offer).toEqual(OFFER_PARTIAL);
+  });
+});
+
+describe('useAutofillMachine Task 5.4: submit timeout (PD-5H)', () => {
+  it('T1. startFill never resolves: failed at SUBMIT_TIMEOUT_MS, not before, grid restored', async () => {
+    const { result } = submittingMachine();
+    await advance(SUBMIT_TIMEOUT_MS - 1);
+    expect(result.current.state).toBe('submitting');
+    await advance(1);
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: LOST });
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('T2. a 202 arriving after the timeout: stays failed, no stream, task cancelled once, no watchdog', async () => {
+    const m = submittingMachine();
+    await advance(SUBMIT_TIMEOUT_MS);
+    expect(m.result.current.state).toBe('failed');
+    await m.accept({ task_id: 't3', ceiling_seconds: 70 });
+    expect(m.result.current.state).toBe('failed');
+    expect(global.EventSource.instances).toHaveLength(0);
+    expect(m.cancelFill).toHaveBeenCalledTimes(1);
+    expect(m.cancelFill).toHaveBeenCalledWith('t3');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('T3. the late task cancel is best effort: its rejection is swallowed', async () => {
+    const m = submittingMachine();
+    m.cancelFill.mockRejectedValue(err(404));
+    await advance(SUBMIT_TIMEOUT_MS);
+    await m.accept({ task_id: 't3', ceiling_seconds: 70 });
+    expect(m.cancelFill).toHaveBeenCalledWith('t3');
+    expect(m.result.current.state).toBe('failed');
+  });
+
+  it('T4. a 202 inside the window clears the submit timer', async () => {
+    const m = submittingMachine();
+    await advance(1000);
+    await m.accept({ task_id: 't', ceiling_seconds: 600 });
+    await advance(SUBMIT_TIMEOUT_MS * 2);
+    expect(m.result.current.state).toBe('running');
+  });
+
+  it('T5. a late 202 of an abandoned run does not hijack a later run', async () => {
+    const m = submittingMachine();
+    await advance(SUBMIT_TIMEOUT_MS);
+    act(() => {
+      m.result.current.reset();
+    });
+    const second = deferred();
+    api.startFill.mockReturnValue(second.promise);
+    act(() => {
+      m.result.current.start({}, 'doc-1');
+    });
+    expect(m.result.current.state).toBe('submitting');
+    await m.accept({ task_id: 'old', ceiling_seconds: 70 }); // the FIRST request's 202
+    expect(m.result.current.state).toBe('submitting');
+    expect(m.cancelFill).toHaveBeenCalledWith('old');
+    expect(global.EventSource.instances).toHaveLength(0);
+  });
+});
+
+describe('useAutofillMachine Task 5.4: C8 lost stream', () => {
+  it('C8a. a stream error while running: failed, lost contact, stream closed, cancelFill(taskId) once, restored', async () => {
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const { result, cancelFill } = await runningWithCeiling();
+    act(() => {
+      global.EventSource.sendError();
+    });
+    expect(result.current.state).toBe('failed');
+    expect(result.current.errorCard).toEqual({ message: LOST });
+    expect(closeSpy).toHaveBeenCalled();
+    expect(cancelFill).toHaveBeenCalledTimes(1);
+    expect(cancelFill).toHaveBeenCalledWith('t');
+    expect(result.current.grid).toEqual(result.current.startSnapshot);
+    expect(await timersLeft()).toBe(0);
+  });
+
+  it('C8b. after a progress grid the offer is as row 8; a cancelFill rejection is swallowed', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockRejectedValue(err(404));
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    act(() => {
+      global.EventSource.sendError();
+    });
+    await flush();
+    expect(m.result.current.state).toBe('failed');
+    expect(m.result.current.offer).toEqual(OFFER_PARTIAL);
+  });
+
+  it('C8c. a stream error after done changes nothing and cancels nothing', async () => {
+    const { result, cancelFill } = await runningWithCeiling();
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    const before = result.current.message;
+    act(() => {
+      global.EventSource.sendError();
+    });
+    expect(result.current.state).toBe('done');
+    expect(result.current.message).toBe(before);
+    expect(result.current.errorCard).toBeNull();
+    expect(cancelFill).not.toHaveBeenCalled();
+  });
+
+  it('C8d. a stream error while submitting is a no-op', async () => {
+    const m = submittingMachine();
+    act(() => {
+      global.EventSource.sendError();
+    });
+    expect(m.result.current.state).toBe('submitting');
+    expect(m.cancelFill).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAutofillMachine Task 5.4: C7 cancel then 200', () => {
+  const partial53 = {
+    success: false,
+    grid: CLI_PART_4,
+    slots_filled: 5,
+    total_slots: 8,
+    fill_percentage: 62,
+  };
+
+  it('C7a. cancel() in running: cancelFill(t), still running, stream open, progress still updates', async () => {
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.cancelFill).toHaveBeenCalledWith('t');
+    expect(m.result.current.state).toBe('running');
+    expect(closeSpy).not.toHaveBeenCalled();
+    send({ status: 'running', progress: 33, message: 'Still going' });
+    expect(m.result.current.progress).toBe(33);
+  });
+
+  it('C7b. ...then the 200: cancelled, Cancelled by user, restored, closed', async () => {
+    const closeSpy = vi.spyOn(global.EventSource.prototype, 'close');
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    send({ status: 'running', progress: 5, data: { grid: CLI_PART_4 } });
+    act(() => {
+      m.result.current.cancel();
+    });
+    await act(async () => {
+      pending.resolve({});
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('cancelled');
+    expect(m.result.current.message).toBe('Cancelled by user');
+    expect(m.result.current.grid).toEqual(m.result.current.startSnapshot);
+    expect(m.result.current.offer).toEqual(OFFER_PARTIAL);
+    expect(closeSpy).toHaveBeenCalled();
+    expect(await timersLeft()).toBe(0);
+  });
+
+  it('C7c. a 404 rejection, then a complete row-3 event: done, Partial: 5/8 slots (62%)', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockRejectedValue(err(404));
+    act(() => {
+      m.result.current.cancel();
+    });
+    await flush();
+    expect(m.result.current.state).toBe('running'); // keeps waiting on the stream
+    complete(partial53);
+    expect(m.result.current.state).toBe('done');
+    expect(m.result.current.message).toBe('Partial: 5/8 slots (62%)');
+  });
+
+  it('C7d. a 404 rejection and no event: the watchdog decides (failed, lost contact)', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockRejectedValue(err(404));
+    act(() => {
+      m.result.current.cancel();
+    });
+    await flush();
+    expect(m.result.current.state).toBe('running');
+    await advance(DEADLINE_70);
+    expect(m.result.current.state).toBe('failed');
+    expect(m.result.current.errorCard).toEqual({ message: LOST });
+  });
+
+  it('C7e. any other rejection status behaves as 404 (PD-5J): keep waiting', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockRejectedValue(err(500));
+    act(() => {
+      m.result.current.cancel();
+    });
+    await flush();
+    expect(m.result.current.state).toBe('running');
+    complete(partial53);
+    expect(m.result.current.state).toBe('done');
+  });
+
+  it('C7f. error event CLI Error (code -9) before the 200: cancelled (PD-3-KILL); the later 200 is a no-op', async () => {
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    send({ status: 'error', message: 'CLI Error (code -9): killed' });
+    expect(m.result.current.state).toBe('cancelled');
+    expect(m.result.current.message).toBe('Cancelled by user');
+    expect(m.result.current.errorCard).toBeNull();
+    await act(async () => {
+      pending.resolve({});
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('cancelled');
+  });
+
+  it.each([
+    ['CLI Error (code 1): boom'],
+    ['Autofill changed a locked letter; nothing was written.'],
+  ])('C7g. a pending cancel then error %j: failed with that text, not Cancelled by user', async (text) => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(new Promise(() => {}));
+    act(() => {
+      m.result.current.cancel();
+    });
+    send({ status: 'error', message: text });
+    expect(m.result.current.state).toBe('failed');
+    expect(m.result.current.errorCard).toEqual({ message: text });
+  });
+
+  it('C7h. a pending cancel then paused: shown as paused; a later 200 is a no-op', async () => {
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    send({ status: 'paused', progress: 30, data: { grid: CLI_PART_4 } });
+    expect(m.result.current.state).toBe('paused');
+    await act(async () => {
+      pending.resolve({});
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('paused');
+  });
+
+  it('C7i. a pending cancel then complete: shown as done; a later 200 is a no-op', async () => {
+    const pending = deferred();
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(pending.promise);
+    act(() => {
+      m.result.current.cancel();
+    });
+    complete(partial53);
+    expect(m.result.current.state).toBe('done');
+    await act(async () => {
+      pending.resolve({});
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('done');
+    expect(m.result.current.message).toBe('Partial: 5/8 slots (62%)');
+  });
+
+  it('C7j. a second cancel() while one is pending posts nothing more', async () => {
+    const m = await runningWithCeiling();
+    m.cancelFill.mockReturnValue(new Promise(() => {}));
+    act(() => {
+      m.result.current.cancel();
+      m.result.current.cancel();
+    });
+    expect(m.cancelFill).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useAutofillMachine Task 5.4: early Cancel (PD-5I)', () => {
+  it('E1. cancel() in submitting, then a 202: stream opened, cancelFill(t2), a 200 then gives cancelled', async () => {
+    const m = submittingMachine();
+    act(() => {
+      m.result.current.cancel();
+    });
+    expect(m.result.current.state).toBe('submitting');
+    expect(m.cancelFill).not.toHaveBeenCalled();
+    await m.accept({ task_id: 't2', ceiling_seconds: 70 });
+    expect(m.cancelFill).toHaveBeenCalledTimes(1);
+    expect(m.cancelFill).toHaveBeenCalledWith('t2');
+    expect(global.EventSource.instances).toHaveLength(1);
+    await flush();
+    expect(m.result.current.state).toBe('cancelled');
+    expect(m.result.current.message).toBe('Cancelled by user');
+    expect(m.result.current.grid).toEqual(m.result.current.startSnapshot);
+  });
+
+  it('E2. an early Cancel is forgotten if the start is rejected: the next run is not cancelled', async () => {
+    const m = submittingMachine();
+    act(() => {
+      m.result.current.cancel();
+    });
+    await act(async () => {
+      m.submit.reject(Object.assign(new Error('nope'), { code: 'X' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(m.result.current.state).toBe('failed');
+    act(() => {
+      m.result.current.reset();
+    });
+    api.startFill.mockResolvedValue({ task_id: 't9', ceiling_seconds: 70 });
+    act(() => {
+      m.result.current.start({}, 'doc-1');
+    });
+    await flush();
+    expect(m.result.current.state).toBe('running');
+    expect(m.cancelFill).not.toHaveBeenCalled();
   });
 });
