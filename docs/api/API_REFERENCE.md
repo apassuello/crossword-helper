@@ -245,7 +245,8 @@ curl -X POST http://localhost:5000/api/fill/with-progress \
 # → {"task_id": "abc123", "progress_url": "/api/progress/abc123", "ceiling_seconds": 480}
 
 # Optional "locked_cells": [[0, 0], [4, 4]] fixes those cells' pre-placed letters during the
-# fill. Absent = none, [] = none, null = 400 INVALID_REQUEST. Schema: openapi.yaml AutofillRequest.
+# fill. Absent = every pre-placed letter locked (an older client), [] = none,
+# null = 400 INVALID_REQUEST. Schema: openapi.yaml AutofillRequest.
 
 curl -X POST http://localhost:5000/api/fill/pause/abc123
 
