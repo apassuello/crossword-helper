@@ -78,6 +78,21 @@ class PreflightResult(NamedTuple):
     index: LetterBitsetIndex
 
 
+def candidate_index(word_list: WordList, extra_words: Iterable[str] = ()) -> LetterBitsetIndex:
+    """
+    The index over ``word_list`` plus ``extra_words`` (the ``--theme-entries`` words,
+    spec 0.2.7 §2.1); ``word_list`` itself is never mutated.
+
+    Shared by ``preflight`` and by ``--adaptive`` runs, which skip pre-flight but
+    still need an index for ``stuck_cells`` check (a).
+    """
+    extras = list(extra_words)
+    if extras:
+        word_list = WordList([(w.text, w.score) for w in word_list.words])
+        word_list.add_words(extras)
+    return LetterBitsetIndex.from_word_list(word_list)
+
+
 def preflight(grid: Grid, word_list: WordList, extra_words: Iterable[str] = ()) -> PreflightResult:
     """
     Pre-flight for a fresh, non-adaptive ``fill`` run; never mutates ``grid``
@@ -102,11 +117,7 @@ def preflight(grid: Grid, word_list: WordList, extra_words: Iterable[str] = ()) 
     - case 2: every cell of every typed (fixed) word that is not in the lists.
     """
     model = SlotModel.from_grid(grid)
-    extras = list(extra_words)
-    if extras:
-        word_list = WordList([(w.text, w.score) for w in word_list.words])
-        word_list.add_words(extras)
-    index = LetterBitsetIndex.from_word_list(word_list)
+    index = candidate_index(word_list, extra_words)
     cleared = grid.clone()
     cleared.clear_unlocked()
     fixed = fixed_from_grid(cleared)
@@ -189,8 +200,9 @@ def stuck_cells(
         "invalid_word"`` (``IterativeRepair._build_result``'s shape; entries
         without a ``"reason"``, as beam and classic return, contribute nothing).
 
-    ``index`` is ``None`` on ``--resume``, where the lock set is empty: with no
-    locked cell the result is ``[]`` and ``index`` is never touched.
+    ``index`` is ``None`` only on ``--resume``, where the lock set is empty: with no
+    locked cell the result is ``[]`` and ``index`` is never touched. A fresh
+    ``--adaptive`` run skips pre-flight but passes ``candidate_index(...)``.
     """
     locked_set = {(int(r), int(c)) for r, c in locked}
     if not locked_set:

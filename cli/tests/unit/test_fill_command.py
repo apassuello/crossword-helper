@@ -1156,3 +1156,24 @@ def test_pf22_theme_words_do_not_reach_the_solver_word_list(tmp_path, monkeypatc
     args = ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "-a", "trie", "-t", "5"]
     CliRunner().invoke(cli_module.cli, args + ["--theme-entries", theme])
     assert seen == [(5, 5)]
+
+
+def test_pf23_adaptive_run_still_reports_stuck_cells(tmp_path):
+    """--adaptive skips pre-flight (0.2.7) but case 3 (C2) check (a) still reports a dead locked `Q`."""
+    grid_path, words = _g33_letter_at_origin(tmp_path, "Q")
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", "10"]
+        + ["--algorithm", "beam", "--adaptive", "--max-adaptations", "1"]
+    )
+    result = last_json(stdout)
+    assert result is not None, (stdout, stderr)
+    assert result["grid"][0][0] == "Q"
+    assert result["stuck_cells"] == [[0, 0]]
+
+
+def test_pf23_control_beam_without_adaptive_is_blocked_by_preflight(tmp_path):
+    grid_path, words = _g33_letter_at_origin(tmp_path, "Q")
+    stdout, stderr, code = run_fill(
+        [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", "10"] + ["--algorithm", "beam"]
+    )
+    assert code == 3, (stdout, stderr)
