@@ -1518,6 +1518,7 @@ describe('useAutofillMachine Task 5.4: submit timeout (PD-5H)', () => {
     const m = submittingMachine();
     await advance(1000);
     await m.accept({ task_id: 't', ceiling_seconds: 600 });
+    expect(await timersLeft()).toBe(1); // the watchdog only; the submit timer is gone
     await advance(SUBMIT_TIMEOUT_MS * 2);
     expect(m.result.current.state).toBe('running');
   });
@@ -1582,8 +1583,9 @@ describe('useAutofillMachine Task 5.4: C8 lost stream', () => {
     expect(cancelFill).not.toHaveBeenCalled();
   });
 
-  it('C8d. a stream error while submitting is a no-op', async () => {
+  it('C8d. in submitting no stream exists, and a stream error changes nothing', async () => {
     const m = submittingMachine();
+    expect(global.EventSource.instances).toHaveLength(0);
     act(() => {
       global.EventSource.sendError();
     });

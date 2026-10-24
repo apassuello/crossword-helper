@@ -42,9 +42,11 @@
  * (inside `transition()`, before/alongside the React `setState` call) — not
  * only via the eventual re-render. The SSE `onEvent`/`onError` callbacks
  * check `stateRef.current === 'running'` before doing anything, so a stray
- * event that arrives after `cancel()`/`reset()` already moved the machine on
- * is a guaranteed no-op, rather than a race that could flip `cancelled`
- * back to `failed`.
+ * event that arrives after a terminal transition (or `reset()`) already moved
+ * the machine on is a guaranteed no-op, rather than a race that could flip
+ * `cancelled` back to `failed`. `cancel()` itself does not move the machine:
+ * it posts cancelFill and the state stays `running` until the 200 (or a
+ * terminal event) arrives (novice-readiness spec 0.2.7 §2.4 (C7)).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -273,7 +275,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
 
   /**
    * The single terminal routine for an unfinished run (novice-readiness spec 0.2.6 §2.3
-   * outcome table; Task 5.4's lost-contact path calls it too). Restore the Start snapshot
+   * outcome table; the submit timeout, watchdog, lost stream, cancel and a rejected start all end here). Restore the Start snapshot
    * and mark red cells in ONE updater, so red lands on the restored grid ("Order on a
    * terminal outcome"); both writes are skipped when the document changed since Start
    * (PD-5D). `offer` is the Keep offer or null. For `failed` the text goes in
@@ -622,9 +624,9 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
           (error) => {
             if (!mountedRef.current) return;
             if (stateRef.current !== 'submitting' || runIdRef.current !== runId) return;
-            transition({
+            finishRun({
               state: 'failed',
-              errorCard: { message: error.message || `Fill failed to start (${error.code})` },
+              text: error.message || `Fill failed to start (${error.code})`,
             });
           }
         );
