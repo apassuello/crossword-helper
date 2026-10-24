@@ -388,7 +388,21 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
         if stderr:
             logger.info(f"[CLI STDERR remaining] {stderr[:500]}")
 
-        if process.returncode == 0:
+        # Exit 3 is a blocked fill (novice-readiness spec 0.2.5 section 2.2, B3): the
+        # result is the product, so it is a `complete` event with `blocked` in its
+        # data. There is no `blocked` status. Anything else on exit 3 is an error.
+        blocked_result = None
+        if process.returncode == 3:
+            try:
+                parsed = json.loads(stdout.strip())
+                if isinstance(parsed, dict) and parsed.get("blocked") is True:
+                    blocked_result = parsed
+            except json.JSONDecodeError:
+                pass
+
+        if blocked_result is not None:
+            send_progress(task_id, 100, "Complete", "complete", blocked_result)
+        elif process.returncode == 0:
             # Parse filled grid from stdout JSON
             try:
                 result_data = json.loads(stdout.strip())
@@ -434,12 +448,18 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
             # Filter out progress JSON lines to find actual errors
             error_lines = [line for line in all_stderr.split("\n") if line and not line.startswith("{")]
             error_preview = "\n".join(error_lines[-10:]) if error_lines else (stdout[:500] if stdout else "Unknown error")
-            send_progress(
-                task_id,
-                0,
-                f"CLI Error (code {process.returncode}): {error_preview}",
-                "error",
-            )
+            message = f"CLI Error (code {process.returncode}): {error_preview}"
+            # PD-3-KILL: a string `error` in the CLI's stdout JSON is the message,
+            # verbatim -- except for a signal death (negative code), which keeps
+            # the generic text whatever stdout holds.
+            if process.returncode > 0:
+                try:
+                    parsed = json.loads(stdout.strip())
+                    if isinstance(parsed, dict) and isinstance(parsed.get("error"), str):
+                        message = parsed["error"]
+                except json.JSONDecodeError:
+                    pass
+            send_progress(task_id, 0, message, "error")
 
     except subprocess.TimeoutExpired:
         try:
