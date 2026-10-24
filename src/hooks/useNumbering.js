@@ -117,9 +117,12 @@ const DEBOUNCE_MS = 150;
  *   3. Each async branch first guards `if (token !== tokenRef.current) return;`
  *      so an out-of-order/stale resolution can neither reconcile nor toast.
  *
- * `gridRef.current` is refreshed every render and read at resolution time, so a
- * letter typed mid-flight survives the reconcile (applyNumbering rewrites only
- * `.number`, plan Global Constraint 2 — server wins on numbers). The paren-key
+ * Both grid writes (the optimistic paint and the reconcile) are FUNCTIONAL updates
+ * (`setGrid((prev) => ...)`), so neither can discard an update still pending in the same
+ * tick: a value built from `gridRef` is queued after it and overwrites it. A letter typed
+ * mid-flight survives the reconcile (applyNumbering rewrites only `.number`, plan Global
+ * Constraint 2 — server wins on numbers). `gridRef.current` (refreshed every render) is
+ * read only for the request payload and the exposed numbering map. The paren-key
  * `applyNumbering` stays internal; `numbering` is exposed as the unparenthesized
  * `"row,col"` map via `numberingMapFromGrid` (DD3).
  *
@@ -136,7 +139,7 @@ const DEBOUNCE_MS = 150;
  * the CURRENT `sig`, catching up any structural drift that accumulated while
  * muted — no special-casing needed beyond the dep-array re-fire.
  *
- * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][]) => void, pushToast: (t: {kind: string, message: string}) => void, enabled?: boolean}} params
+ * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][] | ((prev: object[][]) => object[][])) => void, pushToast: (t: {kind: string, message: string}) => void, enabled?: boolean}} params
  * @returns {{numbering: Record<string, number>, violations: string[], unverified: boolean, invalidate: () => void}}
  */
 export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = true }) {
@@ -168,7 +171,9 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = tru
     const token = ++tokenRef.current;
 
     // 1. Optimistic paint — synchronous, before the debounce or any request.
-    setGrid(localNumber(gridRef.current).grid);
+    // Functional: a VALUE built from gridRef (the last render's grid) is queued after any
+    // update still pending this tick and would discard it (a reload's restore was lost so).
+    setGrid((prev) => localNumber(prev).grid);
     setUnverified(true);
 
     // 2. Debounced server reconcile + validation. The cleanup-clear coalesces
@@ -181,9 +186,12 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = tru
       api.numberGrid({ size: gridSize, grid: cliGrid }).then(
         (resp) => {
           if (token !== tokenRef.current) return;
-          const reconciled = applyNumbering(gridRef.current, resp.numbering || {});
-          setGrid(reconciled);
-          setNumbering(numberingMapFromGrid(reconciled));
+          const map = resp.numbering || {};
+          // The grid write is functional (never discards a pending update); the exposed map
+          // is derived from the latest rendered grid, outside the updater (updaters stay pure).
+          // It is not `map` itself: that is paren-keyed and may name cells outside the grid.
+          setGrid((prev) => applyNumbering(prev, map));
+          setNumbering(numberingMapFromGrid(applyNumbering(gridRef.current, map)));
           setUnverified(false);
         },
         () => {
