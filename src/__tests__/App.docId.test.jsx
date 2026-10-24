@@ -67,6 +67,14 @@ describe('App document id and save document', () => {
     saveSpy.mockRestore();
   });
 
+  // Save grid opens the name prompt (novice-readiness spec 0.2.7 §3.4 (G3)); confirm the
+  // prefilled name and wait for the prompt to close so the next click starts clean.
+  const clickSave = async (user) => {
+    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await user.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
+  };
+
   const importViaPaste = async (user, gridJson) => {
     await user.click(screen.getByRole('button', { name: /^import$/i }));
     await user.click(screen.getByRole('button', { name: /paste json/i }));
@@ -85,7 +93,7 @@ describe('App document id and save document', () => {
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
 
-    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
     const grid = Array.from({ length: 5 }, () => Array(5).fill('.'));
@@ -93,7 +101,7 @@ describe('App document id and save document', () => {
     await importViaPaste(user, { size: 5, grid });
     await waitFor(() => expect(cells(container)).toHaveLength(25), { timeout: 3000 });
 
-    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
 
     const first = saveSpy.mock.calls[0][0].id;
@@ -110,12 +118,12 @@ describe('App document id and save document', () => {
     const { container } = renderApp();
     await waitFor(() => expect(cells(container)).toHaveLength(225));
 
-    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
     await user.click(cells(container)[0]);
     await user.keyboard('A');
-    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
 
     expect(saveSpy.mock.calls[1][0].id).toBe(saveSpy.mock.calls[0][0].id);
@@ -128,7 +136,7 @@ describe('App document id and save document', () => {
 
     await user.click(cells(container)[0]);
     await user.keyboard('A');
-    await user.click(screen.getByRole('button', { name: /save grid/i }));
+    await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
     const doc = saveSpy.mock.calls[0][0];
