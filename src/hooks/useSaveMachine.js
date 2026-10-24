@@ -86,6 +86,10 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   // handler, and an effect-time reset would overwrite the adopted value. A stale
   // value for a brand-new id is harmless (storage.save finds no entry to compare).
   const knownSavedAtRef = useRef(null);
+  // Set by forget(): the stored entry is gone and the pending timer with it. A document that
+  // was already dirty has no clean->dirty edge to arm on, so the next change to `doc` does
+  // (novice-readiness spec 0.2.9 §3.4 (Q1)).
+  const forgottenRef = useRef(false);
   const isDirtyRef = useRef(isDirty); // latest dirtiness, read by the pagehide handler
 
   docRef.current = doc;
@@ -118,7 +122,13 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     setStatus('saving');
     const opts = { expectedSavedAt: knownSavedAtRef.current, ...extra };
     const written = docRef.current;
-    return storage.save(written, opts).then(
+    // The pagehide path (`silent`) writes through the synchronous entry point, outside the
+    // Web Lock: the Promise executor runs it before runSave returns, and a throw becomes
+    // the rejection (novice-readiness spec 0.2.9 §3.4 (Q3)).
+    const write = silent
+      ? new Promise((resolve) => resolve(storage.saveSync(written, opts)))
+      : storage.save(written, opts);
+    return write.then(
       (res) => {
         knownSavedAtRef.current = res.savedAt;
         // A throwing callback must not reject the save (the write already happened)
@@ -181,6 +191,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
    */
   const forget = useCallback(() => {
     clearAutosave();
+    forgottenRef.current = true;
     setStatus('dirty');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -207,6 +218,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     const prevDirty = prevDirtyRef.current;
     prevIdRef.current = doc?.id;
     prevDirtyRef.current = isDirty;
+    if (prevId !== doc?.id) forgottenRef.current = false;
 
     // F10 — the document identity changed (or first mount). Drop the old doc's
     // pending autosave and re-derive from the new doc's dirtiness.
@@ -223,6 +235,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
 
     // Same document: a clean→dirty edge enters `dirty` and arms ONE timer.
     if (!prevDirty && isDirty) {
+      forgottenRef.current = false;
       setStatus('dirty');
       armAutosave();
     }
@@ -230,6 +243,16 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     // is a no-op: it must not clobber the `saved` state/label.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id, isDirty]);
+
+  // After forget(), a change to `doc` while already dirty arms the autosave (no edge to do it).
+  useEffect(() => {
+    if (forgottenRef.current && isDirty && timerRef.current === null) {
+      forgottenRef.current = false;
+      setStatus('dirty');
+      armAutosave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc]);
 
   // S2: with an onSaved supplied the parent marks the written doc clean in the same
   // batch as `saved`; `isDirty` still true here means an edit landed after the write.

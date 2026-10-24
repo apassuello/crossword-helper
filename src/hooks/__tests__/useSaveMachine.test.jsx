@@ -445,13 +445,21 @@ describe('useSaveMachine forget() (§3.4 Q1)', () => {
   });
 
   it('clears an autosave already pending', async () => {
-    const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
     act(() => result.current.forget());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60000);
     });
     expect(storage.save).not.toHaveBeenCalled();
     expect(result.current.savedLabel).toBe('unsaved changes');
+
+    // Already dirty when forgotten, so there is no clean->dirty edge: the next change to
+    // `doc` must arm the autosave itself (spec 0.2.9 §3.4 (Q1)).
+    rerender({ doc: { id: 'a', n: 2 }, isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(storage.save).toHaveBeenCalledTimes(1);
   });
 
   it('leaves saved state to a later save: from saved it reads unsaved, a real edit re-saves', async () => {
@@ -472,6 +480,10 @@ describe('useSaveMachine forget() (§3.4 Q1)', () => {
 });
 
 describe('useSaveMachine pagehide (§3.4 Q3)', () => {
+  beforeEach(() => {
+    // The pagehide path writes through the synchronous entry point, never storage.saveSync.
+    vi.spyOn(storage, 'saveSync').mockImplementation(() => ({ savedAt: new Date().toISOString() }));
+  });
   const pagehide = () => act(async () => {
     window.dispatchEvent(new Event('pagehide'));
     await Promise.resolve();
@@ -479,35 +491,37 @@ describe('useSaveMachine pagehide (§3.4 Q3)', () => {
 
   it('a dirty document is saved at once and the pending timer is cleared', async () => {
     renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
-    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.saveSync).not.toHaveBeenCalled();
     await pagehide();
-    expect(storage.save).toHaveBeenCalledTimes(1);
-    expect(storage.save.mock.calls[0][0]).toEqual({ id: 'a', n: 1 });
+    expect(storage.saveSync).toHaveBeenCalledTimes(1);
+    expect(storage.saveSync.mock.calls[0][0]).toEqual({ id: 'a', n: 1 });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60000);
     });
-    expect(storage.save).toHaveBeenCalledTimes(1);
+    expect(storage.saveSync).toHaveBeenCalledTimes(1);
   });
 
   it('saves the latest doc, not the one at mount', async () => {
     const { rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
     rerender({ doc: { id: 'a', n: 2 }, isDirty: true });
     await pagehide();
-    expect(storage.save.mock.calls[0][0]).toEqual({ id: 'a', n: 2 });
+    expect(storage.saveSync.mock.calls[0][0]).toEqual({ id: 'a', n: 2 });
   });
 
   it('a clean document writes nothing', async () => {
     renderMachine({ doc: { id: 'a' }, isDirty: false });
     await pagehide();
-    expect(storage.save).not.toHaveBeenCalled();
+    expect(storage.saveSync).not.toHaveBeenCalled();
   });
 
   it('a failed write shows no toast', async () => {
-    storage.save.mockRejectedValue(new Error('quota'));
+    storage.saveSync.mockImplementation(() => {
+      throw new Error('quota');
+    });
     renderMachine({ doc: { id: 'a' }, isDirty: true });
     await pagehide();
     await flush();
-    expect(storage.save).toHaveBeenCalledTimes(1);
+    expect(storage.saveSync).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -515,6 +529,16 @@ describe('useSaveMachine pagehide (§3.4 Q3)', () => {
     const { unmount } = renderMachine({ doc: { id: 'a' }, isDirty: true });
     unmount();
     await pagehide();
+    expect(storage.saveSync).not.toHaveBeenCalled();
+  });
+
+  it('writes synchronously within the event dispatch, through saveSync and never storage.save', () => {
+    renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+      // no await: the write must already have happened (spec 0.2.9 §3.4)
+      expect(storage.saveSync).toHaveBeenCalledTimes(1);
+    });
     expect(storage.save).not.toHaveBeenCalled();
   });
 });
