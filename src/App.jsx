@@ -527,11 +527,14 @@ function App() {
     pushToast({ kind: 'info', message });
   }, [pendingClean, pushToast]);
 
-  const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
+  // novice-readiness spec 0.2.8 §3.8 (F1, F4, PD-6-G12): a reply for a replaced document is
+  // dropped, as Verify and Clean do; the rest is merged against the grid it was sent from.
+  const handleThemeWordApplied = useCallback((updatedGrid, placement, { sentGrid, docId: requestDocId }) => {
     if (editingPausedRef.current) return;
+    if (requestDocId !== docIdRef.current) return;
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
-    setGrid((prev) => writeAppliedTheme(prev, updatedGrid));
+    setGrid((prev) => writeAppliedTheme(prev, updatedGrid, sentGrid));
 
     pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
   }, [pushToast]);
@@ -750,6 +753,7 @@ function App() {
         <ThemeWordsPanel
           grid={grid}
           gridSize={gridSize}
+          docId={docId}
           onApplyPlacement={handleThemeWordApplied}
           editingPaused={editingPaused}
           onClose={() => setShowThemePanel(false)}

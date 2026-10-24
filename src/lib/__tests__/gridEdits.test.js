@@ -293,7 +293,7 @@ describe('writeAppliedTheme', () => {
     const upd = freeze(
       mk(3, { '0,0': { letter: 'A', isThemeLocked: true, isAutofilled: true } })
     );
-    const out = writeAppliedTheme(prev, upd);
+    const out = writeAppliedTheme(prev, upd, prev);
     expect(out[0][0]).not.toBe(prev[0][0]);
     expect(out[0][0]).toMatchObject({
       isThemeLocked: true,
@@ -307,7 +307,7 @@ describe('writeAppliedTheme', () => {
     const upd = mk(3);
     upd[1][1] = { letter: '', isBlack: true };
     freeze(upd);
-    const out = writeAppliedTheme(prev, upd);
+    const out = writeAppliedTheme(prev, upd, prev);
     expect(out[1][1]).toEqual({ ...makeCell(), isBlack: true });
   });
 
@@ -321,10 +321,61 @@ describe('writeAppliedTheme', () => {
         '0,0': { letter: 'A', isThemeLocked: true },
       })
     );
-    const out = writeAppliedTheme(prev, upd);
+    const out = writeAppliedTheme(prev, upd, prev);
     expect(out[2][2]).toBe(prev[2][2]);
     expect(out[2][2].isAutofilled).toBe(true);
     expect(out[0][0]).not.toBe(prev[0][0]);
+  });
+});
+
+// novice-readiness spec 0.2.8 §3.8 (F4, F1b, PD-6-G12): the merge is against the grid
+// the request was built from, not the live grid.
+describe('writeAppliedTheme against the sent grid', () => {
+  const placed = { '0,0': { letter: 'C', isThemeLocked: true }, '0,1': { letter: 'A', isThemeLocked: true } };
+
+  it('keeps a letter typed after the request was sent (F4)', () => {
+    const sent = freeze(mk(5));
+    const reply = freeze(mk(5, placed));
+    const live = freeze(mk(5, { '2,2': { letter: 'Q' } }));
+    const out = writeAppliedTheme(live, reply, sent);
+    expect(out[2][2].letter).toBe('Q');
+    expect(out[0][0]).toMatchObject({ letter: 'C', isThemeLocked: true });
+    expect(out[0][1]).toMatchObject({ letter: 'A', isThemeLocked: true });
+  });
+
+  it('keeps a black square toggled after the request was sent', () => {
+    const sent = freeze(mk(5));
+    const reply = freeze(mk(5, placed));
+    const live = freeze(mk(5, { '4,4': { isBlack: true } }));
+    const out = writeAppliedTheme(live, reply, sent);
+    expect(out[4][4].isBlack).toBe(true);
+  });
+
+  it("keeps the user's edit inside the reply's own cell (chained Apply All)", () => {
+    const sent = freeze(mk(5, { '0,0': { letter: 'C', isThemeLocked: true } }));
+    const reply = freeze(
+      mk(5, { '0,0': { letter: 'C', isThemeLocked: true }, '1,0': { letter: 'A', isThemeLocked: true } })
+    );
+    // the user overwrote (1,0) with X while word 1 was being applied
+    const live = freeze(
+      mk(5, { '0,0': { letter: 'C', isThemeLocked: true }, '1,0': { letter: 'X' } })
+    );
+    const out = writeAppliedTheme(live, reply, sent);
+    expect(out[1][0].letter).toBe('X');
+    expect(out[1][0]).toBe(live[1][0]);
+  });
+
+  it('does not throw and returns the live grid when sizes differ (F1b)', () => {
+    const reply = freeze(mk(3, { '0,0': { letter: 'A', isThemeLocked: true } }));
+    const sent = freeze(mk(3));
+    const live = freeze(mk(5));
+    let out;
+    expect(() => {
+      out = writeAppliedTheme(live, reply, sent);
+    }).not.toThrow();
+    expect(out).toBe(live);
+    const bigLive = freeze(mk(7));
+    expect(writeAppliedTheme(bigLive, mk(5), mk(5))).toBe(bigLive);
   });
 });
 

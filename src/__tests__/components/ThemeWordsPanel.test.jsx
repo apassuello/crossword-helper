@@ -818,3 +818,170 @@ describe('ThemeWordsPanel Apply All reports each word\'s real failure (Task 6.14
     expect(summariesNow(toast.success)).toEqual(['Applied 1 theme words successfully!']);
   });
 });
+
+/**
+ * Task 6.16 (novice-readiness spec 0.2.8 §3.8, PD-6-G12; review F1, F4, Greptile #77):
+ * what the panel hands App, when it stops sending, and the request/signature snapshot.
+ */
+describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
+  const UPLOAD_OK = (words) => ({
+    words,
+    count: words.length,
+    validation: { valid: true, errors: [], warnings: [] },
+  });
+  const listFor = (words) =>
+    words.map((w, i) => ({
+      word: w,
+      length: w.length,
+      suggestions: [
+        { word: w, row: i * 2, col: 0, direction: 'across', score: 90, reasoning: 'Good placement' },
+      ],
+    }));
+  const gridWith = (n) => {
+    const g = createEmptyGrid(15);
+    for (let i = 0; i < n; i++) g[i][0].letter = 'A';
+    return g;
+  };
+  const upload = (words) =>
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [new File([words.join('\n')], 'theme.txt', { type: 'text/plain' })] },
+    });
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('single Apply hands App the grid it sent and the docId the request was sent under', async () => {
+    const words = ['ALPHA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith(1) });
+    const onApply = vi.fn();
+    const sent = createEmptyGrid(15);
+    render(
+      <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
+    );
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(1));
+    await act(async () => {
+      screen.getByRole('button', { name: /apply this placement/i }).click();
+    });
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
+    expect(onApply.mock.calls[0][2].sentGrid).toBe(sent);
+    expect(onApply.mock.calls[0][2].docId).toBe('doc-1');
+  });
+
+  it('Apply All: each word is sent the previous reply, and that reply is its sentGrid', async () => {
+    const words = ['ALPHA', 'BETA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    const r1 = gridWith(1);
+    const r2 = gridWith(2);
+    vi.spyOn(api, 'themeApplyPlacement')
+      .mockResolvedValueOnce({ grid: r1 })
+      .mockResolvedValueOnce({ grid: r2 });
+    const onApply = vi.fn();
+    const sent = createEmptyGrid(15);
+    render(
+      <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
+    );
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(2));
+    expect(onApply.mock.calls[0][0]).toBe(r1);
+    expect(onApply.mock.calls[0][2].sentGrid).toBe(sent);
+    expect(onApply.mock.calls[1][0]).toBe(r2);
+    expect(onApply.mock.calls[1][2].sentGrid).toBe(r1);
+    expect(onApply.mock.calls[1][2].docId).toBe('doc-1');
+  });
+
+  it('Apply All over 3 words: closing the panel after the first reply sends no further request', async () => {
+    const words = ['ALPHA', 'BETA', 'GAMMA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    const first = deferred();
+    const applySpy = vi
+      .spyOn(api, 'themeApplyPlacement')
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValue({ grid: gridWith(2) });
+    const { unmount } = render(
+      <ThemeWordsPanel
+        grid={createEmptyGrid(15)}
+        gridSize={15}
+        docId="doc-1"
+        onApplyPlacement={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(3));
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+
+    unmount(); // the × button
+    await act(async () => {
+      first.resolve({ grid: gridWith(1) });
+    });
+    await flush();
+    await flush();
+    expect(applySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a grid edit while themeUpload is pending: the list lands superseded and one refetch runs', async () => {
+    const words = ['ALPHA'];
+    const up = deferred();
+    vi.spyOn(api, 'themeUpload').mockReturnValue(up.promise);
+    const suggest = vi
+      .spyOn(api, 'themeSuggestPlacements')
+      .mockResolvedValue({ suggestions: listFor(words) });
+    const applySpy = vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith(1) });
+    const gridA = createEmptyGrid(15);
+    const gridB = createEmptyGrid(15);
+    gridB[7][7].letter = 'Q';
+    const props = { gridSize: 15, docId: 'doc-1', onApplyPlacement: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<ThemeWordsPanel grid={gridA} {...props} />);
+    upload(words);
+    await flush();
+    rerender(<ThemeWordsPanel grid={gridB} {...props} />); // edited while themeUpload is pending
+    await act(async () => {
+      up.resolve(UPLOAD_OK(words));
+    });
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(1));
+    expect(suggest).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      screen.getByRole('button', { name: /apply this placement/i }).click();
+    });
+    await flush();
+    expect(toast).toHaveBeenCalledWith('Suggestions updated for the changed grid.');
+    expect(applySpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await sleep(SUGGESTION_REFETCH_DEBOUNCE_MS + 150);
+    });
+    expect(suggest).toHaveBeenCalledTimes(2);
+    expect(suggest.mock.calls[1][0].existingGrid[7][7]).toBe('Q');
+  });
+});
