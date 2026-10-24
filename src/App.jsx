@@ -27,6 +27,7 @@ import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
 import GridHintLine from './components/bench/GridHintLine';
+import GridPanel from './components/bench/GridPanel';
 import PatternMatcher from './components/PatternMatcher';
 import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
@@ -472,12 +473,15 @@ function App() {
 
         <aside className="xw-inspector-shell">
           {currentTool === 'edit' && (
-            <div className="xw-inspector-empty">
-              <div className="xw-empty-mark">▦</div>
-              <div className="xw-empty-title">Grid editor</div>
-              <div className="xw-empty-sub">
-                Select a cell to search, or pick a tool from the rail.
-              </div>
+            <div className="xw-inspector">
+              <GridPanel
+                grid={grid}
+                gridSize={gridSize}
+                selectedCell={selectedCell}
+                symmetryEnabled={symmetryEnabled}
+                editingPaused={editingPaused}
+                onToggleBlack={toggleBlackSquare}
+              />
             </div>
           )}
 

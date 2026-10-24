@@ -177,6 +177,45 @@ describe('App black squares and hint line (§3.3)', () => {
     expect(blackCells(container)).toHaveLength(baseline + 2);
   });
 
+  // novice-readiness spec 0.2.7 §3.3: the Black square button acts like Space,
+  // symmetry included. Checks WHICH cells are black, not only how many.
+  const blackSet = (container) => {
+    const all = Array.from(container.querySelectorAll('rect[fill="var(--ink)"]'));
+    return all.map((el) => [Number(el.getAttribute('x')), Number(el.getAttribute('y'))]);
+  };
+
+  it('Black square button blackens the cell and its mirror; with symmetry off only the cell', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(SIZE * SIZE));
+    const before = blackSet(container);
+    // Black fills are inset by half a stroke width; floor aligns them with the hit rects.
+    const key = ([x, y]) => `${Math.floor(x)},${Math.floor(y)}`;
+    const beforeKeys = new Set(before.map(key));
+    const posOf = (i) => {
+      const r = cells(container)[i];
+      return key([Number(r.getAttribute('x')), Number(r.getAttribute('y'))]);
+    };
+    const A = idx(2, 3);
+    const M = idx(SIZE - 1 - 2, SIZE - 1 - 3);
+    const newlyBlack = () =>
+      blackSet(container).map(key).filter((k) => !beforeKeys.has(k)).sort();
+
+    // Symmetry on (default): cell and mirror.
+    await user.click(cells(container)[A]);
+    await user.click(screen.getByRole('button', { name: 'Black square' }));
+    expect(newlyBlack()).toEqual([posOf(A), posOf(M)].sort());
+
+    // Undo, then turn symmetry off and toggle another cell: only that cell.
+    await user.click(screen.getByRole('button', { name: 'Black square' }));
+    expect(newlyBlack()).toEqual([]);
+    await user.click(screen.getByText('Symmetry'));
+    const B = idx(5, 6);
+    await user.click(cells(container)[B]);
+    await user.click(screen.getByRole('button', { name: 'Black square' }));
+    expect(newlyBlack()).toEqual([posOf(B)]);
+  });
+
   it('shows the key hint under the grid in more than one tool', async () => {
     const user = userEvent.setup();
     const { container } = renderApp();
