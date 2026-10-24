@@ -267,3 +267,20 @@ describe('CrosswordGrid (mounted, controlled)', () => {
     expect(propsA.onSetLetter).not.toHaveBeenCalled();
   });
 });
+
+describe('CrosswordGrid red (isBlocked) rendering', () => {
+  it('renders exactly one data-blocked rect for two blocked cells, one of them black', () => {
+    const grid = createEmptyGrid(5);
+    grid[1][1] = { ...grid[1][1], isBlocked: true };
+    grid[2][2] = { ...grid[2][2], isBlack: true, isBlocked: true };
+    const { container } = render(<CrosswordGrid {...baseProps({ grid })} />);
+    const reds = container.querySelectorAll('[data-blocked="true"]');
+    expect(reds).toHaveLength(1);
+    expect(reds[0].getAttribute('fill')).toBe('var(--danger)');
+  });
+
+  it('renders none when no cell is blocked', () => {
+    const { container } = render(<CrosswordGrid {...baseProps()} />);
+    expect(container.querySelectorAll('[data-blocked="true"]')).toHaveLength(0);
+  });
+});
