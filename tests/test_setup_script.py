@@ -209,10 +209,17 @@ def test_created_venv_with_pip_continues(tmp_path):
 
 # --- npm ci failure (novice-readiness spec 0.2.6 §5) ---
 
-NPM_CI_ERROR = "npm ERR! package.json and package-lock.json are not in sync"
+NPM_CI_ERROR = "npm error package.json and package-lock.json are not in sync"
 # The error comes first and a log-path line last, as npm prints them: ``tail -1`` kept only the latter.
+# Like real npm: under --silent a failure prints nothing at all (exit 1), otherwise it prints the error.
 NPM_CI_FAILS = (
-    'if [ "$1" = "ci" ]; then echo "%s" >&2; echo "npm ERR! A complete log is in /x/debug.log" >&2; exit 1; fi\n'
+    'if [ "$1" = "ci" ]; then\n'
+    '  for a in "$@"; do [ "$a" = "--silent" ] && exit 1; done\n'
+    '  echo "npm error code EUSAGE" >&2\n'
+    '  echo "%s" >&2\n'
+    '  echo "npm error A complete log is in /x/debug.log" >&2\n'
+    "  exit 1\n"
+    "fi\n"
     'echo "npm shim"\n' % NPM_CI_ERROR
 )
 
