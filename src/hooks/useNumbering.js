@@ -18,7 +18,7 @@
  * Cell shape (frontend canonical): { letter, isBlack, number, isError, isThemeLocked, ... }
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { toCliStrings, applyNumbering } from '../api/gridCodec';
 import { allSlots } from './useGridGeometry';
@@ -137,7 +137,7 @@ const DEBOUNCE_MS = 150;
  * muted — no special-casing needed beyond the dep-array re-fire.
  *
  * @param {{grid: object[][]|null, gridSize: number, setGrid: (g: object[][]) => void, pushToast: (t: {kind: string, message: string}) => void, enabled?: boolean}} params
- * @returns {{numbering: Record<string, number>, violations: string[], unverified: boolean}}
+ * @returns {{numbering: Record<string, number>, violations: string[], unverified: boolean, invalidate: () => void}}
  */
 export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = true }) {
   const [numbering, setNumbering] = useState({});
@@ -213,7 +213,14 @@ export function useNumbering({ grid, gridSize, setGrid, pushToast, enabled = tru
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig, enabled]);
 
-  return { numbering, violations, unverified };
+  // Increments the token and nothing else, so every already-issued numbering /
+  // validation resolution fails its token guard (used by the autofill Start so a
+  // reconcile cannot land mid-run).
+  const invalidate = useCallback(() => {
+    ++tokenRef.current;
+  }, []);
+
+  return { numbering, violations, unverified, invalidate };
 }
 
 export default useNumbering;

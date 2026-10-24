@@ -95,6 +95,20 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(startBtn).toBeDisabled();
   });
 
+  it('Start click passes the docId prop to machine.start as the second argument', async () => {
+    const machine = baseMachine();
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="doc-9" />);
+    await flush();
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+
+    expect(machine.start).toHaveBeenCalledTimes(1);
+    expect(machine.start).toHaveBeenCalledWith(
+      expect.objectContaining({ themeEntries: { '(0,0,across)': 'AB' } }),
+      'doc-9'
+    );
+  });
+
   it('Start click calls machine.start with options + themeEntries merged in', async () => {
     const machine = baseMachine();
     const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
