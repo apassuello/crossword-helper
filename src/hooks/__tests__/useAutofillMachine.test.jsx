@@ -1874,3 +1874,36 @@ describe('useAutofillMachine Task 5.5: cancelPending is state (spec 0.2.7 sectio
     expect(m.result.current.cancelPending).toBe(false);
   });
 });
+
+describe('useAutofillMachine Task 6.17: adoptForkedDocId (novice-readiness spec 0.2.8 §2.3 (F2))', () => {
+  it('adopting the Start id then rerendering with the new id: a merge still applies', async () => {
+    const { result, rerender } = await runningMachine();
+    act(() => result.current.adoptForkedDocId('doc-1', 'doc-2'));
+    rerender({ docId: 'doc-2' });
+    send({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    expect(lettersOf(result.current.grid)[1]).toBe('EFGH');
+  });
+
+  it('adopting with a different oldId is a no-op: the new id still drops the merge', async () => {
+    const { result, rerender } = await runningMachine();
+    act(() => result.current.adoptForkedDocId('some-other-doc', 'doc-2'));
+    rerender({ docId: 'doc-2' });
+    send({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    expect(lettersOf(result.current.grid)[1]).toBe('');
+  });
+
+  it('a replaced document (no adopt) still drops a late merge', async () => {
+    const { result, rerender } = await runningMachine();
+    rerender({ docId: 'doc-2' });
+    send({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    expect(lettersOf(result.current.grid)[1]).toBe('');
+  });
+
+  it('adopt then a partial result: the Keep offer shows for the new id', async () => {
+    const { result, rerender } = await runningMachine();
+    act(() => result.current.adoptForkedDocId('doc-1', 'doc-2'));
+    rerender({ docId: 'doc-2' });
+    complete({ success: false, grid: CLI_FULL_4, slots_filled: 4, total_slots: 8, fill_percentage: 50 });
+    expect(result.current.offer).not.toBeNull();
+  });
+});
