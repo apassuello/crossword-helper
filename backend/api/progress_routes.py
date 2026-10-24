@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -23,6 +23,47 @@ progress_queues_lock = threading.Lock()
 
 # Track maximum progress per task for monotonicity enforcement
 max_progress_per_task: Dict[str, int] = {}
+
+# Terminal-event record (novice-readiness spec 0.2.5 section 2.4, #41). `progress_queues`
+# is a single-consumer queue, so a second subscriber (or a reconnect) cannot read what the
+# first one consumed. The last terminal event is therefore kept here, with its enqueue
+# time, and re-sent by `generate()`. A tracker whose terminal event is older than
+# TRACKER_RETENTION_SECONDS is swept lazily (no timer thread: P3, PD-3-SWEEP).
+TERMINAL_STATUSES = ("complete", "error", "paused")
+TRACKER_RETENTION_SECONDS = 60
+QUEUE_TIMEOUT_SECONDS = 30
+terminal_events: Dict[str, Tuple[Dict[str, Any], float]] = {}  # task_id -> (event, enqueue time)
+
+
+def get_terminal_event(task_id: str) -> Optional[Dict[str, Any]]:
+    """Return the recorded terminal event for a task, or None."""
+    with progress_queues_lock:
+        record = terminal_events.get(task_id)
+    return record[0] if record else None
+
+
+def _remove_tracker_locked(task_id: str) -> None:
+    """Drop every per-task record. Caller must hold `progress_queues_lock`."""
+    progress_queues.pop(task_id, None)
+    max_progress_per_task.pop(task_id, None)
+    terminal_events.pop(task_id, None)
+
+
+def sweep_expired_trackers(now: Optional[float] = None) -> List[str]:
+    """
+    Remove every tracker whose terminal event was enqueued more than
+    TRACKER_RETENTION_SECONDS before `now` (default `time.time()`).
+
+    A tracker with no terminal event is never removed. Returns the removed ids.
+    """
+    if now is None:
+        now = time.time()
+    with progress_queues_lock:
+        expired = [tid for tid, (_, enqueued) in terminal_events.items() if now - enqueued > TRACKER_RETENTION_SECONDS]
+        for tid in expired:
+            _remove_tracker_locked(tid)
+    return expired
+
 
 # Track running subprocesses for cleanup
 running_processes: Dict[str, "subprocess.Popen"] = {}
@@ -88,6 +129,15 @@ def send_progress(
     if data:
         event["data"] = data
 
+    # Record under the same lock that guards the tracker maps, so a concurrent
+    # cleanup/sweep cannot leave a record behind for a removed tracker. Only the FIRST
+    # terminal event is kept: a stream ends at the first one it meets (DD4b: paused, then
+    # a trailing complete sentinel, replays as paused). novice-readiness spec 0.2.5 s2.4 (#41).
+    if status in TERMINAL_STATUSES:
+        with progress_queues_lock:
+            if task_id in progress_queues:
+                terminal_events.setdefault(task_id, (event, event["timestamp"]))
+
     try:
         progress_queues[task_id].put(event, block=False)
     except queue.Full:
@@ -97,10 +147,7 @@ def send_progress(
 def cleanup_progress_tracker(task_id: str):
     """Remove a progress tracker (does NOT kill subprocess — that's handled by cancel/timeout)."""
     with progress_queues_lock:
-        if task_id in progress_queues:
-            del progress_queues[task_id]
-        if task_id in max_progress_per_task:
-            del max_progress_per_task[task_id]
+        _remove_tracker_locked(task_id)
 
 
 def register_process(task_id: str, process):
@@ -149,37 +196,48 @@ def stream_progress(task_id: str):
     Returns:
         SSE stream of progress events
     """
+    sweep_expired_trackers()
     if task_id not in progress_queues:
         return jsonify({"error": "Task not found"}), 404
 
     def generate():
-        """Generate SSE events from progress queue."""
+        """Generate SSE events from progress queue, ending with one terminal event."""
         task_queue = progress_queues.get(task_id)
         if not task_queue:
             return
 
-        try:
-            while True:
-                try:
-                    # Wait for next event (with timeout)
-                    event = task_queue.get(timeout=30)
+        # The queue has one consumer per event, so a terminal event another subscriber
+        # already took is only available from the record (#41).
+        recorded = get_terminal_event(task_id)
+        if recorded is not None:
+            yield f"data: {json.dumps(recorded)}\n\n"
+            return
 
-                    # Send SSE event
-                    yield f"data: {json.dumps(event)}\n\n"
+        # No cleanup on exit: the tracker outlives its subscribers so a reconnect or a
+        # second subscriber still finds it; sweep_expired_trackers retires it.
+        while True:
+            try:
+                # Wait for next event (with timeout)
+                event = task_queue.get(timeout=QUEUE_TIMEOUT_SECONDS)
 
-                    # If complete, error, or paused, stop streaming. DD4b: `paused` is a
-                    # terminal SSE state (the CLI exits and the stream must close, else
-                    # the synchronous consumer hangs). Resume opens a fresh task_id stream.
-                    if event.get("status") in ["complete", "error", "paused"]:
-                        break
+                # Send SSE event
+                yield f"data: {json.dumps(event)}\n\n"
 
-                except queue.Empty:
-                    # Send heartbeat to keep connection alive
-                    yield ": heartbeat\n\n"
+                # If complete, error, or paused, stop streaming. DD4b: `paused` is a
+                # terminal SSE state (the CLI exits and the stream must close, else
+                # the synchronous consumer hangs). Resume opens a fresh task_id stream.
+                if event.get("status") in TERMINAL_STATUSES:
+                    return
 
-        finally:
-            # Clean up when client disconnects
-            cleanup_progress_tracker(task_id)
+            except queue.Empty:
+                # Another subscriber may have taken the terminal event from the queue.
+                recorded = get_terminal_event(task_id)
+                if recorded is not None:
+                    yield f"data: {json.dumps(recorded)}\n\n"
+                    return
+                sweep_expired_trackers()
+                # Send heartbeat to keep connection alive
+                yield ": heartbeat\n\n"
 
     return Response(
         generate(),
