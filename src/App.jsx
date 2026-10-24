@@ -10,7 +10,7 @@ import { useSaveMachine } from './hooks/useSaveMachine';
 import { useAutofillMachine, LIVE_STATES } from './hooks/useAutofillMachine';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
-import { useNumbering } from './hooks/useNumbering';
+import { useNumbering, localNumber } from './hooks/useNumbering';
 import { mintDocId } from './lib/docId';
 import { toSavedGrid } from './api/gridCodec';
 import {
@@ -195,13 +195,35 @@ function App() {
         isBlocked: false
       }))
     );
-    setGrid(newGrid);
-    // Numbering is now hook-driven (useNumbering): setting the grid changes the
+    // novice-readiness spec 0.2.7 §3.2 (#55): the blank grid is born numbered. useNumbering
+    // fires only on a structural-signature change, and a New grid over a grid with the same
+    // size and black layout does not change it, so the numbers are applied here rather than
+    // left to the hook. The hook's server reconcile still runs on any real structural change.
+    const numbered = localNumber(newGrid).grid;
+    setGrid(numbered);
+    // Numbering is otherwise hook-driven (useNumbering): setting the grid changes the
     // structural signature, which fires the optimistic renumber + server reconcile.
     // A fresh grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
-    setSavedSig(contentSigOf(size, newGrid));
+    setSavedSig(contentSigOf(size, numbered));
   };
+
+  // novice-readiness spec 0.2.7 §3.2 (#55): New grid. Built through `initializeGrid` (which
+  // mints the new document id and numbers the grid), so there is no second mint. Gated at
+  // write time (D1) as well as at the button, because the autofill machine's doc-id guard
+  // relies on New grid never running while a run is live.
+  const createNewGrid = useCallback((size) => {
+    if (editingPausedRef.current) return;
+    if (size !== gridSize) {
+      // The [gridSize] effect would otherwise initialise a second time.
+      skipNextInitRef.current = true;
+      setGridSize(size);
+    }
+    initializeGrid(size);
+    autofill.discardRun();
+    setSelectedCell(null);
+    setSymmetryEnabled(true);
+  }, [gridSize, autofill.discardRun]);
 
   const toggleBlackSquare = useCallback((row, col) => {
     if (editingPausedRef.current) return;
@@ -481,6 +503,7 @@ function App() {
                 symmetryEnabled={symmetryEnabled}
                 editingPaused={editingPaused}
                 onToggleBlack={toggleBlackSquare}
+                onNewGrid={createNewGrid}
               />
             </div>
           )}

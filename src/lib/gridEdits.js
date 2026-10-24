@@ -49,6 +49,15 @@ export function canToggleBlack(grid, row, col, symmetryEnabled) {
   return true;
 }
 
+/**
+ * novice-readiness spec 0.2.7 §3.2 (#55): true if any cell has a letter or is
+ * black, i.e. replacing the grid would lose work. A null grid -> false.
+ */
+export function gridHasContent(grid) {
+  if (!grid) return false;
+  return grid.some((row) => row.some((cell) => cell.letter || cell.isBlack));
+}
+
 /** Flip black on (row, col) and, with symmetry, on its 180-degree partner. */
 export function writeToggleBlack(grid, row, col, symmetryEnabled) {
   const size = grid.length;

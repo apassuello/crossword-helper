@@ -7,10 +7,50 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { ToastProvider } from '../../components/bench/Toast';
+import { localNumber } from '../../hooks/useNumbering';
+
+// Probes for the New grid rows (novice-readiness spec 0.2.7 §3.2). Each wraps the
+// real module and only records or overrides what a test needs: distinguishable
+// document ids, the props App hands the Grid panel, and the autofill machine's
+// state/discardRun (so a live run can be simulated without a backend).
+const probe = vi.hoisted(() => ({
+  mintCalls: 0,
+  panelProps: null,
+  autofillArgs: null,
+  autofillOverride: null,
+}));
+
+vi.mock('../../lib/docId', () => ({
+  mintDocId: () => `doc-${++probe.mintCalls}`,
+}));
+
+vi.mock('../../components/bench/GridPanel', async (importOriginal) => {
+  const actual = await importOriginal();
+  const Real = actual.default;
+  return {
+    ...actual,
+    default: (props) => {
+      probe.panelProps = props;
+      return <Real {...props} />;
+    },
+  };
+});
+
+vi.mock('../../hooks/useAutofillMachine', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useAutofillMachine: (args) => {
+      probe.autofillArgs = args;
+      const real = actual.useAutofillMachine(args);
+      return probe.autofillOverride ? { ...real, ...probe.autofillOverride } : real;
+    },
+  };
+});
 
 // Bench's App consumes the ToastProvider context (useToasts), so it must be
 // rendered inside the provider exactly as main.jsx mounts it. Main's version of
@@ -226,5 +266,159 @@ describe('App black squares and hint line (§3.3)', () => {
     await user.click(screen.getByRole('button', { name: /^import$/i }));
     expect(hint()).not.toBeNull();
     expect(container.querySelectorAll('p.xw-grid-hint')).toHaveLength(1);
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.2 (#55): New grid, end to end through App.
+describe('App New grid (§3.2)', () => {
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const sizeBtn = (label) => screen.getByRole('button', { name: label });
+  const docIdNow = () => probe.autofillArgs.docId;
+  const flat = () => probe.panelProps.grid.flat();
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+  });
+
+  const typeLetter = async (user, container, r, c, ch) => {
+    await user.click(cells(container)[idx(r, c)]);
+    fireEvent.keyDown(focusEl(container), { key: ch });
+  };
+
+  it('15x15 with letters: 21x21 + Replace gives a blank 21x21 with a new docId and clean flags', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    expect(letters(container)).toEqual(['A']);
+    const idBefore = docIdNow();
+    const mintsBefore = probe.mintCalls;
+
+    await user.click(sizeBtn('21\u00d721'));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(cells(container)).toHaveLength(441));
+    expect(letters(container)).toEqual([]);
+    expect(docIdNow()).not.toBe(idBefore);
+    expect(flat()).toHaveLength(441);
+    for (const cell of flat()) {
+      expect(cell.isError).toBe(false);
+      expect(cell.isBlocked).toBe(false);
+      expect(cell.isAutofilled).toBe(false);
+      expect(cell.isThemeLocked).toBe(false);
+    }
+    // skipNextInitRef: the size change must not run initializeGrid a second time.
+    expect(probe.mintCalls - mintsBefore).toBe(1);
+  });
+
+  it('Cancel leaves the grid and docId unchanged', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    const idBefore = docIdNow();
+    const mintsBefore = probe.mintCalls;
+
+    await user.click(sizeBtn('15\u00d715'));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(letters(container)).toEqual(['A']);
+    expect(cells(container)).toHaveLength(225);
+    expect(docIdNow()).toBe(idBefore);
+    expect(probe.mintCalls).toBe(mintsBefore);
+  });
+
+  it('a blank grid: choosing 11x11 asks nothing and gives an 11x11 grid', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    const mintsBefore = probe.mintCalls;
+
+    await user.click(sizeBtn('11\u00d711'));
+
+    expect(screen.queryByRole('group')).toBeNull();
+    await waitFor(() => expect(cells(container)).toHaveLength(121));
+    expect(probe.mintCalls - mintsBefore).toBe(1);
+  });
+
+  it('same size, letters only: the blank grid is numbered as localNumber numbers it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    const idBefore = docIdNow();
+    const mintsBefore = probe.mintCalls;
+
+    await user.click(sizeBtn('15\u00d715'));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(letters(container)).toEqual([]));
+    expect(docIdNow()).not.toBe(idBefore);
+    expect(probe.mintCalls - mintsBefore).toBe(1);
+    const expected = localNumber(probe.panelProps.grid).grid;
+    expect(probe.panelProps.grid[0][0].number).toBe(1);
+    expect(probe.panelProps.grid.map((row) => row.map((x) => x.number))).toEqual(
+      expected.map((row) => row.map((x) => x.number))
+    );
+    expect(container.querySelectorAll('.xw-cell-number').length).toBeGreaterThan(0);
+  });
+
+  it('resets the selected cell and turns symmetry back on', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await user.click(screen.getByText('Symmetry'));
+    await user.click(cells(container)[idx(2, 2)]);
+    await typeLetter(user, container, 3, 3, 'A');
+    expect(probe.panelProps.symmetryEnabled).toBe(false);
+    expect(probe.panelProps.selectedCell).not.toBeNull();
+
+    await user.click(sizeBtn('15\u00d715'));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(letters(container)).toEqual([]));
+    expect(probe.panelProps.symmetryEnabled).toBe(true);
+    expect(probe.panelProps.selectedCell).toBeNull();
+  });
+
+  it('discards the retained run exactly once', async () => {
+    const user = userEvent.setup();
+    const discardRun = vi.fn();
+    probe.autofillOverride = { discardRun };
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+
+    await user.click(sizeBtn('11\u00d711'));
+
+    expect(discardRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('while a run is live the size buttons are disabled and createNewGrid is a no-op', async () => {
+    const user = userEvent.setup();
+    const discardRun = vi.fn();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    const idBefore = docIdNow();
+    const mintsBefore = probe.mintCalls;
+
+    probe.autofillOverride = { state: 'running', discardRun };
+    await user.click(screen.getByText('Symmetry')); // any re-render picks up the override
+    await user.click(screen.getByText('Symmetry'));
+
+    for (const label of ['11\u00d711', '15\u00d715', '21\u00d721']) {
+      expect(sizeBtn(label)).toBeDisabled();
+    }
+    act(() => probe.panelProps.onNewGrid(11));
+
+    expect(cells(container)).toHaveLength(225);
+    expect(letters(container)).toEqual(['A']);
+    expect(docIdNow()).toBe(idBefore);
+    expect(probe.mintCalls).toBe(mintsBefore);
+    expect(discardRun).not.toHaveBeenCalled();
   });
 });
