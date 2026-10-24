@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import App, { contentSigOf } from '../App';
 import { ToastProvider } from '../components/bench/Toast';
 import storage from '../lib/storage';
+import { toSavedGrid } from '../api/gridCodec';
 
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), {
@@ -54,6 +55,16 @@ describe('contentSigOf', () => {
 
   it('keeps a null grid signature', () => {
     expect(JSON.parse(contentSigOf(3, null))).toEqual({ size: 3, cells: null });
+  });
+});
+
+describe('toSavedGrid vs contentSigOf (novice-readiness spec 0.2.7 §3.4 (S2))', () => {
+  it('the saved form has the same signature as the live grid, isBlocked cell included', () => {
+    const g = [
+      [cell({ letter: 'A', isAutofilled: true }), cell({ letter: '', isBlack: true }), cell({ letter: 'T', isThemeLocked: true })],
+      [cell({ letter: 'B', isBlocked: true }), cell({ letter: '' }), cell({ letter: 'C', isAutofilled: false })],
+    ];
+    expect(contentSigOf(3, toSavedGrid(g))).toBe(contentSigOf(3, g));
   });
 });
 

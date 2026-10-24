@@ -369,4 +369,57 @@ describe('useSaveMachine', () => {
       expect(storage.save.mock.calls[0][1]).toEqual({ expectedSavedAt: 'T5' });
     });
   });
+
+  describe('onSaved (novice-readiness spec 0.2.7 §3.4 (S2))', () => {
+    it('is called once with the exact doc object handed to storage.save', async () => {
+      const onSaved = vi.fn();
+      const doc = { id: 'a' };
+      const { result } = renderMachine({ doc, isDirty: true, onSaved });
+      await act(async () => {
+        await result.current.saveNamed('N');
+      });
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved.mock.calls[0][0]).toBe(storage.save.mock.calls[0][0]);
+      expect(onSaved.mock.calls[0][0]).toBe(doc);
+    });
+
+    it('a parent that is still dirty after onSaved keeps the machine dirty and re-arms autosave', async () => {
+      const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true, onSaved: vi.fn() });
+      await act(async () => {
+        await result.current.saveNamed('N');
+      });
+      expect(result.current.status).toBe('dirty');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(storage.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('a throwing onSaved cannot make saveNamed reject or leave status at saving', async () => {
+      const onSaved = vi.fn(() => {
+        throw new Error('boom');
+      });
+      const { result } = renderMachine({ doc: { id: 'a' }, isDirty: false, onSaved });
+      let ok;
+      await act(async () => {
+        ok = await result.current.saveNamed('N');
+      });
+      expect(ok).toBe(true);
+      expect(result.current.status).toBe('saved');
+    });
+
+    it('a throwing onForked cannot make saveNamed reject or leave status at saving', async () => {
+      storage.save.mockResolvedValue({ savedAt: 's', id: 'n', name: 'X (copy)', forked: true });
+      const onForked = vi.fn(() => {
+        throw new Error('boom');
+      });
+      const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true, onForked });
+      let ok;
+      await act(async () => {
+        ok = await result.current.saveNamed('X');
+      });
+      expect(ok).toBe(true);
+      expect(result.current.status).toBe('saved');
+    });
+  });
 });

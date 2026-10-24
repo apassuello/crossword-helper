@@ -14,7 +14,16 @@
  * replaceEntryId? }`: autosave sends only `expectedSavedAt` (the machine's
  * `knownSavedAt`), `saveNamed` adds `name`/`replaceEntryId`.
  * novice-readiness spec 0.2.7 §3.4 (G3, G4, S4, PD-6-G6): a fork result calls
- * `onForked`, a failed explicit save shows the quota message and re-arms autosave. It is driven by two controlled props:
+ * `onForked`, a failed explicit save shows the quota message and re-arms autosave.
+ * novice-readiness spec 0.2.7 §3.4 (S2): `onSaved(written)` receives the exact doc
+ * object handed to `storage.save`, in the same success handler that sets `saved`, so
+ * the parent can record the signature of what was WRITTEN (not of whatever the live
+ * grid is by the time `saved` renders) and both updates land in one render. When an
+ * `onSaved` is supplied, the parent contract is enforced: if `isDirty` is still true
+ * on the render where status is `saved`, the document moved on after the write and
+ * the machine goes back to `dirty` with a fresh autosave timer. Both callbacks are
+ * guarded: a throw in either never rejects the save or strands status at `saving`.
+ * It is driven by two controlled props:
  *   - `doc`     : the serializable grid document, carrying a stable `id`.
  *   - `isDirty` : parent-owned "there are unsaved changes" flag.
  *
@@ -50,13 +59,14 @@ const QUOTA_MESSAGE =
   'Could not save: browser storage is full. Delete a saved grid or export this one.';
 
 /**
- * @param {{doc: {id: string}, isDirty: boolean, onForked?: (info: {id: string, name: string}) => void}} params
+ * @param {{doc: {id: string}, isDirty: boolean, onForked?: (info: {id: string, name: string}) => void,
+ *   onSaved?: (written: object) => void}} params
  * @returns {{status: 'pristine'|'dirty'|'saving'|'saved'|'error', savedLabel: string,
  *   save: () => Promise<void>,
  *   saveNamed: (name: string, opts?: {replaceEntryId?: string}) => Promise<boolean>,
  *   adoptSavedAt: (savedAt: string|null) => void}}
  */
-export function useSaveMachine({ doc, isDirty, onForked }) {
+export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   const { pushToast } = useToasts();
 
   const [status, setStatus] = useState('pristine');
@@ -70,6 +80,7 @@ export function useSaveMachine({ doc, isDirty, onForked }) {
   const prevDirtyRef = useRef(false); // previous isDirty (edge detection)
   const runSaveRef = useRef(() => {}); // latest runSave, called by timer + button
   const onForkedRef = useRef(onForked); // latest fork callback, read at resolve time
+  const onSavedRef = useRef(onSaved); // latest saved callback, read at resolve time
   // The savedAt this tab loaded or last wrote (S4). Deliberately NOT reset on a
   // doc.id change: Open saved / restore call setDocId and adoptSavedAt in one
   // handler, and an effect-time reset would overwrite the adopted value. A stale
@@ -78,6 +89,7 @@ export function useSaveMachine({ doc, isDirty, onForked }) {
 
   docRef.current = doc;
   onForkedRef.current = onForked;
+  onSavedRef.current = onSaved;
 
   function clearAutosave() {
     if (timerRef.current !== null) {
@@ -103,10 +115,24 @@ export function useSaveMachine({ doc, isDirty, onForked }) {
     clearAutosave(); // this attempt consumes any pending timer
     setStatus('saving');
     const opts = { expectedSavedAt: knownSavedAtRef.current, ...extra };
-    return storage.save(docRef.current, opts).then(
+    const written = docRef.current;
+    return storage.save(written, opts).then(
       (res) => {
         knownSavedAtRef.current = res.savedAt;
-        if (res.forked) onForkedRef.current?.({ id: res.id, name: res.name });
+        // A throwing callback must not reject the save (the write already happened)
+        // nor skip the `saved` transition below.
+        if (res.forked) {
+          try {
+            onForkedRef.current?.({ id: res.id, name: res.name });
+          } catch {
+            /* guarded: see above */
+          }
+        }
+        try {
+          onSavedRef.current?.(written);
+        } catch {
+          /* guarded: see above */
+        }
         if (!mountedRef.current) return true;
         setSavedAt(res.savedAt);
         setStatus('saved');
@@ -173,6 +199,17 @@ export function useSaveMachine({ doc, isDirty, onForked }) {
     // is a no-op: it must not clobber the `saved` state/label.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id, isDirty]);
+
+  // S2: with an onSaved supplied the parent marks the written doc clean in the same
+  // batch as `saved`; `isDirty` still true here means an edit landed after the write.
+  const hasOnSaved = onSaved !== undefined;
+  useEffect(() => {
+    if (hasOnSaved && status === 'saved' && isDirty) {
+      setStatus('dirty');
+      armAutosave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, isDirty, hasOnSaved]);
 
   // While `saved`, tick a 60s heartbeat so "just now" ages into "1m ago"
   // without a new save. Cleaned up on leaving `saved` and on unmount.
