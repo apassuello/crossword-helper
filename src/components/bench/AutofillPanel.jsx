@@ -2,14 +2,15 @@
 // Ported from the design bundle prototype (panels.jsx:359-462) — LAYOUT ONLY.
 // The bundle's algorithm list (back/random), preferPersonal checkbox, preset
 // cards, and progress-ticker are fiction; real fields/behavior come from the
-// OLD `src/components/AutofillPanel.jsx` (getThemeEntries logic verbatim,
-// options shape) minus everything pause/resume/black-square-modal related.
+// OLD `src/components/AutofillPanel.jsx` (options shape; getThemeEntries was
+// rewritten over allSlots in Task 5.5) minus everything pause/resume/black-square-modal related.
 //
 // Presentational / fully controlled for lifecycle: this component owns only
 // the options FORM state + the one-time wordlist fetch on mount. All
 // start/cancel/reset/progress state comes from `machine`, shaped exactly like
 // `useAutofillMachine()`'s return value (Task 11A, binding contract):
-//   { state, taskId, progress, message, errorCard, offer, startSnapshot, start, cancel, reset }
+//   { state, taskId, progress, message, errorCard, offer, startSnapshot, cancelPending,
+//     start, cancel, reset, keepFill, discardRun }
 // `start(options, docId)`: this panel passes its `docId` prop through (spec 0.2.6 section 2.3, M1).
 // `state` is one of idle|submitting|running|done|failed|cancelled|paused.
 // This component never touches SSE/EventSource/the API client directly,
@@ -26,9 +27,10 @@
 //     Progress is always a bar (`.xw-progress-bar`/`.xw-progress-fill`).
 //
 // Option defaults are passed EXPLICITLY on every start() call (never omitted)
-// per the 11A review finding: the hook doesn't default options itself, and
-// omitting minScore would let the backend's default (30) silently override
-// this panel's user-visible default (50, matching the old panel).
+// per the 11A review finding: the hook doesn't default options itself, so
+// omitting minScore would let the backend's own default apply instead of the
+// value shown. This panel's default is 30, the value the README's `fill`
+// example uses (novice-readiness spec 0.2.7 §2.5 (#40)).
 //
 // themeList (owner decision, restored post-review): a per-custom-wordlist
 // radio designating one selected custom wordlist as the priority theme list.
@@ -41,10 +43,12 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { allSlots } from '../../hooks/useGridGeometry';
 
+// minScore 30: the value the README's `fill` example uses (novice-readiness spec 0.2.7
+// §2.5 (#40)); it replaces the old panel's 50.
 const DEFAULT_OPTIONS = {
   algorithm: 'repair',
   timeout: 300,
-  minScore: 50,
+  minScore: 30,
   adaptiveMode: false,
   maxAdaptations: 3,
   partialFill: false,
@@ -61,80 +65,30 @@ function countEmptySlots(grid) {
 }
 
 /**
- * Ported verbatim from the old panel (`src/components/AutofillPanel.jsx:224-319`):
- * find contiguous theme-locked runs (across + down) and key them
- * `(row,col,direction)` -> word, exactly as the CLI's `--theme-entries`
- * flag expects. Length-1 runs are excluded (not real entries).
+ * Theme entries for the CLI's `--theme-entries` flag, keyed `(row,col,direction)` -> word
+ * (novice-readiness spec 0.2.7 section 2.3 Theme entries). An entry exists only for a full
+ * slot of `allSlots(grid)` (length >= 2) whose every cell is white, theme-locked and lettered;
+ * a partial theme-locked run yields none and goes only into the lock list
+ * (`lockedCellsOf`, useAutofillMachine.js).
  */
-function getThemeEntries(grid) {
+export function getThemeEntries(grid) {
   if (!grid) return {};
-
-  const themeEntries = {};
-  const visited = new Set();
-
-  const extractThemeWord = (startRow, startCol, direction) => {
-    let word = '';
-    if (direction === 'across') {
-      let c = startCol;
-      while (
-        c < grid[startRow].length &&
-        !grid[startRow][c].isBlack &&
-        grid[startRow][c].isThemeLocked &&
-        grid[startRow][c].letter
-      ) {
-        word += grid[startRow][c].letter;
-        visited.add(`${startRow},${c},across`);
-        c++;
-      }
-    } else {
-      let r = startRow;
-      while (
-        r < grid.length &&
-        !grid[r][startCol].isBlack &&
-        grid[r][startCol].isThemeLocked &&
-        grid[r][startCol].letter
-      ) {
-        word += grid[r][startCol].letter;
-        visited.add(`${r},${startCol},down`);
-        r++;
-      }
-    }
-    return word;
+  const { across, down } = allSlots(grid);
+  const entries = {};
+  const collect = (slots, direction) => {
+    slots.forEach((slot) => {
+      const full = slot.cells.every(([r, c]) => {
+        const cell = grid[r][c];
+        return !cell.isBlack && cell.isThemeLocked && cell.letter;
+      });
+      if (!full) return;
+      const [r, c] = slot.cells[0];
+      entries[`(${r},${c},${direction})`] = slot.cells.map(([rr, cc]) => grid[rr][cc].letter).join('');
+    });
   };
-
-  for (let row = 0; row < grid.length; row++) {
-    for (let col = 0; col < grid[row].length; col++) {
-      const cell = grid[row][col];
-      if (cell.isThemeLocked && !cell.isBlack && cell.letter) {
-        const cellKey = `${row},${col},across`;
-        if (!visited.has(cellKey)) {
-          const isThemeStart = col === 0 || !grid[row][col - 1].isThemeLocked || grid[row][col - 1].isBlack;
-          if (isThemeStart) {
-            const word = extractThemeWord(row, col, 'across');
-            if (word.length > 1) themeEntries[`(${row},${col},across)`] = word;
-          }
-        }
-      }
-    }
-  }
-
-  for (let col = 0; col < grid[0].length; col++) {
-    for (let row = 0; row < grid.length; row++) {
-      const cell = grid[row][col];
-      if (cell.isThemeLocked && !cell.isBlack && cell.letter) {
-        const cellKey = `${row},${col},down`;
-        if (!visited.has(cellKey)) {
-          const isThemeStart = row === 0 || !grid[row - 1][col].isThemeLocked || grid[row - 1][col].isBlack;
-          if (isThemeStart) {
-            const word = extractThemeWord(row, col, 'down');
-            if (word.length > 1) themeEntries[`(${row},${col},down)`] = word;
-          }
-        }
-      }
-    }
-  }
-
-  return themeEntries;
+  collect(across, 'across');
+  collect(down, 'down');
+  return entries;
 }
 
 function SuggestBlackSquareButton() {
@@ -188,6 +142,9 @@ export function AutofillPanel({ machine, grid, docId }) {
   const emptySlots = countEmptySlots(grid);
   const themeCount = Object.keys(getThemeEntries(grid)).length;
 
+  const noWordlists = options.wordlists.length === 0;
+  const noEmptySlots = emptySlots === 0;
+
   const handleStart = () => {
     machine.start({ ...options, themeEntries: getThemeEntries(grid) }, docId);
   };
@@ -195,6 +152,18 @@ export function AutofillPanel({ machine, grid, docId }) {
   const { state } = machine;
   const inProgress = state === 'submitting' || state === 'running';
   const isTerminal = state === 'done' || state === 'failed' || state === 'cancelled';
+
+  // novice-readiness spec 0.2.7 §2.3 (Keep offer): the label follows the offer's kind and counts.
+  const offer = machine.offer;
+  const keepButton = offer ? (
+    <button className="xw-primary-btn" onClick={() => machine.keepFill(docId)}>
+      {offer.kind === 'keepPartialFill'
+        ? offer.slotsFilled != null && offer.totalSlots != null
+          ? `Keep partial fill (${offer.slotsFilled}/${offer.totalSlots} slots)`
+          : 'Keep partial fill'
+        : 'Keep fill'}
+    </button>
+  ) : null;
 
   return (
     <div className="xw-autofill">
@@ -210,8 +179,9 @@ export function AutofillPanel({ machine, grid, docId }) {
 
       {state === 'paused' && (
         <div className="xw-af-progress-panel">
-          <div className="xw-af-progress-label">paused — resume support lands with F11</div>
+          <div className="xw-af-progress-label">{machine.message}</div>
           <div className="xw-af-actions-row">
+            {keepButton}
             <button className="xw-ghost-btn" onClick={machine.reset}>
               Reset
             </button>
@@ -228,14 +198,12 @@ export function AutofillPanel({ machine, grid, docId }) {
           <div className="xw-progress-meta">
             <span>{machine.progress}%</span>
           </div>
-          {state === 'running' && (
-            <div className="xw-af-actions-row">
-              <button className="xw-danger-btn" onClick={machine.cancel}>
-                Cancel
-              </button>
-              <SuggestBlackSquareButton />
-            </div>
-          )}
+          <div className="xw-af-actions-row">
+            <button className="xw-danger-btn" onClick={machine.cancel} disabled={Boolean(machine.cancelPending)}>
+              Cancel
+            </button>
+            {state === 'running' && <SuggestBlackSquareButton />}
+          </div>
         </div>
       )}
 
@@ -256,6 +224,7 @@ export function AutofillPanel({ machine, grid, docId }) {
             </strong>
           </div>
           <div className="xw-af-actions-row">
+            {keepButton}
             <button className="xw-ghost-btn" onClick={machine.reset}>
               Reset
             </button>
@@ -425,10 +394,12 @@ export function AutofillPanel({ machine, grid, docId }) {
 
       {state === 'idle' && (
         <div className="xw-af-footer">
-          <button className="xw-primary-btn" onClick={handleStart} disabled={emptySlots === 0}>
+          <button className="xw-primary-btn" onClick={handleStart} disabled={noEmptySlots || noWordlists}>
             Start Autofill
           </button>
           {emptySlots > 0 && <SuggestBlackSquareButton />}
+          {noWordlists && <div className="xw-insp-mini">Select at least one word list</div>}
+          {noEmptySlots && <div className="xw-insp-mini">Clear some cells to run autofill again</div>}
         </div>
       )}
     </div>

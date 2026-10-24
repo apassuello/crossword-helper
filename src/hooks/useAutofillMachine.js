@@ -12,7 +12,7 @@
  *
  *   useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast })
  *   -> { state, taskId, progress, message, errorCard, offer, startSnapshot,
- *        start, cancel, reset, keepFill, discardRun }
+ *        cancelPending, start, cancel, reset, keepFill, discardRun }
  *   start(options = {}, docId): `docId` is the document id at Start; it is stored
  *   with the snapshot, and every merge and red-marking write is skipped when the
  *   hook's CURRENT `docId` param differs from it (novice-readiness spec 0.2.6
@@ -47,6 +47,11 @@
  * `cancelled` back to `failed`. `cancel()` itself does not move the machine:
  * it posts cancelFill and the state stays `running` until the 200 (or a
  * terminal event) arrives (novice-readiness spec 0.2.7 §2.4 (C7)).
+ *
+ * `cancelPending` is React state (a ref change does not re-render, and the panel disables
+ * Cancel on it): true from cancel()'s post, and from an early Cancel recorded in `submitting`,
+ * until the 200, a rejection, or any transition to a non-live state. `cancelPendingRef` stays
+ * for the synchronous guards; the two are kept in sync.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -83,6 +88,7 @@ function initialSnapshot() {
     errorCard: null,
     offer: null,
     startSnapshot: null,
+    cancelPending: false,
   };
 }
 
@@ -265,6 +271,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       clearTimers();
       cancelPendingRef.current = false;
       earlyCancelRef.current = false;
+      patch = { ...patch, cancelPending: false };
     }
     setSnapshot((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -520,12 +527,14 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const cancel = useCallback(() => {
     if (stateRef.current === 'submitting') {
       earlyCancelRef.current = true;
+      setSnapshot((prev) => ({ ...prev, cancelPending: true }));
       return;
     }
     if (stateRef.current !== 'running' || cancelPendingRef.current) return;
     const taskId = taskIdRef.current;
     if (!taskId) return;
     cancelPendingRef.current = true;
+    setSnapshot((prev) => ({ ...prev, cancelPending: true }));
     api.cancelFill(taskId).then(
       () => {
         if (!mountedRef.current) return;
@@ -538,7 +547,10 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
         });
       },
       (e) => {
-        if (taskIdRef.current === taskId) cancelPendingRef.current = false;
+        if (taskIdRef.current === taskId) {
+          cancelPendingRef.current = false;
+          if (mountedRef.current) setSnapshot((prev) => ({ ...prev, cancelPending: false }));
+        }
         if (!e || e.status !== 404) console.warn('Failed to cancel autofill task:', e);
       }
     );
@@ -576,6 +588,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
         errorCard: null,
         offer: null,
         startSnapshot: startGrid,
+        cancelPending: false,
       });
       // Start clears all red on the live grid (spec 0.2.6 section 2.3 Red cells).
       onGridUpdateRef.current((prev) => clearBlocked(prev));
@@ -685,6 +698,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     errorCard: snapshot.errorCard,
     offer,
     startSnapshot: snapshot.startSnapshot,
+    cancelPending: snapshot.cancelPending,
     start,
     cancel,
     reset,
