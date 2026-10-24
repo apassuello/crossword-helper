@@ -1821,6 +1821,21 @@ components:
           minimum: 1
           maximum: 5
           description: Maximum adaptive black squares
+        locked_cells:
+          type: array
+          description: |
+            `/fill/with-progress` only. [row, col] cells whose pre-placed letters the fill
+            must not change; written to the grid file's `locked` key. Absent means none
+            (an older client); `[]` is valid; `null` is refused with 400 INVALID_REQUEST.
+            Every entry is two integers in `0..size-1`. `--lock-filled` is passed to the
+            CLI on every request.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: integer
+          example: [[0, 0], [4, 4]]
 
     AutofillResponse:
       type: object

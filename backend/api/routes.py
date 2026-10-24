@@ -590,6 +590,11 @@ def fill_with_progress():
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             grid_data = {"size": data["size"], "grid": cli_grid}
+            # Lock channel (novice-readiness spec 0.2.5 section 2.2): `is not None`,
+            # never truthiness, so [] is written as "locked": [].
+            locked_cells = data.get("locked_cells")
+            if locked_cells is not None:
+                grid_data["locked"] = locked_cells
             json.dump(grid_data, f)
             grid_file = f.name
 
@@ -633,6 +638,7 @@ def fill_with_progress():
             "--algorithm",
             data.get("algorithm", "repair"),
             "--allow-nonstandard",
+            "--lock-filled",  # pre-placed letters are fixed (spec 0.2.5 section 2.2)
             "--json-output",  # Enable progress reporting via stderr
         ]
 

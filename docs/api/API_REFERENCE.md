@@ -239,6 +239,9 @@ curl -X POST http://localhost:5000/api/fill/with-progress \
   -H "Content-Type: application/json" -d '{"grid": [...], "size": 15}'
 # → {"task_id": "abc123", "progress_url": "/api/progress/abc123"}
 
+# Optional "locked_cells": [[0, 0], [4, 4]] fixes those cells' pre-placed letters during the
+# fill. Absent = none, [] = none, null = 400 INVALID_REQUEST. Schema: openapi.yaml AutofillRequest.
+
 curl -X POST http://localhost:5000/api/fill/pause/abc123
 
 curl http://localhost:5000/api/fill/state/abc123   # inspect saved state
