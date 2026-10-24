@@ -13,7 +13,7 @@ button { font-family: inherit; color: inherit; background: none; border: 0; curs
 input, select, textarea { font-family: inherit; color: inherit; }
 code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-3); padding: 1px 4px; border-radius: 2px; }
 
-.xw-app { display: grid; grid-template-rows: 54px 1fr; height: 100vh; background: var(--paper); }
+.xw-app { display: grid; grid-template-rows: var(--xw-topbar-h) 1fr; height: 100vh; background: var(--paper); }
 
 /* Top bar */
 .xw-topbar {
@@ -351,6 +351,9 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 @media (max-width: 1200px) {
   .xw-body { grid-template-columns: 92px 1fr 380px; }
   .xw-toolrail { padding: 10px 6px; }
+  /* novice-readiness spec 0.2.7 §3.6 (TH5): at 1024 px the full brand wrapped and pushed
+     Save out of the 54 px top bar; shed the subtitle and version pill instead. */
+  .xw-brand-sub, .xw-pill { display: none; }
 }
 
 /* Key hint line under the grid (novice-readiness spec 0.2.7 §3.3) */
