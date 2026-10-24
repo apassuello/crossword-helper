@@ -1,6 +1,8 @@
 /* Constructor's Bench design tokens (ported). Values verbatim from design bundle;
    --cell-px + --font-* added per Task 4 plan. */
 :root {
+  /* novice-readiness spec 0.2.7 §3.6 (TH5): top bar height, single home; .xw-app row 1 and the Theme panel offset read it */
+  --xw-topbar-h: 54px;
   --paper: #f5f1e8; --paper-2: #ebe4d2; --paper-3: #ded3b9;
   --ink: #1a1713; --ink-2: #3a342b; --ink-3: #66604f; --ink-4: #8a8472;
   --ink-08: rgba(26,23,19,0.5);

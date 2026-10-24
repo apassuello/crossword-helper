@@ -1549,3 +1549,25 @@ describe('App Verify and Clean (§3.5 G5, §2.3 S1, #63)', () => {
     expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
   });
 });
+
+// novice-readiness spec 0.2.7 §3.6 (TH5): with the Theme panel open, Save stays reachable.
+describe('App Theme panel and the top bar (§3.6 TH5)', () => {
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    vi.spyOn(storage, 'list').mockResolvedValue([]);
+  });
+
+  it('Save grid still opens the name prompt with the panel open, and x closes the panel', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await user.click(screen.getByRole('button', { name: /^Theme$/ }));
+    expect(container.querySelector('.theme-words-panel')).not.toBeNull();
+    const save = screen.getByRole('button', { name: /save grid/i });
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(await screen.findByRole('textbox')).toBeInTheDocument();
+    await user.click(container.querySelector('.close-btn'));
+    expect(container.querySelector('.theme-words-panel')).toBeNull();
+  });
+});
