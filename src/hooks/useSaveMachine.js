@@ -64,7 +64,7 @@ const QUOTA_MESSAGE =
  * @returns {{status: 'pristine'|'dirty'|'saving'|'saved'|'error', savedLabel: string,
  *   save: () => Promise<void>,
  *   saveNamed: (name: string, opts?: {replaceEntryId?: string}) => Promise<boolean>,
- *   adoptSavedAt: (savedAt: string|null) => void}}
+ *   adoptSavedAt: (savedAt: string|null) => void, forget: () => void}}
  */
 export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   const { pushToast } = useToasts();
@@ -86,8 +86,10 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   // handler, and an effect-time reset would overwrite the adopted value. A stale
   // value for a brand-new id is harmless (storage.save finds no entry to compare).
   const knownSavedAtRef = useRef(null);
+  const isDirtyRef = useRef(isDirty); // latest dirtiness, read by the pagehide handler
 
   docRef.current = doc;
+  isDirtyRef.current = isDirty;
   onForkedRef.current = onForked;
   onSavedRef.current = onSaved;
 
@@ -111,7 +113,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
    * the failure toast, and resolving a boolean; the write, the knownSavedAt
    * update, the fork callback and the status transitions are shared.
    */
-  function runSave(extra, explicit) {
+  function runSave(extra, explicit, silent = false) {
     clearAutosave(); // this attempt consumes any pending timer
     setStatus('saving');
     const opts = { expectedSavedAt: knownSavedAtRef.current, ...extra };
@@ -141,10 +143,13 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
       () => {
         if (!mountedRef.current) return false;
         setStatus('error');
-        pushToast({
-          kind: 'error',
-          message: explicit ? QUOTA_MESSAGE : 'Couldn’t save — will retry.',
-        });
+        // novice-readiness spec 0.2.8 §3.4 (Q3): a pagehide save fails without a toast.
+        if (!silent) {
+          pushToast({
+            kind: 'error',
+            message: explicit ? QUOTA_MESSAGE : 'Couldn’t save — will retry.',
+          });
+        }
         armAutosave(); // error is a dirty-variant: re-arm the 30s retry
         return false;
       }
@@ -166,6 +171,32 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
 
   const adoptSavedAt = useCallback((at) => {
     knownSavedAtRef.current = at;
+  }, []);
+
+  /**
+   * novice-readiness spec 0.2.8 §3.4 (Q1): the open document's stored entry was deleted.
+   * Clear any pending autosave and read `unsaved changes`, WITHOUT arming and without
+   * touching `isDirty`/`savedSig`/the known `savedAt`: the next real edit flips `isDirty`
+   * and arms as usual, and its save recreates the entry under the same id (storage.save).
+   */
+  const forget = useCallback(() => {
+    clearAutosave();
+    setStatus('dirty');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // novice-readiness spec 0.2.8 §3.4 (Q3): leaving the page saves a dirty document at once
+  // through the same path as the autosave timer (so a live run writes the Start snapshot,
+  // S2). A clean document writes nothing; a failure shows no toast.
+  useEffect(() => {
+    const onPageHide = () => {
+      if (!isDirtyRef.current) return;
+      clearAutosave();
+      runSaveRef.current({}, false, true);
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Transition driver: keyed on doc identity + dirtiness. Content-only edits
@@ -250,7 +281,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, savedAt, tick]);
 
-  return { status, savedLabel, save, saveNamed, adoptSavedAt };
+  return { status, savedLabel, save, saveNamed, adoptSavedAt, forget };
 }
 
 export default useSaveMachine;
