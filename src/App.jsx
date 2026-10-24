@@ -12,6 +12,7 @@ import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering, localNumber } from './hooks/useNumbering';
 import { mintDocId } from './lib/docId';
+import storage from './lib/storage';
 import { toSavedGrid } from './api/gridCodec';
 import {
   writeLetter,
@@ -24,6 +25,7 @@ import {
   canToggleBlack,
 } from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
+import SaveNamePrompt from './components/bench/SaveNamePrompt';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
 import GridHintLine from './components/bench/GridHintLine';
@@ -142,15 +144,35 @@ function App() {
   // Save machine wiring (Task 7). `doc` is the full serializable grid document
   // (saved verbatim); `isDirty` is derived by comparing the current content
   // signature to the last-clean one.
-  const contentSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
+  // novice-readiness spec 0.2.7 §3.4 (S2): while a run is live, the Save button and
+  // autosave write the Start snapshot, so a reload mid-run restores the grid as it was
+  // at Start. `savedGrid` is that grid (the live grid only when no snapshot exists,
+  // which Phase 5 does not allow while live); `contentSig` is computed from the same
+  // grid, so merges during the run do not flip `isDirty`. `liveSig` is the live grid's
+  // own signature, kept for the live-grid consumers (Tasks 6.8 and 6.11).
+  const savedGrid = editingPaused && autofill.startSnapshot ? autofill.startSnapshot : grid;
+  const liveSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
+  const contentSig = useMemo(
+    () => (savedGrid === grid ? liveSig : contentSigOf(gridSize, savedGrid)),
+    [gridSize, savedGrid, grid, liveSig]
+  );
   const isDirty = grid != null && contentSig !== savedSig;
   const doc = useMemo(
-    () => ({ id: docId, size: gridSize, grid: toSavedGrid(grid), numbering, symmetryEnabled }),
-    [docId, gridSize, grid, numbering, symmetryEnabled]
+    () => ({ id: docId, size: gridSize, grid: toSavedGrid(savedGrid), numbering, symmetryEnabled }),
+    [docId, gridSize, savedGrid, numbering, symmetryEnabled]
   );
-  const { savedLabel, save: saveDoc, status: saveStatus } = useSaveMachine({ doc, isDirty });
+  // A fork replaces the document id (S4). Must never throw: the machine calls it inside
+  // its success handler, where a throw would make saveNamed reject.
+  const onForked = useCallback((info) => setDocId(info.id), []);
+  const {
+    savedLabel,
+    saveNamed,
+    status: saveStatus,
+  } = useSaveMachine({ doc, isDirty, onForked });
 
-  // When a save lands, snapshot the current content as clean. Keyed on
+  // When a save lands, snapshot the content that was WRITTEN as clean: `contentSig` is
+  // computed from the same grid `doc` carries (the Start snapshot during a run), so a
+  // save during a run records the snapshot's signature, never the live grid's. Keyed on
   // saveStatus ONLY (adding contentSig here would re-mark clean on every edit
   // while 'saved' and dirtiness would never re-trigger) — sig read from a ref.
   const contentSigRef = useRef(contentSig);
@@ -158,6 +180,37 @@ function App() {
   useEffect(() => {
     if (saveStatus === 'saved') setSavedSig(contentSigRef.current);
   }, [saveStatus]);
+
+  // The Save button opens the name prompt (§3.4 G3); autosave never does. The prompt
+  // mounts only once list() has resolved, so it never shows a prefill the user could
+  // confirm by accident while the stored name is still unknown.
+  const [savePrompt, setSavePrompt] = useState(null); // { initialName, entries, currentId } | null
+  const promptRequestRef = useRef(0);
+  const openSavePrompt = useCallback(() => {
+    const request = ++promptRequestRef.current;
+    const currentId = docId;
+    storage.list().then((entries) => {
+      if (request !== promptRequestRef.current) return;
+      const own = entries.find((e) => e.id === currentId);
+      setSavePrompt({
+        initialName: own ? own.name : storage.defaultName(gridSize, new Date()),
+        entries,
+        currentId,
+      });
+    });
+  }, [docId, gridSize]);
+  const closeSavePrompt = useCallback(() => {
+    promptRequestRef.current += 1; // drops a list() still pending
+    setSavePrompt(null);
+  }, []);
+  const confirmSaveName = useCallback(
+    async (name, opts) => {
+      if (await saveNamed(name, opts)) closeSavePrompt();
+    },
+    [saveNamed, closeSavePrompt]
+  );
+  // A different document (New grid, Open saved, a fork) makes an open prompt stale.
+  useEffect(() => closeSavePrompt(), [docId, closeSavePrompt]);
 
   // Set when a grid import changes the grid size, so the size-change effect
   // below does not wipe the freshly imported grid with an empty one. Bench's
@@ -454,7 +507,18 @@ function App() {
         onVerify={handleVerifyWords}
         onClean={handleCleanGrid}
         editingPaused={editingPaused}
-        onSave={saveDoc}
+        onSave={openSavePrompt}
+        savePrompt={
+          savePrompt && (
+            <SaveNamePrompt
+              initialName={savePrompt.initialName}
+              entries={savePrompt.entries}
+              currentId={savePrompt.currentId}
+              onConfirm={confirmSaveName}
+              onCancel={closeSavePrompt}
+            />
+          )
+        }
         onToggleTheme={() => setDark((v) => !v)}
         dark={dark}
       />

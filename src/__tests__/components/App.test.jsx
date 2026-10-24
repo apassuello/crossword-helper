@@ -6,12 +6,14 @@
  * on the size change and replaced the imported grid with an empty one.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { ToastProvider } from '../../components/bench/Toast';
 import { localNumber } from '../../hooks/useNumbering';
+import storage from '../../lib/storage';
+import { contentSigOf } from '../../App';
 
 // Probes for the New grid rows (novice-readiness spec 0.2.7 §3.2). Each wraps the
 // real module and only records or overrides what a test needs: distinguishable
@@ -420,5 +422,192 @@ describe('App New grid (§3.2)', () => {
     expect(docIdNow()).toBe(idBefore);
     expect(probe.mintCalls).toBe(mintsBefore);
     expect(discardRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('App save wiring (§3.4)', () => {
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const docIdNow = () => probe.autofillArgs.docId;
+  const saveBtn = () => screen.getByRole('button', { name: /save grid/i });
+  const nameInput = () => screen.findByRole('textbox');
+  const result = (over = {}) => ({ savedAt: '2026-10-24T10:00:00.000Z', id: 'doc-1', name: 'n', forked: false, ...over });
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+    vi.spyOn(storage, 'list').mockResolvedValue([]);
+    vi.spyOn(storage, 'save').mockResolvedValue(result());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const typeLetter = async (user, container, r, c, ch) => {
+    await user.click(cells(container)[idx(r, c)]);
+    fireEvent.keyDown(focusEl(container), { key: ch });
+  };
+
+  // A live run whose Start snapshot is the blank grid while the live grid carries an "A".
+  const startLiveRunWithMergedLetter = async (user, container) => {
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    const snapshot = structuredClone(probe.panelProps.grid);
+    await typeLetter(user, container, 3, 3, 'A');
+    expect(letters(container)).toEqual(['A']);
+    probe.autofillOverride = { state: 'running', startSnapshot: snapshot };
+    await user.click(screen.getByText('Symmetry')); // re-render picks up the override
+    await user.click(screen.getByText('Symmetry'));
+    return snapshot;
+  };
+
+  it('Save on a new document opens a prompt prefilled with the default name', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    expect((await nameInput()).value).toMatch(/^15\u00d715 \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+
+  it('Save with a stored entry for docId prefills its name', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    storage.list.mockResolvedValue([{ id: docIdNow(), name: 'Mine' }]);
+    await user.click(saveBtn());
+    expect(await nameInput()).toHaveValue('Mine');
+  });
+
+  it('shows no prompt (so no wrong prefill) while list() is pending', async () => {
+    const user = userEvent.setup();
+    let release;
+    storage.list.mockReturnValue(new Promise((r) => (release = r)));
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    expect(screen.queryByRole('textbox')).toBeNull();
+    await act(async () => release([{ id: docIdNow(), name: 'Mine' }]));
+    expect(await nameInput()).toHaveValue('Mine');
+  });
+
+  it('confirming a name calls saveNamed through storage.save and closes the prompt', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    const input = await nameInput();
+    fireEvent.change(input, { target: { value: 'Puzzle 1' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: 'Puzzle 1' });
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
+  });
+
+  it('a failed save keeps the prompt open', async () => {
+    const user = userEvent.setup();
+    storage.save.mockRejectedValue(new Error('quota'));
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    await nameInput();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it("a different entry's name asks, and Replace saves with replaceEntryId", async () => {
+    const user = userEvent.setup();
+    storage.list.mockResolvedValue([{ id: 'x', name: 'Other' }]);
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    fireEvent.change(await nameInput(), { target: { value: 'Other' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Replace the saved grid named "Other"?')).toBeInTheDocument();
+    expect(storage.save).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: 'Other', replaceEntryId: 'x' });
+  });
+
+  it('the document\'s own current name is not a collision', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    storage.list.mockResolvedValue([{ id: docIdNow(), name: 'Mine' }]);
+    await user.click(saveBtn());
+    await nameInput();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.queryByText(/Replace the saved grid/)).toBeNull();
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+  });
+
+  it('autosave never opens the prompt', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 3, 3, 'A');
+    await act(async () => vi.advanceTimersByTime(30000));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.list).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('a fork result makes the returned id the docId', async () => {
+    const user = userEvent.setup();
+    storage.save.mockResolvedValue(result({ forked: true, id: 'forked-id' }));
+    renderApp();
+    await waitFor(() => expect(probe.panelProps).not.toBeNull());
+    await user.click(saveBtn());
+    await nameInput();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(docIdNow()).toBe('forked-id'));
+  });
+
+  it('S2: autosave during a live run writes the Start snapshot, not the live grid', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await startLiveRunWithMergedLetter(user, container);
+    await act(async () => vi.advanceTimersByTime(30000));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    const written = storage.save.mock.calls[0][0];
+    expect(written.grid.flat().map((c) => c.letter).filter(Boolean)).toEqual([]);
+    expect(written.grid[3][3].letter).toBe('');
+  });
+
+  it('S2: Save during a live run writes the Start snapshot', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await startLiveRunWithMergedLetter(user, container);
+    await user.click(saveBtn());
+    await nameInput();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.save.mock.calls[0][0].grid[3][3].letter).toBe('');
+    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: expect.any(String) });
+  });
+
+  it('S2: after a save during a run, savedSig is the snapshot signature (live merges stay clean, the run ending reads unsaved)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    const snapshot = await startLiveRunWithMergedLetter(user, container);
+    await user.click(saveBtn());
+    await nameInput();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByText(/saved locally/)).toBeInTheDocument());
+    // sanity: the signature the snapshot carries differs from the live grid's
+    expect(contentSigOf(SIZE, snapshot)).not.toBe(contentSigOf(SIZE, probe.panelProps.grid));
+    // the run ends at the live (merged) grid: storage holds the Start grid, so it is unsaved
+    probe.autofillOverride = null;
+    await user.click(screen.getByText('Symmetry'));
+    await user.click(screen.getByText('Symmetry'));
+    await waitFor(() => expect(screen.getByText('unsaved changes')).toBeInTheDocument());
   });
 });
