@@ -51,6 +51,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { toCliStrings } from '../api/gridCodec';
 
+// novice-readiness spec 0.2.7 §2.4 (B4, PD-5H): a Start whose 202 has not arrived after this long fails.
+export const SUBMIT_TIMEOUT_MS = 30000;
+// novice-readiness spec 0.2.7 §2.4 (B4, P4): the watchdog fires this long after the run's own ceiling.
+export const WATCHDOG_GRACE_MS = 30000;
+
+const LOST_CONTACT = 'Lost contact with the autofill run.';
+
+/**
+ * novice-readiness spec 0.2.7 §2.4 (C7, PD-3-KILL): the route's text for a child killed by a signal. An `error` event with
+ * this text while a cancel is pending is the cancel taking effect, not a failure.
+ */
+export function isKillError(message) {
+  return typeof message === 'string' && message.startsWith('CLI Error (code -');
+}
+
 const RESETTABLE_STATES = new Set(['done', 'failed', 'cancelled', 'paused']);
 
 // States in which a run owns the grid: no writer but the machine's own onGridUpdate
@@ -197,11 +212,31 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const taskIdRef = useRef(null);
   const streamRef = useRef(null); // current { close() } from api.openProgress
   const mountedRef = useRef(true);
+  // §2.4 (B4): Start time, the submit timer, the watchdog, the run token that ties a late
+  // 202 to its own request, and the two cancel flags.
+  const startTimeRef = useRef(0);
+  const submitTimerRef = useRef(null);
+  const watchdogRef = useRef(null);
+  const runIdRef = useRef(0);
+  const cancelPendingRef = useRef(false); // C7: cancelFill posted, 200 not yet seen
+  const earlyCancelRef = useRef(false); // PD-5I: Cancel pressed while `submitting`
+
+  const clearTimers = () => {
+    if (submitTimerRef.current !== null) {
+      clearTimeout(submitTimerRef.current);
+      submitTimerRef.current = null;
+    }
+    if (watchdogRef.current !== null) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  };
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      clearTimers();
       // Unmount while running: close the EventSource. The old inline code
       // never did this (App never unmounted the panel) — this is a genuine
       // addition for a proper hook, not a port.
@@ -223,6 +258,12 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     if ('state' in patch) stateRef.current = patch.state;
     if ('taskId' in patch) taskIdRef.current = patch.taskId;
     if ('offer' in patch) offerRef.current = patch.offer;
+    // §2.4 (B4): every transition to a non-live state clears the timers and any cancel flag.
+    if ('state' in patch && !LIVE_STATES.has(patch.state)) {
+      clearTimers();
+      cancelPendingRef.current = false;
+      earlyCancelRef.current = false;
+    }
     setSnapshot((prev) => ({ ...prev, ...patch }));
   }, []);
 
@@ -260,6 +301,12 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     lastGridRef.current && startSnapshotRef.current && fillsAnyCell(startSnapshotRef.current, lastGridRef.current)
       ? { kind: 'keepPartialFill', slotsFilled: null, totalSlots: null }
       : null;
+
+  /** Fire-and-forget api.cancelFill: a rejection is swallowed (nothing can act on it). */
+  const bestEffortCancel = (taskId) => {
+    if (!taskId) return;
+    api.cancelFill(taskId).catch((e) => console.warn('Failed to cancel autofill task:', e));
+  };
 
   const handleEvent = useCallback(
     (data) => {
@@ -379,6 +426,16 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       }
 
       if (status === 'error') {
+        // §2.4 (C7): with a cancel pending, a kill's error text is the cancel taking effect.
+        if (cancelPendingRef.current && isKillError(data.message)) {
+          finishRun({
+            state: 'cancelled',
+            text: 'Cancelled by user',
+            offer: progressOffer(),
+            extra: { taskId: null },
+          });
+          return;
+        }
         finishRun({
           state: 'failed',
           text: data.message || 'Autofill failed',
@@ -394,9 +451,16 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     if (!mountedRef.current) return;
     // Same ref-discipline guard as handleEvent.
     if (stateRef.current !== 'running') return;
-    closeStream();
-    transition({ state: 'failed', errorCard: { message: 'Connection error' }, taskId: null });
-  }, [transition, closeStream]);
+    // novice-readiness spec 0.2.7 §2.4 (C8): the stream is gone (EventSource would reconnect, so finishRun closes it); the run
+    // may still be alive server-side, so best-effort cancel it.
+    bestEffortCancel(taskIdRef.current);
+    finishRun({
+      state: 'failed',
+      text: LOST_CONTACT,
+      offer: progressOffer(),
+      extra: { taskId: null },
+    });
+  }, [finishRun]);
 
   /**
    * Enter `running` on `taskId` and open its progress stream. Factored out
@@ -414,17 +478,69 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
    * hold structurally rather than merely by caller convention.
    */
   const enterRunning = useCallback(
-    (taskId) => {
+    (taskId, ceilingSeconds) => {
       closeStream();
+      clearTimers(); // the submit timer ends with the 202
       transition({ state: 'running', taskId, errorCard: null });
+      // §2.4 (B4, P4): keyed to Start, not to this 202's arrival.
+      if (typeof ceilingSeconds === 'number') {
+        const delay = Math.max(
+          0,
+          startTimeRef.current + ceilingSeconds * 1000 + WATCHDOG_GRACE_MS - Date.now()
+        );
+        watchdogRef.current = setTimeout(() => {
+          watchdogRef.current = null;
+          if (stateRef.current !== 'running' || taskIdRef.current !== taskId) return;
+          bestEffortCancel(taskId);
+          finishRun({
+            state: 'failed',
+            text: LOST_CONTACT,
+            offer: progressOffer(),
+            extra: { taskId: null },
+          });
+        }, delay);
+      }
       const stream = api.openProgress(taskId, {
         onEvent: handleEvent,
         onError: handleStreamError,
       });
       streamRef.current = stream;
     },
-    [closeStream, transition, handleEvent, handleStreamError]
+    [closeStream, transition, handleEvent, handleStreamError, finishRun]
   );
+
+  /**
+   * novice-readiness spec 0.2.7 §2.4 (C7): Cancel in `running` posts cancelFill and keeps the stream open; the 200 ends the
+   * run as `cancelled`, any rejection means the cancel is no longer pending and the machine keeps
+   * waiting on the stream (404, PD-5J). In `submitting` it is only recorded (PD-5I): the 202
+   * handler replays it once the task id is known.
+   */
+  const cancel = useCallback(() => {
+    if (stateRef.current === 'submitting') {
+      earlyCancelRef.current = true;
+      return;
+    }
+    if (stateRef.current !== 'running' || cancelPendingRef.current) return;
+    const taskId = taskIdRef.current;
+    if (!taskId) return;
+    cancelPendingRef.current = true;
+    api.cancelFill(taskId).then(
+      () => {
+        if (!mountedRef.current) return;
+        if (stateRef.current !== 'running' || taskIdRef.current !== taskId) return;
+        finishRun({
+          state: 'cancelled',
+          text: 'Cancelled by user',
+          offer: progressOffer(),
+          extra: { taskId: null },
+        });
+      },
+      (e) => {
+        if (taskIdRef.current === taskId) cancelPendingRef.current = false;
+        if (!e || e.status !== 404) console.warn('Failed to cancel autofill task:', e);
+      }
+    );
+  }, [finishRun]);
 
   const start = useCallback(
     (options = {}, startDocId) => {
@@ -438,6 +554,11 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       if (stateRef.current !== 'idle') return;
 
       closeStream();
+      clearTimers();
+      cancelPendingRef.current = false;
+      earlyCancelRef.current = false;
+      const runId = ++runIdRef.current;
+      startTimeRef.current = Date.now();
 
       // The snapshot is a red-free full copy of the grid at Start; the lock list
       // is computed from it. Any retained last grid from a previous run is dropped.
@@ -458,6 +579,13 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       onGridUpdateRef.current((prev) => clearBlocked(prev));
       // Bumps useNumbering's token so an in-flight reconcile cannot land mid-run.
       if (onStartRef.current) onStartRef.current();
+
+      // §2.4 (PD-5H): a 202 that never comes ends the run; a 202 arriving later is cancelled.
+      submitTimerRef.current = setTimeout(() => {
+        submitTimerRef.current = null;
+        if (stateRef.current !== 'submitting' || runIdRef.current !== runId) return;
+        finishRun({ state: 'failed', text: LOST_CONTACT, extra: { taskId: null } });
+      }, SUBMIT_TIMEOUT_MS);
 
       api
         .startFill({
@@ -483,10 +611,17 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
         .then(
           (res) => {
             if (!mountedRef.current) return;
-            enterRunning(res.task_id);
+            if (stateRef.current !== 'submitting' || runIdRef.current !== runId) {
+              bestEffortCancel(res && res.task_id); // late 202: ignored, its task cancelled
+              return;
+            }
+            const early = earlyCancelRef.current;
+            enterRunning(res.task_id, res.ceiling_seconds);
+            if (early) cancel(); // PD-5I: replay the recorded Cancel on the now-known task
           },
           (error) => {
             if (!mountedRef.current) return;
+            if (stateRef.current !== 'submitting' || runIdRef.current !== runId) return;
             transition({
               state: 'failed',
               errorCard: { message: error.message || `Fill failed to start (${error.code})` },
@@ -494,22 +629,8 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
           }
         );
     },
-    [closeStream, transition, enterRunning]
+    [closeStream, transition, enterRunning, finishRun, cancel]
   );
-
-  const cancel = useCallback(() => {
-    if (stateRef.current !== 'running') return;
-    const taskId = taskIdRef.current;
-    finishRun({
-      state: 'cancelled',
-      text: 'Cancelled by user',
-      offer: progressOffer(),
-      extra: { taskId: null },
-    });
-    if (taskId) {
-      api.cancelFill(taskId).catch((err) => console.warn('Failed to cancel autofill task:', err));
-    }
-  }, [finishRun]);
 
   const reset = useCallback(() => {
     if (!RESETTABLE_STATES.has(stateRef.current)) return;
