@@ -275,6 +275,14 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(getByRole('button', { name: /cancel/i })).toBeDisabled();
   });
 
+  it('submitting with cancelPending: Cancel is shown and disabled', async () => {
+    const machine = baseMachine({ state: 'submitting', message: 'Starting autofill…', cancelPending: true });
+    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    await flush();
+
+    expect(getByRole('button', { name: /cancel/i })).toBeDisabled();
+  });
+
   it('running without cancelPending: Cancel is enabled', async () => {
     const machine = baseMachine({ state: 'running', progress: 10, message: 'Working…' });
     const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
@@ -530,6 +538,20 @@ describe('AutofillPanel Keep offer (spec 0.2.7 section 2.3 table)', () => {
     await flush();
 
     expect(getByRole('button', { name: 'Keep fill' })).toBeInTheDocument();
+  });
+
+  it('failed with an errorCard and an offer: the card, the Keep button, and the click calls keepFill(docId)', async () => {
+    const machine = baseMachine({
+      state: 'failed',
+      errorCard: { message: 'No word fits the highlighted letters.' },
+      offer: { kind: 'keepPartialFill', slotsFilled: 5, totalSlots: 8 },
+    });
+    const { getByRole, getByText } = render(<AutofillPanel machine={machine} grid={themedGrid()} docId="d" />);
+    await flush();
+
+    expect(getByText('No word fits the highlighted letters.')).toBeInTheDocument();
+    fireEvent.click(getByRole('button', { name: 'Keep partial fill (5/8 slots)' }));
+    expect(machine.keepFill).toHaveBeenCalledWith('d');
   });
 
   it('no offer: no Keep button', async () => {
