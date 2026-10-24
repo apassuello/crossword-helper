@@ -15,7 +15,10 @@ Deliberately UNMARKED (no `slow`): it must run in the default suite.
 
 import json
 import queue
+import stat
+import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -116,3 +119,35 @@ def test_e4b_empty_locked_cells_reaches_the_cli_and_nothing_is_locked(client):
     assert data["success"] is True, data
     assert data["all_slots_filled"] is True, data
     assert data["grid"][0][:2] != ["Q", "X"], data["grid"]
+
+
+def test_cx3_early_cancel_makes_run_cli_with_progress_end_in_an_error_event(client, tmp_path, monkeypatch):
+    """Cancel recorded before the child registers: the child dies at registration and
+    the task's terminal event is `error` (a signal death), not a hang to timeout."""
+    from backend.api import routes
+
+    fake_cli = tmp_path / "sleeper"
+    fake_cli.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(3600)\n")
+    fake_cli.chmod(fake_cli.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setattr(routes.cli_adapter, "cli_path", Path(fake_cli))
+
+    task_id = progress_routes.create_progress_tracker()
+    try:
+        resp = client.post(f"/api/fill/cancel/{task_id}")
+        assert resp.status_code == 200
+        assert task_id in progress_routes.pending_cancels
+
+        routes.run_cli_with_progress(task_id, [], timeout=60)
+
+        terminal = progress_routes.get_terminal_event(task_id)
+        assert terminal is not None
+        assert terminal["status"] == "error", terminal
+    finally:
+        proc = progress_routes.running_processes.get(task_id)
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        progress_routes.cleanup_process(task_id)
+        progress_routes.cleanup_progress_tracker(task_id)
+        with progress_routes.running_processes_lock:
+            progress_routes.pending_cancels.discard(task_id)

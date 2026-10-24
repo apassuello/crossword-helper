@@ -687,6 +687,11 @@ paths:
         Hard-stops a running autofill subprocess immediately. Unlike pause,
         no state is saved — a cancelled task cannot be resumed. Also clears
         any stale pause/running marker for the task id.
+
+        A cancel sent after the fill's 202 but before its subprocess has
+        registered is recorded and answered 200 with the same body; the
+        subprocess is killed as soon as it registers. An unknown task id, or
+        one whose terminal event is already recorded, is 404.
       operationId: cancelAutofill
       parameters:
         - name: task_id
@@ -696,7 +701,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Cancel request processed
+          description: Cancel request processed (process killed, or recorded to kill it at registration)
           content:
             application/json:
               schema:

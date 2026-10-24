@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -68,6 +68,9 @@ def sweep_expired_trackers(now: Optional[float] = None) -> List[str]:
 # Track running subprocesses for cleanup
 running_processes: Dict[str, "subprocess.Popen"] = {}
 running_processes_lock = threading.Lock()
+# Cancels that arrived after the 202 but before the child registered (novice-readiness
+# spec 0.2.5 section 2.4 (C7), "Early Cancel"). Guarded by `running_processes_lock`.
+pending_cancels: Set[str] = set()
 
 
 def create_progress_tracker() -> str:
@@ -150,10 +153,75 @@ def cleanup_progress_tracker(task_id: str):
         _remove_tracker_locked(task_id)
 
 
+def _terminate(process) -> None:
+    """Terminate-then-kill a subprocess. Takes no lock, so it is safe to call with or without one."""
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
 def register_process(task_id: str, process):
-    """Register a subprocess for a task (for cleanup on disconnect)."""
+    """
+    Register a subprocess for a task (for cleanup on disconnect).
+
+    If a cancel was recorded for this task before it registered, the process is
+    terminated here, before returning (novice-readiness spec 0.2.5 section 2.4 (C7)).
+    The check and the registration share one critical section with `request_cancel`,
+    so whichever of the two takes `running_processes_lock` first, the process ends up
+    killed: see `request_cancel`.
+    """
     with running_processes_lock:
         running_processes[task_id] = process
+        cancelled = task_id in pending_cancels
+        pending_cancels.discard(task_id)
+    if cancelled:
+        _terminate(process)
+
+
+def request_cancel(task_id: str) -> str:
+    """
+    Cancel a task: "killed" | "recorded" | "not_running" (spec 0.2.5 section 2.4 (C7)).
+
+    - a live registered process: popped and terminated, "killed";
+    - a tracker with no terminal event and no registered process: `task_id` is added to
+      `pending_cancels`, "recorded", and `register_process` kills the child on arrival;
+    - anything else (no tracker, terminal event recorded, dead process): "not_running".
+
+    Lock order: `running_processes_lock` (outer) then `progress_queues_lock` (inner), and
+    only here. Every other path takes at most one of the two (`send_progress`, the sweep,
+    `get_terminal_event` and the cleanup helpers take only the queues lock; the process
+    helpers only the processes lock), so no path holds the inner lock while waiting for
+    the outer one and no cycle can form.
+
+    Atomicity: the registered/not-registered decision and the `pending_cancels` insert
+    happen inside one hold of `running_processes_lock`, as do `register_process`'s
+    insert and `pending_cancels` check. Either `register_process` ran first (the process
+    is in `running_processes`, so this call sees it: "killed"), or this call ran first
+    (the id is in `pending_cancels`, so `register_process` sees it and terminates).
+    There is no third ordering. The child is terminated after the lock is released; it
+    is already unreachable by any other cancel at that point.
+    """
+    with running_processes_lock:
+        process = running_processes.get(task_id)
+        if process is not None:
+            if process.poll() is not None:
+                return "not_running"
+            running_processes.pop(task_id, None)
+        else:
+            with progress_queues_lock:
+                has_tracker = task_id in progress_queues
+                has_terminal = task_id in terminal_events
+            if not has_tracker or has_terminal:
+                return "not_running"
+            pending_cancels.add(task_id)
+            return "recorded"
+    _terminate(process)
+    return "killed"
 
 
 def is_process_running(task_id: str) -> bool:
@@ -173,14 +241,7 @@ def cleanup_process(task_id: str) -> bool:
     with running_processes_lock:
         process = running_processes.pop(task_id, None)
     if process and process.poll() is None:
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except (subprocess.TimeoutExpired, OSError):
-            try:
-                process.kill()
-            except OSError:
-                pass
+        _terminate(process)
         return True
     return False
 
