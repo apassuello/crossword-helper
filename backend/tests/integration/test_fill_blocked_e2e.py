@@ -137,11 +137,17 @@ def test_cx3_early_cancel_makes_run_cli_with_progress_end_in_an_error_event(clie
         assert resp.status_code == 200
         assert task_id in progress_routes.pending_cancels
 
-        routes.run_cli_with_progress(task_id, [], timeout=60)
+        started = time.monotonic()
+        routes.run_cli_with_progress(task_id, [], timeout=15)
+        elapsed = time.monotonic() - started
 
         terminal = progress_routes.get_terminal_event(task_id)
         assert terminal is not None
         assert terminal["status"] == "error", terminal
+        # A child that registration failed to kill outlives the timeout and reports this instead.
+        assert terminal["message"] != "Operation timed out", terminal
+        assert terminal["message"].startswith("CLI Error (code -"), terminal
+        assert elapsed < 10, f"run took {elapsed:.1f}s of a 15s timeout"
     finally:
         proc = progress_routes.running_processes.get(task_id)
         if proc is not None and proc.poll() is None:

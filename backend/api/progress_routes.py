@@ -233,13 +233,15 @@ def is_process_running(task_id: str) -> bool:
 
 def cleanup_process(task_id: str) -> bool:
     """
-    Terminate subprocess if still running.
+    Terminate subprocess if still running, and drop any cancel recorded for the task
+    that never met a registration (a fill that failed before Popen).
 
     Returns:
         True if a live process was found and terminated, False otherwise.
     """
     with running_processes_lock:
         process = running_processes.pop(task_id, None)
+        pending_cancels.discard(task_id)
     if process and process.poll() is None:
         _terminate(process)
         return True
