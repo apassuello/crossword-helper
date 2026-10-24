@@ -1,7 +1,31 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../api/client';
 import toast from 'react-hot-toast';
 import './ThemeWordsPanel.scss';
+
+// novice-readiness spec 0.2.7 §3.8 (TH2b), plan default PD-6-G13: the spec says
+// "debounced" and gives no value.
+export const SUGGESTION_REFETCH_DEBOUNCE_MS = 400;
+
+// novice-readiness spec 0.2.7 §3.8 (TH2b): the per-cell [letter, isBlack] plus
+// gridSize. Deliberately local: isError, number, isHighlighted, isThemeLocked and
+// isAutofilled must not trigger a refetch, so App's contentSigOf is not reused.
+function gridSigOf(grid, gridSize) {
+  if (!Array.isArray(grid)) return JSON.stringify([gridSize, null]);
+  return JSON.stringify([
+    gridSize,
+    grid.map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => {
+            if (typeof cell === 'string') return cell === '#' ? ['', true] : [cell === '.' ? '' : cell, false];
+            return [(cell && cell.letter) || '', !!(cell && cell.isBlack)];
+          })
+        : row
+    ),
+  ]);
+}
+
+const SUPERSEDED_MSG = 'Suggestions updated for the changed grid.';
 
 function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPaused = false }) {
   const [file, setFile] = useState(null);
@@ -12,6 +36,14 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
   const [selectedWord, setSelectedWord] = useState(null);
   const [applyingAll, setApplyingAll] = useState(false);
   const fileInputRef = useRef(null);
+
+  // novice-readiness spec 0.2.7 §3.8 (TH2b): the signature the showing list was
+  // fetched with, the latest request's token, and the live grid signature.
+  const gridSig = gridSigOf(grid, gridSize);
+  const gridSigRef = useRef(gridSig);
+  gridSigRef.current = gridSig;
+  const listSigRef = useRef(null);
+  const requestTokenRef = useRef(0);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -76,8 +108,11 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
     }
   };
 
-  const analyzePlacements = async (words) => {
-    setLoading(true);
+  // `silent` is the grid-change refetch (PD-6-G16): no loading overlay, no success toast.
+  const analyzePlacements = async (words, { silent = false } = {}) => {
+    const requestSig = gridSigRef.current;
+    const token = ++requestTokenRef.current;
+    if (!silent) setLoading(true);
 
     // Convert frontend grid format to backend format if needed
     const convertGrid = (frontendGrid) => {
@@ -110,26 +145,58 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
         maxSuggestions: 3
       });
 
+      // A response that is not for the latest request, or (refetch) not for the
+      // latest grid signature, is dropped (novice-readiness spec 0.2.7 §3.8 (TH2b)).
+      if (token !== requestTokenRef.current) return;
+      if (silent && requestSig !== gridSigRef.current) return;
+
       // Ensure suggestions are in correct format
       if (data.suggestions && Array.isArray(data.suggestions)) {
+        listSigRef.current = requestSig;
         setSuggestions(data.suggestions);
-        toast.success(`Found placement suggestions for ${data.suggestions.length} words!`);
+        if (!silent) {
+          toast.success(`Found placement suggestions for ${data.suggestions.length} words!`);
+        }
       } else {
         console.error('Invalid suggestions format:', data.suggestions);
         toast.error('Received invalid placement data');
       }
 
     } catch (error) {
+      if (token !== requestTokenRef.current) return;
       console.error('Error analyzing placements:', error);
       const errorMsg = error.message || 'Failed to analyze placements';
       toast.error(errorMsg);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // A list is superseded while the grid signature differs from the one it was
+  // fetched with (derived, not a timer flag): novice-readiness spec 0.2.7 §3.8 (TH2b).
+  const isSuperseded = () => listSigRef.current !== gridSigRef.current;
+
+  // novice-readiness spec 0.2.7 §3.8 (TH2b, PD-6-G13/G15): while suggestions show,
+  // a grid change refetches for the same words after the debounce; suspended while
+  // Apply All runs, then one refetch if the grid differs from the list's.
+  useEffect(() => {
+    if (!suggestions || applyingAll) return undefined;
+    if (listSigRef.current === gridSig) return undefined;
+    const timer = setTimeout(() => {
+      analyzePlacements(themeWords, { silent: true });
+    }, SUGGESTION_REFETCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // analyzePlacements and themeWords are read at fire time; the triggers are these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridSig, suggestions, applyingAll]);
+
   const handleApplyPlacement = async (wordData, suggestionIndex) => {
     const suggestion = wordData.suggestions[suggestionIndex];
+
+    if (isSuperseded()) {
+      toast(SUPERSEDED_MSG);
+      return;
+    }
 
     try {
       // Apply placement to grid
@@ -168,6 +235,11 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPau
   const handleApplyAllPlacements = async () => {
     if (!suggestions || suggestions.length === 0) {
       toast.error('No placement suggestions available. Please analyze placements first.');
+      return;
+    }
+
+    if (isSuperseded()) {
+      toast(SUPERSEDED_MSG);
       return;
     }
 
