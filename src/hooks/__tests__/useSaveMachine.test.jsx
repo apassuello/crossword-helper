@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, screen } from '@testing-library/react';
 import { useSaveMachine } from '../useSaveMachine';
 import { ToastProvider } from '../../components/bench/Toast';
-import storage from '../../lib/storage';
+import storage, { SAVE_KEY } from '../../lib/storage';
 
 const wrapper = ({ children }) => <ToastProvider>{children}</ToastProvider>;
 
@@ -481,7 +481,7 @@ describe('useSaveMachine forget() (§3.4 Q1)', () => {
 
 describe('useSaveMachine pagehide (§3.4 Q3)', () => {
   beforeEach(() => {
-    // The pagehide path writes through the synchronous entry point, never storage.saveSync.
+    // The pagehide path writes through the synchronous entry point, never storage.save.
     vi.spyOn(storage, 'saveSync').mockImplementation(() => ({ savedAt: new Date().toISOString() }));
   });
   const pagehide = () => act(async () => {
@@ -540,5 +540,144 @@ describe('useSaveMachine pagehide (§3.4 Q3)', () => {
       expect(storage.saveSync).toHaveBeenCalledTimes(1);
     });
     expect(storage.save).not.toHaveBeenCalled();
+  });
+});
+
+// novice-readiness spec 0.2.9 §3.4 (S4), §2.3 (M1): since Task 6.19 a save resolves only
+// after its Web Lock is granted, so a click can land between the machine reading `docRef` and
+// the resolution. These tests run the REAL storage behind a deferred FIFO lock stub.
+describe('useSaveMachine: a save resolution only acts on the document it wrote', () => {
+  const S0 = '2026-10-01T10:00:00.000Z';
+  const S1 = '2026-10-01T11:00:00.000Z';
+  let store;
+  const stored = () => JSON.parse(store.get(SAVE_KEY) ?? '[]');
+  const seed = (...entries) => store.set(SAVE_KEY, JSON.stringify(entries));
+  const entry = (id, savedAt) => ({ id, name: id.toUpperCase(), savedAt, size: 5, grid: [] });
+  // Runs every lock request queued so far, in order (timers 1 ms out, FIFO).
+  const flushLocks = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  // Fires the next pending timer only: the autosave timer, leaving its lock request queued.
+  const fireAutosave = () =>
+    act(async () => {
+      await vi.advanceTimersToNextTimerAsync();
+    });
+  // What the Delete button does: remove through the lock, and once that resolves forget().
+  const deleteEntry = (result, id) =>
+    storage.remove(id).then(() => act(async () => result.current.forget()));
+
+  beforeEach(() => {
+    storage.save.mockRestore(); // the file-level beforeEach mocks it; these tests use the real one
+    store = new Map();
+    localStorage.getItem.mockImplementation((k) => (store.has(k) ? store.get(k) : null));
+    localStorage.setItem.mockImplementation((k, v) => {
+      store.set(k, String(v));
+    });
+    localStorage.removeItem.mockImplementation((k) => {
+      store.delete(k);
+    });
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      // Brief's recipe with a 1 ms delay: fake timers turn a 0 ms delay into 1 ms only inside a
+      // tick, so a request made from the autosave callback would otherwise queue behind one made
+      // outside it and the lock would not be FIFO.
+      value: { request: (n, fn) => new Promise((r) => setTimeout(() => r(fn()), 1)) },
+    });
+  });
+
+  afterEach(() => {
+    delete navigator.locks;
+  });
+
+  it('control, forward order: autosave, then Delete of the open entry, then flush -> deleted, "unsaved changes"', async () => {
+    seed(entry('a', S0));
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    const deleting = deleteEntry(result, 'a'); // queued behind the save
+    await flushLocks();
+    await deleting;
+    expect(stored().map((e) => e.id)).toEqual([]);
+    expect(result.current.savedLabel).toBe('unsaved changes');
+  });
+
+  it('pinned as observed, reverse order: Delete queued, then the autosave fires, then flush', async () => {
+    seed(entry('a', S0));
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    act(() => result.current.adoptSavedAt(S0));
+    const deleting = deleteEntry(result, 'a'); // queued first
+    act(() => {
+      result.current.save(); // the autosave timer's path (runSave), queued second
+    });
+    await flushLocks();
+    await deleting;
+    await flushLocks();
+    // Observed: the delete lands first, then the save writes the entry back under its own id
+    // (spec: "a save whose entry no longer exists writes that entry"), so the label tells
+    // the truth about storage.
+    expect(stored().map((e) => e.id)).toEqual(['a']);
+    expect(result.current.savedLabel).toMatch(/^saved locally/);
+  });
+
+  it('autosave of A, New grid (B) before the flush: B keeps its status, savedAt expectation and next save', async () => {
+    seed(entry('a', S0), entry('b', S1));
+    const onSaved = vi.fn();
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onSaved });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    // Open saved B: setDocId and adoptSavedAt in one handler.
+    rerender({ doc: { id: 'b', n: 1 }, isDirty: false, onSaved });
+    act(() => result.current.adoptSavedAt(S1));
+    await flushLocks();
+    expect(stored().find((e) => e.id === 'a').savedAt).not.toBe(S0); // A's entry IS written
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('pristine');
+    expect(result.current.savedLabel).toBe('');
+
+    rerender({ doc: { id: 'b', n: 2 }, isDirty: true, onSaved });
+    const saving = vi.spyOn(storage, 'save');
+    await fireAutosave();
+    await flushLocks();
+    expect(saving.mock.calls[0][1].expectedSavedAt).toBe(S1);
+    expect(stored().map((e) => e.name)).not.toContain('B (copy)');
+  });
+
+  it('autosave of A that will fork, New grid (B) before the flush: onForked is not called', async () => {
+    seed(entry('a', S1)); // a second tab moved A's savedAt
+    const onForked = vi.fn();
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onForked });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    rerender({ doc: { id: 'b', n: 1 }, isDirty: false, onForked });
+    await flushLocks();
+    expect(stored().some((e) => e.name === 'A (copy)')).toBe(true); // the fork was written
+    expect(onForked).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('pristine');
+  });
+
+  it('a failed save of a replaced document leaves the new document\'s status alone', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    const failing = vi.spyOn(storage, 'save').mockImplementation(
+      () => new Promise((_, reject) => setTimeout(() => reject(new Error('quota')), 1))
+    );
+    await fireAutosave();
+    rerender({ doc: { id: 'b', n: 1 }, isDirty: false });
+    await flushLocks();
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('pristine');
+    expect(result.current.savedLabel).toBe('');
+  });
+
+  it('a save of the still-current document acts as before (onSaved, saved, fork callback)', async () => {
+    seed(entry('a', S1));
+    const onSaved = vi.fn();
+    const onForked = vi.fn();
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onSaved, onForked });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    await flushLocks();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onForked).toHaveBeenCalledTimes(1);
   });
 });
