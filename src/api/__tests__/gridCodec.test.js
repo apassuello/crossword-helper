@@ -5,6 +5,8 @@ import {
   toCliStrings,
   fromCliStrings,
   applyNumbering,
+  normalizeCell,
+  toSavedGrid,
 } from '../gridCodec';
 
 describe('gridCodec', () => {
@@ -16,6 +18,8 @@ describe('gridCodec', () => {
         isThemeLocked: false,
         number: null,
         isError: false,
+        isAutofilled: false,
+        isBlocked: false,
       });
     });
 
@@ -92,6 +96,70 @@ describe('gridCodec', () => {
       expect(out[0][0].number).toBe(null);
       expect(out).not.toBe(grid);
       expect(out[0]).not.toBe(grid[0]);
+    });
+  });
+
+  describe('normalizeCell', () => {
+    it('normalizeCell({}) deep-equals makeCell()', () => {
+      expect(normalizeCell({})).toEqual(makeCell());
+    });
+
+    it('keeps supplied fields and defaults the provenance flags to false', () => {
+      const out = normalizeCell({ letter: 'A', isThemeLocked: true });
+      expect(out.letter).toBe('A');
+      expect(out.isThemeLocked).toBe(true);
+      expect(out.isAutofilled).toBe(false);
+      expect(out.isBlocked).toBe(false);
+    });
+
+    it('keeps isAutofilled true but forces isBlocked false', () => {
+      const out = normalizeCell({ letter: 'A', isAutofilled: true, isBlocked: true });
+      expect(out.isAutofilled).toBe(true);
+      expect(out.isBlocked).toBe(false);
+    });
+
+    it('treats a non-true isAutofilled ("yes") as false', () => {
+      expect(normalizeCell({ letter: 'A', isAutofilled: 'yes' }).isAutofilled).toBe(false);
+    });
+
+    it('returns a new object and does not mutate the input', () => {
+      const input = { letter: 'A', isBlocked: true };
+      const out = normalizeCell(input);
+      expect(out).not.toBe(input);
+      expect(input).toEqual({ letter: 'A', isBlocked: true });
+    });
+  });
+
+  describe('toSavedGrid', () => {
+    it('strips isBlocked, keeps isAutofilled and other fields', () => {
+      const cell = toSavedGrid([
+        [{ letter: 'A', isAutofilled: true, isBlocked: true, isBlack: false }],
+      ])[0][0];
+      expect('isBlocked' in cell).toBe(false);
+      expect(cell.isAutofilled).toBe(true);
+      expect(cell.letter).toBe('A');
+      expect(cell.isBlack).toBe(false);
+    });
+
+    it('defaults a missing isAutofilled to false', () => {
+      expect(toSavedGrid([[{ letter: 'B' }]])[0][0].isAutofilled).toBe(false);
+    });
+
+    it('treats a non-true isAutofilled as false', () => {
+      expect(toSavedGrid([[{ isAutofilled: 'yes' }]])[0][0].isAutofilled).toBe(false);
+    });
+
+    it('maps null to null', () => {
+      expect(toSavedGrid(null)).toBe(null);
+    });
+
+    it('returns a new grid and does not mutate the input', () => {
+      const grid = [[{ letter: 'A', isAutofilled: true, isBlocked: true }]];
+      const out = toSavedGrid(grid);
+      expect(out).not.toBe(grid);
+      expect(out[0]).not.toBe(grid[0]);
+      expect(out[0][0]).not.toBe(grid[0][0]);
+      expect(grid[0][0]).toEqual({ letter: 'A', isAutofilled: true, isBlocked: true });
     });
   });
 });

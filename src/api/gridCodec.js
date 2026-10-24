@@ -2,7 +2,8 @@
  * gridCodec — the ONLY place that converts between the three grid cell
  * encodings used across the app (see the plan's "Grid cell encodings"):
  *
- *   1. Frontend canonical: { letter, isBlack, isThemeLocked, number, isError }
+ *   1. Frontend canonical: { letter, isBlack, isThemeLocked, number, isError,
+ *                         isAutofilled, isBlocked }
  *   2. CLI strings (every backend call): "#" black, "." empty, "A" letter (uppercase)
  *   3. numbering response keys: "(r,c)" strings
  *
@@ -17,7 +18,37 @@ export function makeCell() {
     isThemeLocked: false,
     number: null,
     isError: false,
+    isAutofilled: false,
+    isBlocked: false,
   };
+}
+
+/**
+ * Canonical cell from a saved/foreign cell. A new object: makeCell()'s fields
+ * overlaid by `cell`'s. `isAutofilled` survives only as a literal `true`;
+ * `isBlocked` is runtime-only and is never loaded as true.
+ */
+export function normalizeCell(cell) {
+  return {
+    ...makeCell(),
+    ...cell,
+    isAutofilled: cell.isAutofilled === true,
+    isBlocked: false,
+  };
+}
+
+/**
+ * Cells as the save document carries them: copies without `isBlocked`
+ * (runtime-only), `isAutofilled` coerced to a boolean. Input is not mutated.
+ */
+export function toSavedGrid(grid) {
+  if (grid === null) return null;
+  return grid.map((row) =>
+    row.map((cell) => {
+      const { isBlocked: _isBlocked, ...rest } = cell;
+      return { ...rest, isAutofilled: cell.isAutofilled === true };
+    })
+  );
 }
 
 /** size x size grid of fresh (independent) canonical cells. */
