@@ -35,7 +35,7 @@ import CrosswordGrid from './components/bench/CrosswordGrid';
 import RestoreBanner from './components/bench/RestoreBanner';
 import InlineConfirm from './components/bench/InlineConfirm';
 import GridHintLine from './components/bench/GridHintLine';
-import GridPanel from './components/bench/GridPanel';
+import GridPanel, { NEW_GRID_SIZES } from './components/bench/GridPanel';
 import PatternMatcher from './components/PatternMatcher';
 import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
@@ -50,6 +50,27 @@ import './styles/App.scss';
 // and got every installed list merged), which left red cells sitting on the
 // grid after a clean reported success.
 const VALIDATION_WORDLISTS = ['comprehensive'];
+
+/**
+ * novice-readiness spec 0.2.8 §3.4 (G#77 App.jsx:264): a stored entry becomes the live
+ * document only if `size` is one of the offered sizes, `grid` is a `size`×`size` array of
+ * rows and every cell is a non-null object. Anything else would crash `allSlots` (ragged
+ * rows) or `normalizeCell` (a null cell) after the adoption had started.
+ */
+export function isAdoptableEntry(entry) {
+  if (!entry || !NEW_GRID_SIZES.includes(entry.size)) return false;
+  const { grid, size } = entry;
+  return (
+    Array.isArray(grid) &&
+    grid.length === size &&
+    grid.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === size &&
+        row.every((cell) => cell !== null && typeof cell === 'object' && !Array.isArray(cell))
+    )
+  );
+}
 
 // Signature of user-authored grid content, for the save machine's dirty
 // tracking. Deliberately array-shaped and limited to durable authored fields:
@@ -201,7 +222,7 @@ function App() {
   // and the `saved` status. If the grid moved on, isDirty stays true and the machine
   // returns to `dirty` (see useSaveMachine).
   const onSaved = useCallback((written) => setSavedSig(contentSigOf(written.size, written.grid)), []);
-  const { savedLabel, saveNamed, adoptSavedAt } = useSaveMachine({ doc, isDirty, onForked, onSaved });
+  const { savedLabel, saveNamed, adoptSavedAt, forget } = useSaveMachine({ doc, isDirty, onForked, onSaved });
 
   // The Save button opens the name prompt (§3.4 G3); autosave never does. The prompt
   // mounts only once list() has resolved, so it never shows a prefill the user could
@@ -261,13 +282,13 @@ function App() {
   const [restoredBanner, setRestoredBanner] = useState(null); // { name, savedAt, sig } | null
   // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): the one place a saved entry becomes
   // the live document, shared by restore-on-load and Open saved. It reads the current size
-  // through `gridSizeRef` and applies the S3 skip-flag rule exactly once. An entry whose
-  // `grid` is not an array of arrays is adopted by nothing (`normalizeSavedGrid` would
-  // throw): one console.error, no state change, no user-visible text (the spec defines none).
+  // through `gridSizeRef` and applies the S3 skip-flag rule exactly once. An entry that
+  // fails `isAdoptableEntry` is adopted by nothing: one console.error, no state change; Open
+  // saved reports it (`openSavedEntry`), restore stays silent on a blank grid.
   // `banner` true shows the restore banner for the entry; false dismisses it.
   const adoptSavedEntry = useCallback(
     (entry, { banner }) => {
-      if (!entry || !Array.isArray(entry.grid) || !entry.grid.every(Array.isArray)) {
+      if (!isAdoptableEntry(entry)) {
         console.error('Ignoring a saved grid whose cells are malformed:', entry?.id);
         return false;
       }
@@ -364,8 +385,17 @@ function App() {
     (entry) => {
       if (editingPausedRef.current) return;
       if (adoptSavedEntry(entry, { banner: false })) autofill.discardRun();
+      else pushToast({ kind: 'error', message: 'Could not open this saved grid.' });
     },
-    [adoptSavedEntry, autofill.discardRun]
+    [adoptSavedEntry, autofill.discardRun, pushToast]
+  );
+  // novice-readiness spec 0.2.8 §3.4 (Q1): Delete removed the entry with this id; when it is
+  // the open document's, the document is unsaved now (no autosave is armed until an edit).
+  const onEntryDeleted = useCallback(
+    (id) => {
+      if (id === docIdRef.current) forget();
+    },
+    [forget]
   );
 
   const toggleBlackSquare = useCallback((row, col) => {
@@ -719,6 +749,7 @@ function App() {
                 onToggleBlack={toggleBlackSquare}
                 onNewGrid={createNewGrid}
                 onOpenSaved={openSavedEntry}
+                onDeleted={onEntryDeleted}
               />
             </div>
           )}

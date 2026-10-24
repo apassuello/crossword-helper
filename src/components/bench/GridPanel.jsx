@@ -9,7 +9,7 @@ import SavedGridsList from './SavedGridsList';
 
 const REPLACE_MESSAGE = 'Replace the current grid? Unsaved changes are lost.';
 
-const NEW_GRID_SIZES = [11, 15, 21];
+export const NEW_GRID_SIZES = [11, 15, 21];
 
 export default function GridPanel({
   grid,
@@ -19,6 +19,7 @@ export default function GridPanel({
   onToggleBlack,
   onNewGrid,
   onOpenSaved,
+  onDeleted,
 }) {
   // The one open confirm: { kind: 'new', size } | { kind: 'open', entry } | { kind: 'delete',
   // entry } | null. A single slot, so opening one closes any other (novice-readiness spec
@@ -26,6 +27,15 @@ export default function GridPanel({
   const [pending, setPending] = useState(null);
   const [saved, setSaved] = useState(null); // entries from storage.list() | null (list hidden)
   const refreshSaved = () => storage.list().then(setSaved);
+  // novice-readiness spec 0.2.8 §3.4 (Q1, Greptile #77 GridPanel.jsx:88): Open reads the entry
+  // again by id when the user confirms it, not from the list snapshot. An entry that has gone
+  // away shows the refreshed list and nothing is adopted.
+  const openEntry = (entry) =>
+    storage.list().then((entries) => {
+      const fresh = entries.find((e) => e.id === entry.id);
+      if (fresh) onOpenSaved(fresh);
+      else setSaved(entries);
+    });
   const hasSelection = Boolean(selectedCell) && Boolean(grid);
   const { row, col } = selectedCell || {};
   const allowed =
@@ -85,8 +95,18 @@ export default function GridPanel({
             const current = pending;
             setPending(null);
             if (current.kind === 'new') onNewGrid(current.size);
-            else if (current.kind === 'open') onOpenSaved(current.entry);
-            else storage.remove(current.entry.id).then(refreshSaved);
+            else if (current.kind === 'open') openEntry(current.entry);
+            else {
+              // novice-readiness spec 0.2.8 §3.4 (Q1): App learns which id went, so it can mark
+              // the open document unsaved when it was that one. A failed remove changes
+              // nothing but the refreshed list.
+              const id = current.entry.id;
+              storage
+                .remove(id)
+                .then(() => onDeleted?.(id))
+                .then(refreshSaved)
+                .catch(refreshSaved);
+            }
           }}
           onCancel={() => setPending(null)}
         />
@@ -97,7 +117,7 @@ export default function GridPanel({
           disabled={editingPaused}
           onOpen={(entry) => {
             if (gridHasContent(grid)) setPending({ kind: 'open', entry });
-            else onOpenSaved(entry);
+            else openEntry(entry);
           }}
           onDelete={(id) => setPending({ kind: 'delete', entry: saved.find((e) => e.id === id) })}
         />

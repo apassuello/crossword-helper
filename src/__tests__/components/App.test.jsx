@@ -1144,7 +1144,12 @@ describe('App Open saved (§3.4)', () => {
       await pressOpenSaved(user);
       await screen.findByText('Broken');
       await user.click(within(rowOf('Broken')).getByRole('button', { name: 'Open' }));
-      await user.click(screen.getByRole('button', { name: 'Replace' }));
+      // list() resolves after the click; flush it inside act (as pressOpenSaved does).
+      await act(async () => {
+        await user.click(screen.getByRole('button', { name: 'Replace' }));
+      });
+      // Open re-reads the entry by id (§3.4 Q1), so the refusal lands a microtask later.
+      await screen.findByText('Could not open this saved grid.');
 
       expect(err).toHaveBeenCalledTimes(1);
       expect(letters(container)).toEqual(['Q']);

@@ -423,3 +423,98 @@ describe('useSaveMachine', () => {
     });
   });
 });
+
+// novice-readiness spec 0.2.8 §3.4 (Q1, Q3): forget() and the pagehide save.
+describe('useSaveMachine forget() (§3.4 Q1)', () => {
+  it('reads "unsaved changes" and arms nothing; the next real edit arms the autosave', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a' }, isDirty: false });
+    expect(result.current.savedLabel).toBe('');
+    act(() => result.current.forget());
+    expect(result.current.savedLabel).toBe('unsaved changes');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+    expect(storage.save).not.toHaveBeenCalled();
+
+    rerender({ doc: { id: 'a' }, isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(storage.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears an autosave already pending', async () => {
+    const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
+    act(() => result.current.forget());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+    expect(storage.save).not.toHaveBeenCalled();
+    expect(result.current.savedLabel).toBe('unsaved changes');
+  });
+
+  it('leaves saved state to a later save: from saved it reads unsaved, a real edit re-saves', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a' }, isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    rerender({ doc: { id: 'a' }, isDirty: false });
+    expect(result.current.status).toBe('saved');
+    act(() => result.current.forget());
+    expect(result.current.savedLabel).toBe('unsaved changes');
+    rerender({ doc: { id: 'a' }, isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(storage.save).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useSaveMachine pagehide (§3.4 Q3)', () => {
+  const pagehide = () => act(async () => {
+    window.dispatchEvent(new Event('pagehide'));
+    await Promise.resolve();
+  });
+
+  it('a dirty document is saved at once and the pending timer is cleared', async () => {
+    renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    expect(storage.save).not.toHaveBeenCalled();
+    await pagehide();
+    expect(storage.save).toHaveBeenCalledTimes(1);
+    expect(storage.save.mock.calls[0][0]).toEqual({ id: 'a', n: 1 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+    expect(storage.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the latest doc, not the one at mount', async () => {
+    const { rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    rerender({ doc: { id: 'a', n: 2 }, isDirty: true });
+    await pagehide();
+    expect(storage.save.mock.calls[0][0]).toEqual({ id: 'a', n: 2 });
+  });
+
+  it('a clean document writes nothing', async () => {
+    renderMachine({ doc: { id: 'a' }, isDirty: false });
+    await pagehide();
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+
+  it('a failed write shows no toast', async () => {
+    storage.save.mockRejectedValue(new Error('quota'));
+    renderMachine({ doc: { id: 'a' }, isDirty: true });
+    await pagehide();
+    await flush();
+    expect(storage.save).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('the listener is removed on unmount', async () => {
+    const { unmount } = renderMachine({ doc: { id: 'a' }, isDirty: true });
+    unmount();
+    await pagehide();
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+});
