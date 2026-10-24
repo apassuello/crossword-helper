@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.7** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.8** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -321,7 +321,10 @@ before relying on case 3 (b) outside repair and hybrid.
   premise), tracked as issue #75. This spec adds no mechanism.
 - **Document id (M1).** The machine receives the document id as an argument to `start` and stores it
   with the snapshot. `App` passes its current document id (§3.4) with every merge and with "Keep
-  partial fill"; each compares it with the stored one.
+  partial fill"; each compares it with the stored one. A save fork (§3.4 S4) is the same document
+  continuing under a new id, so the stored id follows it: `App`'s `onForked` gives the machine the old
+  and the new id, and the machine replaces its stored id when it equals the old one. Merges, the
+  terminal restore and "Keep partial fill" then carry on as if no fork had happened (0.2.8, review F2).
 - **No other grid writer runs while a run is live (D1).** While `autofill.state` is `submitting` or
   `running`, the machine's `onGridUpdate` is the only writer of letters and black squares. Every other
   `setGrid` caller in `App.jsx`, and every control that leads to one (typing and Backspace in
@@ -476,6 +479,10 @@ that none of the hidden labels renders.
 - **Ordering:** §2.3 says red cells clear on New grid, but the control lands here. This task owns the
   clearing: it resets `isBlocked`, `isError` and any retained snapshot or "Keep partial fill" offer when
   the new grid is created. If `isBlocked` does not exist yet, there is nothing to clear for it.
+- **Import (0.2.8, review F3, M3, Q2).** Importing over a grid that has any letter or black square asks
+  the same confirm, `Replace the current grid? Unsaved changes are lost.`, before anything is replaced.
+  An imported grid is born numbered, as New grid is, whatever its black-square layout, and import clears
+  a finished run's result and "Keep partial fill" offer as New grid and Open saved do.
 
 ### 3.3 Black squares (#50)
 
@@ -538,6 +545,18 @@ scope here.
   `offline — will retry` status label, and the unbounded 30 s re-arm. **[?]** Whether autosave should
   also show the quota text is open (§7 P11).
 - **Banner.** It closes on its × or on any grid edit.
+- **Deleting the open grid's own entry (0.2.8, review Q1).** When Delete removes the entry whose id is
+  the current document's, the document becomes unsaved: the label shows the unsaved state, and the
+  delete itself arms no autosave. The next grid edit autosaves it as a new entry under the default name,
+  keeping its document id. A save whose entry no longer exists writes that entry; it does not fork.
+- **Leaving the page (0.2.8, review Q3).** On `pagehide`, a document with unsaved changes is saved at
+  once through the autosave path, so during a run it writes the Start snapshot (S2). A failure there
+  shows nothing, since the page is going away.
+- **Storage never throws on read (0.2.8, review M1).** `list()` never rejects either. When the browser
+  refuses localStorage access, `list()` and `load()` read as no saves.
+- **A fork during a named Save (0.2.8, review M2).** If the user confirmed replacing a *different*
+  entry and the write forks (S4), the other entry is not removed and the fork is named
+  `<chosen name> (copy)`.
 - Tests: legacy-key migration; name collision asks to replace; the banner and its dismissal; document-id
   minting (New grid, import) and adoption (Open saved, restore); S2: a reload mid-run restores the Start
   grid; S3: restore and Open saved across grid sizes; S4: a changed `savedAt` forks a `(copy)` entry.
@@ -638,6 +657,10 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   skipped word with its reason: for a 400 with a `conflicts` array, the server's conflict text (as
   `handleApplyPlacement` already shows it, fixed under #15); for any other failure, `Could not reach
   the server` or the error's message. `skipped due to conflicts` is used only for real conflicts.
+- **Applying against the grid that was sent (0.2.8, review F1, F4).** A theme apply response is merged
+  against the grid its request was built from: a cell the user changed after the request was sent keeps
+  the user's value. A response landing after the document was replaced is dropped (PD-6-G12). Apply All
+  stops sending requests when the Theme panel closes.
 - Tests: a grid change while suggestions show triggers one refetch and drops the old list; Apply on a
   superseded entry is a no-op; Apply All with a 400 conflict, a 500 and a network failure reports three
   different reasons and counts only its own applies.
@@ -824,7 +847,7 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | PD-6-G9 | §3.4 | What "Start blank" does | Opens the Grid tool, where New grid is; the §3.2 confirm then applies. |
 | ★ PD-6-G10 | §3.5 | Where Clean's confirm renders (Clean is in the top bar; any tool may be open) | Above the grid, whatever tool is open. |
 | PD-6-G11 | §3.5 | What "any grid change" means for dismissing Clean's confirm | A change to letters, black squares, theme locks or provenance (`contentSigOf`); not `isError`, so Verify landing does not dismiss it. |
-| ★ PD-6-G12 | §2.3, §3.5 | A Verify or Clean response landing after the document was replaced (New grid, Open saved) | Dropped: it writes nothing when `docId` changed since its request. |
+| ★ PD-6-G12 | §2.3, §3.5, §3.8 | A Verify, Clean or theme-apply (0.2.8) response landing after the document was replaced (New grid, Open saved) | Dropped: it writes nothing when `docId` changed since its request. |
 | PD-6-G13 | §3.8 | Refetch debounce | 400 ms. |
 | PD-6-G14 | §3.8 | Channel for `Suggestions updated for the changed grid.` | The panel's existing toast. |
 | PD-6-G15 | §3.8 | Refetch during Apply All's own grid changes | Suspended while Apply All runs; one refetch afterwards. |
@@ -916,3 +939,12 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   `--adaptive` unusable on a list without some slot length. Found by CI's slow suite on PR #76 and its review.
   P8 and the §9 M2 line amended to match. Pre-flight only lets more runs through; the lock guarantee is the
   postcondition, unchanged. §2.4: a subscriber whose tracker was removed ends at its next queue timeout (PR #76 review). §2.4 C7: `cancelPending` exposed and Cancel disabled while it holds, no new text (owner 2026-10-24, option A; beat: no change, which gives no feedback for a click; and a `Cancelling…` status line, which adds a user-visible string).
+- 0.2.8 (2026-10-24): amended from the Phases 4–6 cross-task review at `f7579b9` (report in the SDD
+  ledger, `review-phase4-6-cross-task.md`), owner ruling 2026-10-24 "go as recommended". §2.3 M1: the
+  machine's stored document id follows a save fork (F2). §3.2: import confirms, is born numbered and
+  clears a finished run (F3, M3, Q2). §3.4: deleting the open grid's own entry makes it unsaved (Q1);
+  `pagehide` saves unsaved changes (Q3); `list()` never rejects (M1); a fork during a named Save keeps
+  the other entry and takes the chosen name (M2). §3.8 and PD-6-G12: theme apply merges against the sent
+  grid, drops a reply for a replaced document, and Apply All stops when the panel closes (F1, F4). Beat:
+  for Q1, minting a new document id (it would orphan the label from the user's grid for no gain); for Q3,
+  no flush (up to 30 s of typing lost on every reload); for F2, gating saves during a run (S2 requires them).
