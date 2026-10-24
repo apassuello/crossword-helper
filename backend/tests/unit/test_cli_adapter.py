@@ -343,6 +343,68 @@ class TestFill:
 
 
 # ===========================================================================
+# fill: blocked run / CLI message (novice-readiness spec 0.2.5 section 2.2)
+# ===========================================================================
+
+_G33 = {"size": 3, "grid": [["Q", "X", "."], [".", ".", "."], [".", ".", "."]]}
+_L1_LINES = "CAT;50\nCOT;50\nCUT;50\nQUA;50\nXIS;50\n"
+
+
+class TestFillBlockedAndErrors:
+    def test_real_cli_blocked_run_reports_exit_3_message(self, tmp_path):
+        words = tmp_path / "words.txt"
+        words.write_text(_L1_LINES)
+        result = CLIAdapter().fill(_G33, [str(words)], timeout_seconds=10)
+        assert result["success"] is False
+        assert result["blocked"] is True
+        assert result["error"] == "Blocked: no word fits QX? at 0,0 across"
+
+    def test_real_cli_unreadable_wordlist_carries_cli_message(self, tmp_path):
+        result = CLIAdapter().fill(_G33, [str(tmp_path)], timeout_seconds=10)
+        assert result["success"] is False
+        assert "Could not read wordlist" in result["error"]
+
+    @patch("subprocess.run")
+    def test_no_word_of_length_renders_one_line_per_length(self, mock_run, adapter):
+        blocked = {
+            "success": False,
+            "blocked": True,
+            "reason": "no_word_of_length",
+            "blocked_slots": [
+                {"row": 0, "col": 0, "direction": "across", "length": 5, "pattern": "?????"},
+                {"row": 1, "col": 0, "direction": "across", "length": 3, "pattern": "???"},
+                {"row": 2, "col": 0, "direction": "across", "length": 5, "pattern": "?????"},
+            ],
+        }
+        mock_run.return_value = _make_completed_process(stdout=json.dumps(blocked), returncode=3)
+        result = adapter.fill(_G33, ["w.txt"])
+        assert result["error"] == (
+            "Blocked: the selected word lists have no words of length 3\n"
+            "Blocked: the selected word lists have no words of length 5"
+        )
+        assert result["blocked"] is True
+
+    @patch("subprocess.run")
+    def test_passes_json_output_and_no_lock_list(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout="", returncode=1)
+        adapter.fill(_G33, ["w.txt"])
+        args = mock_run.call_args[0][0]
+        assert "--json-output" in args
+        assert not any("lock" in a for a in args)
+
+    @patch("subprocess.run")
+    def test_missing_output_uses_stdout_json_error(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout=json.dumps({"success": False, "error": "boom"}), returncode=1)
+        assert adapter.fill(_G33, ["w.txt"])["error"] == "boom"
+
+    @patch("subprocess.run")
+    def test_missing_output_without_stdout_error_uses_stderr_lines(self, mock_run, adapter):
+        mock_run.return_value = _make_completed_process(stdout="", stderr='{"progress": 1}\nError: bad thing\n', returncode=1)
+        result = adapter.fill(_G33, ["w.txt"])
+        assert result == {"success": False, "error": "Error: bad thing"}
+
+
+# ===========================================================================
 # fill_with_resume()
 # ===========================================================================
 
