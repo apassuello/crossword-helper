@@ -360,7 +360,7 @@ describe('ThemeWordsPanel refetch on grid change (Task 6.13, TH2b)', () => {
       .spyOn(api, 'themeSuggestPlacements')
       .mockResolvedValue({ suggestions: listFor(WORDS, 'First list') });
     applySpy = vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith() });
-    onApply = vi.fn();
+    onApply = vi.fn().mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -601,6 +601,7 @@ describe('ThemeWordsPanel refetch on grid change (Task 6.13, TH2b)', () => {
         onApplyPlacement: (next) => {
           onApply(next);
           setG(next);
+          return true;
         },
       });
     };
@@ -672,7 +673,7 @@ describe('ThemeWordsPanel Apply All reports each word\'s real failure (Task 6.14
 
   const Host = ({ initial }) => {
     const [g, setG] = useState(initial);
-    return <ThemeWordsPanel grid={g} gridSize={15} onApplyPlacement={setG} onClose={vi.fn()} />;
+    return <ThemeWordsPanel grid={g} gridSize={15} onApplyPlacement={(next) => { setG(next); return true; }} onClose={vi.fn()} />;
   };
 
   const showList = async (words, overrides) => {
@@ -874,7 +875,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
     vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
     vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith(1) });
-    const onApply = vi.fn();
+    const onApply = vi.fn().mockReturnValue(true);
     const sent = createEmptyGrid(15);
     render(
       <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
@@ -898,7 +899,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     vi.spyOn(api, 'themeApplyPlacement')
       .mockResolvedValueOnce({ grid: r1 })
       .mockResolvedValueOnce({ grid: r2 });
-    const onApply = vi.fn();
+    const onApply = vi.fn().mockReturnValue(true);
     const sent = createEmptyGrid(15);
     render(
       <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
@@ -1049,6 +1050,29 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
       expect(summary(toast.success)).toEqual([]);
       expect(summary(toast.error)).toEqual([]);
       expect(toast.dismiss).toHaveBeenCalledWith('apply-all'); // the loading toast does not linger
+    });
+
+    it('a host that returns undefined is a drop: no Applied toast', async () => {
+      const onApply = vi.fn().mockReturnValue(undefined);
+      await setup(['ALPHA'], onApply);
+      await act(async () => {
+        screen.getByRole('button', { name: /apply this placement/i }).click();
+      });
+      await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
+      await flush();
+      expect(toast.success).not.toHaveBeenCalledWith('Applied ALPHA to grid');
+    });
+
+    it('Apply All: a host that returns undefined stops after the first reply with no summary', async () => {
+      const onApply = vi.fn().mockReturnValue(undefined);
+      const applySpy = await setup(['ALPHA', 'BETA'], onApply);
+      await applyAll();
+      await flush();
+      await flush();
+      expect(applySpy).toHaveBeenCalledTimes(1);
+      const summary = (fn) => fn.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all');
+      expect(summary(toast.success)).toEqual([]);
+      expect(summary(toast.error)).toEqual([]);
     });
 
     it('Apply All: a first-word drop sends nothing further and counts nothing', async () => {
