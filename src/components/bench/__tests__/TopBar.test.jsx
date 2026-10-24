@@ -123,3 +123,20 @@ describe('TopBar (mounted, controlled)', () => {
     expect(btn).not.toBeDisabled();
   });
 });
+
+describe('TopBar while editingPaused (Task 4.4, D1)', () => {
+  it('disables Verify and Clean but not Save', () => {
+    const props = baseProps({ status: { online: true, degraded: false }, editingPaused: true });
+    const { getByText } = render(<TopBar {...props} />);
+    expect(getByText('Verify words').closest('button')).toBeDisabled();
+    expect(getByText('Clean grid').closest('button')).toBeDisabled();
+    expect(getByText('Save grid').closest('button')).not.toBeDisabled();
+  });
+
+  it('control: the same online props without editingPaused leave Verify and Clean enabled', () => {
+    const props = baseProps({ status: { online: true, degraded: false } });
+    const { getByText } = render(<TopBar {...props} />);
+    expect(getByText('Verify words').closest('button')).not.toBeDisabled();
+    expect(getByText('Clean grid').closest('button')).not.toBeDisabled();
+  });
+});

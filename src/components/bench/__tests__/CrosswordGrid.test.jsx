@@ -284,3 +284,100 @@ describe('CrosswordGrid red (isBlocked) rendering', () => {
     expect(container.querySelectorAll('[data-blocked="true"]')).toHaveLength(0);
   });
 });
+
+// Task 4.4 — D1 writer gate (novice-readiness spec 0.2.6 section 2.3).
+describe('dispatchGridKey while editingPaused', () => {
+  const grid = createEmptyGrid(5);
+  const state = (over = {}) => ({
+    grid,
+    size: 5,
+    focus: { row: 1, col: 1 },
+    selectedDir: 'across',
+    slots: allSlots(grid),
+    ...over,
+  });
+  const PAUSED = { preventDefault: true, actions: [] };
+
+  it.each([
+    ['a letter', { key: 'A' }],
+    ['Backspace', { key: 'Backspace' }],
+    ['Delete', { key: 'Delete' }],
+    ['Space', { key: ' ' }],
+    ['period', { key: '.' }],
+    ['Ctrl+L', { key: 'l', ctrlKey: true }],
+    ['Cmd+L', { key: 'L', metaKey: true }],
+  ])('%s prevents default and emits no action', (_name, key) => {
+    expect(dispatchGridKey(key, state({ editingPaused: true }))).toEqual(PAUSED);
+  });
+
+  it('Backspace on a filled cell would write when not paused (control)', () => {
+    const g = createEmptyGrid(5);
+    g[1][1].letter = 'Q';
+    const live = dispatchGridKey({ key: 'Backspace' }, state({ grid: g, slots: allSlots(g) }));
+    expect(live.actions).toContainEqual({ type: 'setLetter', row: 1, col: 1, ch: '' });
+    expect(
+      dispatchGridKey({ key: 'Backspace' }, state({ grid: g, slots: allSlots(g), editingPaused: true }))
+    ).toEqual(PAUSED);
+  });
+
+  it.each([
+    ['ArrowRight', {}],
+    ['ArrowDown', {}],
+    ['Tab', {}],
+    ['Tab', { shiftKey: true }],
+    ['Enter', {}],
+  ])('%s behaves as today (regression pin)', (k, extra) => {
+    const key = { key: k, ...extra };
+    const live = dispatchGridKey(key, state({ editingPaused: false }));
+    expect(live.actions.length).toBeGreaterThan(0);
+    expect(dispatchGridKey(key, state({ editingPaused: true }))).toEqual(live);
+  });
+});
+
+describe('CrosswordGrid while editingPaused (mounted)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const STATUS = 'Editing is paused while autofill runs.';
+
+  it('renders the status text inside .xw-grid-wrap', () => {
+    const { container } = render(<CrosswordGrid {...baseProps({ editingPaused: true })} />);
+    const status = container.querySelector('.xw-grid-wrap [role="status"]');
+    expect(status).not.toBeNull();
+    expect(status.textContent).toBe(STATUS);
+  });
+
+  it('renders no status element when the prop is absent', () => {
+    const { container } = render(<CrosswordGrid {...baseProps()} />);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('Shift+click calls no onToggleBlack; Alt+click neither', () => {
+    const props = baseProps({ editingPaused: true });
+    const { container } = render(<CrosswordGrid {...props} />);
+    fireEvent.click(hitRects(container)[0], { shiftKey: true });
+    fireEvent.click(hitRects(container)[0], { altKey: true });
+    expect(props.onToggleBlack).not.toHaveBeenCalled();
+  });
+
+  it('right-click prevents default and calls no onToggleLock', () => {
+    const props = baseProps({ editingPaused: true });
+    const { container } = render(<CrosswordGrid {...props} />);
+    const notCancelled = fireEvent.contextMenu(hitRects(container)[0]);
+    expect(notCancelled).toBe(false);
+    expect(props.onToggleLock).not.toHaveBeenCalled();
+  });
+
+  it('a plain click still focuses', () => {
+    const props = baseProps({ editingPaused: true, focus: null });
+    const { container } = render(<CrosswordGrid {...props} />);
+    fireEvent.click(hitRects(container)[6]);
+    expect(props.onFocus).toHaveBeenCalledWith(1, 1);
+  });
+
+  it('typing through the mounted listener calls no onSetLetter', () => {
+    const props = baseProps({ editingPaused: true });
+    const { container } = render(<CrosswordGrid {...props} />);
+    fireEvent.keyDown(container.querySelector('.xw-grid-focus'), { key: 'C' });
+    expect(props.onSetLetter).not.toHaveBeenCalled();
+    expect(props.onMoveFocus).not.toHaveBeenCalled();
+  });
+});

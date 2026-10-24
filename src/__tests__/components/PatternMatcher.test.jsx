@@ -460,3 +460,55 @@ describe('PatternMatcher Component', () => {
     });
   });
 });
+
+describe('PatternMatcher while editingPaused (Task 4.4, D1)', () => {
+  const searchWithResults = async (props) => {
+    const user = userEvent.setup();
+    const { rerender, container } = render(<PatternMatcher {...props} />);
+    await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+    await user.click(screen.getByRole('button', { name: /search/i }));
+    await waitFor(() => expect(mockSSEConnect).toHaveBeenCalled());
+    mockSSEStatus = 'complete';
+    mockSSEData = {
+      results: [{ word: 'CAT', score: 95, source: 'comprehensive' }],
+      meta: { total_found: 1 },
+    };
+    rerender(<PatternMatcher {...props} />);
+    await waitFor(() => expect(screen.getByText(/results \(1\)/i)).toBeInTheDocument());
+    return { user, container };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSSEStatus = 'idle';
+    mockSSEData = null;
+    mockSSEMessage = '';
+    mockSSEConnect = vi.fn();
+    mockSSEReset = vi.fn();
+  });
+
+  it('control: not paused, a result row click calls onSelectWord and has no aria-disabled', async () => {
+    const onSelectWord = vi.fn();
+    const { user, container } = await searchWithResults({
+      selectedCell: { row: 0, col: 0 },
+      onSelectWord,
+    });
+    const row = container.querySelector('.result-item');
+    expect(row).not.toHaveAttribute('aria-disabled');
+    await user.click(row);
+    expect(onSelectWord).toHaveBeenCalledWith('CAT');
+  });
+
+  it('paused: result rows carry aria-disabled and the click is a no-op', async () => {
+    const onSelectWord = vi.fn();
+    const { user, container } = await searchWithResults({
+      selectedCell: { row: 0, col: 0 },
+      onSelectWord,
+      editingPaused: true,
+    });
+    const row = container.querySelector('.result-item');
+    expect(row).toHaveAttribute('aria-disabled', 'true');
+    await user.click(row);
+    expect(onSelectWord).not.toHaveBeenCalled();
+  });
+});

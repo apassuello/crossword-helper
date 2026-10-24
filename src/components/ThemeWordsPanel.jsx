@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import toast from 'react-hot-toast';
 import './ThemeWordsPanel.scss';
 
-function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
+function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose, editingPaused = false }) {
   const [file, setFile] = useState(null);
   const [themeWords, setThemeWords] = useState([]);
   const [suggestions, setSuggestions] = useState(null);
@@ -320,7 +320,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
               <button
                 className="apply-all-btn"
                 onClick={handleApplyAllPlacements}
-                disabled={applyingAll || loading}
+                disabled={applyingAll || loading || editingPaused}
               >
                 {applyingAll ? '⏳ Applying...' : '🚀 Apply All Best Placements'}
               </button>
@@ -361,6 +361,7 @@ function ThemeWordsPanel({ grid, gridSize, onApplyPlacement, onClose }) {
 
                     <button
                       className="apply-btn"
+                      disabled={editingPaused}
                       onClick={() => handleApplyPlacement(wordData, sugIdx)}
                     >
                       ✓ Apply This Placement

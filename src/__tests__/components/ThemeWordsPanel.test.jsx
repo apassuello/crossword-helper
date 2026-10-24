@@ -257,3 +257,52 @@ describe('ThemeWordsPanel Component', () => {
     await waitFor(() => expect(screen.getByText('BIRTHDAY')).toBeInTheDocument());
   });
 });
+
+describe('ThemeWordsPanel while editingPaused (Task 4.4, D1)', () => {
+  const showSuggestions = async (extraProps) => {
+    const user = userEvent.setup();
+    mockApiEndpoint('post', '/theme/upload', {
+      words: ['BIRTHDAY'],
+      count: 1,
+      validation: { valid: true, errors: [], warnings: [] },
+    });
+    mockApiEndpoint('post', '/theme/suggest-placements', {
+      suggestions: [
+        {
+          word: 'BIRTHDAY',
+          length: 8,
+          suggestions: [
+            { word: 'BIRTHDAY', row: 0, col: 0, direction: 'across', score: 90, reasoning: 'Good placement' },
+            { word: 'BIRTHDAY', row: 2, col: 0, direction: 'across', score: 80, reasoning: 'Also fine' },
+          ],
+        },
+      ],
+    });
+    render(
+      <ThemeWordsPanel
+        grid={emptyGrid15x15}
+        gridSize={15}
+        onApplyPlacement={vi.fn()}
+        onClose={vi.fn()}
+        {...extraProps}
+      />
+    );
+    const input = document.querySelector('input[type="file"]');
+    await user.upload(input, new File(['BIRTHDAY'], 'theme.txt', { type: 'text/plain' }));
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+  };
+
+  it('control: not paused, apply buttons and Apply All are enabled', async () => {
+    await showSuggestions({});
+    document.querySelectorAll('.apply-btn').forEach((b) => expect(b).not.toBeDisabled());
+    expect(screen.getByRole('button', { name: /apply all best placements/i })).not.toBeDisabled();
+  });
+
+  it('paused: every .apply-btn and the Apply All button are disabled', async () => {
+    await showSuggestions({ editingPaused: true });
+    const buttons = document.querySelectorAll('.apply-btn');
+    expect(buttons.length).toBe(2);
+    buttons.forEach((b) => expect(b).toBeDisabled());
+    expect(screen.getByRole('button', { name: /apply all best placements/i })).toBeDisabled();
+  });
+});

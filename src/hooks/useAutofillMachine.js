@@ -45,6 +45,10 @@ import { toCliStrings } from '../api/gridCodec';
 
 const RESETTABLE_STATES = new Set(['done', 'failed', 'cancelled', 'paused']);
 
+// States in which a run owns the grid: no writer but the machine's own onGridUpdate
+// may run (novice-readiness spec 0.2.6 section 2.3, D1). App derives `editingPaused` from it.
+export const LIVE_STATES = new Set(['submitting', 'running']);
+
 function initialSnapshot() {
   return {
     state: 'idle',
