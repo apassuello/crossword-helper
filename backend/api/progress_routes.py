@@ -264,7 +264,11 @@ def stream_progress(task_id: str):
         return jsonify({"error": "Task not found"}), 404
 
     def generate():
-        """Generate SSE events from progress queue, ending with one terminal event."""
+        """
+        Generate SSE events from the progress queue, ending with one terminal event, or
+        with none when this subscriber's tracker was retired first (its terminal record
+        expired while the subscriber was not reading; it ends at its next queue timeout).
+        """
         task_queue = progress_queues.get(task_id)
         if not task_queue:
             return
@@ -300,6 +304,13 @@ def stream_progress(task_id: str):
                 sweep_expired_trackers()
                 if recorded is not None:
                     yield f"data: {json.dumps(recorded)}\n\n"
+                    return
+                # No record in hand and the tracker is gone (retired by a sweep while this
+                # subscriber was suspended): nothing can ever arrive, so end the stream
+                # instead of heartbeating forever.
+                with progress_queues_lock:
+                    retired = task_id not in progress_queues
+                if retired:
                     return
                 # Send heartbeat to keep connection alive
                 yield ": heartbeat\n\n"

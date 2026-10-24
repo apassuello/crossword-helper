@@ -403,7 +403,7 @@ were never at risk from a late reconcile.
   concurrent subscribers *consume* each other's events, and an open second stream can take the terminal
   event from the panel's stream (#41). On connect and on every queue timeout, `generate()` checks the
   recorded terminal event and sends it if its own subscriber has not yet sent a terminal event, so a
-  subscriber that lost the race still ends within one timeout. A run the backend kills at its ceiling
+  subscriber that lost the race still ends within one timeout. A subscriber whose tracker was already removed (its terminal record expired while the subscriber was not reading) ends at its next queue timeout without a terminal event; the client treats the closed stream as a lost connection (§2.4 client). A run the backend kills at its ceiling
   (`run_cli_with_progress`'s `TimeoutExpired` branch, §2.2) already enqueues `error` with
   `Operation timed out`, so that path reaches cleanup too. A second subscriber disconnecting therefore
   cannot drop the terminal event. **Retention:** the terminal event is stored on the tracker with its
@@ -913,4 +913,4 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   after each adaptive pass, inside four solvers, mid-phase; (D) keep it and mark the slow test xfail, leaving
   `--adaptive` unusable on a list without some slot length. Found by CI's slow suite on PR #76 and its review.
   P8 and the §9 M2 line amended to match. Pre-flight only lets more runs through; the lock guarantee is the
-  postcondition, unchanged.
+  postcondition, unchanged. §2.4: a subscriber whose tracker was removed ends at its next queue timeout (PR #76 review).
