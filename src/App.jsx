@@ -13,6 +13,15 @@ import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering } from './hooks/useNumbering';
 import { mintDocId } from './lib/docId';
 import { toSavedGrid } from './api/gridCodec';
+import {
+  writeLetter,
+  writeToggleBlack,
+  writeToggleThemeLock,
+  writePatternWord,
+  writeAppliedTheme,
+  writeImportedGrid,
+  writeCleanedGrid,
+} from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
@@ -180,46 +189,21 @@ function App() {
   const toggleBlackSquare = useCallback((row, col) => {
     if (!grid) return;
 
-    const newGrid = [...grid.map(row => [...row])];
-    const cell = newGrid[row][col];
-    cell.isBlack = !cell.isBlack;
-    cell.letter = cell.isBlack ? '' : cell.letter;
-
-    // Apply symmetry only if enabled
-    if (symmetryEnabled) {
-      const symRow = gridSize - 1 - row;
-      const symCol = gridSize - 1 - col;
-      newGrid[symRow][symCol].isBlack = cell.isBlack;
-      newGrid[symRow][symCol].letter = cell.isBlack ? '' : newGrid[symRow][symCol].letter;
-    }
-
-    setGrid(newGrid);
+    setGrid(writeToggleBlack(grid, row, col, symmetryEnabled));
     // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
     // black-square layout change. No manual renumber/validate here.
-  }, [grid, gridSize, symmetryEnabled]);
+  }, [grid, symmetryEnabled]);
 
   const toggleThemeLock = useCallback((row, col) => {
     if (!grid || grid[row][col].isBlack) return;
 
-    // Create deep copy with new objects
-    const newGrid = grid.map((gridRow, r) =>
-      gridRow.map((cell, c) => {
-        if (r === row && c === col) {
-          return { ...cell, isThemeLocked: !cell.isThemeLocked };
-        }
-        return { ...cell };
-      })
-    );
-
-    setGrid(newGrid);
+    setGrid(writeToggleThemeLock(grid, row, col));
   }, [grid]);
 
   const setLetter = useCallback((row, col, letter) => {
     if (!grid || grid[row][col].isBlack) return;
 
-    const newGrid = [...grid.map(row => [...row])];
-    newGrid[row][col].letter = letter.toUpperCase();
-    setGrid(newGrid);
+    setGrid(writeLetter(grid, row, col, letter));
     // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
   }, [grid]);
 
@@ -247,24 +231,9 @@ function App() {
     // Fill word into grid at selected position
     if (!selectedCell || !grid) return;
 
-    const { row, col, direction } = selectedCell;
-    const newGrid = [...grid.map(row => [...row])];
-
-    for (let i = 0; i < word.length; i++) {
-      if (direction === 'across') {
-        if (col + i < gridSize) {
-          newGrid[row][col + i].letter = word[i];
-        }
-      } else {
-        if (row + i < gridSize) {
-          newGrid[row + i][col].letter = word[i];
-        }
-      }
-    }
-
-    setGrid(newGrid);
+    setGrid(writePatternWord(grid, selectedCell, word));
     // Letter fill — no renumber/validate (structural signature unchanged).
-  }, [selectedCell, grid, gridSize]);
+  }, [selectedCell, grid]);
 
   const handleVerifyWords = useCallback(async () => {
     if (!grid) return;
@@ -336,24 +305,7 @@ function App() {
       }
 
       // Update grid with cleaned result
-      const newGrid = grid.map((row, r) =>
-        row.map((cell, c) => {
-          const cleanedCell = cleanedGrid[r][c];
-          const letter = typeof cleanedCell === 'object'
-            ? (cleanedCell.letter || '')
-            : (cleanedCell === '#' ? '' : (cleanedCell === '.' ? '' : cleanedCell));
-          const isBlack = typeof cleanedCell === 'object'
-            ? cleanedCell.isBlack
-            : cleanedCell === '#';
-          return {
-            ...cell,
-            letter: isBlack ? '' : letter,
-            isBlack,
-            isError: false
-          };
-        })
-      );
-      setGrid(newGrid);
+      setGrid(writeCleanedGrid(grid, cleanedGrid));
       pushToast({ kind: 'info', message });
     } catch (error) {
       console.error('Clean grid failed:', error);
@@ -364,7 +316,7 @@ function App() {
   const handleThemeWordApplied = useCallback((updatedGrid, placement) => {
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
-    setGrid(updatedGrid);
+    setGrid((prev) => writeAppliedTheme(prev, updatedGrid));
 
     pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
   }, [pushToast]);
@@ -383,7 +335,8 @@ function App() {
     // imported grid changes the structural signature, so useNumbering renumbers
     // (server-authoritative) and revalidates. The imported `numbering` field is
     // intentionally no longer applied — the server is the source of truth.
-    setGrid(importedGrid);
+    const normalisedGrid = writeImportedGrid(importedGrid);
+    setGrid(normalisedGrid);
 
     // Update symmetry setting if provided
     if (importedSymmetry !== undefined) {
@@ -392,7 +345,7 @@ function App() {
 
     // A freshly imported grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
-    setSavedSig(contentSigOf(size, importedGrid));
+    setSavedSig(contentSigOf(size, normalisedGrid));
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');

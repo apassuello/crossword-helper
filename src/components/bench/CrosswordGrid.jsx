@@ -370,6 +370,19 @@ function CrosswordGrid({
                       filter={cell.isBlack ? 'url(#blacksq-shadow)' : undefined}
                     />
                   )}
+                  {/* Red: the solver could not fill around this cell (isBlocked) */}
+                  {cell.isBlocked && !cell.isBlack && (
+                    <rect
+                      data-blocked="true"
+                      x={x + 0.5}
+                      y={y + 0.5}
+                      width={CELL_PX - 1}
+                      height={CELL_PX - 1}
+                      fill="var(--danger)"
+                      fillOpacity="0.25"
+                      pointerEvents="none"
+                    />
+                  )}
                   <rect
                     x={x}
                     y={y}
