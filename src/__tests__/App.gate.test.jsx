@@ -286,6 +286,53 @@ describe('App D1 gate: async Verify and Clean', () => {
     expect(screen.queryByText('Removed 1 invalid word')).not.toBeInTheDocument();
   });
 
+  // The N === 0 path writes clearAllErrors and toasts directly, so only the post-await D1
+  // check stops it (the removed_count 1 row above is also stopped by the dismissal effect).
+  it('Clean resolving after Start with nothing to remove: red cells stay red, no toast', async () => {
+    const verifyD = deferred();
+    vi.spyOn(api, 'verifyWords').mockImplementation(() => verifyD.promise);
+    const d = deferred();
+    vi.spyOn(api, 'cleanGrid').mockImplementation(() => d.promise);
+    const { user, container } = await boot();
+    await act(async () => {
+      await focusCell(user, container, 0);
+      await user.keyboard('BA');
+    });
+    await act(async () => {
+      await user.click(screen.getByText('Verify words'));
+    });
+    await act(async () => verifyD.resolve(invalid));
+    await waitFor(() => expect(underlines(container)).toBe(2));
+
+    await act(async () => {
+      await user.click(screen.getByText('Clean grid'));
+    });
+    expect(api.cleanGrid).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /^autofill$/i }));
+    });
+    const startBtn = await screen.findByRole('button', { name: /start autofill/i });
+    await act(async () => {
+      await user.click(startBtn);
+    });
+    await waitFor(() => expect(screen.getByText(STATUS)).toBeInTheDocument());
+    expect(underlines(container)).toBe(2);
+
+    const keepsBA = Array.from({ length: 15 }, (_, r) =>
+      Array.from({ length: 15 }, (_, c) => ({
+        letter: r === 0 ? 'BA'[c] || '' : '',
+        isBlack: false,
+      }))
+    );
+    await act(async () =>
+      d.resolve({ grid: keepsBA, removed_count: 0, valid_count: 1, cleared_cells: 0, message: 'x' })
+    );
+    await flush();
+    expect(underlines(container)).toBe(2);
+    expect(screen.queryByText(/Grid is clean/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing removed/)).not.toBeInTheDocument();
+  });
+
   it('Verify and Clean make no request when a run is already live (pre-request return)', async () => {
     vi.spyOn(api, 'verifyWords').mockResolvedValue(invalid);
     vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleaned());
