@@ -6,12 +6,13 @@ export default function InlineConfirm({
   cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
+  confirmDisabled = false,
 }) {
   return (
     <div className="xw-inline-confirm" role="group" aria-label={message}>
       <p className="xw-inline-confirm-msg">{message}</p>
       <div className="xw-inline-confirm-actions">
-        <button type="button" className="xw-danger-btn" onClick={onConfirm}>
+        <button type="button" className="xw-danger-btn" onClick={onConfirm} disabled={confirmDisabled}>
           {confirmLabel}
         </button>
         <button type="button" className="xw-ghost-btn" onClick={onCancel}>

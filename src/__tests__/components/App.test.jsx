@@ -1658,6 +1658,22 @@ describe('App import: confirm, numbering, run discard (§3.2)', () => {
     expect(letters(container)).toEqual(['Q']);
   });
 
+  it('a second press of Import Grid while the confirm is open does not replace the grid (Q2)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await typeLetter(user, container, 5, 5, 'Q');
+
+    await preparePaste(user, blank15());
+    await user.click(screen.getByRole('button', { name: /import grid/i }));
+    expect(screen.getByText(REPLACE)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /import grid/i }));
+    await settle();
+
+    expect(letters(container)).toEqual(['Q']);
+    expect(screen.getByText(REPLACE)).toBeInTheDocument();
+  });
+
   it('replaces the grid once Replace is pressed (Q2)', async () => {
     const user = userEvent.setup();
     const { container } = renderApp();

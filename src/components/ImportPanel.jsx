@@ -200,16 +200,25 @@ function ImportPanel({
   /**
    * Handle import action
    */
-  const handleImport = () => {
+  const handleImportClick = () => {
     if (!preview || !preview.data) {
       setError('No valid data to import. Please validate first.');
       return;
     }
 
-    // Q2: over a grid with any letter or black square, ask in-panel first. Cancel keeps
-    // the preview so the import can still be confirmed or the input edited.
-    if (gridHasContent && !confirmingReplace) {
+    // Q2: over a grid with any letter or black square, the button only opens the confirm.
+    // The import itself (`performImport`) is reached from the confirm's Replace alone, so a
+    // second press of this button can never replace the grid. Cancel keeps the preview.
+    if (gridHasContent) {
       setConfirmingReplace(true);
+      return;
+    }
+    performImport();
+  };
+
+  const performImport = () => {
+    if (!preview || !preview.data) {
+      setError('No valid data to import. Please validate first.');
       return;
     }
     setConfirmingReplace(false);
@@ -350,7 +359,8 @@ function ImportPanel({
                 message={REPLACE_MESSAGE}
                 confirmLabel="Replace"
                 cancelLabel="Cancel"
-                onConfirm={handleImport}
+                confirmDisabled={editingPaused}
+                onConfirm={performImport}
                 onCancel={() => setConfirmingReplace(false)}
               />
             )}
@@ -359,9 +369,9 @@ function ImportPanel({
                 Clear
               </button>
               <button
-                onClick={handleImport}
+                onClick={handleImportClick}
                 className="import-btn"
-                disabled={isProcessing || editingPaused}
+                disabled={isProcessing || editingPaused || confirmingReplace}
               >
                 {isProcessing ? 'Importing...' : 'Import Grid'}
               </button>
