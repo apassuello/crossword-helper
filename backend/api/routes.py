@@ -488,8 +488,9 @@ def run_cli_with_progress(task_id, cmd_args, timeout=300, temp_files=None):
                 except Exception:
                     pass
         # #21 sub-item 1: register_process() above has no matching removal
-        # on this path — only the cancel route's cleanup_process() ever
-        # popped the registry, so a completed or paused fill left a dead
+        # on this path — before this, only the cancel path popped the
+        # registry (it now goes through request_cancel, which pops itself),
+        # so a completed or paused fill left a dead
         # Popen in running_processes forever. cleanup_process is idempotent
         # (pop(task_id, None), then a poll-and-terminate that no-ops on an
         # already-dead process), so this is safe unconditionally — no need
