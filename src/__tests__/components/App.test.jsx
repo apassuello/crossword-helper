@@ -121,3 +121,20 @@ describe('App grid import', () => {
     expect(blackCells(container)).toHaveLength(1);
   });
 });
+
+// novice-readiness spec 0.2.7 §3.1 (#53, #50): hidden rail controls.
+describe('App tool rail', () => {
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+  });
+
+  it('renders no Clues tool and no Heatmap toggle', async () => {
+    const { container } = renderApp();
+    await waitFor(() => {
+      expect(cells(container)).toHaveLength(225);
+    });
+    expect(screen.getByText('Symmetry')).toBeInTheDocument();
+    expect(screen.queryByText('Clues')).toBeNull();
+    expect(screen.queryByText('Heatmap')).toBeNull();
+  });
+});

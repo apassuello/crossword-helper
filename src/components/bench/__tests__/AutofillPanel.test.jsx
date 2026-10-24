@@ -237,24 +237,23 @@ describe('AutofillPanel (mounted, controlled)', () => {
     expect(machine.cancel).toHaveBeenCalledTimes(1);
   });
 
-  it('"Suggest Black Square" is present but disabled with the Task-20 title in running state', async () => {
+  // novice-readiness spec 0.2.7 §3.1 (#54): the button is not rendered.
+  it('renders no "Suggest Black Square" button in running state; Cancel remains', async () => {
     const machine = baseMachine({ state: 'running', progress: 10, message: 'Working…' });
-    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    const { getByRole, queryByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
     await flush();
 
-    const btn = getByRole('button', { name: /suggest black square/i });
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute('title', 'lands in Task 20');
+    expect(queryByRole('button', { name: /suggest black square/i })).toBeNull();
+    expect(getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
 
-  it('"Suggest Black Square" is present but disabled with the Task-20 title in idle state', async () => {
+  it('renders no "Suggest Black Square" button in idle state with empty slots; Start Autofill remains', async () => {
     const machine = baseMachine();
-    const { getByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
+    const { getByRole, queryByRole } = render(<AutofillPanel machine={machine} grid={themedGrid()} />);
     await flush();
 
-    const btn = getByRole('button', { name: /suggest black square/i });
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute('title', 'lands in Task 20');
+    expect(queryByRole('button', { name: /suggest black square/i })).toBeNull();
+    expect(getByRole('button', { name: /start autofill/i })).toBeInTheDocument();
   });
 
   it('submitting state shows Cancel and the click calls machine.cancel (spec 0.2.7 section 2.4)', async () => {

@@ -5,13 +5,16 @@
 // Presentational / fully controlled — parent (App, U3) owns tool selection,
 // view-toggle state, and stats derivation. No useState/useEffect.
 //
+// Not rendered (novice-readiness spec 0.2.7 §3.1): the Clues tool (#53) and
+// the Heatmap VIEW toggle (#50). The issues stay open.
+//
 // Prop reconciliation vs. the bundle's { tool, onTool, stats, symmetry,
 // onToggleSym, heatmap, onToggleHeatmap } (see plan Task 6 brief):
 //   - onSelectTool(id): renamed from the bundle's onTool.
-//   - viewToggles: { symmetry, heatmap } replaces the bundle's separate
-//     symmetry/heatmap props; onToggleView(which) with which in
-//     'symmetry' | 'heatmap' replaces the bundle's two separate
-//     onToggleSym/onToggleHeatmap callbacks with a single handler.
+//   - viewToggles: { symmetry } replaces the bundle's separate
+//     symmetry/heatmap props; onToggleView(which) replaces the bundle's two
+//     separate onToggleSym/onToggleHeatmap callbacks with a single handler
+//     and is only ever called with 'symmetry'.
 //   - Dropped the bundle's dead per-tool `hint` field: keyboard letters
 //     (G/S/F/...) were defined but never rendered or wired to a shortcut.
 //   - stats: { total, black, blackPct, fillPct, words } — rendered verbatim.
@@ -22,7 +25,6 @@ const TOOLS = [
   { id: 'edit', label: 'Grid' },
   { id: 'search', label: 'Search' },
   { id: 'autofill', label: 'Autofill' },
-  { id: 'clues', label: 'Clues' },
   { id: 'theme', label: 'Theme' },
   { id: 'lists', label: 'Lists' },
   { id: 'import', label: 'Import' },
@@ -47,13 +49,6 @@ const ICONS = {
     <g>
       <path d="M3 8 L7 12 L13 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="3" cy="3" r="1" fill="currentColor" />
-    </g>
-  ),
-  clues: (
-    <g>
-      <line x1="3" y1="4" x2="13" y2="4" stroke="currentColor" strokeWidth="1.4" />
-      <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" strokeWidth="1.4" />
-      <line x1="3" y1="12" x2="10" y2="12" stroke="currentColor" strokeWidth="1.4" />
     </g>
   ),
   theme: (
@@ -111,17 +106,6 @@ export function ToolRail({ tool, onSelectTool, viewToggles, onToggleView, stats,
             <rect x="11" y="11" width="4" height="4" fill="currentColor" />
           </svg>
           <span>Symmetry</span>
-        </button>
-        <button
-          className={`xw-tool-btn xw-tool-btn-small ${viewToggles.heatmap ? 'on' : ''}`}
-          onClick={() => onToggleView('heatmap')}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16">
-            <circle cx="8" cy="8" r="6" fill="currentColor" opacity=".3" />
-            <circle cx="8" cy="8" r="3.5" fill="currentColor" opacity=".6" />
-            <circle cx="8" cy="8" r="1.2" fill="currentColor" />
-          </svg>
-          <span>Heatmap</span>
         </button>
 
         <div className="xw-rail-section-label" style={{ marginTop: 14 }}>GRID</div>

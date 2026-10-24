@@ -10,14 +10,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { ToolRail } from '../ToolRail';
 
-const TOOL_IDS = ['edit', 'search', 'autofill', 'clues', 'theme', 'lists', 'import', 'export'];
-const TOOL_LABELS = ['Grid', 'Search', 'Autofill', 'Clues', 'Theme', 'Lists', 'Import', 'Export'];
+const TOOL_IDS = ['edit', 'search', 'autofill', 'theme', 'lists', 'import', 'export'];
+const TOOL_LABELS = ['Grid', 'Search', 'Autofill', 'Theme', 'Lists', 'Import', 'Export'];
 
 function baseProps(overrides = {}) {
   return {
     tool: 'edit',
     onSelectTool: vi.fn(),
-    viewToggles: { symmetry: false, heatmap: false },
+    viewToggles: { symmetry: false },
     onToggleView: vi.fn(),
     stats: { total: 225, black: 36, blackPct: 16, fillPct: 42, words: 78 },
     ...overrides,
@@ -25,12 +25,27 @@ function baseProps(overrides = {}) {
 }
 
 describe('ToolRail (mounted, controlled)', () => {
-  it('renders all 8 tools', () => {
+  it('renders every tool and the Symmetry toggle', () => {
     const props = baseProps();
     const { getByText } = render(<ToolRail {...props} />);
     TOOL_LABELS.forEach((label) => {
       expect(getByText(label)).toBeInTheDocument();
     });
+    expect(getByText('Symmetry')).toBeInTheDocument();
+  });
+
+  // novice-readiness spec 0.2.7 §3.1 (#53, #50): unfinished controls are not rendered.
+  it('does not render the Clues tool or the Heatmap toggle', () => {
+    const props = baseProps();
+    const { queryByText } = render(<ToolRail {...props} />);
+    expect(queryByText('Clues')).toBeNull();
+    expect(queryByText('Heatmap')).toBeNull();
+  });
+
+  it('ignores a heatmap key in viewToggles (still renders no Heatmap)', () => {
+    const props = baseProps({ viewToggles: { symmetry: false, heatmap: true } });
+    const { queryByText } = render(<ToolRail {...props} />);
+    expect(queryByText('Heatmap')).toBeNull();
   });
 
   TOOL_IDS.forEach((id, i) => {
@@ -56,24 +71,10 @@ describe('ToolRail (mounted, controlled)', () => {
     expect(props.onToggleView).toHaveBeenCalledWith('symmetry');
   });
 
-  it('clicking Heatmap calls onToggleView("heatmap")', () => {
-    const props = baseProps();
-    const { getByText } = render(<ToolRail {...props} />);
-    fireEvent.click(getByText('Heatmap'));
-    expect(props.onToggleView).toHaveBeenCalledWith('heatmap');
-  });
-
-  it('viewToggles.symmetry:true puts "on" on the Symmetry button (Heatmap unaffected)', () => {
-    const props = baseProps({ viewToggles: { symmetry: true, heatmap: false } });
+  it('viewToggles.symmetry:true puts "on" on the Symmetry button', () => {
+    const props = baseProps({ viewToggles: { symmetry: true } });
     const { getByText } = render(<ToolRail {...props} />);
     expect(getByText('Symmetry').closest('button')).toHaveClass('on');
-    expect(getByText('Heatmap').closest('button')).not.toHaveClass('on');
-  });
-
-  it('viewToggles.heatmap:true puts "on" on the Heatmap button', () => {
-    const props = baseProps({ viewToggles: { symmetry: false, heatmap: true } });
-    const { getByText } = render(<ToolRail {...props} />);
-    expect(getByText('Heatmap').closest('button')).toHaveClass('on');
   });
 
   it('renders the GRID stats block (total/black/blackPct/fillPct/words)', () => {
