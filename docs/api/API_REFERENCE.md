@@ -154,6 +154,10 @@ There are three distinct ways to stop an in-flight autofill, verified against
 `backend/api/pause_resume_routes.py`: pausing saves full algorithm state to gzipped JSON and is
 resumable; cancelling hard-kills the subprocess immediately and is never resumable (no
 checkpoint is written); resuming restarts a paused task, optionally merging user edits first.
+A cancel that arrives after the fill's 202 but before its subprocess has registered is recorded
+and answered `200` with the same body; the subprocess is killed as soon as it registers
+(novice-readiness spec 0.2.5 section 2.4 (C7)). Cancelling an unknown task, or one whose
+terminal event is already recorded, is `404`.
 Exact paths and request/response shapes: `openapi.yaml`, tag `Pause/Resume`.
 
 Use `/fill/edit-summary` to preview what a set of user edits will change before committing to

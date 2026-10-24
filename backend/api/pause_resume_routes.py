@@ -199,23 +199,27 @@ def cancel_autofill(task_id: str):
 
     Behavior:
         - Terminates the CLI subprocess immediately (hard stop)
+        - Before the process has registered, the cancel is recorded (same 200 body)
+          and the process is killed as soon as it registers
         - No state is saved — cancel is NOT resumable (use pause for that)
         - Clears any stale pause flag / running marker for the task id
     """
     try:
         from cli.src.fill.pause_controller import PauseController
 
-        from .progress_routes import cleanup_process, is_process_running
+        from .progress_routes import request_cancel
 
-        if not is_process_running(task_id):
+        outcome = request_cancel(task_id)
+        if outcome == "not_running":
             return handle_error(
                 "TASK_NOT_FOUND",
                 f"No running fill found for task {task_id}",
                 404,
             )
 
-        # Terminate the subprocess (hard stop — the CLI does not checkpoint)
-        cleanup_process(task_id)
+        # "killed": the subprocess was terminated (hard stop, no checkpoint).
+        # "recorded": no process yet; it is killed when it registers
+        # (novice-readiness spec 0.2.5 section 2.4 (C7), PD-3-EARLY: 200).
 
         # Clean up any pause/running marker files so a stale flag can't
         # instantly pause a future run reusing this task id.

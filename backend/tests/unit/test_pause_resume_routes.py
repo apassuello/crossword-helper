@@ -166,14 +166,7 @@ class TestCancelAutofill:
     def test_cancel_returns_200_and_honest_state_saved(self, client, mock_pause_controller, mocker):
         """Regression: cancel must NOT claim state_saved: true — killing the
         subprocess saves nothing."""
-        mocker.patch(
-            "backend.api.progress_routes.is_process_running",
-            return_value=True,
-        )
-        mocker.patch(
-            "backend.api.progress_routes.cleanup_process",
-            return_value=True,
-        )
+        mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed", create=True)
 
         resp = client.post("/api/fill/cancel/task_c1")
         data = resp.get_json()
@@ -186,18 +179,11 @@ class TestCancelAutofill:
 
     def test_cancel_kills_process_and_clears_flags(self, client, mock_pause_controller, mocker):
         _, mock_pc = mock_pause_controller
-        mocker.patch(
-            "backend.api.progress_routes.is_process_running",
-            return_value=True,
-        )
-        mock_cleanup = mocker.patch(
-            "backend.api.progress_routes.cleanup_process",
-            return_value=True,
-        )
+        mock_cancel = mocker.patch("backend.api.progress_routes.request_cancel", return_value="killed", create=True)
 
         client.post("/api/fill/cancel/task_c2")
 
-        mock_cleanup.assert_called_once_with("task_c2")
+        mock_cancel.assert_called_once_with("task_c2")
         # Cancel is a hard stop: it must clear stale flags, not request pause
         mock_pc.request_pause.assert_not_called()
         mock_pc.clear_pause.assert_called_once()
@@ -206,26 +192,16 @@ class TestCancelAutofill:
     def test_cancel_nonexistent_task_returns_404(self, client, mock_pause_controller, mocker):
         """Regression: cancelling an unknown/finished task must 404 with JSON,
         not return 200 success."""
-        mocker.patch(
-            "backend.api.progress_routes.is_process_running",
-            return_value=False,
-        )
-        mock_cleanup = mocker.patch(
-            "backend.api.progress_routes.cleanup_process",
-        )
+        mocker.patch("backend.api.progress_routes.request_cancel", return_value="not_running", create=True)
 
         resp = client.post("/api/fill/cancel/no_such_task")
         data = resp.get_json()
 
         assert resp.status_code == 404, resp_diag(resp)
         assert "error" in data
-        mock_cleanup.assert_not_called()
 
     def test_cancel_exception_returns_error(self, client, mocker):
-        mocker.patch(
-            "backend.api.progress_routes.is_process_running",
-            side_effect=RuntimeError("boom"),
-        )
+        mocker.patch("backend.api.progress_routes.request_cancel", side_effect=RuntimeError("boom"), create=True)
 
         resp = client.post("/api/fill/cancel/task_err")
         data = resp.get_json()
@@ -816,3 +792,114 @@ class TestTaskIdValidation:
 
         assert resp.status_code == 404, f"{good_id!r}: {resp.status_code} {resp.data!r}"
         mock_state_manager.load_csp_state.assert_called_once_with(good_id)
+
+
+# ---------------------------------------------------------------------------
+# Early Cancel: novice-readiness spec 0.2.5 section 2.4 (C7), cases cx1-cx6.
+# Real trackers and real sleeping children; nothing on the cancel path is mocked.
+# ---------------------------------------------------------------------------
+
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+
+SLEEPER = [sys.executable, "-c", "import time; time.sleep(3600)"]
+
+
+@pytest.fixture
+def children():
+    """Every child spawned by a test is killed and reaped, pass or fail."""
+    spawned = []
+    yield spawned
+    for p in spawned:
+        if p.poll() is None:
+            p.kill()
+        p.wait()
+
+
+@pytest.fixture
+def fresh_task():
+    from backend.api import progress_routes as pr
+
+    task_id = pr.create_progress_tracker()
+    yield task_id
+    pr.cleanup_progress_tracker(task_id)
+    with pr.running_processes_lock:
+        pr.running_processes.pop(task_id, None)
+        pr.pending_cancels.discard(task_id)
+
+
+class TestEarlyCancel:
+    def test_cx1_cancel_before_registration_is_recorded(self, client, mock_pause_controller, fresh_task):
+        from backend.api import progress_routes as pr
+
+        resp = client.post(f"/api/fill/cancel/{fresh_task}")
+
+        assert resp.status_code == 200, resp_diag(resp)
+        assert resp.get_json()["state_saved"] is False
+        assert fresh_task in pr.pending_cancels
+
+    def test_cx1_clears_pause_markers(self, client, mock_pause_controller, fresh_task):
+        _, mock_pc = mock_pause_controller
+        client.post(f"/api/fill/cancel/{fresh_task}")
+        mock_pc.clear_pause.assert_called_once()
+        mock_pc.clear_running.assert_called_once()
+
+    def test_cx2_registration_after_a_recorded_cancel_kills_the_child(
+        self, client, mock_pause_controller, fresh_task, children
+    ):
+        from backend.api import progress_routes as pr
+
+        client.post(f"/api/fill/cancel/{fresh_task}")
+        child = subprocess.Popen(SLEEPER)
+        children.append(child)
+
+        pr.register_process(fresh_task, child)
+
+        deadline = time.time() + 10
+        while child.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+        assert child.poll() is not None
+        assert fresh_task not in pr.pending_cancels
+
+    def test_cx4_live_process_is_killed(self, client, mock_pause_controller, fresh_task, children):
+        from backend.api import progress_routes as pr
+
+        child = subprocess.Popen(SLEEPER)
+        children.append(child)
+        pr.register_process(fresh_task, child)
+
+        resp = client.post(f"/api/fill/cancel/{fresh_task}")
+
+        assert resp.status_code == 200, resp_diag(resp)
+        assert child.poll() is not None
+        assert fresh_task not in pr.pending_cancels
+
+    def test_cx5_recorded_terminal_event_is_not_running(self, client, mock_pause_controller, fresh_task):
+        from backend.api import progress_routes as pr
+
+        pr.send_progress(fresh_task, 100, "Complete", "complete")
+
+        resp = client.post(f"/api/fill/cancel/{fresh_task}")
+
+        assert resp.status_code == 404, resp_diag(resp)
+        assert fresh_task not in pr.pending_cancels
+
+    def test_cx6_unknown_id_is_not_running(self, client, mock_pause_controller):
+        from backend.api import progress_routes as pr
+
+        resp = client.post("/api/fill/cancel/never_existed")
+
+        assert resp.status_code == 404, resp_diag(resp)
+        assert "never_existed" not in pr.pending_cancels
+
+    def test_request_cancel_dead_process_is_not_running(self, fresh_task, children):
+        from backend.api import progress_routes as pr
+
+        child = subprocess.Popen([sys.executable, "-c", "pass"])
+        children.append(child)
+        child.wait()
+        pr.register_process(fresh_task, child)
+
+        assert pr.request_cancel(fresh_task) == "not_running"
+        assert fresh_task not in pr.pending_cancels
