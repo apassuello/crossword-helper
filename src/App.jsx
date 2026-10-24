@@ -13,7 +13,7 @@ import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering, localNumber } from './hooks/useNumbering';
 import { mintDocId } from './lib/docId';
 import storage from './lib/storage';
-import { toSavedGrid } from './api/gridCodec';
+import { toSavedGrid, normalizeSavedGrid } from './api/gridCodec';
 import {
   writeLetter,
   writeToggleBlack,
@@ -28,6 +28,7 @@ import { TopBar } from './components/bench/TopBar';
 import SaveNamePrompt from './components/bench/SaveNamePrompt';
 import { ToolRail } from './components/bench/ToolRail';
 import CrosswordGrid from './components/bench/CrosswordGrid';
+import RestoreBanner from './components/bench/RestoreBanner';
 import GridHintLine from './components/bench/GridHintLine';
 import GridPanel from './components/bench/GridPanel';
 import PatternMatcher from './components/PatternMatcher';
@@ -170,7 +171,7 @@ function App() {
   // and the `saved` status. If the grid moved on, isDirty stays true and the machine
   // returns to `dirty` (see useSaveMachine).
   const onSaved = useCallback((written) => setSavedSig(contentSigOf(written.size, written.grid)), []);
-  const { savedLabel, saveNamed } = useSaveMachine({ doc, isDirty, onForked, onSaved });
+  const { savedLabel, saveNamed, adoptSavedAt } = useSaveMachine({ doc, isDirty, onForked, onSaved });
 
   // The Save button opens the name prompt (§3.4 G3); autosave never does. The prompt
   // mounts only once list() has resolved, so it never shows a prefill the user could
@@ -218,6 +219,44 @@ function App() {
     }
     initializeGrid(gridSize);
   }, [gridSize]);
+
+  // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): restore the newest save on load. The
+  // [gridSize] effect above has already initialised a blank grid by the time `load()`
+  // resolves (a microtask later), so the restore simply lands after it. Across sizes the
+  // skip flag is set before the size change, so that effect does not blank the restored
+  // cells; at the same size it is NOT set (a stray `true` would swallow the next legitimate
+  // size change). No entry: the blank grid and the docId minted at start stay.
+  const gridSizeRef = useRef(gridSize);
+  gridSizeRef.current = gridSize;
+  const [restoredBanner, setRestoredBanner] = useState(null); // { name, savedAt, sig } | null
+  useEffect(() => {
+    let cancelled = false;
+    storage.load().then((entry) => {
+      if (cancelled || !entry) return;
+      const restored = normalizeSavedGrid(entry.grid);
+      if (entry.size !== gridSizeRef.current) {
+        skipNextInitRef.current = true;
+        setGridSize(entry.size);
+      }
+      setGrid(restored);
+      setDocId(entry.id);
+      if (typeof entry.symmetryEnabled === 'boolean') setSymmetryEnabled(entry.symmetryEnabled);
+      const sig = contentSigOf(entry.size, restored);
+      setSavedSig(sig);
+      adoptSavedAt(entry.savedAt);
+      setSelectedCell(null);
+      setRestoredBanner({ name: entry.name, savedAt: entry.savedAt, sig });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // The banner closes on any grid edit: the live signature leaves the one recorded at
+  // restore. `contentSigOf` excludes `number`, so a numbering reconcile does not close it.
+  useEffect(() => {
+    if (restoredBanner && liveSig !== restoredBanner.sig) setRestoredBanner(null);
+  }, [liveSig, restoredBanner]);
 
   // Apply the UI theme to the document whenever it changes (Task 6). Persistence
   // is owned by usePersistentState above; TopBar is a controlled toggle and
@@ -526,6 +565,18 @@ function App() {
         />
 
         <main className="xw-canvas">
+          {restoredBanner && (
+            <RestoreBanner
+              name={restoredBanner.name}
+              savedAt={restoredBanner.savedAt}
+              onStartBlank={() => {
+                // PD-6-G9: opens the Grid tool, where New grid is; it creates nothing itself.
+                setCurrentTool('edit');
+                setRestoredBanner(null);
+              }}
+              onDismiss={() => setRestoredBanner(null)}
+            />
+          )}
           {grid ? (
             <>
             <CrosswordGrid

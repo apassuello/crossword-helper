@@ -687,3 +687,205 @@ describe('App save wiring (§3.4)', () => {
     });
   });
 });
+
+// novice-readiness spec 0.2.7 §3.4 (S3, PD-6-G4, PD-6-G9): restore on load, the banner, and
+// restore across sizes. `storage.load` is mocked; everything else is the real App.
+describe('App restore on load (§3.4)', () => {
+  const idx = (size) => (r, c) => r * size + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const docIdNow = () => probe.autofillArgs.docId;
+  const SAVED_AT = new Date(2026, 9, 22, 9, 30).toISOString();
+
+  // A saved grid as storage.load hands it back: canonical cells minus isBlocked.
+  const savedCells = (size, edits = {}) =>
+    Array.from({ length: size }, (_, r) =>
+      Array.from({ length: size }, (_, c) => ({
+        letter: '',
+        isBlack: false,
+        isThemeLocked: false,
+        number: null,
+        isError: false,
+        isAutofilled: false,
+        ...(edits[`${r},${c}`] || {}),
+      }))
+    );
+  const entryOf = (size, edits, over = {}) => ({
+    id: 'saved-id',
+    name: 'Mine',
+    savedAt: SAVED_AT,
+    size,
+    grid: savedCells(size, edits),
+    numbering: {},
+    symmetryEnabled: true,
+    ...over,
+  });
+  const restoreFrom = (entry) => vi.spyOn(storage, 'load').mockResolvedValue(entry);
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+    probe.saveArgs = null;
+    vi.spyOn(storage, 'list').mockResolvedValue([]);
+    vi.spyOn(storage, 'save').mockResolvedValue({
+      savedAt: '2026-10-24T10:00:00.000Z', id: 'saved-id', name: 'Mine', forked: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('load -> null: blank 15x15, no banner, the minted docId stays', async () => {
+    restoreFrom(null);
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await waitFor(() => expect(storage.load).toHaveBeenCalled());
+    await act(async () => {});
+    expect(letters(container)).toEqual([]);
+    expect(screen.queryByText(/^Restored /)).toBeNull();
+    expect(docIdNow()).toMatch(/^doc-\d+$/);
+  });
+
+  it('load -> 15x15 entry: letters are back, banner text is local, docId is the entry id, nothing selected', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const { container } = renderApp();
+    expect(await screen.findByText('Restored "Mine" (saved 2026-10-22 09:30)')).toBeInTheDocument();
+    expect(letters(container)).toEqual(['Q']);
+    expect(cells(container)).toHaveLength(225);
+    expect(docIdNow()).toBe('saved-id');
+    expect(storage.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('restore clears the selected cell (PD-6-G4)', async () => {
+    let release;
+    vi.spyOn(storage, 'load').mockReturnValue(new Promise((r) => (release = r)));
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    await user.click(cells(container)[idx(15)(4, 4)]);
+    await waitFor(() => expect(probe.panelProps.selectedCell).toMatchObject({ row: 4, col: 4 }));
+
+    await act(async () => release(entryOf(15, { '2,3': { letter: 'Q' } })));
+
+    await screen.findByText(/^Restored "Mine"/);
+    expect(probe.panelProps.selectedCell).toBeNull();
+  });
+
+  it('load -> 21x21 entry while gridSize is 15: a 21x21 grid WITH the entry letters', async () => {
+    restoreFrom(entryOf(21, { '4,5': { letter: 'Z' }, '20,20': { letter: 'K' } }));
+    const { container } = renderApp();
+    expect(await screen.findByText(/^Restored "Mine"/)).toBeInTheDocument();
+    await waitFor(() => expect(cells(container)).toHaveLength(441));
+    expect(letters(container)).toEqual(['Z', 'K']);
+    expect(docIdNow()).toBe('saved-id');
+    // let the [gridSize] effect and any numbering settle; the letters must still be there
+    await act(async () => {});
+    expect(letters(container)).toEqual(['Z', 'K']);
+  });
+
+  it('15x15 restore, then New grid -> 11x11 gives a blank, fresh 11x11 (no stray skip flag)', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    expect(letters(container)).toEqual(['Q']);
+
+    await user.click(screen.getByRole('button', { name: '11×11' }));
+    await user.click(screen.getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => expect(cells(container)).toHaveLength(121));
+    expect(letters(container)).toEqual([]);
+    expect(docIdNow()).not.toBe('saved-id');
+  });
+
+  it('cells without isAutofilled read false; a saved true stays true', async () => {
+    const entry = entryOf(15, { '0,0': { letter: 'A', isAutofilled: true }, '0,1': { letter: 'B' } });
+    delete entry.grid[0][1].isAutofilled;
+    restoreFrom(entry);
+    renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    const g = probe.panelProps.grid;
+    expect(g[0][0].isAutofilled).toBe(true);
+    expect(g[0][1].isAutofilled).toBe(false);
+    expect(g.flat().filter((c) => c.isAutofilled)).toHaveLength(1);
+  });
+
+  it('the restored grid is born clean: no edits, banner stays, isDirty is false', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    await act(async () => {});
+    expect(probe.saveArgs.isDirty).toBe(false);
+    expect(screen.getByText(/^Restored "Mine"/)).toBeInTheDocument();
+  });
+
+  it('the first autosave after a restore sends the loaded savedAt as expectedSavedAt', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    await user.click(cells(container)[idx(15)(5, 5)]);
+    fireEvent.keyDown(focusEl(container), { key: 'W' });
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+    });
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(storage.save.mock.calls[0][0].id).toBe('saved-id');
+    expect(storage.save.mock.calls[0][1]).toMatchObject({ expectedSavedAt: SAVED_AT });
+  });
+
+  it('the dismiss button closes the banner', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/^Restored /)).toBeNull();
+  });
+
+  it('typing a letter closes the banner', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    await user.click(cells(container)[idx(15)(5, 5)]);
+    expect(screen.getByText(/^Restored "Mine"/)).toBeInTheDocument(); // selecting is not an edit
+    fireEvent.keyDown(focusEl(container), { key: 'W' });
+    await waitFor(() => expect(screen.queryByText(/^Restored /)).toBeNull());
+  });
+
+  it('a numbering reconcile that lands after the restore does not close the banner', async () => {
+    // The mount's numbering reconcile (150 ms debounce) lands on the restored grid and
+    // rewrites every `number` (the MSW handler answers with `numbered`, so all become null).
+    // contentSigOf excludes `number`, so the banner must survive it.
+    const numberGrid = vi.spyOn(api, 'numberGrid');
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' }, '0,0': { number: 99 } }));
+    renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    expect(probe.panelProps.grid[0][0].number).toBe(99);
+    await waitFor(() => expect(numberGrid).toHaveBeenCalled());
+    await waitFor(() => expect(probe.panelProps.grid[0][0].number).not.toBe(99));
+    await act(async () => {});
+    expect(screen.getByText(/^Restored "Mine"/)).toBeInTheDocument();
+    expect(probe.saveArgs.isDirty).toBe(false);
+  });
+
+  it('Start blank closes the banner and shows the Grid panel with the New grid buttons', async () => {
+    restoreFrom(entryOf(15, { '2,3': { letter: 'Q' } }));
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await screen.findByText(/^Restored "Mine"/);
+    await user.click(screen.getByRole('button', { name: /^import$/i })); // leave the Grid tool
+    expect(screen.queryByRole('button', { name: '11×11' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Start blank' }));
+
+    expect(screen.queryByText(/^Restored /)).toBeNull();
+    expect(screen.getByRole('button', { name: '11×11' })).toBeInTheDocument();
+    // it does not create a grid by itself (PD-6-G9)
+    expect(letters(container)).toEqual(['Q']);
+  });
+});
