@@ -12,11 +12,14 @@
  *
  *   useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast })
  *   -> { state, taskId, progress, message, errorCard, offer, startSnapshot,
- *        start, cancel, reset }
+ *        start, cancel, reset, keepFill, discardRun }
  *   start(options = {}, docId): `docId` is the document id at Start; it is stored
  *   with the snapshot, and every merge and red-marking write is skipped when the
  *   hook's CURRENT `docId` param differs from it (novice-readiness spec 0.2.6
- *   section 2.3 (M1)). `offer` is `null` until Task 5.3 gives it behaviour.
+ *   section 2.3 (M1)). Every unfinished run (a failed or partial fill, a block, cancel,
+ *   pause, an error event) goes through ONE routine, `finishRun`, that restores the Start
+ *   snapshot, marks red cells on it and sets the Keep offer (spec 0.2.6 section 2.3).
+ *   `offer` is `null` whenever the hook's current `docId` differs from Start's.
  *
  * FLAT return (no nested `context`), per the Phase-3 contract in
  * `.superpowers/sdd/phase2-scoping-2026-07-14.md` "Task 11".
@@ -61,8 +64,28 @@ function initialSnapshot() {
     progress: 0,
     message: '',
     errorCard: null,
+    offer: null,
     startSnapshot: null,
   };
+}
+
+// Spec 0.2.6 section 2.3 (PD-5C, ruled by the owner 2026-10-24): a blocked run ends `failed`
+// (the error card), grid restored, red cells shown. The state value lives here only, so a
+// later re-ruling is a one-value change.
+const BLOCKED_STATE = 'failed';
+
+// PD-5F: one message; the distinct slot lengths ascending, joined by ", ".
+function blockedMessage(d) {
+  if (d.reason === 'no_word_of_length') {
+    const lengths = [...new Set((d.blocked_slots || []).map((s) => s.length))].sort((a, b) => a - b);
+    return `The selected word lists have no words of length ${lengths.join(', ')}.`;
+  }
+  return 'No word fits the highlighted letters.';
+}
+
+// Red cells of a terminal event: blocked, stuck and off-list cells, each [] when absent.
+function redCellsOf(d) {
+  return [...(d.blocked_cells || []), ...(d.stuck_cells || []), ...(d.off_list_cells || [])];
 }
 
 /**
@@ -163,7 +186,9 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   onStartRef.current = onStart;
   onToastRef.current = onToast;
   const startDocIdRef = useRef(null); // document id at the accepted start()
-  const lastGridRef = useRef(null); // latest CLI result grid of the current run (Task 5.3 reads it)
+  const startSnapshotRef = useRef(null); // the red-free Start copy that restore writes back
+  const lastGridRef = useRef(null); // last data.grid received on any event of the current run
+  const offerRef = useRef(null); // synchronous mirror of the stored offer, for keepFill
 
   // Synchronous state-guard — see the module doc comment above. Updated the
   // instant a transition happens, never lagging behind React's batched
@@ -197,12 +222,44 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const transition = useCallback((patch) => {
     if ('state' in patch) stateRef.current = patch.state;
     if ('taskId' in patch) taskIdRef.current = patch.taskId;
+    if ('offer' in patch) offerRef.current = patch.offer;
     setSnapshot((prev) => ({ ...prev, ...patch }));
   }, []);
 
   // novice-readiness spec 0.2.6 section 2.3 (M1): a merge or red-marking write is
   // skipped when the document was replaced since Start.
   const sameDocument = () => docIdRef.current === startDocIdRef.current;
+
+  /**
+   * The single terminal routine for an unfinished run (novice-readiness spec 0.2.6 §2.3
+   * outcome table; Task 5.4's lost-contact path calls it too). Restore the Start snapshot
+   * and mark red cells in ONE updater, so red lands on the restored grid ("Order on a
+   * terminal outcome"); both writes are skipped when the document changed since Start
+   * (PD-5D). `offer` is the Keep offer or null. For `failed` the text goes in
+   * `errorCard.message`, otherwise in `message`.
+   */
+  const finishRun = useCallback(
+    ({ state, text, red = [], offer = null, extra = {} }) => {
+      closeStream();
+      const snap = startSnapshotRef.current;
+      if (snap && sameDocument()) {
+        onGridUpdateRef.current(() => markBlocked(snap, red));
+      }
+      transition({
+        state,
+        offer,
+        ...(state === 'failed' ? { errorCard: { message: text } } : { message: text, errorCard: null }),
+        ...extra,
+      });
+    },
+    [transition, closeStream]
+  );
+
+  /** Offer for cancelled / paused / error: only if a progress grid filled at least one cell (§2.3 table). */
+  const progressOffer = () =>
+    lastGridRef.current && startSnapshotRef.current && fillsAnyCell(startSnapshotRef.current, lastGridRef.current)
+      ? { kind: 'keepPartialFill', slotsFilled: null, totalSlots: null }
+      : null;
 
   const handleEvent = useCallback(
     (data) => {
@@ -238,78 +295,99 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       }
 
       if (status === 'complete') {
-        closeStream();
-        if (data.data && data.data.grid) {
-          const cliGrid = data.data.grid;
-          if (sameDocument()) {
-            onGridUpdateRef.current((prevGrid) => mergeGridPreserveThemeLocked(prevGrid, cliGrid));
-          }
+        const d = data.data;
+        // Spec 0.2.6 §2.3 (B3): a blocked run arrives as `complete`; check it FIRST, before
+        // success or the grid.
+        if (d && d.blocked === true) {
+          if (d.grid) lastGridRef.current = d.grid;
+          finishRun({
+            state: BLOCKED_STATE,
+            text: blockedMessage(d),
+            red: redCellsOf(d),
+            extra: { progress: 0, taskId: null },
+          });
+          return;
+        }
+        if (d && d.grid) {
+          const cliGrid = d.grid;
+          lastGridRef.current = cliGrid;
+          const red = redCellsOf(d);
 
-          if (data.data.success) {
+          if (d.success) {
+            closeStream();
+            if (sameDocument()) {
+              onGridUpdateRef.current((prevGrid) =>
+                markBlocked(mergeGridPreserveThemeLocked(prevGrid, cliGrid), red)
+              );
+            }
             transition({
               state: 'done',
               progress: 100,
-              message: `Successfully filled ${data.data.slots_filled}/${data.data.total_slots} slots!`,
+              message: `Successfully filled ${d.slots_filled}/${d.total_slots} slots!`,
               errorCard: null,
+              offer: null,
               taskId: null,
             });
-          } else {
-            const fillPct = data.data.fill_percentage || 0;
-            const allSlotsFilled =
-              fillPct >= 100 ||
-              (data.data.total_slots > 0 && data.data.slots_filled === data.data.total_slots);
+            return;
+          }
 
-            if (allSlotsFilled) {
-              // Every slot is filled — don't present this as "Partial" with a
-              // suggestion to lower the min score. Some entries may still be
-              // flagged as problematic by the CLI.
-              const problematicCount = data.data.problematic_slots_count || 0;
-              const message =
-                problematicCount > 0
-                  ? `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — ${problematicCount} entries may be invalid (use Verify Words to check)`
-                  : `Filled ${data.data.slots_filled}/${data.data.total_slots} slots — some entries may need review (use Verify Words to check)`;
-              transition({ state: 'done', progress: 100, message, errorCard: null, taskId: null });
-            } else {
-              let message = `Partial: ${data.data.slots_filled}/${data.data.total_slots} slots (${fillPct}%)`;
-              if (data.data.suggestions && data.data.suggestions.length > 0) {
-                message += ` - ${data.data.suggestions[0].message}`;
-              }
-              transition({ state: 'done', progress: fillPct, message, errorCard: null, taskId: null });
-            }
+          // Spec 0.2.6 §2.3 outcome table. "Every slot filled" is decided by the result grid
+          // (no empty white cell), not by the slot counts.
+          const fillPct = d.fill_percentage || 0;
+          if (resultGridIsFull(cliGrid)) {
+            const problematicCount = d.problematic_slots_count || 0;
+            // PD-5G: the no-count variant stays beside the counted text.
+            const text =
+              problematicCount > 0
+                ? `Filled ${d.slots_filled}/${d.total_slots} slots — ${problematicCount} entries may be invalid (use Verify Words to check)`
+                : `Filled ${d.slots_filled}/${d.total_slots} slots — some entries may need review (use Verify Words to check)`;
+            finishRun({
+              state: 'done',
+              text,
+              red,
+              offer: { kind: 'keepFill', slotsFilled: null, totalSlots: null },
+              extra: { progress: 100, taskId: null },
+            });
+          } else {
+            const stuck = Array.isArray(d.stuck_cells) && d.stuck_cells.length > 0;
+            finishRun({
+              state: 'done',
+              text: stuck
+                ? 'Autofill could not fill around the highlighted letters.'
+                : `Partial: ${d.slots_filled}/${d.total_slots} slots (${fillPct}%)`,
+              red,
+              offer: { kind: 'keepPartialFill', slotsFilled: d.slots_filled, totalSlots: d.total_slots },
+              extra: { progress: fillPct, taskId: null },
+            });
           }
         } else {
-          transition({
-            state: 'failed',
-            progress: 0,
-            errorCard: { message: 'No solution found' },
-            taskId: null,
-          });
+          finishRun({ state: 'failed', text: 'No solution found', extra: { progress: 0, taskId: null } });
         }
         return;
       }
 
       if (status === 'paused') {
-        closeStream();
+        if (data.data && data.data.grid) lastGridRef.current = data.data.grid;
         // taskId intentionally NOT included in the patch — retained.
-        transition({
+        finishRun({
           state: 'paused',
-          progress: data.progress || 0,
-          message: data.message || 'Autofill paused - state saved',
-          errorCard: null,
+          text: 'Autofill was paused outside the app.',
+          offer: progressOffer(),
+          extra: { progress: data.progress || 0 },
         });
         return;
       }
 
       if (status === 'error') {
-        closeStream();
-        transition({
+        finishRun({
           state: 'failed',
-          errorCard: { message: data.message || 'Autofill failed' },
-          taskId: null,
+          text: data.message || 'Autofill failed',
+          offer: progressOffer(),
+          extra: { taskId: null },
         });
       }
     },
-    [transition, closeStream]
+    [transition, closeStream, finishRun]
   );
 
   const handleStreamError = useCallback(() => {
@@ -365,6 +443,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       // is computed from it. Any retained last grid from a previous run is dropped.
       const startGrid = clearBlocked(gridRef.current);
       startDocIdRef.current = startDocId;
+      startSnapshotRef.current = startGrid;
       lastGridRef.current = null;
       transition({
         state: 'submitting',
@@ -372,6 +451,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
         progress: 0,
         message: 'Starting autofill…',
         errorCard: null,
+        offer: null,
         startSnapshot: startGrid,
       });
       // Start clears all red on the live grid (spec 0.2.6 section 2.3 Red cells).
@@ -420,18 +500,59 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const cancel = useCallback(() => {
     if (stateRef.current !== 'running') return;
     const taskId = taskIdRef.current;
-    closeStream();
-    transition({ state: 'cancelled', message: 'Cancelled by user', errorCard: null, taskId: null });
+    finishRun({
+      state: 'cancelled',
+      text: 'Cancelled by user',
+      offer: progressOffer(),
+      extra: { taskId: null },
+    });
     if (taskId) {
       api.cancelFill(taskId).catch((err) => console.warn('Failed to cancel autofill task:', err));
     }
-  }, [closeStream, transition]);
+  }, [finishRun]);
 
   const reset = useCallback(() => {
     if (!RESETTABLE_STATES.has(stateRef.current)) return;
     closeStream(); // defensively close any lingering stream
-    transition({ state: 'idle', taskId: null, progress: 0, message: '', errorCard: null });
+    // Keeps startSnapshot (and the last grid): only the offer is dropped.
+    transition({ state: 'idle', taskId: null, progress: 0, message: '', errorCard: null, offer: null });
   }, [closeStream, transition]);
+
+  /**
+   * Apply the last received result or progress grid through the same merge, against the
+   * grid as it is now, so letters typed after the run stay (spec 0.2.6 §2.3 "Keep partial
+   * fill"). A no-op unless an offer is showing and `forDocId` is the Start document.
+   */
+  const keepFill = useCallback(
+    (forDocId) => {
+      if (!offerRef.current || !lastGridRef.current) return;
+      if (!sameDocument() || forDocId !== startDocIdRef.current) return;
+      const lastGrid = lastGridRef.current;
+      onGridUpdateRef.current((prev) => mergeGridPreserveThemeLocked(prev, lastGrid));
+      transition({ offer: null });
+    },
+    [transition]
+  );
+
+  /** New grid / Open saved: drop the run's retained snapshot and offer (spec 0.2.6 §3.2). No-op while live. */
+  const discardRun = useCallback(() => {
+    if (LIVE_STATES.has(stateRef.current)) return;
+    closeStream();
+    lastGridRef.current = null;
+    startSnapshotRef.current = null;
+    transition({
+      state: 'idle',
+      taskId: null,
+      progress: 0,
+      message: '',
+      errorCard: null,
+      offer: null,
+      startSnapshot: null,
+    });
+  }, [closeStream, transition]);
+
+  // Offered only while the document id App passes still matches Start's.
+  const offer = snapshot.offer && docId === startDocIdRef.current ? snapshot.offer : null;
 
   return {
     state: snapshot.state,
@@ -439,11 +560,13 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
     progress: snapshot.progress,
     message: snapshot.message,
     errorCard: snapshot.errorCard,
-    offer: null, // Task 5.3
+    offer,
     startSnapshot: snapshot.startSnapshot,
     start,
     cancel,
     reset,
+    keepFill,
+    discardRun,
   };
 }
 
