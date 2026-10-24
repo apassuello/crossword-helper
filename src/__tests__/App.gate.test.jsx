@@ -251,7 +251,7 @@ describe('App D1 gate: async Verify and Clean', () => {
     message: 'Removed 1 invalid word',
   });
 
-  it('control: with no run live, Clean removes the letter and toasts', async () => {
+  it('control: with no run live, Clean asks, then removes the letter and toasts', async () => {
     const d = deferred();
     vi.spyOn(api, 'cleanGrid').mockImplementation(() => d.promise);
     const { user, container } = await boot();
@@ -262,6 +262,8 @@ describe('App D1 gate: async Verify and Clean', () => {
     await user.click(screen.getByText('Clean grid'));
     expect(api.cleanGrid).toHaveBeenCalledTimes(1);
     await act(async () => d.resolve(cleaned()));
+    // novice-readiness spec 0.2.7 §3.5 (G5): Clean asks before it blanks; accepting writes.
+    await user.click(await screen.findByRole('button', { name: 'Clean' }));
     await waitFor(() => expect(letters(container)).toEqual([]));
     expect(screen.getByText('Removed 1 invalid word')).toBeInTheDocument();
   });

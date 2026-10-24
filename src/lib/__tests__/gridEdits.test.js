@@ -16,6 +16,9 @@ import {
   writeCleanedGrid,
   canToggleBlack,
   gridHasContent,
+  applyVerifyErrors,
+  planClean,
+  clearAllErrors,
 } from '../gridEdits';
 
 const cell = (over = {}) => ({ ...makeCell(), ...over });
@@ -339,34 +342,113 @@ describe('writeImportedGrid', () => {
   });
 });
 
+// novice-readiness spec 0.2.7 §3.5 (G5, S1): Clean writes only the planned blanks.
 describe('writeCleanedGrid', () => {
-  it('writes only cells Clean changes; a surviving autofilled letter stays autofilled (PD-4A)', () => {
+  it('blanks only the listed cells; every other cell keeps its own object and isError (PD-4A)', () => {
     const prev = freeze(
-      mk(2, {
-        '0,0': { letter: 'Q', isAutofilled: true, isBlocked: true },
-        '0,1': { letter: 'A', isAutofilled: true, isBlocked: true },
-        '1,0': { letter: 'R', isError: true },
+      mk(3, {
+        '0,0': { letter: 'C', isError: true },
+        '0,1': { letter: 'A', isAutofilled: true, isBlocked: true, isError: true },
+        '0,2': { letter: 'T', isAutofilled: true, isBlocked: true, isError: true },
+        '1,1': { letter: 'R', isError: true },
       })
     );
-    const cleaned = [
-      [{ letter: '', isBlack: false }, { letter: 'A', isBlack: false }],
-      [{ letter: 'R', isBlack: false }, { letter: '', isBlack: false }],
-    ];
-    const out = writeCleanedGrid(prev, cleaned);
-    expect(flags(out[0][0])).toEqual({ letter: '', a: false, b: false });
-    expect(out[0][0]).not.toBe(prev[0][0]);
-    expect(out[0][1]).toMatchObject({ letter: 'A', isAutofilled: true, isBlocked: true });
-    expect(out[0][1].isError).toBe(false);
+    const cleaned = mk(3, { '0,0': { letter: 'C' } });
+    const out = writeCleanedGrid(prev, cleaned, [[0, 2]]);
+    expect(out[0][2]).toMatchObject({
+      letter: '',
+      isError: false,
+      isAutofilled: false,
+      isBlocked: false,
+    });
+    expect(out[0][2]).not.toBe(prev[0][2]);
+    for (const [r, c] of [[0, 0], [0, 1], [1, 1], [2, 2]]) {
+      expect(out[r][c]).toBe(prev[r][c]);
+    }
+    expect(out[0][1].isError).toBe(true);
   });
 
-  it('a cell turned black is written; isError clears on every cell', () => {
-    const prev = freeze(mk(2, { '1,1': { letter: 'Z', isAutofilled: true, isError: true } }));
-    const cleaned = [
-      [{ letter: '', isBlack: false }, { letter: '', isBlack: false }],
-      [{ letter: '', isBlack: false }, { letter: '', isBlack: true }],
-    ];
-    const out = writeCleanedGrid(prev, cleaned);
-    expect(out[1][1]).toMatchObject({ isBlack: true, letter: '', isAutofilled: false, isError: false });
+  it('isBlack never changes: the response isBlack is not applied', () => {
+    const prev = freeze(mk(3, { '1,1': { letter: 'Z' } }));
+    const cleaned = mk(3, { '1,1': { isBlack: true }, '0,0': { isBlack: true } });
+    const out = writeCleanedGrid(prev, cleaned, [[1, 1]]);
+    expect(out[1][1]).toMatchObject({ letter: '', isBlack: false });
+    expect(out[0][0]).toBe(prev[0][0]);
+    expect(out[0][0].isBlack).toBe(false);
+  });
+});
+
+describe('applyVerifyErrors', () => {
+  it('changes only isError, by key; the input is unchanged', () => {
+    const prev = freeze(
+      mk(2, {
+        '0,0': { isError: true },
+        '1,1': { letter: 'Q' },
+      })
+    );
+    const out = applyVerifyErrors(prev, new Set(['0,1']));
+    expect(out[0][0].isError).toBe(false);
+    expect(out[0][1].isError).toBe(true);
+    expect(out[1][1].letter).toBe('Q');
+    expect(prev[0][0].isError).toBe(true);
+    expect(prev[0][1].isError).toBe(false);
+    expect(out).not.toBe(prev);
+  });
+});
+
+describe('clearAllErrors', () => {
+  it('sets isError false everywhere and touches no letter', () => {
+    const prev = freeze(
+      mk(2, { '0,0': { letter: 'A', isError: true }, '1,1': { letter: 'B', isError: true } })
+    );
+    const out = clearAllErrors(prev);
+    expect(out.flat().every((x) => x.isError === false)).toBe(true);
+    expect(out[0][0].letter).toBe('A');
+    expect(out[1][1].letter).toBe('B');
+    expect(prev[0][0].isError).toBe(true);
+  });
+});
+
+// novice-readiness spec 0.2.7 §3.5 (G5, S1): which letters Clean may blank.
+describe('planClean', () => {
+  const sent = [['C', 'A', 'T'], ['', '', ''], ['', '', '']];
+  const cleaned = [['C', '', ''], ['', '', ''], ['', '', '']];
+  const TL = { isThemeLocked: true };
+  const row0 = (over = {}) =>
+    mk(3, {
+      '0,0': { letter: 'C', ...(over['0,0'] || {}) },
+      '0,1': { letter: 'A', ...(over['0,1'] || {}) },
+      '0,2': { letter: 'T', ...(over['0,2'] || {}) },
+    });
+
+  it('no locks: both removed letters', () => {
+    expect(planClean(row0(), sent, cleaned).blanks).toEqual([[0, 1], [0, 2]]);
+  });
+
+  it('a theme-locked cell is never in blanks', () => {
+    expect(planClean(row0({ '0,1': TL }), sent, cleaned).blanks).toEqual([[0, 2]]);
+  });
+
+  it('every removed cell locked: no blanks', () => {
+    expect(planClean(row0({ '0,1': TL, '0,2': TL }), sent, cleaned).blanks).toEqual([]);
+  });
+
+  it('a letter typed after the request (Q) is not blanked', () => {
+    expect(planClean(row0({ '0,1': { letter: 'Q' } }), sent, cleaned).blanks).toEqual([[0, 2]]);
+  });
+
+  it('a letter the server kept is not blanked', () => {
+    const keeps = [['C', 'A', ''], ['', '', ''], ['', '', '']];
+    expect(planClean(row0(), sent, keeps).blanks).toEqual([[0, 2]]);
+  });
+
+  it('a cell that was empty when sent is not blanked', () => {
+    const sentGap = [['C', '', 'T'], ['', '', ''], ['', '', '']];
+    expect(planClean(row0(), sentGap, cleaned).blanks).toEqual([[0, 2]]);
+  });
+
+  it('a cell black now is not blanked', () => {
+    expect(planClean(row0({ '0,1': { isBlack: true } }), sent, cleaned).blanks).toEqual([[0, 2]]);
   });
 });
 

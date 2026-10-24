@@ -369,6 +369,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; background: var(--paper-
 .xw-inline-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent-60); border-radius: 3px; background: var(--card); }
 .xw-inline-confirm-msg { margin: 0 0 8px; font-family: var(--font-ui); font-size: 13px; color: var(--ink); line-height: 1.4; }
 .xw-inline-confirm-actions { display: flex; gap: 8px; }
+.xw-canvas > .xw-inline-confirm { margin: 0 0 10px; }
 
 /* Restore banner above the grid (novice-readiness spec 0.2.7 §3.4) */
 .xw-restore-banner {

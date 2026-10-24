@@ -1271,3 +1271,273 @@ describe('App Search placement (§3.5 #62, SR-PLACE)', () => {
     expect(blackCells(container)).toHaveLength(blackBefore);
   });
 });
+
+// novice-readiness spec 0.2.7 §3.5 (G5), §2.3 (S1), #63, #73: Verify and Clean apply to the
+// grid as it is when the response lands, and Clean asks before it blanks anything.
+describe('App Verify and Clean (§3.5 G5, §2.3 S1, #63)', () => {
+  const SIZE = 15;
+  const idx = (r, c) => r * SIZE + c;
+  const focusEl = (container) => container.querySelector('.xw-grid-focus');
+  const docIdNow = () => probe.autofillArgs.docId;
+  const gridNow = () => probe.panelProps.grid;
+  const SERVER_MESSAGE = 'Cleared 2 cells in 1 invalid word';
+  const CLEAN_OK = 'Grid is clean — all words are valid!';
+  const KEPT = 'Nothing removed: theme-locked letters are kept.';
+
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  // The server echoes the cell shape it was sent: { letter, isBlack } objects.
+  const serverGrid = (row0 = '') =>
+    Array.from({ length: SIZE }, (_, r) =>
+      Array.from({ length: SIZE }, (_, c) => ({
+        letter: r === 0 ? row0[c] || '' : '',
+        isBlack: false,
+      }))
+    );
+  const cleanResp = (row0, removed) => ({
+    grid: serverGrid(row0),
+    removed_count: removed,
+    valid_count: 0,
+    cleared_cells: removed,
+    message: SERVER_MESSAGE,
+  });
+  const flagged = (...cells) => ({
+    invalid_words: [{ word: 'CAT', status: 'invalid', cells }],
+    invalid_count: 1,
+    total_checked: 3,
+    wordlist_size: 100,
+  });
+  // Numbering reconciles asynchronously after typing; it is not part of what Cancel must preserve.
+  const unnumbered = (g) => g.map((row) => row.map(({ number, ...rest }) => rest));
+  const errorsNow = () => gridNow().flat().filter((x) => x.isError).length;
+
+  // The click's follow-up state updates land after userEvent returns; the act scope covers them.
+  const clickCell = (user, container, r, c) =>
+    act(async () => {
+      await user.click(cells(container)[idx(r, c)]);
+    });
+  const typeAt = async (user, container, r, c, ch) => {
+    await clickCell(user, container, r, c);
+    fireEvent.keyDown(focusEl(container), { key: ch });
+  };
+  const lockAt = async (user, container, r, c) => {
+    await clickCell(user, container, r, c);
+    fireEvent.keyDown(focusEl(container), { key: 'l', ctrlKey: true });
+  };
+  const typeCat = async (user, container) => {
+    await typeAt(user, container, 0, 0, 'c');
+    await typeAt(user, container, 0, 1, 'a');
+    await typeAt(user, container, 0, 2, 't');
+  };
+  const boot = async () => {
+    vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy' });
+    const user = userEvent.setup();
+    let view;
+    await act(async () => {
+      view = renderApp();
+    });
+    await waitFor(() => expect(cells(view.container)).toHaveLength(SIZE * SIZE));
+    await waitFor(() => expect(screen.getByRole('button', { name: /clean grid/i })).toBeEnabled());
+    return { user, ...view };
+  };
+  // The response's state updates land in microtasks after the click; the act scope covers them.
+  const press = (user, name) =>
+    act(async () => {
+      await user.click(screen.getByRole('button', { name }));
+    });
+  const clickClean = (user) => press(user, /clean grid/i);
+  const clickVerify = (user) => press(user, /verify words/i);
+  const land = (d, value) =>
+    act(async () => {
+      d.resolve(value);
+      await d.promise;
+    });
+  const confirmText = () => screen.queryByRole('group', { name: /^Clean will remove/ });
+
+  beforeEach(() => {
+    global.localStorage.getItem.mockReturnValue(null);
+    probe.autofillOverride = null;
+    probe.panelProps = null;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Verify: a letter typed while the request was in flight survives, and the flagged cells show isError (#73)', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    const d = deferred();
+    vi.spyOn(api, 'verifyWords').mockReturnValue(d.promise);
+    await clickVerify(user);
+    await typeAt(user, container, 5, 5, 'q');
+    await land(d, flagged([0, 0], [0, 1], [0, 2]));
+    expect(await screen.findByText(/1 of 3 words flagged/)).toBeInTheDocument();
+    expect(gridNow()[5][5].letter).toBe('Q');
+    expect([0, 1, 2].map((c) => gridNow()[0][c].isError)).toEqual([true, true, true]);
+    expect(errorsNow()).toBe(3);
+  });
+
+  it('Verify with nothing flagged keeps its toast', async () => {
+    const { user } = await boot();
+    vi.spyOn(api, 'verifyWords').mockResolvedValue({
+      invalid_words: [],
+      invalid_count: 0,
+      total_checked: 4,
+      wordlist_size: 100,
+    });
+    await clickVerify(user);
+    expect(await screen.findByText('All 4 words valid!')).toBeInTheDocument();
+  });
+
+  it('Verify in flight, docId changes: nothing is written, no toast (PD-6-G12)', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    const d = deferred();
+    vi.spyOn(api, 'verifyWords').mockReturnValue(d.promise);
+    await clickVerify(user);
+    const idBefore = docIdNow();
+    act(() => probe.panelProps.onNewGrid(SIZE));
+    await waitFor(() => expect(docIdNow()).not.toBe(idBefore));
+    await land(d, flagged([0, 0], [0, 1], [0, 2]));
+    expect(errorsNow()).toBe(0);
+    expect(screen.queryByText(/words flagged/)).toBeNull();
+  });
+
+  it('Clean, N > 0: the confirm counts the letters, Cancel changes nothing and toasts nothing', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    const before = unnumbered(structuredClone(gridNow()));
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    expect(await screen.findByText('Clean will remove 2 letters')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(confirmText()).toBeNull();
+    expect(unnumbered(gridNow())).toEqual(before);
+    expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
+  });
+
+  it('Clean, N === 1: singular text', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('CA', 1));
+    await clickClean(user);
+    expect(await screen.findByText('Clean will remove 1 letter')).toBeInTheDocument();
+  });
+
+  it('Clean, N > 0, accept: the letters blank, the locked letter stays, the toast is the server message', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    await lockAt(user, container, 0, 1);
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    expect(await screen.findByText('Clean will remove 1 letter')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clean' }));
+    expect(confirmText()).toBeNull();
+    expect(gridNow()[0].slice(0, 3).map((x) => x.letter)).toEqual(['C', 'A', '']);
+    expect(gridNow()[0][1].isThemeLocked).toBe(true);
+    expect(await screen.findByText(SERVER_MESSAGE)).toBeInTheDocument();
+  });
+
+  it('Clean in flight, the user types: only cells still holding the sent letter are offered', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    const d = deferred();
+    vi.spyOn(api, 'cleanGrid').mockReturnValue(d.promise);
+    await clickClean(user);
+    await typeAt(user, container, 0, 1, 'q');
+    await land(d, cleanResp('C', 2));
+    expect(await screen.findByText('Clean will remove 1 letter')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clean' }));
+    expect(gridNow()[0].slice(0, 3).map((x) => x.letter)).toEqual(['C', 'Q', '']);
+  });
+
+  it('Clean, N === 0 and nothing removed (#63): no confirm, the clean toast, and no cell stays red', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    vi.spyOn(api, 'verifyWords').mockResolvedValue(flagged([0, 0], [0, 1], [0, 2]));
+    await clickVerify(user);
+    await waitFor(() => expect(errorsNow()).toBe(3));
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('CAT', 0));
+    await clickClean(user);
+    expect(await screen.findByText(CLEAN_OK)).toBeInTheDocument();
+    expect(confirmText()).toBeNull();
+    expect(errorsNow()).toBe(0);
+  });
+
+  it('Clean, N === 0 with removals the locks prevent: the kept toast, and no cell stays red', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    await lockAt(user, container, 0, 1);
+    await lockAt(user, container, 0, 2);
+    vi.spyOn(api, 'verifyWords').mockResolvedValue(flagged([0, 0], [0, 1], [0, 2]));
+    await clickVerify(user);
+    await waitFor(() => expect(errorsNow()).toBe(3));
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    expect(await screen.findByText(KEPT)).toBeInTheDocument();
+    expect(confirmText()).toBeNull();
+    expect(errorsNow()).toBe(0);
+    expect(gridNow()[0].slice(0, 3).map((x) => x.letter)).toEqual(['C', 'A', 'T']);
+  });
+
+  it('Clean in flight, docId changes: no confirm, no write, no toast (PD-6-G12)', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    const d = deferred();
+    vi.spyOn(api, 'cleanGrid').mockReturnValue(d.promise);
+    await clickClean(user);
+    const idBefore = docIdNow();
+    act(() => probe.panelProps.onNewGrid(SIZE));
+    await waitFor(() => expect(docIdNow()).not.toBe(idBefore));
+    const fresh = gridNow();
+    await land(d, cleanResp('C', 2));
+    expect(confirmText()).toBeNull();
+    expect(gridNow()).toBe(fresh);
+    expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
+    expect(screen.queryByText(CLEAN_OK)).toBeNull();
+    expect(screen.queryByText(KEPT)).toBeNull();
+  });
+
+  it('an open confirm is dismissed, applying nothing, when the user types', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    await screen.findByText('Clean will remove 2 letters');
+    await typeAt(user, container, 8, 8, 'z');
+    await waitFor(() => expect(confirmText()).toBeNull());
+    expect(gridNow()[0].slice(0, 3).map((x) => x.letter)).toEqual(['C', 'A', 'T']);
+    expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
+  });
+
+  it('an isError-only change (Verify landing) does not dismiss an open confirm (PD-6-G11)', async () => {
+    const { user, container } = await boot();
+    await typeCat(user, container);
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    await screen.findByText('Clean will remove 2 letters');
+    vi.spyOn(api, 'verifyWords').mockResolvedValue(flagged([0, 0], [0, 1], [0, 2]));
+    await clickVerify(user);
+    await waitFor(() => expect(errorsNow()).toBe(3));
+    expect(confirmText()).not.toBeNull();
+  });
+
+  it('an open confirm is dismissed, applying nothing, when a run starts', async () => {
+    const { user, container, rerender } = await boot();
+    await typeCat(user, container);
+    vi.spyOn(api, 'cleanGrid').mockResolvedValue(cleanResp('C', 2));
+    await clickClean(user);
+    await screen.findByText('Clean will remove 2 letters');
+    probe.autofillOverride = { state: 'submitting' };
+    rerender(<App />);
+    await waitFor(() => expect(confirmText()).toBeNull());
+    expect(gridNow()[0].slice(0, 3).map((x) => x.letter)).toEqual(['C', 'A', 'T']);
+    expect(screen.queryByText(SERVER_MESSAGE)).toBeNull();
+  });
+});
