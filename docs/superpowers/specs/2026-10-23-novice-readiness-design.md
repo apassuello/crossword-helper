@@ -424,7 +424,9 @@ were never at risk from a late reconcile.
 - **Cancel (C7).** Today `cancel()` closes the stream and moves to `cancelled` before posting, so a
   Cancel after the run has ended shows `Cancelled by user` for a run that was not cancelled. Instead
   `cancel()` posts `api.cancelFill(taskId)` first and keeps the stream open, the machine staying
-  `running` with a cancel pending. On 200 it moves to `cancelled`; an `error` event that arrives while
+  `running` with a cancel pending. The machine exposes `cancelPending` (true from the post until the 200, a
+  rejection, or a transition to a non-live state), and the panel disables Cancel while it is true; no
+  text is added (owner 2026-10-24, 0.2.7). On 200 it moves to `cancelled`; an `error` event that arrives while
   the cancel is pending (the killed process) also counts as `cancelled`. On 404 (no process running:
   the run has ended) it keeps waiting on the open stream, and the terminal event, which the server now
   keeps, or the watchdog decides the outcome. A `complete` event that arrives first is shown as what it
@@ -913,4 +915,4 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   after each adaptive pass, inside four solvers, mid-phase; (D) keep it and mark the slow test xfail, leaving
   `--adaptive` unusable on a list without some slot length. Found by CI's slow suite on PR #76 and its review.
   P8 and the §9 M2 line amended to match. Pre-flight only lets more runs through; the lock guarantee is the
-  postcondition, unchanged. §2.4: a subscriber whose tracker was removed ends at its next queue timeout (PR #76 review).
+  postcondition, unchanged. §2.4: a subscriber whose tracker was removed ends at its next queue timeout (PR #76 review). §2.4 C7: `cancelPending` exposed and Cancel disabled while it holds, no new text (owner 2026-10-24, option A; beat: no change, which gives no feedback for a click; and a `Cancelling…` status line, which adds a user-visible string).

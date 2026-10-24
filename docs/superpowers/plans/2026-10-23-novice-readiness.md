@@ -1818,6 +1818,7 @@ git commit -m "fix(autofill): a lost stream, a dead run or a late Cancel never s
 
 **Files:**
 - Modify: `src/components/bench/AutofillPanel.jsx` (`getThemeEntries`, `DEFAULT_OPTIONS` and the comments above it and in the header, Start gating and hints, Cancel, the terminal and paused panels)
+- Modify: `src/hooks/useAutofillMachine.js` (return `cancelPending`; spec 0.2.7 §2.4 C7, owner 2026-10-24) and `src/hooks/__tests__/useAutofillMachine.test.jsx`
 - Test: `src/components/bench/__tests__/AutofillPanel.test.jsx`
 
 **Interfaces:**
@@ -1832,7 +1833,7 @@ export function getThemeEntries(grid): Record<string, string>   // keys `(${row}
 - `getThemeEntries` (§2.3 Theme entries): an entry only for a slot of `allSlots(grid)` (length ≥ 2) whose **every** cell is white, `isThemeLocked` and has a letter; key format unchanged; the word is the slot's letters. A partial theme-locked run yields no entry (it goes only in the lock list).
 - `DEFAULT_OPTIONS.minScore` is `30` (§2.5). The comment above `DEFAULT_OPTIONS` and the header paragraph that says "this panel's user-visible default (50, matching the old panel)" are rewritten to say the default is 30, the value the README's `fill` example uses, citing `novice-readiness spec 0.2.4 §2.5 (#40)`.
 - Start (§2.3 I5, P18): disabled when `options.wordlists.length === 0`, with the hint text `Select at least one word list`; disabled when the empty-slot count is 0, with the hint text `Clear some cells to run autofill again`. Each hint renders exactly when its condition holds (both may show).
-- Cancel renders in `submitting` and in `running` and calls `machine.cancel` (§2.4).
+- Cancel renders in `submitting` and in `running` and calls `machine.cancel` (§2.4). It is disabled while `machine.cancelPending` is true; no text is added (spec 0.2.7 §2.4 C7). The machine's `cancelPending` is React state, true from `cancel()`'s post (and from an early Cancel in `submitting`) until the 200, a rejection, or any transition to a non-live state.
 - Terminal panel: when `machine.offer` is non-null, a button whose label is `Keep fill` for `kind 'keepFill'`, `Keep partial fill (X/Y slots)` for `kind 'keepPartialFill'` with counts, `Keep partial fill` without counts; it calls `machine.keepFill(docId)` (§2.3 table). The `paused` panel shows `machine.message` (`Autofill was paused outside the app.`) in place of today's `paused — resume support lands with F11`, plus the offer button and Reset.
 
 **Normative cases:**
@@ -1847,6 +1848,8 @@ export function getThemeEntries(grid): Record<string, string>   // keys `(${row}
 | all word lists unticked | Start disabled; `Select at least one word list` shown |
 | grid with no empty slot | Start disabled; `Clear some cells to run autofill again` shown |
 | state `submitting` | Cancel shown; click calls `machine.cancel` |
+| state `running`, `cancelPending: true` | Cancel shown and disabled |
+| machine: `cancel()` in `running` | `cancelPending` true; after the 200, a 404 rejection, or a terminal event, false |
 | `offer {kind:'keepPartialFill', slotsFilled:5, totalSlots:8}`, `docId 'd'`, click | label `Keep partial fill (5/8 slots)`; `machine.keepFill('d')` |
 | `offer {kind:'keepPartialFill', slotsFilled:null, totalSlots:null}` | label `Keep partial fill` |
 | `offer {kind:'keepFill', …}` | label `Keep fill` |
@@ -1859,7 +1862,7 @@ export function getThemeEntries(grid): Record<string, string>   // keys `(${row}
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/components/bench/AutofillPanel.jsx src/components/bench/__tests__/AutofillPanel.test.jsx
+git add src/components/bench/AutofillPanel.jsx src/components/bench/__tests__/AutofillPanel.test.jsx src/hooks/useAutofillMachine.js src/hooks/__tests__/useAutofillMachine.test.jsx
 git commit -m "feat(autofill): panel defaults to min score 30, explains a disabled Start and offers the fill"
 ```
 ---
