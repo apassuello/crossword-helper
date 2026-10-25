@@ -32,7 +32,15 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
     loadWordlists();
   }, []);
 
+  // novice-readiness spec 0.2.12 §4 (SR4): the CLI's built-in fallback list is
+  // not reachable from the UI, so with no list ticked there is no search.
+  const noWordlist = selectedWordlists.length === 0;
+
   const searchPattern = useCallback(async () => {
+    if (selectedWordlists.length === 0) {
+      return;
+    }
+
     if (!pattern || pattern.length < 3) {
       setError('Pattern must be at least 3 characters');
       return;
@@ -157,10 +165,14 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
             placeholder="Enter pattern (e.g., ?I?A)"
             className="pattern-input"
           />
-          <button onClick={searchPattern} disabled={loading} className="search-btn">
+          <button onClick={searchPattern} disabled={loading || noWordlist} className="search-btn">
             {loading ? 'Searching...' : 'Search'}
           </button>
         </div>
+
+        {noWordlist && (
+          <div className="pattern-help wordlist-required-hint">Select at least one word list</div>
+        )}
 
         <div className="pattern-help">
           Use <code>?</code> for unknown letters. Example: <code>C?T</code> finds CAT, COT, CUT
