@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false, savePrompt = null }) {
+export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false, savePrompt = null, canUndo = false, canRedo = false, onUndo, onRedo }) {
   const offline = !status.online;
   const kind = offline ? 'err' : status.degraded ? 'warn' : 'ok';
   const label = offline ? 'offline' : status.degraded ? 'degraded' : 'online';
@@ -50,6 +50,23 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
           {label}
         </span>
         <div className="xw-topbar-divider" />
+        {/* Undo/Redo (novice-readiness spec 0.2.18 §3.9): greyed when the stack is empty or a run is live. */}
+        <button
+          className="xw-icon-btn"
+          onClick={onUndo}
+          disabled={!canUndo || editingPaused}
+          title="Undo (Cmd/Ctrl+Z)"
+        >
+          <span>Undo</span>
+        </button>
+        <button
+          className="xw-icon-btn"
+          onClick={onRedo}
+          disabled={!canRedo || editingPaused}
+          title="Redo (Cmd/Ctrl+Shift+Z or Ctrl+Y)"
+        >
+          <span>Redo</span>
+        </button>
         <button
           className="xw-icon-btn"
           onClick={onVerify}

@@ -164,8 +164,40 @@ function App() {
     beginBatch,
     commitBatch,
     clear: clearHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useUndoHistory({ grid, gridSize, setGrid, editingPausedRef });
   recordRunRef.current = recordStep;
+
+  // Undo and redo keys (novice-readiness spec 0.2.18 §3.9 "Controls"). One document listener, so
+  // the key works with focus anywhere; it is ignored in a text-editing target, where the browser's
+  // own text undo runs. The grid's listener does not act on Ctrl/Cmd+letter, so it never sees Z.
+  const keyActionsRef = useRef({ undo, redo });
+  keyActionsRef.current = { undo, redo };
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const t = e.target;
+      if (
+        t &&
+        t.closest &&
+        t.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+      ) {
+        return;
+      }
+      const k = (e.key || '').toLowerCase();
+      let action = null;
+      if (k === 'z') action = e.shiftKey ? 'redo' : 'undo';
+      else if (k === 'y' && e.ctrlKey && !e.shiftKey) action = 'redo';
+      if (!action) return;
+      e.preventDefault();
+      keyActionsRef.current[action]();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
   // client-only word-start numbering pass and the validation stub: fires on
@@ -722,6 +754,10 @@ function App() {
         onVerify={handleVerifyWords}
         onClean={handleCleanGrid}
         editingPaused={editingPaused}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undo}
+        onRedo={redo}
         onSave={openSavePrompt}
         savePrompt={
           savePrompt && (
