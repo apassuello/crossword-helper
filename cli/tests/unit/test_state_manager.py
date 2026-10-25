@@ -4,10 +4,13 @@ Unit tests for StateManager - pause/resume state serialization.
 
 import gzip
 import json
+import os
 import shutil
 import tempfile
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -553,3 +556,57 @@ class TestPauseController:
         # And clearing it is likewise observed immediately
         controller.clear_pause()
         assert controller.should_pause() is False
+
+
+class TestCleanupAgeAcrossDST:
+    """cleanup_old_states across an autumn clock change, on a fixed clock.
+
+    The test above uses the real clock, so it can only fail during the week
+    after clocks go back. Here "now" is fixed one day after Europe/Zurich
+    left summer time (2026-10-25 03:00 CEST -> 02:00 CET): an 8-day-old file
+    spans the change and must go; a 7.5-day-old one must stay.
+    """
+
+    NOW = datetime(2026, 10, 26, 11, 0, tzinfo=timezone.utc).timestamp()
+
+    @pytest.fixture
+    def zurich_frozen(self, monkeypatch):
+        if not hasattr(time, "tzset"):
+            pytest.skip("time.tzset is POSIX-only")
+        import cli.src.fill.state_manager as sm
+
+        now = self.NOW
+
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.fromtimestamp(now, tz)
+
+        monkeypatch.setenv("TZ", "Europe/Zurich")
+        time.tzset()
+        monkeypatch.setattr(sm, "datetime", FrozenDatetime)
+        monkeypatch.setattr(sm, "time", SimpleNamespace(time=lambda: now), raising=False)
+        yield
+        monkeypatch.undo()
+        time.tzset()
+
+    def _aged(self, directory, name, days):
+        path = Path(directory) / name
+        path.write_bytes(b"")
+        mtime = self.NOW - days * 24 * 3600
+        os.utime(path, (mtime, mtime))
+        return path
+
+    def test_eight_day_old_file_spanning_the_change_is_deleted(self, zurich_frozen, tmp_path):
+        old = self._aged(tmp_path, "old.json.gz", 8)
+        assert time.strftime("%Z", time.localtime(os.stat(old).st_mtime)) == "CEST"
+        assert time.strftime("%Z", time.localtime(self.NOW)) == "CET"
+
+        assert StateManager(storage_dir=tmp_path).cleanup_old_states(max_age_days=7) == 1
+        assert not old.exists()
+
+    def test_seven_and_a_half_day_old_file_is_kept(self, zurich_frozen, tmp_path):
+        recent = self._aged(tmp_path, "recent.json.gz", 7.5)
+
+        assert StateManager(storage_dir=tmp_path).cleanup_old_states(max_age_days=7) == 0
+        assert recent.exists()
