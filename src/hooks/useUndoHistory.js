@@ -4,9 +4,12 @@
  * because autofill, numbering and Verify write through it too.
  *
  * `record(before)` and `commitBatch()` do not compare at call time: a handler's `setGrid` is a
- * functional update that has not rendered yet. They park the "before" content and the step is
- * decided in an effect after the next render, by comparing that content with
- * the rendered grid's content (never a reference compare: `writeLetter` always returns a new grid).
+ * functional update that has not rendered yet. They queue the "before" content and the steps are
+ * decided in an effect after the next render: each queued "before" is compared with the next
+ * queued one (the content after its edit), the last with the rendered grid's content (never a
+ * reference compare: `writeLetter` always returns a new grid). Two edits before one render are
+ * therefore two steps, provided the second `record` was handed the grid the first edit produced
+ * (App's `editGrid` does that); two identical "before"s collapse into one step.
  *
  * A batch (Apply All) is one step: `beginBatch()` takes the "before" content; every `record`
  * while it is open is folded into it; `undo`/`redo` do nothing; `commitBatch()` decides the one
@@ -37,11 +40,11 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
   gridRef.current = grid;
   gridSizeRef.current = gridSize;
   const batchRef = useRef(null); // { before } while an Apply All batch is open
-  const pendingRef = useRef(null); // the "before" content whose step is decided after the next render
+  const pendingRef = useRef([]); // queued "before" snapshots, decided after the next render
 
   const record = useCallback((before) => {
     if (batchRef.current || !before) return; // folded into the open batch
-    pendingRef.current = snapshotContent(before, gridSizeRef.current);
+    pendingRef.current.push(snapshotContent(before, gridSizeRef.current));
     bump();
   }, []);
 
@@ -52,25 +55,31 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
 
   const commitBatch = useCallback(() => {
     if (!batchRef.current) return;
-    pendingRef.current = batchRef.current.before;
+    pendingRef.current.push(batchRef.current.before);
     batchRef.current = null;
     bump(); // an effect after the next render sees every write the batch queued
   }, []);
 
   const clear = useCallback(() => {
     batchRef.current = null;
-    pendingRef.current = null;
+    pendingRef.current = [];
     historyRef.current = emptyHistory();
     bump();
   }, []);
 
   useEffect(() => {
-    const before = pendingRef.current;
-    if (!before || !grid) return;
-    pendingRef.current = null;
-    if (before.size !== gridSize) return;
-    if (before.sig === contentSigOf(gridSize, grid)) return;
-    historyRef.current = pushStep(historyRef.current, before);
+    const queue = pendingRef.current;
+    if (queue.length === 0 || !grid) return;
+    pendingRef.current = [];
+    const renderedSig = contentSigOf(gridSize, grid);
+    let next = historyRef.current;
+    queue.forEach((before, i) => {
+      if (before.size !== gridSize) return;
+      const afterSig = i + 1 < queue.length ? queue[i + 1].sig : renderedSig;
+      if (before.sig !== afterSig) next = pushStep(next, before);
+    });
+    if (next === historyRef.current) return;
+    historyRef.current = next;
     bump();
   });
 
