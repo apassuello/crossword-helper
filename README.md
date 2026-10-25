@@ -55,7 +55,10 @@ Open http://localhost:5000. The tool rail on the left switches between tools:
 - **Import** and **Export** -- `Import Grid` reads a saved grid from `Upload File` or `Paste JSON`;
   `Export` saves the grid as JSON, HTML or text, and `Preview` shows it first.
 
-The top bar has `Verify words`, `Clean grid` and `Save grid`.
+The top bar has `Undo`, `Redo`, `Verify words`, `Clean grid` and `Save grid`. `Undo` steps back one
+edit at a time: a letter, a black square, a placed word, a whole `Apply All Best Placements`, a Clean or
+a finished autofill. The keys are Cmd+Z (Ctrl+Z on Windows and Linux) to undo and Cmd+Shift+Z to redo.
+Undo stops at a new grid, an import or an opened save.
 
 ## Features
 
@@ -161,7 +164,9 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
   grid unchanged and no red cell, because a letter already in the grid fits no word; Repair reworks that
   letter instead ([#75](https://github.com/apassuello/crossword-helper/issues/75)).
 - **Theme:** `Apply All Best Placements` can count a word you already placed by hand in its summary
-  ([#80](https://github.com/apassuello/crossword-helper/issues/80)).
+  ([#80](https://github.com/apassuello/crossword-helper/issues/80)). A JSON export keeps the letters and
+  black squares but not which words are theme-locked, so after importing it the theme words can be
+  overwritten; `Save grid` keeps the locks.
 - **Saves with the app open in two tabs:** if the other tab changes the same save while `Verify words`,
   `Clean grid` or a theme apply is running, the result is dropped without a message; run it again
   ([#81](https://github.com/apassuello/crossword-helper/issues/81)).
