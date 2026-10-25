@@ -62,6 +62,7 @@ class WordListManager:
 
         Raises:
             FileNotFoundError: If wordlist doesn't exist
+            OSError, UnicodeDecodeError: If it cannot be read whole (nothing is cached)
         """
         # Return cached version if available
         if name in self._cache:
@@ -79,7 +80,7 @@ class WordListManager:
         if not filepath.exists():
             raise FileNotFoundError(f"Wordlist '{name}' not found at {filepath}")
 
-        words = read_wordlist_words_ordered(filepath)
+        words = read_wordlist_words_ordered(filepath, strict=True)
 
         self._cache[name] = words
         return words

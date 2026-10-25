@@ -12,11 +12,13 @@ Shared by the Verify/Clean routes (a set) and WordListManager (file order).
 from typing import List, Set
 
 
-def read_wordlist_words_ordered(path) -> List[str]:
+def read_wordlist_words_ordered(path, strict: bool = False) -> List[str]:
     """Words of one list file in file order, each once (first occurrence wins).
 
-    A list that fails while being read contributes the words read before the
-    failure, and an unreadable one contributes nothing.
+    By default a list that fails while being read contributes the words read
+    before the failure, and an unreadable one contributes nothing (the
+    Verify/Clean behaviour). With ``strict`` the error propagates instead, so a
+    caller that shows a list as a whole never shows a truncated one.
     """
     from cli.src.fill.word_list import WordList
 
@@ -37,7 +39,9 @@ def read_wordlist_words_ordered(path) -> List[str]:
                     seen.add(w)
                     words.append(w)
     except Exception:
-        pass  # swallow and skip, keeping what was read before the failure
+        if strict:
+            raise
+        # swallow and skip, keeping what was read before the failure
     return words
 
 
