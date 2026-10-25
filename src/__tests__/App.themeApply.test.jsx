@@ -20,7 +20,7 @@ vi.mock('react-hot-toast', () => ({
 const probe = vi.hoisted(() => ({ props: null }));
 vi.mock('../components/ThemeWordsPanel', () => ({
   default: (props) => {
-    probe.props = props;
+    if (props) probe.props = props;
     return <div className="theme-words-panel" />;
   },
   SUGGESTION_REFETCH_DEBOUNCE_MS: 400,

@@ -39,7 +39,7 @@ vi.mock('../../components/bench/GridPanel', async (importOriginal) => {
   return {
     ...actual,
     default: (props) => {
-      probe.panelProps = props;
+      if (props) probe.panelProps = props;
       return <Real {...props} />;
     },
   };
