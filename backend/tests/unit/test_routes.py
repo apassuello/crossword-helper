@@ -625,6 +625,144 @@ class TestCleanGrid:
 
 
 # ===================================================================
+# verify-words and clean read lists through the solver's parser
+# novice-readiness spec 0.2.12 section 4 (L11, P5)
+# ===================================================================
+
+# Every row of Task 7.1's normative table, plus a "word,score" line, a comment
+# line and a duplicate. The file is UTF-8; the decomposed and fullwidth rows
+# are spelled as escapes so the fixture survives an editor's normalisation.
+_SHARED_PARSER_LINES = [
+    "CAFÉ",
+    "NAÏVE;50",
+    "ÜBER",
+    "café,40",
+    "CAFÉ;50",
+    "CAFÉ",
+    "ＣＡＴ",
+    "STRAßE",
+    "ÆON",
+    "BJØRN",
+    "ONE TWO",
+    "AB",
+    "ΑΒΓ",
+    "ONE",
+    "dogs,30",
+    "# a comment line",
+    "",
+    "DOGS",
+    "CAFE",
+]
+
+# A-Z strings the solver must NOT accept from the fixture (their un-folded
+# spellings are rejected there), so a route that accepts one has its own rules.
+_MUST_STAY_REJECTED = ["STRASSE", "AEON", "BJORN", "ONETWO", "ABC"]
+
+
+def _write_list_with_stale_pre_fold_cache(tmp_path, lines):
+    """A list file plus a newer .pkl in the pre-fold layout holding accented words."""
+    import os
+    import pickle
+
+    from cli.src.fill.word_list import ScoredWord
+
+    txt = tmp_path / "custom.txt"
+    txt.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    stale = [ScoredWord(text="NAÏVE", score=50, length=5), ScoredWord(text="CAFÉ", score=40, length=4)]
+    cache = tmp_path / "custom.pkl"
+    with open(cache, "wb") as f:
+        pickle.dump(
+            {
+                "words": stale,
+                "length_index": {5: [stale[0]], 4: [stale[1]]},
+                "first_letter_index": {"N": [stale[0]], "C": [stale[1]]},
+                "version": "1.0",
+            },
+            f,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+    os.utime(txt, (1_000_000, 1_000_000))
+    os.utime(cache, (1_000_010, 1_000_010))
+    return txt
+
+
+def _use_list(mocker, path):
+    mocker.patch(
+        "backend.api.routes.resolve_wordlist_paths_strict",
+        return_value=([str(path)], []),
+    )
+
+
+def _row_grid(word):
+    """word across the top row of a len(word) square grid, every other cell black.
+
+    Down slots are one cell long, so the only slot checked is the word itself.
+    """
+    n = len(word)
+    return [list(word)] + [["#"] * n for _ in range(n - 1)]
+
+
+def _is_invalid_in_verify(c, word):
+    resp = _post_json(c, "/api/grid/verify-words", {"grid": _row_grid(word), "size": len(word), "wordlists": ["custom"]})
+    assert resp.status_code == 200, resp_diag(resp)
+    return word in [w["word"] for w in resp.get_json()["invalid_words"]]
+
+
+def _is_cleared_by_clean(c, word):
+    resp = _post_json(c, "/api/grid/clean", {"grid": _row_grid(word), "size": len(word), "wordlists": ["custom"]})
+    assert resp.status_code == 200, resp_diag(resp)
+    body = resp.get_json()
+    return body["removed_count"] == 1
+
+
+_NORMATIVE_ROWS = [
+    # (list line, grid slot, invalid / cleared?)
+    ("NAÏVE;50", "NAIVE", False),
+    ("café,40", "CAFE", False),
+    ("STRAßE", "STRASSE", True),
+    ("ONE", "ONE", False),
+]
+
+
+class TestListsReadThroughSharedParser:
+    @pytest.mark.parametrize("line,slot,invalid", _NORMATIVE_ROWS)
+    def test_verify_words_row(self, client, mocker, tmp_path, line, slot, invalid):
+        c, _ = client
+        _use_list(mocker, _write_list_with_stale_pre_fold_cache(tmp_path, [line]))
+        assert _is_invalid_in_verify(c, slot) is invalid
+
+    @pytest.mark.parametrize("line,slot,cleared", _NORMATIVE_ROWS)
+    def test_clean_row(self, client, mocker, tmp_path, line, slot, cleared):
+        c, _ = client
+        _use_list(mocker, _write_list_with_stale_pre_fold_cache(tmp_path, [line]))
+        assert _is_cleared_by_clean(c, slot) is cleared
+
+    def _expected(self, txt):
+        from cli.src.fill.word_list import WordList
+
+        return {w.text for w in WordList.from_file(str(txt), use_cache=False).words}
+
+    def test_verify_words_accepts_exactly_what_the_solver_accepts(self, client, mocker, tmp_path):
+        c, _ = client
+        txt = _write_list_with_stale_pre_fold_cache(tmp_path, _SHARED_PARSER_LINES)
+        _use_list(mocker, txt)
+        expected = self._expected(txt)
+        assert {"CAFE", "NAIVE", "UBER", "CAT", "DOGS", "ONE"} <= expected  # fixture sanity
+        candidates = sorted(expected | set(_MUST_STAY_REJECTED))
+        accepted = {w for w in candidates if not _is_invalid_in_verify(c, w)}
+        assert accepted == expected
+
+    def test_clean_keeps_exactly_what_the_solver_accepts(self, client, mocker, tmp_path):
+        c, _ = client
+        txt = _write_list_with_stale_pre_fold_cache(tmp_path, _SHARED_PARSER_LINES)
+        _use_list(mocker, txt)
+        expected = self._expected(txt)
+        candidates = sorted(expected | set(_MUST_STAY_REJECTED))
+        accepted = {w for w in candidates if not _is_cleared_by_clean(c, w)}
+        assert accepted == expected
+
+
+# ===================================================================
 # POST /api/pattern/with-progress
 # ===================================================================
 
