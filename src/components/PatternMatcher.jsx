@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import './PatternMatcher.scss';
@@ -16,6 +16,13 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
   const [selectedWordlists, setSelectedWordlists] = useState(['comprehensive']);
   const [algorithm, setAlgorithm] = useState('regex');  // Algorithm selection state
   const searchProgress = useSSEProgress();
+
+  // novice-readiness spec 0.2.15 §4 item 2 (SR2): a completed search that
+  // produced results scrolls .results-section into view, once. The flag is set
+  // by the completion effect and consumed after the render that shows the
+  // section, so a later sort/filter change never re-scrolls.
+  const resultsRef = useRef(null);
+  const scrollPending = useRef(false);
 
   // Load available wordlists on mount
   useEffect(() => {
@@ -112,6 +119,7 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
         setError('No matching words found');
       }
 
+      scrollPending.current = searchResults.length > 0;
       setResults(searchResults);
       setLoading(false);
     } else if (searchProgress.status === 'error' && loading) {
@@ -120,6 +128,13 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
       setLoading(false);
     }
   }, [searchProgress.status, searchProgress.data, searchProgress.message, loading, sortBy, filterMinScore]);
+
+  useEffect(() => {
+    if (scrollPending.current && results.length > 0 && resultsRef.current) {
+      scrollPending.current = false;
+      resultsRef.current.scrollIntoView({ block: 'start' });
+    }
+  }, [results]);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -261,7 +276,7 @@ function PatternMatcher({ selectedCell, onSelectWord, editingPaused = false }) {
       )}
 
       {results.length > 0 && (
-        <div className="results-section">
+        <div className="results-section" ref={resultsRef}>
           <h3>Results ({results.length})</h3>
           <div className="results-list">
             {results.map((result, idx) => (
