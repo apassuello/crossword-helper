@@ -703,7 +703,8 @@ real reason (above) instead of a stale offer.
   stored line, and a requested word, by `WordList.canonical_word` of the word `parse_line` returns, so an
   add or a removal of `CAFE` acts on a stored `CAFÉ;50`, and one of `GRAPE` on `grape,40`. A line
   `parse_line` rejects keeps the old key, its text before `;` uppercased. A removal drops every stored line
-  with the key; an add's rewrite keeps the first of them, the one the list shows. An add writes each line
+  with the key; an add's rewrite keeps the one the list shows: the first that `parse_line` accepts, or the
+  first if none does. An add writes each line
   uppercased unless uppercasing would change its key, as `"ß".upper()` → `"SS"` does; such a line is written
   as given, so a stored or added `STRAßE` stays skipped instead of becoming `STRASSE`.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
@@ -1011,3 +1012,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   PR #87 (P1, thread 4370995355). Also: an add's rewrite uppercased every line, turning a skipped `STRAßE`
   into a valid `STRASSE`; a line whose key uppercasing changes is now written as given (found by Task 7.8's
   implementer; ruled by default, beat: writing every line as read, which drops the uppercase convention).
+  And: where a line `parse_line` rejects (`GRAPE;abc`) shares its key with a later valid one (`GRAPE;40`),
+  "keeps the first" kept the rejected line and an unrelated add dropped `GRAPE` from the list; the kept line
+  is now the first one `parse_line` accepts (found by the 7.8 review; ruled by default, beat: a separate
+  key for rejected lines, which would stop `APPLE` removing a stored `APPLE;x`).
