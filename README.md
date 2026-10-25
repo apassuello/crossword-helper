@@ -152,6 +152,23 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
 ## Known Limitations
 
 - No multi-user or authentication support. Runs locally only.
+- **Clean grid:** the toast after Clean can report more cells cleared than it actually emptied, because
+  it counts locked letters that Clean keeps; the confirm's count is the right one
+  ([#78](https://github.com/apassuello/crossword-helper/issues/78)). Red marks stay on words that crossed
+  a removed word; run `Verify words` again to refresh them
+  ([#79](https://github.com/apassuello/crossword-helper/issues/79)).
+- **Theme:** `Apply All Best Placements` can count a word you already placed by hand in its summary
+  ([#80](https://github.com/apassuello/crossword-helper/issues/80)).
+- **Saves with the app open in two tabs:** if the other tab changes the same save while `Verify words`,
+  `Clean grid` or a theme apply is running, the result is dropped without a message; run it again
+  ([#81](https://github.com/apassuello/crossword-helper/issues/81)).
+- **Deleting the open grid's save, then closing the tab:** with unsaved edits the save comes back; without
+  them the grid is gone after a reload. Export or save under a new name before closing
+  ([#82](https://github.com/apassuello/crossword-helper/issues/82)).
+- **Save toasts:** `Couldn’t save — will retry.` can appear for a grid you have already left; nothing
+  retries it ([#83](https://github.com/apassuello/crossword-helper/issues/83)).
+- **Restore on reload** tries only your newest save. If that one can't be read, nothing is restored;
+  older saves still open from `Open saved` ([#84](https://github.com/apassuello/crossword-helper/issues/84)).
 
 ## Tech Stack
 
