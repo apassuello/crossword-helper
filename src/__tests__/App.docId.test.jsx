@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import App, { contentSigOf } from '../App';
 import { ToastProvider } from '../components/bench/Toast';
 import storage from '../lib/storage';
+import { saveArg, resolvingSave } from './saveArgs';
 import { toSavedGrid } from '../api/gridCodec';
 
 vi.mock('react-hot-toast', () => ({
@@ -72,7 +73,7 @@ describe('App document id and save document', () => {
   let saveSpy;
   beforeEach(() => {
     global.localStorage.getItem.mockReturnValue(null);
-    saveSpy = vi.spyOn(storage, 'save').mockResolvedValue({ savedAt: '2026-10-24T00:00:00.000Z' });
+    saveSpy = vi.spyOn(storage, 'save').mockImplementation(resolvingSave({ savedAt: '2026-10-24T00:00:00.000Z' }));
   });
   afterEach(() => {
     saveSpy.mockRestore();
@@ -115,8 +116,8 @@ describe('App document id and save document', () => {
     await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
 
-    const first = saveSpy.mock.calls[0][0].id;
-    const second = saveSpy.mock.calls[1][0].id;
+    const first = saveArg(saveSpy.mock.calls[0], 0).id;
+    const second = saveArg(saveSpy.mock.calls[1], 0).id;
     expect(typeof first).toBe('string');
     expect(first.length).toBeGreaterThan(0);
     expect(typeof second).toBe('string');
@@ -137,7 +138,7 @@ describe('App document id and save document', () => {
     await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
 
-    expect(saveSpy.mock.calls[1][0].id).toBe(saveSpy.mock.calls[0][0].id);
+    expect(saveArg(saveSpy.mock.calls[1], 0).id).toBe(saveArg(saveSpy.mock.calls[0], 0).id);
   });
 
   it('Save after typing a letter saves cells that carry isAutofilled and no isBlocked key', async () => {
@@ -150,7 +151,7 @@ describe('App document id and save document', () => {
     await clickSave(user);
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
-    const doc = saveSpy.mock.calls[0][0];
+    const doc = saveArg(saveSpy.mock.calls[0], 0);
     expect(doc.grid[0][0].letter).toBe('A');
     const all = doc.grid.flat();
     expect(all).toHaveLength(225);

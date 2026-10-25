@@ -421,6 +421,22 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     return seen;
   };
 
+  it('save resolves a function-form doc and opts INSIDE the lock, not when called', async () => {
+    const where = [];
+    await save(
+      () => {
+        where.push(inside);
+        return { id: 'a', size: 5, grid: g };
+      },
+      () => {
+        where.push(inside);
+        return { name: 'Late' };
+      }
+    );
+    expect(where).toEqual([true, true]);
+    expect(JSON.parse(store.get(SAVE_KEY))[0].name).toBe('Late');
+  });
+
   it('save runs its whole read-and-write inside one lock callback', async () => {
     const seen = writesInsideLock();
     await save({ id: 'a', size: 5, grid: g });
