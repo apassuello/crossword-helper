@@ -32,11 +32,14 @@ vi.mock('react-hot-toast', () => ({
 
 const captured = vi.hoisted(() => ({}));
 
+// Every capture wrapper below is guarded with `if (props)`: React DEV calls a function component
+// once with no props to build a warning's component stack, which would otherwise overwrite the
+// captured props with undefined (Phase 6R final review, M1).
 vi.mock('../components/bench/CrosswordGrid', async () => {
   const actual = await vi.importActual('../components/bench/CrosswordGrid');
   const R = await import('react');
   const Wrapped = (props) => {
-    captured.grid = props;
+    if (props) captured.grid = props;
     return R.createElement(actual.default, props);
   };
   return { ...actual, default: Wrapped };
@@ -45,7 +48,7 @@ vi.mock('../components/bench/TopBar', async () => {
   const actual = await vi.importActual('../components/bench/TopBar');
   const R = await import('react');
   const Wrapped = (props) => {
-    captured.topbar = props;
+    if (props) captured.topbar = props;
     return R.createElement(actual.TopBar, props);
   };
   return { ...actual, TopBar: Wrapped };
@@ -54,7 +57,7 @@ vi.mock('../components/PatternMatcher', async () => {
   const actual = await vi.importActual('../components/PatternMatcher');
   const R = await import('react');
   const Wrapped = (props) => {
-    captured.pattern = props;
+    if (props) captured.pattern = props;
     return R.createElement(actual.default, props);
   };
   return { ...actual, default: Wrapped };
@@ -63,7 +66,7 @@ vi.mock('../components/ThemeWordsPanel', async () => {
   const actual = await vi.importActual('../components/ThemeWordsPanel');
   const R = await import('react');
   const Wrapped = (props) => {
-    captured.theme = props;
+    if (props) captured.theme = props;
     return R.createElement(actual.default, props);
   };
   return { ...actual, default: Wrapped };
@@ -72,7 +75,7 @@ vi.mock('../components/ImportPanel', async () => {
   const actual = await vi.importActual('../components/ImportPanel');
   const R = await import('react');
   const Wrapped = (props) => {
-    captured.importPanel = props;
+    if (props) captured.importPanel = props;
     return R.createElement(actual.default, props);
   };
   return { ...actual, default: Wrapped };
