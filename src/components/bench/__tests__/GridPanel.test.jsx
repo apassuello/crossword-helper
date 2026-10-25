@@ -183,6 +183,8 @@ describe('GridPanel Open saved (§3.4)', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  // novice-readiness spec 0.2.10 §3.4: the token App hands out at the confirm travels back.
+  const TOKEN = 7;
   const setupOpen = async (over = {}) => {
     const listed = [E1, E2];
     const listSpy = vi.spyOn(storage, 'list').mockImplementation(() => Promise.resolve([...listed]));
@@ -192,7 +194,7 @@ describe('GridPanel Open saved (§3.4)', () => {
     });
     const onOpenSaved = vi.fn();
     const user = userEvent.setup();
-    const utils = setup({ onOpenSaved, ...over });
+    const utils = setup({ onOpenBegin: () => TOKEN, onOpenSaved, ...over });
     return { ...utils, user, onOpenSaved, listSpy, removeSpy };
   };
   const rowOf = (name) => screen.getByText(name).closest('li');
@@ -265,7 +267,7 @@ describe('GridPanel Open saved (§3.4)', () => {
     await showList(user);
     await user.click(within(rowOf('Second')).getByRole('button', { name: 'Open' }));
     expect(onOpenSaved).toHaveBeenCalledTimes(1);
-    expect(onOpenSaved).toHaveBeenCalledWith(E2);
+    expect(onOpenSaved).toHaveBeenCalledWith(E2, TOKEN);
     expect(screen.queryByRole('group')).toBeNull();
   });
 
@@ -283,7 +285,7 @@ describe('GridPanel Open saved (§3.4)', () => {
     await user.click(within(rowOf('Second')).getByRole('button', { name: 'Open' }));
     await user.click(screen.getByRole('button', { name: 'Replace' }));
     expect(onOpenSaved).toHaveBeenCalledTimes(1);
-    expect(onOpenSaved).toHaveBeenCalledWith(E2);
+    expect(onOpenSaved).toHaveBeenCalledWith(E2, TOKEN);
     expect(screen.queryByRole('group')).toBeNull();
   });
 

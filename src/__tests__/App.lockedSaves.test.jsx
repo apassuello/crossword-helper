@@ -149,3 +149,85 @@ describe('N2: an import while a save of the old document waits for the lock', ()
     expect(screen.queryByText(/saved locally/)).toBeNull();
   });
 });
+
+// novice-readiness spec 0.2.10 §3.4 (An Open that waits): a confirmed Open behind a held lock is
+// dropped only if New grid or import replaced the document since the confirm.
+describe('An Open that waits for the lock', () => {
+  const imported5 = () =>
+    Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => ({ letter: 'X', isBlack: false })));
+  const setup = async (entries) => {
+    store.set(SAVE_KEY, JSON.stringify(entries));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+    const view = renderApp();
+    await waitFor(() => expect(letters(view.container).length).toBeGreaterThan(0));
+    await act(async () => { await user.click(screen.getByRole('button', { name: 'Open saved' })); });
+    return { user, ...view };
+  };
+  const confirmOpen = async (user, name) => {
+    await screen.findByText(name);
+    await act(async () => {
+      await user.click(within(screen.getByText(name).closest('li')).getByRole('button', { name: 'Open' }));
+    });
+    await act(async () => { await user.click(screen.getByRole('button', { name: 'Replace' })); });
+  };
+
+  it('(i) an import since the confirm drops the Open', async () => {
+    const { user, container } = await setup([entryOf('G', 'Gee', { '1,1': { letter: 'F' } })]);
+    await confirmOpen(user, 'Gee');
+    expect(pending).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: /^import$/i }));
+    await act(async () => { captured.importPanel.onImport({ grid: imported5(), size: 5 }); });
+    await act(async () => { await grant(); });
+    expect(cells(container)).toHaveLength(25);
+    expect(letters(container).every((l) => l === 'X')).toBe(true);
+  });
+
+  it('(ii) New grid since the confirm drops the Open', async () => {
+    const { user, container } = await setup([entryOf('G', 'Gee', { '1,1': { letter: 'F' } })]);
+    await confirmOpen(user, 'Gee');
+    expect(pending).toHaveLength(1);
+    await act(async () => { await user.click(screen.getByRole('button', { name: '11×11' })); });
+    await act(async () => { await user.click(screen.getByRole('button', { name: 'Replace' })); });
+    await act(async () => { await grant(); });
+    expect(cells(container)).toHaveLength(121);
+    expect(letters(container)).toEqual([]);
+  });
+
+  it('(iii) control: an Open of the own entry behind a queued autosave adopts', async () => {
+    const { user, container } = await setup([entryOf('G', 'Gee', { '1,1': { letter: 'F' } })]);
+    await typeLetter(user, container, 3, 3, 'A');
+    await advance(30000);
+    expect(pending).toHaveLength(1);
+    await confirmOpen(user, 'Gee');
+    await act(async () => { await grant(); });
+    await act(async () => { await grant(); });
+    expect(letters(container).sort()).toEqual(['A', 'F']);
+  });
+
+  it('(iv) control: Open A then Open B while the lock is held leaves B open', async () => {
+    const { user, container } = await setup([
+      entryOf('A', 'Aye', { '1,1': { letter: 'P' } }),
+      entryOf('B', 'Bee', { '2,2': { letter: 'Q' } }),
+    ]);
+    await confirmOpen(user, 'Aye');
+    await confirmOpen(user, 'Bee');
+    expect(pending).toHaveLength(2);
+    await act(async () => { await grant(); });
+    expect(letters(container)).toEqual(['Q']);
+  });
+
+  it('(v) control: a save fork during the wait does not cancel the Open', async () => {
+    const { user, container } = await setup([entryOf('G', 'Gee', { '1,1': { letter: 'F' } })]);
+    await typeLetter(user, container, 3, 3, 'A');
+    await advance(30000);
+    expect(pending).toHaveLength(1);
+    await confirmOpen(user, 'Gee');
+    expect(pending).toHaveLength(2);
+    // another tab saved G since this tab last knew it, so the queued save forks
+    store.set(SAVE_KEY, JSON.stringify([{ ...entryOf('G', 'Gee', { '1,1': { letter: 'F' } }), savedAt: '2026-10-22T10:00:00.000Z' }]));
+    await act(async () => { await grant(); });
+    expect(stored().length).toBe(2); // the fork happened
+    expect(letters(container)).toEqual(['F']);
+  });
+});

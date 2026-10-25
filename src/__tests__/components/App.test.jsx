@@ -1210,7 +1210,7 @@ describe('App Open saved (§3.4)', () => {
     await user.click(screen.getByText('Symmetry'));
     await user.click(screen.getByText('Symmetry'));
 
-    act(() => probe.panelProps.onOpenSaved(E21()));
+    act(() => probe.panelProps.onOpenSaved(E21(), probe.panelProps.onOpenBegin()));
 
     expect(cells(container)).toHaveLength(225);
     expect(letters(container)).toEqual(['A']);
