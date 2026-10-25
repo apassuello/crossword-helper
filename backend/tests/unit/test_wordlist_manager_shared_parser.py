@@ -180,6 +180,32 @@ class TestEditsKeyOnTheFoldedWord:
         kept = [ln for ln in _file_lines(tmp_path) if ln.startswith("CAF")]
         assert kept == ["CAFÉ;50"]
 
+    def test_add_rewrite_keeps_a_stored_sharp_s_line_as_given(self, tmp_path):
+        """Spec 0.2.14 4.1: "ß".upper() is "SS", which would make a skipped line valid."""
+        m = _manager(tmp_path, ["STRAßE"])
+        m.add_words("custom", ["DOGS"])
+        assert "STRAßE" in _file_lines(tmp_path)
+        m._cache.clear()
+        assert "STRASSE" not in m.load("custom")
+
+    def test_add_writes_a_new_sharp_s_entry_as_given(self, tmp_path):
+        m = _manager(tmp_path, ["CAT"])
+        m.add_words("custom", ["Straße"])
+        m._cache.clear()
+        assert "STRASSE" not in m.load("custom")
+
+    def test_pin_add_rewrite_uppercases_a_comma_scored_accented_line(self, tmp_path):
+        """Passes before the fix too."""
+        m = _manager(tmp_path, ["naïve,40"])
+        m.add_words("custom", ["DOGS"])
+        assert "NAÏVE,40" in _file_lines(tmp_path)
+
+    def test_pin_add_rewrite_uppercases_a_semicolon_scored_accented_line(self, tmp_path):
+        """Passes before the fix too."""
+        m = _manager(tmp_path, ["café;50"])
+        m.add_words("custom", ["DOGS"])
+        assert "CAFÉ;50" in _file_lines(tmp_path)
+
     def test_pin_rejected_line_keeps_the_old_key(self, tmp_path):
         """Passes before the fix too: parse_line rejects APPLE;x, so the old key applies."""
         m = _manager(tmp_path, ["APPLE;x"])

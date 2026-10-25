@@ -15,6 +15,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.core.wordlist_reader import line_key, read_wordlist_words_ordered
 
 
+def _written_line(text: str) -> str:
+    """``text`` uppercased, unless that would change its key (``"ß".upper()`` is
+    ``"SS"``): then as given, so a skipped line stays skipped (spec 0.2.14 4.1)."""
+    upper = text.upper()
+    return upper if line_key(upper) == line_key(text) else text
+
+
 class WordListManager:
     """Enhanced wordlist manager with metadata and category support."""
 
@@ -270,7 +277,7 @@ class WordListManager:
                 for raw in f:
                     raw = raw.strip()
                     if raw and not raw.startswith("#"):
-                        lines.setdefault(line_key(raw), raw.upper())
+                        lines.setdefault(line_key(raw), _written_line(raw))
 
         # New entries: "WORD" or canonical "WORD;N". A scored entry replaces
         # the stored line; a bare entry never erases a stored score.
@@ -279,7 +286,7 @@ class WordListManager:
             if not entry:
                 continue
             word = line_key(entry)
-            entry = entry.upper()
+            entry = _written_line(entry)
             if ";" not in entry and word in lines:
                 continue
             lines[word] = entry
