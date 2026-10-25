@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -44,7 +46,44 @@ def test_overflowing_score_skipped_and_other_words_kept(tmp_path):
 
 
 def test_accented_word_accepted(tmp_path):
-    assert parse(tmp_path, "CAFÉ\n")["words"] == [{"word": "CAFÉ", "score": None}]
+    """novice-readiness spec 0.2.12 section 4 (L11): the fold, not the accented spelling, is what loads."""
+    assert parse(tmp_path, "CAFÉ\n")["words"] == [{"word": "CAFE", "score": None}]
+
+
+@pytest.mark.parametrize(
+    "line, word, score",
+    [
+        ("CAFÉ", "CAFE", None),
+        ("NAÏVE", "NAIVE", None),
+        ("ÜBER", "UBER", None),
+        ("café", "CAFE", None),
+        ("CAFÉ;50", "CAFE", 50),
+        ("CAFE\u0301", "CAFE", None),
+        ("\uff23\uff21\uff34", "CAT", None),
+    ],
+)
+def test_fold_rows(tmp_path, line, word, score):
+    out = parse(tmp_path, line + "\n")
+    assert out["words"] == [{"word": word, "score": score}]
+    assert out["skipped"] == []
+
+
+def test_duplicate_detected_after_fold(tmp_path):
+    out = parse(tmp_path, "CAFE\nCAFÉ\n")
+    assert out["words"] == [{"word": "CAFE", "score": None}]
+    assert out["skipped"] == []
+
+
+@pytest.mark.parametrize("line", ["STRAßE", "ÆON", "BJØRN", "ΑΒΓ"])
+def test_unfoldable_letters_skipped_not_letters_only(tmp_path, line):
+    out = parse(tmp_path, line + "\n")
+    assert out["words"] == []
+    assert out["skipped"] == [{"line": 1, "text": line, "reason": "not letters only"}]
+
+
+def test_bare_sharp_s_is_classified_by_length_first(tmp_path):
+    """PD-L6: a bare ß is too short; length is classified before letters."""
+    assert parse(tmp_path, "ß\n")["skipped"] == [{"line": 1, "text": "ß", "reason": "length outside 3-21"}]
 
 
 def test_too_short_skipped(tmp_path):

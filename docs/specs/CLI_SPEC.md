@@ -672,11 +672,14 @@ crossword parse-wordlist WORDLIST_FILE [--json-output]
 
 Parses a word-list file with the one line format (see **Wordlist File
 Format**) and reports what an import would accept. A line is accepted iff
-`WordList.parse_line` parses it and the uppercased word passes
-`WordList._is_valid_word`; every other non-blank, non-`#` line is reported in
+`WordList.parse_line` parses it and the folded, uppercased word
+(`WordList.canonical_word`) passes `WordList._is_valid_word`, which requires
+3-21 ASCII letters `A`-`Z`; every other non-blank, non-`#` line is reported in
 `skipped` with one of three reasons: `malformed score`, `length outside 3-21`,
-`not letters only`. Words are uppercased; a duplicate keeps its first
-occurrence. A missing file is a Click usage error (exit `2`, no JSON). The
+`not letters only`. Accented letters are folded to A-Z first (Unicode NFKD, combining marks
+dropped: `CAFÉ` is `CAFE`); `ß`, `Æ`, `Ø` and non-Latin letters have no fold and
+are skipped as `not letters only`. Words are uppercased; a duplicate (after the
+fold) keeps its first occurrence; `skipped[].text` is the original stripped line. A missing file is a Click usage error (exit `2`, no JSON). The
 backend reaches this command through `CLIAdapter.parse_wordlist`.
 
 The `--json-output` object (printed indented) for the three lines `APPLE;50`, `grape,40`, `AB`:

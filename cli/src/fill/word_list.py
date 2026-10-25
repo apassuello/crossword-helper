@@ -6,6 +6,7 @@ and provides efficient lookup operations for autofill.
 """
 
 import pickle
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -14,6 +15,20 @@ from typing import Dict, List, Optional, Tuple, Union
 COMMON_LETTERS = set("EARIOTNS")  # Very common, good for crosswords
 REGULAR_LETTERS = set("DHCLUMPFGYBWKV")  # Regular usage
 UNCOMMON_LETTERS = set("JQXZ")  # Difficult letters
+
+
+def fold_letters(text: str) -> str:
+    """
+    Fold letters towards A-Z: Unicode NFKD decomposition, then drop combining marks.
+
+    novice-readiness spec 0.2.12 section 4 (L11): CAFÉ -> CAFE, NAÏVE -> NAIVE,
+    fullwidth ＣＡＴ -> CAT. Case is preserved (this never calls upper()), the
+    function is idempotent, and text with nothing to fold is returned equal.
+    Letters with no NFKD decomposition (ß, Æ, Ø, Greek, ...) are left as they
+    are; WordList._is_valid_word then rejects them.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 @dataclass
@@ -40,7 +55,7 @@ class WordList:
         Initialize word list.
 
         Args:
-            words: List of words to include (will be uppercased and validated).
+            words: List of words to include (folded to A-Z, uppercased and validated).
                 Entries may be plain strings or (word, score) tuples; a tuple's
                 score (e.g. from a scored wordlist file) overrides the computed
                 letter-frequency score.
@@ -58,7 +73,7 @@ class WordList:
         Add words to list with automatic scoring.
 
         Args:
-            words: Words to add (will be uppercased and validated). Entries may
+            words: Words to add (folded to A-Z, uppercased and validated). Entries may
                 be plain strings or (word, score) tuples; a tuple's score (e.g.
                 from a scored wordlist file) overrides the computed score.
             progress_callback: Optional callback(current, total) for progress updates
@@ -72,7 +87,7 @@ class WordList:
                 word, file_score = item
             else:
                 word, file_score = item, None
-            word = word.upper().strip()
+            word = self.canonical_word(word)
 
             # Validate word
             if not self._is_valid_word(word):
@@ -145,12 +160,29 @@ class WordList:
             words = [w for w in words if w.score >= min_score]
         return sorted(words, key=lambda w: w.score, reverse=True)
 
+    @staticmethod
+    def canonical_word(text: str) -> str:
+        """
+        Fold, strip, and uppercase a word, in that order, uppercasing only ASCII.
+
+        novice-readiness spec 0.2.12 section 4 (L11). A character that is still
+        non-ASCII after the fold must reach _is_valid_word unchanged:
+        "ß".upper() is "SS", so uppercasing first would accept a letter the
+        spec says is skipped.
+        """
+        folded = fold_letters(text).strip()
+        return folded.upper() if folded.isascii() else folded
+
     def _is_valid_word(self, word: str) -> bool:
         """
         Validate word for crossword use.
 
+        novice-readiness spec 0.2.12 section 4 (L11): 3-21 characters, all
+        ASCII A-Z. Tightened from isalpha() plus isupper(), which accept
+        non-ASCII letters; callers fold first (canonical_word).
+
         Args:
-            word: Word to validate
+            word: Word to validate (already canonical)
 
         Returns:
             True if valid crossword word
@@ -159,15 +191,8 @@ class WordList:
         if len(word) < 3 or len(word) > 21:
             return False
 
-        # Must contain only letters
-        if not word.isalpha():
-            return False
-
-        # Must be all uppercase (after initial conversion)
-        if not word.isupper():
-            return False
-
-        return True
+        # Must be ASCII A-Z only
+        return all("A" <= ch <= "Z" for ch in word)
 
     def _score_word(self, word: str) -> int:
         """
@@ -235,6 +260,9 @@ class WordList:
         - Semicolon-scored: "WORD;50" (raw/comprehensive_scored.txt, *.dict files)
         - Comma-scored: "word,50" (broda.owl style CSV)
 
+        The word part is folded with fold_letters (novice-readiness spec 0.2.12
+        section 4, L11); case is kept and the score is parsed as before.
+
         Args:
             line: Stripped, non-empty, non-comment line
 
@@ -247,7 +275,7 @@ class WordList:
         for sep in (";", ","):
             if sep in line:
                 parts = line.split(sep)
-                word = parts[0].strip()
+                word = fold_letters(parts[0].strip())
                 try:
                     score = int(float(parts[1].strip()))
                 except (ValueError, IndexError, OverflowError):
@@ -255,7 +283,7 @@ class WordList:
                     # score such as "1e999" that float() reads as infinity) - skip
                     return None
                 return (word, score)
-        return (line, None)
+        return (fold_letters(line), None)
 
     @classmethod
     def from_file(cls, filepath: str, progress_callback=None, use_cache=True) -> "WordList":
