@@ -728,7 +728,9 @@ real reason (above) instead of a stale offer.
   together with others is its place in a joint plan: one placement per word, checked as if applied in
   turn with the same conflict check and the same black squares the apply step writes. The search keeps the
   plan that places the most words among a bounded set of each word's best candidates, then the highest
-  total score. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
+  total score. The search also has a fixed budget of steps, so on a crowded set of words it can stop
+  before it has tried every combination and keep the best plan found so far, which may place one word
+  fewer than the best possible plan; the plan is always valid. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
   Placements` applies the plan before any word it leaves out; such a word is then skipped with the
   server's reason (TH3). Out of scope: the rule for letters that abut a placed word side by side (#19
   defect 3).
@@ -1042,4 +1044,5 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   order in the upload. §4 item 4 states the behaviour; §6 gains TH4. Supersedes P17's "#19's backend half
   stays stretch" for #19 defect 1 (the plan uses the blacks the apply step writes); defect 3 stays out of
   scope. Ruled by default (owner go-ahead to fix TH4); beat: Apply All re-requesting suggestions after each
-  apply (greedy, places one word on this grid).
+  apply (greedy, places one word on this grid). The plan search's step budget is stated in §4 item 4: past
+  it the search keeps the best plan found so far, so "most words" holds within that budget.

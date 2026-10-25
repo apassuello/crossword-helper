@@ -219,7 +219,7 @@ characteristic runtime.
 
 ### Theme Placement (`backend/core/theme_placer.py`)
 - Places longest theme words first (centered, symmetric)
-- Multi-factor scoring: symmetry (+20), intersections (+10 each), position preference (center bias), spacing (+10 if >4 apart), length consideration
+- Multi-factor scoring: symmetry (+20), intersections (+10 each), position preference (center bias), length consideration (no spacing term: every word is ranked on the grid as it is)
 - Generates 3 ranked suggestions per word
 - Locked theme words survive autofill clearing
 

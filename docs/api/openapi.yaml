@@ -551,8 +551,12 @@ paths:
         - Theme Management
       summary: Suggest theme word placements
       description: |
-        Generate optimal placement suggestions for theme words.
-        Considers symmetry, position, intersections, and spacing.
+        Generate placement suggestions for theme words. Each word's suggestions
+        are its best placements on the grid as it is, ranked by symmetry,
+        position and intersections with letters already on the grid.
+        The words are listed with the joint plan's members first, in plan
+        order, then the rest, so applying each word's first suggestion from
+        top to bottom applies the plan before any word it leaves out.
       operationId: suggestThemePlacements
       requestBody:
         required: true
