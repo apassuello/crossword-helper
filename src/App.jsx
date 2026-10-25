@@ -35,7 +35,8 @@ import CrosswordGrid from './components/bench/CrosswordGrid';
 import RestoreBanner from './components/bench/RestoreBanner';
 import InlineConfirm from './components/bench/InlineConfirm';
 import GridHintLine from './components/bench/GridHintLine';
-import GridPanel, { NEW_GRID_SIZES } from './components/bench/GridPanel';
+import GridPanel from './components/bench/GridPanel';
+import { IMPORT_MIN_SIZE, IMPORT_MAX_SIZE } from './lib/gridSizes';
 import PatternMatcher from './components/PatternMatcher';
 import AutofillPanel from './components/bench/AutofillPanel';
 import ExportPanel from './components/ExportPanel';
@@ -52,13 +53,16 @@ import './styles/App.scss';
 const VALIDATION_WORDLISTS = ['comprehensive'];
 
 /**
- * novice-readiness spec 0.2.8 §3.4 (G#77 App.jsx:264): a stored entry becomes the live
- * document only if `size` is one of the offered sizes, `grid` is a `size`×`size` array of
- * rows and every cell is a non-null object. Anything else would crash `allSlots` (ragged
- * rows) or `normalizeCell` (a null cell) after the adoption had started.
+ * A stored entry becomes the live document only if `size` is an integer the importer accepts
+ * (`IMPORT_MIN_SIZE`..`IMPORT_MAX_SIZE`: a saved import may be any of them), `grid` is a
+ * `size`×`size` array of rows and every cell is a non-null object. Anything else would crash
+ * `allSlots` (ragged rows) or `normalizeCell` (a null cell) after the adoption had started.
+ * The spec (0.2.8 §3.4, G#77 App.jsx:264) requires the entry to be validated before adoption
+ * but names no size rule; the size rule is the plan's, Task 6.20 (amended by Phase 6R I2).
  */
 export function isAdoptableEntry(entry) {
-  if (!entry || !NEW_GRID_SIZES.includes(entry.size)) return false;
+  if (!entry || !Number.isInteger(entry.size)) return false;
+  if (entry.size < IMPORT_MIN_SIZE || entry.size > IMPORT_MAX_SIZE) return false;
   const { grid, size } = entry;
   return (
     Array.isArray(grid) &&
