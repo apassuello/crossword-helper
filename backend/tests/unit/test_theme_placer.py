@@ -394,3 +394,46 @@ class TestTH4JointPlan:
         elapsed = time.perf_counter() - t0
         assert elapsed < 1.0, elapsed
         assert ThemePlacer(15).suggest_placements(words, existing_grid=grid) == first
+
+
+CAPPED_WORDS = ["MYNBIQP", "MZJPLSG", "QEJEYDT", "ZIRWZTE", "JDXCVKP", "RDLNKTU", "GRPOQIB", "ZRACXMW", "ZVUATPK", "HXKWCGS"]
+
+
+class TestPlanNodeCap:
+    def test_capped_plan_search_still_returns_a_valid_plan_and_suggests_every_fitting_word(self, monkeypatch):
+        """Spec 0.2.16 section 4 item 4: past the node budget the search keeps the best plan found so far."""
+        import backend.core.theme_placer as theme_placer
+
+        calls = {"n": 0}
+        real = theme_placer.apply_checked_placement
+
+        def spy(grid, placement):
+            calls["n"] += 1
+            return real(grid, placement)
+
+        monkeypatch.setattr(theme_placer, "apply_checked_placement", spy)
+
+        # (i) the cap path was taken: tightening the limit strictly reduces the
+        # search work, which only happens if the cap branch cuts the search.
+        monkeypatch.setattr(theme_placer, "_PLAN_NODE_LIMIT", 1000)
+        ThemePlacer(7).suggest_placements(CAPPED_WORDS)
+        looser_calls = calls["n"]
+        monkeypatch.setattr(theme_placer, "_PLAN_NODE_LIMIT", 1)
+        calls["n"] = 0
+        results = ThemePlacer(7).suggest_placements(CAPPED_WORDS)
+        assert calls["n"] < looser_calls, (calls["n"], looser_calls)
+
+        # (iii) every word fits somewhere on an empty 7x7, so every word is suggested.
+        assert [r["word"] for r in results if not r["suggestions"]] == []
+
+        # (ii) plan members come first; their first suggestions apply in turn
+        # with no conflicts. The plan is non-trivial: several words, not none.
+        grid = [[""] * 7 for _ in range(7)]
+        applied = 0
+        for entry in results:
+            s = entry["suggestions"][0]
+            conflicts, _ = real(grid, {"word": entry["word"], "row": s["row"], "col": s["col"], "direction": s["direction"]})
+            if conflicts:
+                break
+            applied += 1
+        assert applied >= 4, applied

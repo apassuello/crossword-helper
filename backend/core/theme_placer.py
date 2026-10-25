@@ -43,11 +43,13 @@ class ThemePlacer:
     """
     Suggests optimal placements for theme words in crossword grids.
 
-    Strategy:
+    Strategy (spec 0.2.16 section 4 item 4):
     1. Sort words by length (longest first)
-    2. Place longest word centered horizontally (symmetric)
-    3. Find intersecting placements for remaining words
-    4. Maximize spacing and symmetry
+    2. Rank each word's placements on the grid as it is, independently of the
+       other theme words (symmetry, intersections with letters already on the
+       grid, position, diversity across the grid)
+    3. Choose a joint plan, one placement per word, that places the most words
+       when applied in turn, then the highest total score (_plan_placements)
     """
 
     def __init__(self, grid_size: int):
@@ -319,9 +321,13 @@ class ThemePlacer:
                 score += 10
 
         # ===============================
-        # FACTOR 5: Spacing (0-10 points)
+        # FACTOR 5: Spacing from placed words (inert, constant +10)
         # ===============================
-        # Bonus for good spacing from other theme words
+        # self.placed_words stays empty while suggesting, because every word is
+        # ranked against the grid as it is (spec 0.2.16 section 4 item 4), so
+        # the distance below is always 999 and this adds the same 10 points to
+        # every placement. It does not affect ranking order; it is kept so
+        # the reported scores do not shift.
         min_distance = self._min_distance_to_placed_words(placement)
         if min_distance > 4:
             score += 10
@@ -369,7 +375,12 @@ class ThemePlacer:
         return count
 
     def _min_distance_to_placed_words(self, placement: Dict) -> int:
-        """Calculate minimum distance to any already placed word."""
+        """
+        Minimum Manhattan distance to any word in self.placed_words.
+
+        placed_words is filled only by apply_placement, which suggest_placements
+        does not call, so during suggestion this returns 999.
+        """
         if not self.placed_words:
             return 999  # No placed words yet
 
