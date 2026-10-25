@@ -3183,10 +3183,72 @@ Added 2026-10-25. The plan search recurses one frame per submitted word, so a li
 - [ ] **Step 5: Commit:** `fix(theme): refuse more than 50 theme words, so the plan search cannot exceed the recursion limit`.
 ---
 
+## Phase U: undo and redo (spec 0.2.18 §3.9)
+
+Worktree `../crossword-helper-undo`, branch `feat/undo-redo` (off `fix/theme-joint-plan`; rebase onto `origin/main` once PR #89 merges). Never push. The history lives in the UI: undo restores grid content the user already had, and no crossword rule is involved, so the CLI-first rule does not apply. Each task starts with failing tests, RED evidence recorded before any `src/` edit. Phase-end gates: `npx vitest run`, `npm run build`, `bash scripts/docs-check.sh`, `bash scripts/check-guards.sh --full-tree`, each run alone. Then the browser drive (Task U.4) is mandatory.
+
+### Task U.1: the history module (§3.9 "What a step holds", "Restoring")
+
+**Files:** Create: `src/lib/history.js`. Test: `src/__tests__/lib/history.test.js`.
+
+**Interfaces (pure, no React):**
+- `snapshotContent(grid, gridSize) -> Snapshot`: `{ size, cells }` where each cell holds exactly `letter`, `isBlack`, `isThemeLocked`, `isAutofilled`, the fields `contentSigOf` in `App.jsx` reads. Name that coupling in a comment, citing §3.9.
+- `restoreContent(grid, snapshot) -> grid`: a new grid with those four fields taken from the snapshot, `isError` and `isBlocked` false on every cell, and every other field kept from `grid`.
+- `emptyHistory() -> History`; `pushStep(history, snapshot) -> History`, which keeps the latest 100 steps and clears redo; `undoStep(history, currentSnapshot) -> { history, snapshot } | null`; `redoStep(history, currentSnapshot) -> { history, snapshot } | null`; `canUndo(history)`; `canRedo(history)`. Every function returns new values and never mutates its input.
+
+**Criteria:**
+- Round trip: push, undo and redo restore content exactly, including `isAutofilled` and `isThemeLocked`.
+- A push clears redo, and step 101 drops the oldest.
+- `restoreContent` clears `isError` and `isBlocked`.
+- The two `null` returns happen on empty stacks.
+- `contentSigOf(restoreContent(g, snapshotContent(h)))` equals `contentSigOf(h)` for grids `g` and `h` of one size. Export `contentSigOf` from `App.jsx` only if the test needs it; otherwise compare the four fields.
+
+- [ ] Step 1: tests. Step 2: run them, RED (the module does not exist). Step 3: implement. Step 4: run the file and `npx vitest run`. Step 5: commit `feat(undo): a pure history of grid content snapshots`.
+
+### Task U.2: wire the history into the user-action handlers (§3.9 "What one step is", "History ends with the document", "Gating", "Async responses")
+
+**Files:** Modify: `src/App.jsx`, `src/components/ThemeWordsPanel.jsx` (Apply All's begin/commit), and `src/hooks/useAutofillMachine.js` (report a committed run with its Start snapshot). Tests: the existing `App` and component test files, plus a new `src/__tests__/undoWiring.test.jsx` if that reads better.
+
+**Interfaces:** a hook, e.g. `useUndoHistory({ gridRef, gridSize, setGrid, editingPausedRef })`, returning `{ record(prevGrid), beginBatch(), commitBatch(), undo(), redo(), clear(), canUndo, canRedo }`. The implementer owns the mechanics; the behaviour below is binding.
+
+**Criteria:**
+- **One step each** when content changes: `setLetter` (type or Backspace), `toggleBlackSquare` (the cell and its mirror as one step), `toggleThemeLock`, `handlePatternSelect`, `handleThemeWordApplied` from `Apply This Placement`, `acceptClean`. A handler whose write returns the same grid reference records nothing.
+- **Apply All is one step**, whatever the number of words: `ThemeWordsPanel`'s `handleApplyAllPlacements` opens the batch before its first request and commits it where the TH3 summary is computed (§3.8), and the per-word `onApplyPlacement` calls inside it record nothing of their own. If it applied nothing, there is no step.
+- **Autofill:** a finished run that changed the grid (success, or "Keep partial fill") records one step whose snapshot is the machine's existing Start snapshot (`startSnapshotRef`, §2.3). A run whose outcome restores the Start snapshot records nothing. The run's merges and progress record nothing.
+- **Not recorded:** Verify (`applyVerifyErrors`), `clearAllErrors`, `useNumbering` writes, autofill merges.
+- **Clear both stacks** in `createNewGrid` (New grid and size change), `handleGridImport`, `adoptSavedEntry` (Open saved and restore on load). A save fork (`onForked`) keeps them.
+- **Gating:** `undo` and `redo` return early when `editingPausedRef.current` is true (D1), like every other writer.
+- **Async:** after an undo, a Verify or Clean response in flight applies to the current grid under the existing S1 rules, and an open Clean confirm is dismissed (§3.5). Pin both with tests: undo while a Verify request is pending, then resolve it.
+- Undo back to the saved content makes `isDirty` false.
+
+- [ ] Step 1: tests, one per criterion, with Apply All of three words as one step. Step 2: RED. Step 3: implement. Step 4: run the touched files and `npx vitest run`. Step 5: commit `feat(undo): every user edit is one undo step, Apply All and a finished autofill run included`.
+
+### Task U.3: keys and top-bar buttons (§3.9 "Controls")
+
+**Files:** Modify: `src/components/bench/TopBar.jsx` and `src/App.jsx` (a document-level `keydown` listener). Tests: `TopBar` and `App` test files.
+
+**Criteria:**
+- `Undo` and `Redo` buttons in the top bar, each `disabled` when its stack is empty or while autofill is live.
+- Keys: Cmd+Z / Ctrl+Z undo; Cmd+Shift+Z / Ctrl+Shift+Z and Ctrl+Y redo. They are handled on `document` and ignored when the event target is an `input`, `textarea`, `select` or contenteditable element; there the browser's text undo runs.
+- When handled, the event's default is prevented.
+- The grid's own listener (`CrosswordGrid.jsx` `dispatchGridKey`) does not also act on Z.
+- Pressing a key after a click on a panel button (focus outside the grid) still undoes.
+
+- [ ] Step 1: tests (key events on `document`, on the grid, on a focused text input; disabled states). Step 2: RED. Step 3: implement. Step 4: run the files, `npx vitest run`, `npm run build`. Step 5: commit `feat(undo): Undo and Redo in the top bar, with Cmd/Ctrl+Z and redo keys`.
+
+### Task U.4: README and the browser drive (no new code; the owner's GUI gate)
+
+**Files:** Modify: `README.md` ("Using the app": the top bar line names `Undo` and `Redo` and the keys).
+
+- [ ] Step 1: README edit; `bash scripts/docs-check.sh`, with the result read on its own line.
+- [ ] Step 2: phase-end gates, each run alone.
+- [ ] Step 3: browser drive of spec §6 UNDO (the row is in Task 8.5's table) on the dev servers from this worktree, with clean storage. Paste the observed values into the worktree's SDD ledger.
+- [ ] Step 4: commit `docs(readme): the tour names Undo and Redo`.
+
 ## Phase 8: acceptance (spec §6)
 
 **Method (binding, from `docs/dev/qa/2026-10-22-fresh-install-run.md`).**
-- Fresh clones of the committed `feat/novice-readiness` tip: E1 = CPython 3.13.7 (uv download only) + current Node LTS; E2 = the Xcode CLT `/usr/bin/python3` first on `PATH` + the same Node. Wrapper scripts run one command string under `env -i` (ENV-1, ENV-2).
+- Fresh clones of `origin/main` after Phase U merges (the phases landed on `main` through PRs; the old `feat/novice-readiness` tip predates them): E1 = CPython 3.13.7 (uv download only) + current Node LTS; E2 = the Xcode CLT `/usr/bin/python3` first on `PATH` + the same Node. Wrapper scripts run one command string under `env -i` (ENV-1, ENV-2).
 - Functional cases run top-level on `http://127.0.0.1:5000` (ENV-3: the browser tool cannot set the window size; `localhost` carries a stored page zoom). Layout cases (TH5 at the desktop viewport and at 1024 px; the Lists rows if re-run) are measured inside a same-origin iframe sized exactly 1440×900 and 1024×768, reading the iframe's own `innerWidth/innerHeight`, as L3 and L4 did.
 - Evidence goes to `/Users/apa/projects/crossword-helper/.handoff/artifacts/<YYYY-MM-DD>-novice-readiness/` (gitignored; exists only in the main checkout). Reuse `…/2026-10-22-fresh-install/driver/api_probe.py` and `api_probe2.py` as the model for API-level observations (they hard-code `/private/tmp/crossword-fresh/crossword-helper/data/grids/` and `http://127.0.0.1:5000/api`; copy and adapt the paths, do not edit the originals).
 - The run log is `docs/dev/qa/YYYY-MM-DD-novice-readiness-run.md`, dated the day it runs, using the old log's case-block format verbatim (`### <ID> — <title>` / Phase · Env · Viewport / Steps / Expected / Observed / Evidence / Verdict: PASS|FAIL|BLOCKED|NOT-IMPLEMENTED|UNSPECIFIED|NOT-TESTABLE · Severity · Known). Observed values are pasted command output, never typed.
@@ -3216,9 +3278,9 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:$SB/tools/python/<
 exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm LANG=en_US.UTF-8 /bin/bash -c "$1"
 ```
 
-- [ ] **Step 1: Pin the artefact.** In the worktree: `git status --short` must be empty; `git rev-parse --short HEAD` is the sha under test. Everything below clones exactly that sha.
+- [ ] **Step 1: Pin the artefact.** `git fetch origin && git rev-parse --short origin/main` is the sha under test. Everything below clones exactly that sha.
 - [ ] **Step 2: Tools.** `UV_PYTHON_INSTALL_DIR="$SB/tools/python" uv python install 3.13.7`; Node LTS tarball into `$SB/tools/node` with its SHA-256 verified against `SHASUMS256.txt`; write `e1.sh`, `e2.sh`; run the ENV-1/ENV-2 probe (`python3 --version`, `which -a python3 node npm`, `env`) through each and keep the output.
-- [ ] **Step 3: Clones.** `git clone --local /Users/apa/projects/crossword-helper-novice "$SB/e1/crossword-helper"` and `…/e2/crossword-helper`; `git -C <clone> checkout <sha>`; `git -C <clone> status --short` empty in both (CLONE-1).
+- [ ] **Step 3: Clones.** `git clone https://github.com/apassuello/crossword-helper.git "$SB/e1/crossword-helper"` (a fresh clone, as a novice gets) and `…/e2/crossword-helper`; `git -C <clone> checkout <sha>`; `git -C <clone> status --short` empty in both (CLONE-1).
 - [ ] **Step 4: Fixtures.** Recreate F7 (non-ASCII: the words of L11, `CAFÉ`, `NAÏVE`, `ÜBER`, plus one `ß`, one `Æ` and one `Ø` word) from the 2026-10-22 definition (`FIX-1` in the old log; fixtures are under `/private/tmp/crossword-fresh/fixtures/` only while that directory survives). Fixtures for AF-BLOCK-LEN and AF-LOCKED-CROSS are built in Task 8.6 when needed. Keep all under `$SB/fixtures`.
 - [ ] **Step 5: Write the header** of the run log: clone sha, E1/E2 interpreter and Node versions (pasted), the ENV-3 viewport method sentence, and a coverage table with one row per §6 "Area" cell (copied from the spec, one line each) whose Verdict column is filled by Tasks 8.3-8.7.
 - [ ] **Step 6: Commit the header:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness acceptance run, header and environment"`.
@@ -3252,6 +3314,29 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 
 - [ ] **Step 1:** run both images; one case block per image-and-state. **Step 2:** fill the coverage row. **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, linux rows"`.
 
+### Task 8.5a: fundamentals rows (browser and README, E1), run before the detailed rows
+
+§6 rows, verbatim (owner 2026-10-25: verify the whole basic workflow; spec §1 "Fundamentals in acceptance"):
+
+| Area | Cases | Pass criterion |
+|---|---|---|
+| New: F-WORKFLOW | On a fresh clone, following only the README: New grid 15x15, black squares with `Symmetry` on, load theme words with `Choose File`, `Apply All Best Placements`, fill one slot from a Search result, `Start Autofill` for the rest, `Verify words`, `Clean grid` if anything is red, `Undo` and `Redo` once each, `Save grid` under a name, reload, `Open saved`, Export JSON, HTML and Text | Every step can be done from the README and the visible controls alone, with no dead end; each step shows its result on the grid or in a message; across the whole run the browser console shows no uncaught error and the network log no 5xx response (both counts pasted into the log) |
+| New: F-TOUR | Follow README "Using the app" literally, start to finish | Every step works as written; every backticked control is where the README says |
+| New: F-IMPORT | `Upload File` with `example_11x11.json`, `example_15x15.json` and `example_21x21.json`; `Paste JSON` with one of them; import over a grid with letters; a malformed file and malformed pasted text | The grid matches the file (size and black squares); importing over letters asks the replace confirm; malformed input shows a plain message, no crash or blank grid, and the current grid is unchanged |
+| New: F-EDIT | New grid at 11x11, 15x15 and 21x21; type letters; arrows, Enter, Tab and Backspace as the grid's hint line describes; place and remove black squares with `Symmetry` on and off; Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z after each kind of edit | Each key does what the hint line says; the mirror square follows the toggle; numbering and the GRID stats (Total, Black, Filled, Words) update after each change; undo and redo step back and forth one edit at a time (§3.9) |
+| New: F-THEME-LOAD | `Choose File` with a list holding a lowercase word, a blank line, a duplicate, a 2-letter word and a word longer than the grid; then `Apply This Placement` on one suggestion | Valid words load in uppercase, once each; the invalid words are named with a reason; the applied word is on the grid and shown as theme-locked |
+| New: F-LISTS | First start: the Lists panel; `Statistics` and `Preview` of a shipped list; `Upload Wordlist` with a plain ASCII list holding a word no shipped list has; `Add Words`; delete the uploaded list | The shipped lists are shown and selected by default; the uploaded list can be ticked in Search and in Autofill, and Search finds its unique word; deleting asks a confirm and removes it from Search and Autofill |
+| New: F-SEARCH | On the default lists: `C?T`, a 6-letter all-`?` pattern, a pattern no word matches (e.g. `Q?Z??`); place one result in an empty slot | Every result matches the pattern and its length; the no-match case shows a message, not an empty panel; the placed word fills exactly that slot |
+| New: F-EXPORT | Export JSON, HTML and Text, each after `Preview`; import the exported JSON into a new grid | Each export downloads a file whose content matches the grid; the JSON round trip restores letters and black squares. The log records whether theme locks survive; if they don't, the row still passes and the run's close adds a README known-limitations line (owner, §1) |
+| New: F-RESTORE | A grid with letters, black squares and a theme-locked word; reload; then `Open saved` on its named save | Letters, black squares and the theme lock survive both paths |
+| New: F-FEEDBACK | Across every browser row: each action that writes the grid or calls the server (apply, place, Verify, Clean, Save, import, export, upload, autofill, undo, redo) | Each shows visible feedback (a message, a toast or a grid change) within 2 s, or a busy state (2 s: Claude's threshold); every error message names the problem in plain language, with no stack trace, raw JSON or bare HTTP code |
+
+**Order:** F-TOUR and F-WORKFLOW first, on the fresh E1 clone with clean browser storage, since they are the novice's first session; then F-IMPORT, F-EDIT, F-THEME-LOAD, F-LISTS, F-SEARCH, F-EXPORT, F-RESTORE. F-FEEDBACK is judged across every browser row of 8.5a-8.6 and closed in Task 8.7. Console errors and 5xx responses are read with the browser tool's console and network logs, and the counts pasted, never typed. Fixtures (the theme list for F-THEME-LOAD, the ASCII word list for F-LISTS) go under `$SB/fixtures`.
+
+**Theme locks in F-EXPORT (owner):** not required to round-trip. If they don't, the row passes and Task 8.7 adds one plain-language line to README "Known limitations".
+
+- [ ] **Step 1:** run each case in the browser at `http://127.0.0.1:5000` (E1 server running); one `### <ID>` block per case; evidence in the evidence dir. **Step 2:** fill the coverage rows. Any FAIL: STOP and report. **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, fundamentals rows"`.
+
 ### Task 8.5: grid, save, guard, theme and hidden-control rows (browser, E1)
 
 §6 rows, verbatim:
@@ -3267,6 +3352,7 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
 | New: TH4 | Import `example_11x11.json`, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE, read the suggestions, then Apply All Best Placements | Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
+| New: UNDO | On a grid with typed letters: undo and redo each step kind of §3.9 (letter, black square with its mirror, theme lock, Search placement, `Apply This Placement`, a three-word `Apply All Best Placements`, an accepted Clean, a finished autofill run), with the buttons and with the keys; undo back to the last save; type after an undo; New grid and Import; press Cmd/Ctrl+Z inside the Search pattern field | Each step undoes and redoes as one step, restoring letters, black squares, theme locks and autofill marks exactly, with no red cell left; undoing back to the last save clears `unsaved changes`; typing after an undo greys `Redo`; New grid and Import grey both buttons; Cmd/Ctrl+Z in the Search field edits the text only |
 | New: SAVE-SIZE | Save a 21x21 grid, switch to 11x11, reload or Open saved | The saved grid restores at its own size, with its letters (S3) |
 | New: SAVE-TABS | Open one saved grid in two tabs, edit and save in both | The second save forks `<name> (copy)`; neither tab's work is lost (S4) |
 
@@ -3288,7 +3374,7 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 | New: AF-REFILL | Run Repair, choose "Keep partial fill", type a letter, press Start again | The typed letter is intact; the run is not refused because of the autofilled letters; the lock list sent excludes them |
 | New: AF-LOCKED-CROSS | Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start | The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement |
-| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved | None of them changes the grid; `Editing is paused while autofill runs.` shows |
+| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys) | None of them changes the grid; `Editing is paused while autofill runs.` shows |
 | New: AF-OFFLIST | Type a word not in the lists (case 2), Start | The run proceeds; those cells show red; the toast `Typed words not in the selected word lists: <WORD>` shows |
 | New: AF-NOLISTS | Untick every word list | Start is disabled with `Select at least one word list` (I5) |
 | New: AF-VERIFY-STALE | Press Verify (and, separately, Clean), type a letter while the request is in flight | The typed letter survives the response; an open Clean confirm is dismissed by the typing (S1) |
@@ -3320,6 +3406,6 @@ wc -l < "$SB/areas.txt"
 while IFS= read -r a; do grep -qF -- "$a" "$RUN" || echo "MISSING: $a"; done < "$SB/areas.txt"
 ```
 Positive control: `areas.txt` is non-empty and the loop prints nothing only if every area is present; run it once against a copy of the log with one row deleted and confirm it prints `MISSING`.
-- [ ] **Step 3: Close the log.** Add the summary the old log's `summary.txt` served (verdict per area, pasted from the coverage table), and record every FAIL/BLOCKED with its owning phase.
+- [ ] **Step 3: Close the log.** Add the summary the old log's `summary.txt` served (verdict per area, pasted from the coverage table), and record every FAIL/BLOCKED with its owning phase. Close F-FEEDBACK from the observations of every browser row. If F-EXPORT recorded that theme locks do not survive the JSON round trip, add one plain-language line to README "Known limitations" and commit it with the log (owner, spec §1).
 - [ ] **Step 4: Doc guard:** `bash scripts/docs-check.sh`, read the result on its own line.
 - [ ] **Step 5: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness acceptance run, lists, CLI and close"`.
