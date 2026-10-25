@@ -88,6 +88,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   // (buildOpts in runSave) and the Web Lock grants in request order: the first save of a new id
   // creates the entry and updates this value before the second reads it (Phase 6R review I1).
   const knownSavedAtRef = useRef(null);
+  const adoptionRef = useRef(0); // bumped synchronously by adoptSavedAt (a document was replaced)
   // Set by forget(): the stored entry is gone and the pending timer with it. A document that
   // was already dirty has no clean->dirty edge to arm on, so the next change to `doc` does
   // (novice-readiness spec 0.2.9 §3.4 (Q1)).
@@ -123,6 +124,12 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     clearAutosave(); // this attempt consumes any pending timer
     setStatus('saving');
     const requested = docRef.current;
+    // Open saved and import call `adoptSavedAt` in the same handler as the setter for the
+    // new docId, but React commits that docId a render later, so `docRef` can still name
+    // this document after it has been replaced. `adoptSavedAt` bumps `adoptionRef`
+    // synchronously: this save is for the current document only while neither moved.
+    const adoption = adoptionRef.current;
+    const isCurrent = () => adoptionRef.current === adoption && docRef.current?.id === requested.id;
     // `written` is the document this save writes. Locked saves resolve it when they EXECUTE
     // (inside the Web Lock, via storage.save's function form): the same document's latest
     // content, or the requested one if it has been replaced since (that save still writes
@@ -132,7 +139,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     const buildDoc = () => {
       if (builtDoc) return builtDoc; // resolved once: the lock calls it once, a test double may read it again
       const current = docRef.current;
-      written = current && current.id === requested.id ? current : requested;
+      written = isCurrent() ? current : requested;
       builtDoc = written;
       return written;
     };
@@ -145,7 +152,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     const buildOpts = () => {
       if (!builtOpts) {
         builtOpts = {
-          expectedSavedAt: docRef.current?.id === requested.id ? knownSavedAtRef.current : requestedKnown,
+          expectedSavedAt: isCurrent() ? knownSavedAtRef.current : requestedKnown,
           ...extra,
         };
       }
@@ -170,7 +177,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
         // replaced must not set the new document's clean signature, its known savedAt, its
         // docId (fork) or its status label (novice-readiness spec 0.2.9 §3.4 (S4), §2.3 (M1)).
         // Reachable since Task 6.19: a Web Lock grant is asynchronous.
-        if (written.id !== docRef.current?.id) return true;
+        if (!isCurrent()) return true;
         knownSavedAtRef.current = res.savedAt;
         // A throwing callback must not reject the save (the write already happened)
         // nor skip the `saved` transition below.
@@ -195,7 +202,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
         if (!mountedRef.current) return false;
         // A failed save of a replaced document says nothing about the current one: no
         // `offline` label and no retry timer for it (the toast below still reports the loss).
-        const current = written.id === docRef.current?.id;
+        const current = isCurrent();
         if (current) setStatus('error');
         // novice-readiness spec 0.2.8 §3.4 (Q3): a pagehide save fails without a toast.
         if (!silent) {
@@ -224,6 +231,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   }, []);
 
   const adoptSavedAt = useCallback((at) => {
+    adoptionRef.current += 1;
     knownSavedAtRef.current = at;
   }, []);
 

@@ -766,4 +766,25 @@ describe('useSaveMachine: a save resolution only acts on the document it wrote',
     expect(stored().map((e) => e.id).sort()).toEqual(['a']);
     expect(stored()[0].name).toBe('Renamed');
   });
+
+  // M3 (Phase 6R final review): Open saved and import call `adoptSavedAt` synchronously but
+  // commit the new docId a render later, so a lock grant can land between the two.
+  it('M3: autosave of A granted between adoptSavedAt(X) and X rendering: X still saves without a fork', async () => {
+    seed(entry('a', S0), entry('x', S1));
+    const onForked = vi.fn();
+    const onSaved = vi.fn();
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onForked, onSaved });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave(); // A's save waits for the lock
+    act(() => result.current.adoptSavedAt(S1)); // Open saved X: the adoption is synchronous ...
+    await flushAllLocks(); // ... the grant lands before X's render
+    rerender({ doc: { id: 'x', n: 1 }, isDirty: false, onForked, onSaved }); // ... which commits now
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onForked).not.toHaveBeenCalled();
+    rerender({ doc: { id: 'x', n: 2 }, isDirty: true, onForked, onSaved });
+    await fireAutosave();
+    await flushAllLocks();
+    expect(stored().map((e) => e.name).sort()).toEqual(['A', 'X']);
+    expect(onForked).not.toHaveBeenCalled();
+  });
 });
