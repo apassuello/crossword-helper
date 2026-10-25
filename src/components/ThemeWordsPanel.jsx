@@ -65,8 +65,8 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
   const listSigRef = useRef(null);
   const requestTokenRef = useRef(0);
 
-  // novice-readiness spec 0.2.8 §3.8 (F1): Apply All stops sending once the panel
-  // is closed (unmounted).
+  // novice-readiness spec 0.2.8 §3.8 (F1), 0.2.19: Apply All stops sending once the panel
+  // is closed (unmounted) and drops a reply that lands after the close.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -287,7 +287,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
       toast.loading('Applying all theme words...', { id: 'apply-all' });
 
       for (const wordData of suggestions) {
-        if (!mountedRef.current) break; // panel closed: send nothing further
+        if (!mountedRef.current) break; // panel closed: send nothing further (F1)
         // Skip words with no valid placements
         if (!wordData.suggestions || wordData.suggestions.length === 0) {
           skipped.push(`${wordData.word} (no valid placement)`);
@@ -316,6 +316,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
               direction: bestSuggestion.direction
             }
           });
+          if (!mountedRef.current) break; // panel closed while this request was out: drop its reply (F1)
 
           if (response && response.grid) {
             const sentGrid = currentGrid; // the grid this word's request was built from
