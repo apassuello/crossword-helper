@@ -3120,7 +3120,8 @@ git commit -m "fix(ui): Search is disabled until a word list is selected"
 |---|---|---|
 | `Hello, World!` | `HELLOWORLD` | `default` |
 | `Tina Fey` | `TINAFEY` | `two_word_names` |
-| `The Office` | `THEOFFICE` | `title_with_article` |
+| `The Office` | `THEOFFICE` | `two_word_names` (corrected 2026-10-25: `RULES` checks `two_word_names`, `^[A-Z][a-z]+ [A-Z][a-z]+$`, first, and the order is unchanged) |
+| `La haine` | `LAHAINE` | `title_with_article` |
 | `self-aware` | `SELFAWARE` | `hyphenated` |
 | `can't` | `CANT` | `apostrophe` |
 | an input that reaches the default rule and contains an accented letter (e.g. `É`) | the folded letters (`É` → `E`), uppercased | `default` |
