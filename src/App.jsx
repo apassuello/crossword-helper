@@ -621,6 +621,10 @@ function App() {
     // A freshly imported grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
     setSavedSig(contentSigOf(size, normalisedGrid));
+    // The new docId commits a render later (this runs from ImportPanel's timer); marking the
+    // replacement now keeps a save of the old document, granted in between, off the new one
+    // (Phase 6R re-review N2). A fresh id has no stored entry, so no savedAt to expect.
+    adoptSavedAt(null);
 
     // novice-readiness spec 0.2.8 §3.2 Import (M3): clear a finished run's result and
     // "Keep partial fill" offer, as New grid and Open saved do.
@@ -629,7 +633,7 @@ function App() {
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, autofill.discardRun]);
+  }, [gridSize, autofill.discardRun, adoptSavedAt]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
