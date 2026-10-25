@@ -746,7 +746,8 @@ def _read_wordlist_words(path):
     accented words fold, "word,score" lines load, and a word the solver rejects
     is rejected here. WordList.from_file is not used because it also builds the
     solver's indices and these routes only need the set of words.
-    An unreadable list contributes nothing (unchanged behaviour).
+    A list that fails while being read contributes the words read before the
+    failure, and an unreadable one contributes nothing (unchanged behaviour).
     """
     from cli.src.fill.word_list import WordList
 
