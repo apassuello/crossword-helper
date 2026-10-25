@@ -12,6 +12,23 @@ Shared by the Verify/Clean routes (a set) and WordListManager (file order).
 from typing import List, Set
 
 
+def line_key(text: str) -> str:
+    """The word a list line or a requested word stands for, as the list shows it.
+
+    novice-readiness spec 0.2.14 section 4 item 1: ``WordList.canonical_word``
+    of the word ``WordList.parse_line`` returns, so ``CAFE`` and ``CAFÉ;50``
+    share a key, as do ``GRAPE`` and ``grape,40``. A line ``parse_line``
+    rejects keeps the old key: its text before ``;``, uppercased.
+    """
+    from cli.src.fill.word_list import WordList
+
+    text = text.strip()
+    parsed = WordList.parse_line(text)
+    if parsed:
+        return WordList.canonical_word(parsed[0])
+    return text.split(";", 1)[0].strip().upper()
+
+
 def read_wordlist_words_ordered(path, strict: bool = False) -> List[str]:
     """Words of one list file in file order, each once (first occurrence wins).
 

@@ -119,3 +119,69 @@ def test_load_raises_on_an_undecodable_list_and_caches_nothing(tmp_path):
     with pytest.raises(UnicodeDecodeError):
         mgr.load("latin")
     assert "latin" not in mgr._cache
+
+
+def _file_lines(tmp_path, name="custom"):
+    text = (tmp_path / f"{name}.txt").read_text(encoding="utf-8")
+    return [ln for ln in text.splitlines() if ln]
+
+
+class TestEditsKeyOnTheFoldedWord:
+    """novice-readiness spec 0.2.14 section 4 item 1: add/remove key on the word load() shows."""
+
+    def test_remove_folded_word_drops_accented_scored_line(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50", "APPLE"])
+        m.remove_words("custom", ["CAFE"])
+        assert _file_lines(tmp_path) == ["APPLE"]
+        m._cache.clear()
+        assert m.load("custom") == ["APPLE"]
+
+    def test_remove_matches_comma_scored_line(self, tmp_path):
+        m = _manager(tmp_path, ["grape,40"])
+        m.remove_words("custom", ["GRAPE"])
+        assert _file_lines(tmp_path) == []
+
+    def test_remove_accepts_a_lowercase_accented_request(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50"])
+        m.remove_words("custom", ["café"])
+        assert _file_lines(tmp_path) == []
+
+    def test_remove_accented_request_matches_unaccented_stored_line(self, tmp_path):
+        """Row 3b: row 3 alone passes pre-fix (str.upper() already maps café to CAFÉ)."""
+        m = _manager(tmp_path, ["CAFE;50"])
+        m.remove_words("custom", ["café"])
+        assert _file_lines(tmp_path) == []
+
+    def test_remove_drops_every_line_with_the_key(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50", "CAFE;40"])
+        m.remove_words("custom", ["CAFE"])
+        assert _file_lines(tmp_path) == []
+        m._cache.clear()
+        assert "CAFE" not in m.load("custom")
+
+    def test_add_bare_folded_word_keeps_stored_accented_score(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50"])
+        m.add_words("custom", ["CAFE"])
+        assert _file_lines(tmp_path) == ["CAFÉ;50"]
+
+    def test_add_scored_folded_word_replaces_stored_line(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50"])
+        m.add_words("custom", ["CAFE;60"])
+        assert _file_lines(tmp_path) == ["CAFE;60"]
+
+    def test_add_uppercase_to_comma_scored_lowercase_writes_one_line(self, tmp_path):
+        m = _manager(tmp_path, ["apple,50"])
+        m.add_words("custom", ["APPLE"])
+        assert len(_file_lines(tmp_path)) == 1
+
+    def test_add_rewrite_keeps_the_first_line_of_a_key(self, tmp_path):
+        m = _manager(tmp_path, ["CAFÉ;50", "CAFE;40"])
+        m.add_words("custom", ["DOGS"])
+        kept = [ln for ln in _file_lines(tmp_path) if ln.startswith("CAF")]
+        assert kept == ["CAFÉ;50"]
+
+    def test_pin_rejected_line_keeps_the_old_key(self, tmp_path):
+        """Passes before the fix too: parse_line rejects APPLE;x, so the old key applies."""
+        m = _manager(tmp_path, ["APPLE;x"])
+        m.remove_words("custom", ["APPLE"])
+        assert _file_lines(tmp_path) == []
