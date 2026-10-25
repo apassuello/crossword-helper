@@ -102,3 +102,20 @@ def test_get_wordlist_info_counts_loaded_words(tmp_path):
 def test_file_order_is_kept(tmp_path, name):
     m = _manager(tmp_path, ["ZEBRA", "APPLE", "zebra", "MANGO"], name)
     assert m.load(name) == ["ZEBRA", "APPLE", "MANGO"]
+
+
+def test_load_raises_on_an_undecodable_list_and_caches_nothing(tmp_path):
+    """load() must not serve a truncated list as if it were whole.
+
+    Verify/Clean keep their swallow-and-skip (Task 7.3, unchanged behaviour);
+    WordListManager.load raised on a read error before Task 7.7 and still must,
+    or GET /api/wordlists/<name> would show the words before the bad byte as
+    the whole list.
+    """
+    (tmp_path / "latin.txt").write_bytes("CAT\nDOG\n".encode() + "CAFÉ\nEMU\n".encode("latin-1"))
+    mgr = WordListManager(wordlist_dir=str(tmp_path))
+    mgr._cache.clear()
+
+    with pytest.raises(UnicodeDecodeError):
+        mgr.load("latin")
+    assert "latin" not in mgr._cache
