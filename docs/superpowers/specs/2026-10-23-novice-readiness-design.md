@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.13** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.14** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25
@@ -699,6 +699,11 @@ real reason (above) instead of a stale offer.
   `backend/tests/integration/test_parse_wordlist_e2e.py`, which has no accented input today. Folding
   uppercases only ASCII letters: `"ß".upper()` is `"SS"`, so a plain `upper()` before the A–Z check would
   accept `ß` as `SS`.
+  The Lists panel's edits key on the same word. `WordListManager.add_words` and `remove_words` identify a
+  stored line, and a requested word, by `WordList.canonical_word` of the word `parse_line` returns, so an
+  add or a removal of `CAFE` acts on a stored `CAFÉ;50`, and one of `GRAPE` on `grape,40`. A line
+  `parse_line` rejects keeps the old key, its text before `;` uppercased. A removal drops every stored line
+  with the key; an add's rewrite keeps the first of them, the one the list shows.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
   Nor from the API: `POST /api/pattern` and `POST /api/pattern/with-progress` reject an explicit
@@ -995,3 +1000,10 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   letters" and PD-L7 says letters are "folded as §4 item 1 folds them", which reads as `STRAßE`. Ruled
   (owner 2026-10-25, "double S"): keep `str.upper()`. Beat: uppercasing ASCII letters only (`STRAßE`, not
   enterable in a grid). Found by the controller reading Task 7.5's report against §4 item 1.
+- 0.2.14 (2026-10-25): §4 item 1 states how the Lists panel's edits identify a word. Task 7.7 moved
+  `WordListManager.load` onto the shared parser, while `add_words` and `remove_words` still keyed on the text
+  before `;`, uppercased: removing `CAFE`, the word the list returns for a stored `CAFÉ;50`, reported success
+  and left the line, as did `GRAPE` for `grape,40`, and adding `CAFE` wrote a second line that the list then
+  hid. Ruled by default (owner go-ahead to the fix plan, 2026-10-25): key both edits on the folded word.
+  Beat: keeping the raw key and recording that only a stored spelling can be edited. Found by Greptile on
+  PR #87 (P1, thread 4370995355).
