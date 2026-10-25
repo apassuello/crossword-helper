@@ -100,7 +100,7 @@ export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) 
   const forgottenRef = useRef(false);
   const isDirtyRef = useRef(isDirty); // latest dirtiness, read by the pagehide handler
   // The clean status (`pristine` or `saved`) the document had when it last turned dirty, shown
-  // again when it returns to its saved content (novice-readiness spec 0.2.11 §3.9, History).
+  // again when it returns to its saved content (novice-readiness spec 0.2.18 §3.9, "What a step holds").
   const preDirtyStatusRef = useRef('pristine');
 
   docRef.current = doc;
@@ -302,7 +302,7 @@ export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) 
       armAutosave();
     }
     // dirty→clean while the machine still reads `dirty` (or `error`) is a return to the saved
-    // content (an undo, or any edit that restores it, spec 0.2.11 §3.9): show the state the
+    // content (an undo, or any edit that restores it, spec 0.2.18 §3.9): show the state the
     // document had before the edit and cancel the armed autosave, as there is nothing new to
     // write. A document whose stored entry was deleted (forget) stays `dirty`.
     // dirty→clean after the machine's OWN save arrives with status `saved` (the parent marks the

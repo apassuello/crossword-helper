@@ -209,7 +209,7 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const onToastRef = useRef(onToast);
   onStartRef.current = onStart;
   onToastRef.current = onToast;
-  // Undo wiring (novice-readiness spec 0.2.11 §3.9, Autofill): told when a run's result was
+  // Undo wiring (novice-readiness spec 0.2.18 §3.9, "What one step is"): told when a run's result was
   // committed to the grid, with the grid to restore on undo.
   const onRunCommittedRef = useRef(onRunCommitted);
   onRunCommittedRef.current = onRunCommitted;

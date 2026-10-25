@@ -274,7 +274,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
       return;
     }
 
-    // Apply All is one undo step (novice-readiness spec 0.2.11 §3.9): the host opens its batch
+    // Apply All is one undo step (novice-readiness spec 0.2.18 §3.9): the host opens its batch
     // before the first request and it closes on every path out, the early returns included.
     onBatchBegin?.();
     try {

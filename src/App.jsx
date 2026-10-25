@@ -156,7 +156,7 @@ function App() {
   const editingPausedRef = useRef(false);
   editingPausedRef.current = editingPaused;
 
-  // Undo and redo (novice-readiness spec 0.2.11 §3.9 (U1)). One step per user action, recorded
+  // Undo and redo (novice-readiness spec 0.2.18 §3.9 (U1)). One step per user action, recorded
   // at the handlers below, not inside `setGrid`: autofill merges, numbering and Verify write
   // through it too and are not steps.
   const {
