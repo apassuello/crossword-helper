@@ -36,7 +36,8 @@ export default function GridPanel({
   // wait, and novice-readiness spec 0.2.10 §3.4 (An Open that waits) applies: App's
   // `onOpenBegin` token is taken at the confirm, before the read, and handed back with the
   // entry so App drops the Open if New grid or import replaced the document meanwhile.
-  // Closing the panel does not cancel it: the user confirmed, and the request stands.
+  // Closing the panel does not cancel it: the user asked to open it, and the request stands (an
+  // empty grid skips the confirm, so "confirm" here includes that click).
   const openEntry = (entry) => {
     const token = onOpenBegin?.();
     return storage.list({ ordered: true }).then((entries) => {
