@@ -7,7 +7,9 @@ conflicts. Both the apply-placement route and ThemePlacer.suggest_placements
 call it; these tests pin the contract they both depend on.
 """
 
-from backend.core.placement_validation import check_placement, validate_placement
+import copy
+
+from backend.core.placement_validation import apply_checked_placement, check_placement, validate_placement
 
 
 def _empty_grid(size=15):
@@ -58,4 +60,37 @@ class TestValidatePlacement:
         before = copy.deepcopy(grid)
         validate_placement(grid, placement)
 
+        assert grid == before
+
+
+class TestApplyCheckedPlacement:
+    """The one write step shared by the apply route and the joint-plan search."""
+
+    def test_string_and_dict_formats_get_the_same_result(self):
+        placement = {"word": "HELLO", "row": 2, "col": 3, "direction": "across"}
+        strings = [["." for _ in range(11)] for _ in range(11)]
+        dicts = _empty_grid(11)
+        c1, b1 = apply_checked_placement(strings, placement)
+        c2, b2 = apply_checked_placement(dicts, placement)
+        assert c1 == c2 == []
+        assert b1 == b2 == [[2, 2], [2, 8], [8, 8], [8, 2]]
+        assert strings[2][2] == "#" and strings[8][8] == "#"
+        assert dicts[2][2] == {"letter": "", "isBlack": True}
+        for g in (strings, dicts):
+            assert [g[2][3 + i]["letter"] for i in range(5)] == list("HELLO")
+            assert all(g[2][3 + i]["isThemeLocked"] for i in range(5))
+
+    def test_conflict_leaves_grid_untouched(self):
+        grid = _empty_grid(15)
+        grid[7][6] = {"letter": "Z", "isBlack": False}
+        before = copy.deepcopy(grid)
+        conflicts, added = apply_checked_placement(grid, {"word": "HELLO", "row": 7, "col": 5, "direction": "across"})
+        assert conflicts and added == []
+        assert grid == before
+
+    def test_does_not_mutate_cell_objects_so_row_copies_are_safe(self):
+        grid = _empty_grid(11)
+        trial = [row[:] for row in grid]
+        before = copy.deepcopy(grid)
+        apply_checked_placement(trial, {"word": "HELLO", "row": 2, "col": 3, "direction": "across"})
         assert grid == before

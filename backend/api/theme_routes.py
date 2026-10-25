@@ -9,7 +9,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from backend.api.errors import handle_error
-from backend.core.placement_validation import check_placement
+from backend.core.placement_validation import apply_checked_placement
 from backend.core.theme_placer import ThemePlacer
 
 logger = logging.getLogger(__name__)
@@ -238,24 +238,13 @@ def apply_placement():
         if not all(field in placement for field in required_fields):
             return jsonify({"error": "Incomplete placement data"}), 400
 
-        word = placement["word"].upper()
-        row = placement["row"]
-        col = placement["col"]
-        direction = placement["direction"]
-
-        def _set_black(r, c):
-            """Turn a cell into a black square, preserving cell format."""
-            if isinstance(grid[r][c], dict):
-                grid[r][c] = {"letter": "", "isBlack": True}
-            else:
-                grid[r][c] = "#"
-
         # Single source of truth for conflict detection (cell/intersection
-        # conflicts and 180-degree rotational-symmetry boundary conflicts) —
-        # see backend/core/placement_validation.py. ThemePlacer gates its
-        # suggestions through the same function, so no candidate reaches this
+        # conflicts and 180-degree rotational-symmetry boundary conflicts) and
+        # for the write step (theme-locked letters, boundary + twin blacks) —
+        # see backend/core/placement_validation.py. ThemePlacer's suggestions
+        # and joint plan use the same function, so no candidate reaches this
         # endpoint that this check would reject.
-        conflicts, boundary_blacks, twin_blacks = check_placement(grid, placement)
+        conflicts, added_blacks = apply_checked_placement(grid, placement)
 
         # If there are conflicts, return error with details
         if conflicts:
@@ -269,40 +258,6 @@ def apply_placement():
                 ),
                 400,
             )
-
-        # No conflicts - safe to apply word to grid
-        for i, letter in enumerate(word):
-            if direction == "across":
-                target_row = row
-                target_col = col + i
-                if target_col >= len(grid[row]):
-                    continue
-            else:  # down
-                target_row = row + i
-                target_col = col
-                if target_row >= len(grid):
-                    continue
-
-            cell = grid[target_row][target_col]
-
-            if isinstance(cell, dict):
-                cell["letter"] = letter
-                cell["isThemeLocked"] = True
-            else:
-                # Handle string format (convert to dict for theme locking)
-                grid[target_row][target_col] = {
-                    "letter": letter,
-                    "isBlack": False,
-                    "isThemeLocked": True,
-                }
-
-        # Add boundary black squares WITH their 180-degree symmetric twins
-        # (conflicts were already checked above, so this cannot clobber a
-        # letter or a theme-locked cell)
-        added_blacks = []
-        for br, bc in boundary_blacks + twin_blacks:
-            _set_black(br, bc)
-            added_blacks.append([br, bc])
 
         return jsonify({"grid": grid, "applied": True, "added_black_squares": added_blacks}), 200
 
