@@ -283,7 +283,8 @@ function App() {
 
   // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): restore the newest save on load. The
   // [gridSize] effect above has already initialised a blank grid by the time `load()`
-  // resolves (a microtask later), so the restore simply lands after it. Across sizes the
+  // resolves (it is promise-based, and takes the Web Lock when a legacy migration is
+  // pending), so the restore simply lands after it. Across sizes the
   // skip flag is set before the size change, so that effect does not blank the restored
   // cells; at the same size it is NOT set (a stray `true` would swallow the next legitimate
   // size change). No entry: the blank grid and the docId minted at start stay.
@@ -387,8 +388,9 @@ function App() {
   }, [gridSize, autofill.discardRun]);
 
   // novice-readiness spec 0.2.7 §3.4 (S3, M1): Open saved. Gated at write time (D1) as well as
-  // at the buttons, because the autofill machine's doc-id guard assumes `docId` cannot change
-  // mid-run. The shared adoption does the S3 skip-flag rule, the docId and savedAt adoption;
+  // at the buttons, because the autofill machine's doc-id guard assumes the document is not
+  // replaced mid-run (a save fork changes `docId` too, and `adoptForkedDocId` follows it:
+  // spec 0.2.8 §2.3 (F2)). The shared adoption does the S3 skip-flag rule, the docId and savedAt adoption;
   // only on success does the run get discarded (no retained snapshot or Keep offer) and the
   // restore banner close (adoption with `banner: false` dismisses it).
   const openSavedEntry = useCallback(
