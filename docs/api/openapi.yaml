@@ -159,7 +159,7 @@ paths:
 
         **Examples**:
         - "Tina Fey" → "TINAFEY" (remove spaces in names)
-        - "50/50" → "FIFTYFIFTY" (spell out fractions)
+        - "naïve" → "NAIVE" (accents fold to A-Z)
         - "X-ray" → "XRAY" (remove hyphens)
       operationId: normalizeEntry
       requestBody:

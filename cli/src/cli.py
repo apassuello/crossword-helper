@@ -112,7 +112,7 @@ def _load_wordlist_words(wordlist_files) -> list:
     """
     all_words = []
     for wordlist_file in wordlist_files:
-        with open(wordlist_file, "r") as f:
+        with open(wordlist_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -806,7 +806,7 @@ def fill(
             if not json_output:
                 click.echo(f"  • {wordlist_file}")
             try:
-                wordlist_handle = open(wordlist_file, "r")
+                wordlist_handle = open(wordlist_file, "r", encoding="utf-8")
             except OSError as e:
                 _fail_fill(
                     f"Could not read wordlist {wordlist_file}: {e.strerror}",

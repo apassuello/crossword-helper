@@ -12,6 +12,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.core.wordlist_reader import read_wordlist_words_ordered
+
 
 class WordListManager:
     """Enhanced wordlist manager with metadata and category support."""
@@ -51,11 +53,12 @@ class WordListManager:
         Args:
             name: Wordlist name (can include category path)
 
-        A trailing ``;N`` score on a line is stripped (spec O5), so callers
-        see the word alone.
+        Lines are read by the solver's parser (novice-readiness spec 0.2.12
+        section 4, P5): accents fold, ``WORD;N`` and ``word,N`` lose the score,
+        and a word the solver rejects is skipped. File order, each word once.
 
         Returns:
-            List of words (uppercase)
+            List of words (uppercase, folded)
 
         Raises:
             FileNotFoundError: If wordlist doesn't exist
@@ -76,13 +79,7 @@ class WordListManager:
         if not filepath.exists():
             raise FileNotFoundError(f"Wordlist '{name}' not found at {filepath}")
 
-        words = []
-        with open(filepath, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                # Skip comments and empty lines
-                if line and not line.startswith("#"):
-                    words.append(line.split(";", 1)[0].strip().upper())
+        words = read_wordlist_words_ordered(filepath)
 
         self._cache[name] = words
         return words
@@ -288,8 +285,9 @@ class WordListManager:
             for word in sorted(lines):
                 f.write(f"{lines[word]}\n")
 
-        # Update cache (words only)
-        self._cache[name] = sorted(lines)
+        # Drop the cache: the next load() reads the file through the solver's
+        # parser, so the cached value is never raw WORD;N lines
+        self._cache.pop(name, None)
 
         # Update metadata
         if name not in self._metadata["wordlists"]:
