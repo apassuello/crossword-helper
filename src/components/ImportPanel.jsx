@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import './ImportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 import InlineConfirm from './bench/InlineConfirm';
+import { IMPORT_MIN_SIZE, IMPORT_MAX_SIZE } from '../lib/gridSizes';
 
 // novice-readiness spec 0.2.8 §3.2 Import (Q2): same text as New grid and Open saved.
 const REPLACE_MESSAGE = 'Replace the current grid? Unsaved changes are lost.';
@@ -65,8 +66,10 @@ function ImportPanel({
 
     // Validate size
     const size = parseInt(data.size);
-    if (isNaN(size) || size < 3 || size > 25) {
-      throw new Error(`Invalid grid size: ${data.size}. Must be between 3 and 25.`);
+    if (isNaN(size) || size < IMPORT_MIN_SIZE || size > IMPORT_MAX_SIZE) {
+      throw new Error(
+        `Invalid grid size: ${data.size}. Must be between ${IMPORT_MIN_SIZE} and ${IMPORT_MAX_SIZE}.`
+      );
     }
 
     // Validate grid is array

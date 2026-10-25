@@ -172,7 +172,8 @@ describe('Restore and Open validate the entry (§3.4, G#77 App.jsx:264)', () => 
   const BAD = [
     ['ragged rows', { grid: [[{}, {}], [{}]] }],
     ['a null cell', () => { const g = cellsOf(15); g[3][3] = null; return { grid: g }; }],
-    ['a size that is not offered', { size: 5, grid: cellsOf(5) }],
+    ['a size above the import range', { size: 26, grid: cellsOf(26) }],
+    ['a size below the import range', { size: 2, grid: cellsOf(2) }],
     ['a size that disagrees with the rows', { size: 15, grid: cellsOf(11) }],
     ['one row too many', () => ({ grid: [...cellsOf(15), cellsOf(15)[0]] })],
     ['one row one cell short', () => { const g = cellsOf(15); g[7] = g[7].slice(1); return { grid: g }; }],
@@ -207,6 +208,30 @@ describe('Restore and Open validate the entry (§3.4, G#77 App.jsx:264)', () => 
       expect(cells(container)).toHaveLength(225);
     });
   }
+
+  // I2 (Phase 6R final review): the importer accepts every size 3..25, so a saved import of
+  // any of them is a valid entry. Sizes other than 11/15/21 used to be unrestorable.
+  for (const size of [3, 13, 21, 25]) {
+    it(`restore: a saved ${size}x${size} import restores`, async () => {
+      storage.load.mockResolvedValue(entryOf('I', 'Imported', size, { '1,1': { letter: 'F' } }));
+      const { container } = renderApp();
+      await waitFor(() => expect(cells(container)).toHaveLength(size * size));
+      expect(letters(container)).toEqual(['F']);
+    });
+  }
+
+  it('Open: a saved 13x13 import opens', async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    storage.list.mockResolvedValue([entryOf('I', 'Imported', 13, { '1,1': { letter: 'F' } })]);
+    await pressOpenSaved(user);
+    await screen.findByText('Imported');
+    await user.click(within(rowOf('Imported')).getByRole('button', { name: 'Open' }));
+    await waitFor(() => expect(cells(container)).toHaveLength(169));
+    expect(letters(container)).toEqual(['F']);
+    expect(screen.queryByText('Could not open this saved grid.')).toBeNull();
+  });
 
   it('a valid 11x11 entry still restores', async () => {
     storage.load.mockResolvedValue(entryOf('V', 'Valid', 11, { '1,1': { letter: 'F' } }));
