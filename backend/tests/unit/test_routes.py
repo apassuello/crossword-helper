@@ -123,6 +123,36 @@ class TestPatternSearch:
         resp = _post_json(c, "/api/pattern", {"wordlists": ["comprehensive"]})
         assert resp.status_code == 400, resp_diag(resp)
 
+    # novice-readiness spec 0.2.12 §4 (SR4), Task 7.6: normative cases, both routes.
+    def test_wordlists_absent_resolves_comprehensive(self, client, mocker):
+        c, mock_adapter = client
+        mock_adapter.pattern.return_value = {"results": []}
+        resolver = mocker.patch(
+            "backend.api.routes.resolve_wordlist_paths_strict",
+            return_value=(["/fake/wordlists/comprehensive.txt"], []),
+        )
+        resp = _post_json(c, "/api/pattern", {"pattern": "C?T"})
+        assert resp.status_code == 200, resp_diag(resp)
+        resolver.assert_called_once_with(["comprehensive"])
+        assert mock_adapter.pattern.call_count == 1
+        assert mock_adapter.pattern.call_args.kwargs["wordlist_paths"] == ["/fake/wordlists/comprehensive.txt"]
+
+    def test_empty_wordlists_rejected_no_wordlist(self, client):
+        c, mock_adapter = client
+        mock_adapter.pattern.return_value = {"results": []}
+        resp = _post_json(c, "/api/pattern", {"pattern": "C?T", "wordlists": []})
+        assert resp.status_code == 400, resp_diag(resp)
+        assert resp.get_json()["error"]["code"] == "NO_WORDLIST"
+        assert mock_adapter.pattern.call_count == 0
+
+    def test_unknown_wordlist_rejected_unknown_wordlist(self, client, mocker):
+        c, mock_adapter = client
+        mocker.patch("backend.api.routes.resolve_wordlist_paths_strict", return_value=([], ["no-such-list"]))
+        resp = _post_json(c, "/api/pattern", {"pattern": "C?T", "wordlists": ["no-such-list"]})
+        assert resp.status_code == 400, resp_diag(resp)
+        assert resp.get_json()["error"]["code"] == "UNKNOWN_WORDLIST"
+        assert mock_adapter.pattern.call_count == 0
+
     def test_empty_body(self, client):
         c, _ = client
         resp = c.post(
@@ -786,6 +816,44 @@ class TestPatternWithProgress:
         c, _ = client
         resp = _post_json(c, "/api/pattern/with-progress", {"wordlists": ["comprehensive"]})
         assert resp.status_code == 400, resp_diag(resp)
+
+    # novice-readiness spec 0.2.12 §4 (SR4), Task 7.6: normative cases, both routes.
+    def _prep_progress(self, client, mocker):
+        c, mock_adapter = client
+        mock_adapter.cli_path = MagicMock()
+        mock_adapter.cli_path.parent = "/fake"
+        tracker = mocker.patch("backend.api.routes.create_progress_tracker", return_value="pat-1")
+        thread = mocker.patch("backend.api.routes.threading.Thread")
+        return c, tracker, thread
+
+    def test_wordlists_absent_resolves_comprehensive(self, client, mocker):
+        c, tracker, thread = self._prep_progress(client, mocker)
+        resolver = mocker.patch(
+            "backend.api.routes.resolve_wordlist_paths_strict",
+            return_value=(["/fake/wordlists/comprehensive.txt"], []),
+        )
+        resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "C?T"})
+        assert resp.status_code == 202, resp_diag(resp)
+        resolver.assert_called_once_with(["comprehensive"])
+        assert tracker.call_count == 1
+        assert thread.return_value.start.call_count == 1
+
+    def test_empty_wordlists_rejected_no_wordlist(self, client, mocker):
+        c, tracker, thread = self._prep_progress(client, mocker)
+        resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "C?T", "wordlists": []})
+        assert resp.status_code == 400, resp_diag(resp)
+        assert resp.get_json()["error"]["code"] == "NO_WORDLIST"
+        assert tracker.call_count == 0
+        assert thread.call_count == 0
+
+    def test_unknown_wordlist_rejected_unknown_wordlist(self, client, mocker):
+        c, tracker, thread = self._prep_progress(client, mocker)
+        mocker.patch("backend.api.routes.resolve_wordlist_paths_strict", return_value=([], ["no-such-list"]))
+        resp = _post_json(c, "/api/pattern/with-progress", {"pattern": "C?T", "wordlists": ["no-such-list"]})
+        assert resp.status_code == 400, resp_diag(resp)
+        assert resp.get_json()["error"]["code"] == "UNKNOWN_WORDLIST"
+        assert tracker.call_count == 0
+        assert thread.call_count == 0
 
     def test_internal_error(self, client, mocker):
         c, _ = client
