@@ -1093,3 +1093,90 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     });
   });
 });
+
+describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 section 3.9)', () => {
+  const words = ['ALPHA', 'BETA', 'GAMMA'];
+  const listFor = (ws) =>
+    ws.map((w, i) => ({
+      word: w,
+      length: w.length,
+      suggestions: [
+        { word: w, row: i * 2, col: 0, direction: 'across', score: 90, reasoning: 'Good placement' },
+      ],
+    }));
+  const upload = () =>
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [new File([words.join('\n')], 'theme.txt', { type: 'text/plain' })] },
+    });
+
+  // `events` records the order of batch signals, host replies and API requests.
+  const setup = async (onApply) => {
+    const events = [];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue({
+      words,
+      count: words.length,
+      validation: { valid: true, errors: [], warnings: [] },
+    });
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    vi.spyOn(api, 'themeApplyPlacement').mockImplementation(async () => {
+      events.push('request');
+      return { grid: createEmptyGrid(15) };
+    });
+    const onBatchBegin = vi.fn(() => events.push('begin'));
+    const onBatchEnd = vi.fn(() => events.push('end'));
+    render(
+      <ThemeWordsPanel
+        grid={createEmptyGrid(15)}
+        gridSize={15}
+        docId="doc-1"
+        onApplyPlacement={(...a) => {
+          events.push('apply');
+          return onApply(...a);
+        }}
+        onBatchBegin={onBatchBegin}
+        onBatchEnd={onBatchEnd}
+        onClose={vi.fn()}
+      />
+    );
+    upload();
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(3));
+    return { events, onBatchBegin, onBatchEnd };
+  };
+  const click = (name) =>
+    act(async () => {
+      screen.getByRole('button', { name }).click();
+    });
+
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('Apply All opens the batch before its first request and closes it once after the last word', async () => {
+    const { events, onBatchBegin, onBatchEnd } = await setup(() => true);
+    await click(/apply all best placements/i);
+    await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
+    expect(onBatchBegin).toHaveBeenCalledTimes(1);
+    expect(onBatchEnd).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['begin', 'request', 'apply', 'request', 'apply', 'request', 'apply', 'end']);
+  });
+
+  it('Apply All that stops early on a dropped reply still closes the batch', async () => {
+    const { events, onBatchBegin, onBatchEnd } = await setup(
+      vi.fn().mockReturnValueOnce(true).mockReturnValue(false)
+    );
+    await click(/apply all best placements/i);
+    await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
+    expect(onBatchBegin).toHaveBeenCalledTimes(1);
+    expect(onBatchEnd).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['begin', 'request', 'apply', 'request', 'apply', 'end']);
+  });
+
+  it('Apply This Placement opens no batch', async () => {
+    const { onBatchBegin, onBatchEnd } = await setup(() => true);
+    await act(async () => {
+      screen.getAllByRole('button', { name: /apply this placement/i })[0].click();
+    });
+    await waitFor(() => expect(api.themeApplyPlacement).toHaveBeenCalledTimes(1));
+    expect(onBatchBegin).not.toHaveBeenCalled();
+    expect(onBatchEnd).not.toHaveBeenCalled();
+  });
+});

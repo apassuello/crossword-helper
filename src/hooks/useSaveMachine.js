@@ -99,6 +99,9 @@ export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) 
   // `doc` but is not a grid edit.
   const forgottenRef = useRef(false);
   const isDirtyRef = useRef(isDirty); // latest dirtiness, read by the pagehide handler
+  // The clean status (`pristine` or `saved`) the document had when it last turned dirty, shown
+  // again when it returns to its saved content (novice-readiness spec 0.2.11 §3.9, History).
+  const preDirtyStatusRef = useRef('pristine');
 
   docRef.current = doc;
   isDirtyRef.current = isDirty;
@@ -294,11 +297,21 @@ export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) 
     // Same document: a clean→dirty edge enters `dirty` and arms ONE timer.
     if (!prevDirty && isDirty) {
       forgottenRef.current = false;
+      preDirtyStatusRef.current = status === 'saved' ? 'saved' : 'pristine';
       setStatus('dirty');
       armAutosave();
     }
-    // dirty→clean without our own save (e.g. parent marking clean after a save)
-    // is a no-op: it must not clobber the `saved` state/label.
+    // dirty→clean while the machine still reads `dirty` (or `error`) is a return to the saved
+    // content (an undo, or any edit that restores it, spec 0.2.11 §3.9): show the state the
+    // document had before the edit and cancel the armed autosave, as there is nothing new to
+    // write. A document whose stored entry was deleted (forget) stays `dirty`.
+    // dirty→clean after the machine's OWN save arrives with status `saved` (the parent marks the
+    // written document clean in the same batch as `saved`): a no-op, it must not clobber the
+    // `saved` state/label.
+    if (prevDirty && !isDirty && !forgottenRef.current && (status === 'dirty' || status === 'error')) {
+      clearAutosave();
+      setStatus(preDirtyStatusRef.current);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id, isDirty]);
 
@@ -318,6 +331,7 @@ export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) 
   const hasOnSaved = onSaved !== undefined;
   useEffect(() => {
     if (hasOnSaved && status === 'saved' && isDirty) {
+      preDirtyStatusRef.current = 'saved'; // what was written is the last saved content
       setStatus('dirty');
       armAutosave();
     }
