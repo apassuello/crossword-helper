@@ -270,14 +270,25 @@ class WordListManager:
 
         # Existing lines keyed by the folded word the list shows (novice-readiness
         # spec 0.2.14 section 4 item 1), so stored ;N scores survive a rewrite;
-        # of several lines with one key the first, the one the list shows, stays
+        # of several lines with one key the one the list shows stays: the first
+        # parse_line accepts, or the first if none does
+        from cli.src.fill.word_list import WordList
+
         lines: Dict[str, str] = {}
+        kept_rejected = set()
         if filepath.exists():
             with open(filepath, "r", encoding="utf-8") as f:
                 for raw in f:
                     raw = raw.strip()
                     if raw and not raw.startswith("#"):
-                        lines.setdefault(line_key(raw), _written_line(raw))
+                        key = line_key(raw)
+                        if key not in lines:
+                            lines[key] = _written_line(raw)
+                            if not WordList.parse_line(raw):
+                                kept_rejected.add(key)
+                        elif key in kept_rejected and WordList.parse_line(raw):
+                            lines[key] = _written_line(raw)
+                            kept_rejected.discard(key)
 
         # New entries: "WORD" or canonical "WORD;N". A scored entry replaces
         # the stored line; a bare entry never erases a stored score.
