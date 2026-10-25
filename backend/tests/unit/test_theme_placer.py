@@ -2,6 +2,7 @@
 Unit tests for ThemePlacer.
 """
 
+from backend.core.placement_validation import validate_placement
 from backend.core.theme_placer import ThemePlacer
 
 
@@ -75,12 +76,11 @@ class TestThemePlacer:
         for result in results:
             if result["suggestions"]:
                 top = result["suggestions"][0]
-                # Check if it's a non-overlapping suggestion
-                if "WARNING: Overlaps" not in top["reasoning"]:
-                    placements.append((top["row"], top["col"], top["direction"]))
+                assert "WARNING" not in top["reasoning"]
+                placements.append((top["row"], top["col"], top["direction"]))
 
-        # All words should have been placed without overlaps in a 21x21 grid
-        assert len(placements) == len(words), "All words should be placed without overlaps"
+        # Every word is listed with a plan placement on a 21x21 grid
+        assert len(placements) == len(words), "Every word should be listed with a suggestion"
 
         # Check that positions are diverse (not all in same row/col)
         rows = [p[0] for p in placements]
@@ -185,9 +185,9 @@ class TestThemePlacer:
         for result in results:
             if result["suggestions"]:
                 top = result["suggestions"][0]
-                if "WARNING: Overlaps" not in top["reasoning"]:
-                    placed_count += 1
-                    positions.append((top["row"], top["col"]))
+                assert "WARNING" not in top["reasoning"]
+                placed_count += 1
+                positions.append((top["row"], top["col"]))
 
         # Should place at least 10 words successfully
         assert placed_count >= 10, f"Should place at least 10 words, got {placed_count}"
@@ -213,16 +213,13 @@ class TestThemePlacer:
         results = placer.suggest_placements(["WORLD"])
         suggestions = results[0]["suggestions"]
 
-        # Any suggestion that overlaps HELLO's cells (row 7, cols 5-9) must be
-        # flagged with a warning in its reasoning string.
+        # Suggestions are checked against the grid as it is (HELLO included):
+        # none may conflict with it, and none may carry a WARNING (TH4 removed
+        # the "WARNING: Overlaps" fallback).
+        assert suggestions
         for sugg in suggestions:
-            if sugg["direction"] == "across" and sugg["row"] == 7:
-                sugg_end = sugg["col"] + len("WORLD") - 1
-                overlaps = sugg["col"] <= 9 and sugg_end >= 5
-                if overlaps:
-                    assert "WARNING: Overlaps" in sugg["reasoning"], (
-                        f"Overlapping across suggestion at row={sugg['row']}, " f"col={sugg['col']} was not flagged"
-                    )
+            assert "WARNING" not in sugg["reasoning"]
+            assert validate_placement(placer.grid, {**sugg, "word": "WORLD"}) == []
 
     def test_intersection_scoring(self):
         """Test that intersections are detected and contribute to scoring."""
@@ -258,3 +255,142 @@ class TestThemePlacer:
         # Should detect the 'L' intersection at (7,7)
         assert intersections_good == 1, f"Should detect one intersection, got {intersections_good}"
         assert intersections_bad == 0, "Should detect no intersections"
+
+
+# ---------------------------------------------------------------------------
+# TH4 (novice-readiness spec 0.2.16 section 4 item 4): suggestions are found on
+# the user's grid as it is, independently per word, and the first suggestions
+# form a joint plan checked with the apply step's own conflict check + blacks.
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+EXAMPLE_11 = ["OBSERVATION", "MIRRORIMAGE", "PERFORMANCE"]
+
+
+@pytest.fixture
+def client():
+    from backend.app import app
+
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        yield c
+
+
+def _example_11_grid():
+    return json.loads((REPO_ROOT / "data" / "grids" / "example_11x11.json").read_text())["grid"]
+
+
+def _suggest_via_route(client, words, grid):
+    resp = client.post(
+        "/api/theme/suggest-placements",
+        json={"theme_words": words, "grid_size": len(grid), "existing_grid": grid},
+    )
+    assert resp.status_code == 200, resp.get_json()
+    return resp.get_json()["suggestions"]
+
+
+def _apply_firsts_in_order(client, grid, results):
+    """Apply each listed word's suggestions[0] through the apply route, in
+    response order, feeding each reply's grid forward. Returns [(word, ok)]."""
+    outcome = []
+    current = grid
+    for entry in results:
+        s = entry["suggestions"][0]
+        resp = client.post(
+            "/api/theme/apply-placement",
+            json={
+                "grid": current,
+                "placement": {"word": entry["word"], "row": s["row"], "col": s["col"], "direction": s["direction"]},
+            },
+        )
+        ok = resp.status_code == 200
+        if ok:
+            current = resp.get_json()["grid"]
+        outcome.append((entry["word"], ok))
+    return outcome
+
+
+class TestTH4JointPlan:
+    def test_row1_every_word_lists_a_suggestion(self, client):
+        results = _suggest_via_route(client, EXAMPLE_11, _example_11_grid())
+        assert [r["word"] for r in results if not r["suggestions"]] == []
+
+    def test_row2_apply_all_places_two_and_third_is_rejected(self, client):
+        grid = _example_11_grid()
+        results = _suggest_via_route(client, EXAMPLE_11, grid)
+        outcome = _apply_firsts_in_order(client, grid, [r for r in results if r["suggestions"]])
+        assert [ok for _, ok in outcome] == [True, True, False], outcome
+
+    def test_row3_reversed_input_still_places_two(self, client):
+        grid = _example_11_grid()
+        results = _suggest_via_route(client, list(reversed(EXAMPLE_11)), grid)
+        assert [r["word"] for r in results if not r["suggestions"]] == []
+        outcome = _apply_firsts_in_order(client, grid, results)
+        assert [ok for _, ok in outcome] == [True, True, False], outcome
+
+    def test_row4_plan_honours_blacks_the_apply_step_writes(self, client):
+        # 7x7, every cell black except: row 1 "C . . . E . #" and col 5 rows 0-3,
+        # plus a row-6 slot for OWL and a 'Z' at (5,6).
+        # CRANE's only placement is row 1 cols 0-4; its right boundary (1,5) is
+        # empty, so applying it writes a black at (1,5). DOGS's only placement
+        # is down col 5 rows 0-3 and needs (1,5) as a letter. A placer that
+        # commits letters only (the pre-fix behaviour) lists CRANE, DOGS, OWL
+        # in length order, so apply-in-order places CRANE, rejects DOGS and
+        # places OWL; the plan must instead list the rejected word last.
+        g = [["#"] * 7 for _ in range(7)]
+        for c in (1, 2, 3, 5):
+            g[1][c] = "."
+        g[1][0], g[1][4] = "C", "E"
+        for r in (0, 2, 3):
+            g[r][5] = "."
+        for c in (0, 1, 2):
+            g[6][c] = "."
+        g[5][6] = "Z"
+        results = _suggest_via_route(client, ["CRANE", "DOGS", "OWL"], g)
+        assert [r["word"] for r in results if not r["suggestions"]] == []
+        outcome = _apply_firsts_in_order(client, g, results)
+        assert [ok for _, ok in outcome] == [True, True, False], outcome
+        assert {w for w, ok in outcome if not ok} <= {"CRANE", "DOGS"}
+
+    def test_row5_word_that_fits_nowhere_gets_no_suggestions_and_no_warning(self, client):
+        g = [["#"] * 5 for _ in range(5)]
+        for c in (0, 1, 2):
+            g[2][c] = "."
+        results = _suggest_via_route(client, ["ZEBRA", "CAT"], g)
+        by_word = {r["word"]: r["suggestions"] for r in results}
+        assert by_word["ZEBRA"] == []
+        assert len(by_word["CAT"]) >= 1
+        assert "WARNING" not in json.dumps(results)
+
+    def test_row5_dict_format_grid_is_read_like_string_format(self, client):
+        g = [[{"letter": "", "isBlack": True} for _ in range(5)] for _ in range(5)]
+        for c in (0, 1, 2):
+            g[2][c] = {"letter": "", "isBlack": False}
+        results = _suggest_via_route(client, ["ZEBRA", "CAT"], g)
+        by_word = {r["word"]: r["suggestions"] for r in results}
+        assert by_word["ZEBRA"] == []
+        assert len(by_word["CAT"]) >= 1
+        assert "WARNING" not in json.dumps(results)
+
+    def test_scores_stay_clamped_and_no_duplicate_placements(self, client):
+        results = _suggest_via_route(client, EXAMPLE_11, _example_11_grid())
+        for r in results:
+            keys = [(s["row"], s["col"], s["direction"]) for s in r["suggestions"]]
+            assert len(keys) == len(set(keys))
+            assert all(0 <= s["score"] <= 100 for s in r["suggestions"])
+
+    def test_plan_search_is_bounded_and_deterministic(self):
+        import time
+
+        grid = json.loads((REPO_ROOT / "data" / "grids" / "example_15x15.json").read_text())["grid"]
+        words = ["HOUSE", "MOUSE", "LEMON", "RIVER", "CLOUD"]
+        t0 = time.perf_counter()
+        first = ThemePlacer(15).suggest_placements(words, existing_grid=grid)
+        elapsed = time.perf_counter() - t0
+        assert elapsed < 1.0, elapsed
+        assert ThemePlacer(15).suggest_placements(words, existing_grid=grid) == first

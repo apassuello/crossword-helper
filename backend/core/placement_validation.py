@@ -10,9 +10,10 @@ duplicates this logic; both call in here instead (issue #15).
 Deliberately does not import from theme_routes.py or theme_placer.py, so both
 of them can import this module without creating an import cycle.
 
-Read-only: nothing here mutates the grid it is checking. Turning boundary
-cells into actual black squares is the apply step's job, not this module's —
-see `_set_black` in theme_routes.py.
+`check_placement` and `validate_placement` are read-only. The one write step —
+letters with `isThemeLocked`, then the boundary and twin black squares — is
+`apply_checked_placement`, the single mutation shared by the apply-placement
+route and ThemePlacer's joint-plan search (TH4).
 """
 
 from typing import Dict, List, Tuple
@@ -174,3 +175,54 @@ def validate_placement(grid: List[List], placement: Dict) -> List[str]:
     """
     conflicts, _, _ = check_placement(grid, placement)
     return conflicts
+
+
+def _set_black(grid: List[List], r: int, c: int) -> None:
+    """Turn a cell into a black square, preserving cell format."""
+    if isinstance(grid[r][c], dict):
+        grid[r][c] = {"letter": "", "isBlack": True}
+    else:
+        grid[r][c] = "#"
+
+
+def apply_checked_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[List[int]]]:
+    """
+    Check a placement and, if it has no conflicts, write it into `grid`.
+
+    Returns (conflicts, added_blacks). On conflicts the grid is untouched and
+    added_blacks is []. Otherwise the word's letters are written as
+    theme-locked dict cells and the boundary and twin black squares are set
+    (conflicts were already checked, so neither can clobber a letter).
+
+    Mutates only the row lists of `grid`: every cell is replaced, never edited
+    in place, so a caller can search on `[row[:] for row in grid]` without a
+    deep copy. Works on both cell formats check_placement reads.
+    """
+    conflicts, boundary_blacks, twin_blacks = check_placement(grid, placement)
+    if conflicts:
+        return conflicts, []
+
+    word = placement["word"].upper()
+    row = placement["row"]
+    col = placement["col"]
+    direction = placement["direction"]
+
+    for i, letter in enumerate(word):
+        if direction == "across":
+            target_row, target_col = row, col + i
+        else:
+            target_row, target_col = row + i, col
+        cell = grid[target_row][target_col]
+        if isinstance(cell, dict):
+            new_cell = dict(cell)
+            new_cell["letter"] = letter
+            new_cell["isThemeLocked"] = True
+        else:
+            new_cell = {"letter": letter, "isBlack": False, "isThemeLocked": True}
+        grid[target_row][target_col] = new_cell
+
+    added_blacks: List[List[int]] = []
+    for br, bc in boundary_blacks + twin_blacks:
+        _set_black(grid, br, bc)
+        added_blacks.append([br, bc])
+    return conflicts, added_blacks

@@ -5,9 +5,16 @@ Analyzes theme words and suggests optimal placements in the grid
 with symmetry, balance, and intersection considerations.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from backend.core.placement_validation import validate_placement
+from backend.core.placement_validation import _cell_state, apply_checked_placement, validate_placement
+
+# Joint plan (spec 0.2.16 section 4 item 4): each word contributes its best K
+# candidates to the plan search, and the search stops expanding after
+# _PLAN_NODE_LIMIT nodes (keeping the best plan found so far), so the cost is
+# bounded whatever the grid and word count.
+PLAN_CANDIDATES_PER_WORD = 8
+_PLAN_NODE_LIMIT = 20000
 
 
 class ThemePlacementSuggestion:
@@ -63,7 +70,10 @@ class ThemePlacer:
             max_suggestions_per_word: Number of suggestions to return per word
 
         Returns:
-            List of dicts, one per word, each containing top suggestions
+            List of dicts, one per word, each containing top suggestions.
+            Plan members (see _plan_placements) come first, in plan order,
+            each led by its plan placement; the words the plan leaves out
+            follow with their independent best.
         """
         # Initialize grid from existing if provided
         if existing_grid:
@@ -81,55 +91,31 @@ class ThemePlacer:
         # Sort words by length (longest first)
         words_sorted = sorted([(w.upper(), len(w)) for w in theme_words], key=lambda x: x[1], reverse=True)
 
+        # Every word is judged against the grid exactly as the user has it:
+        # nothing is committed to self.grid between words. A candidate must
+        # pass the apply step's own conflict check (issue #15); a word with no
+        # surviving candidate gets no suggestions — no fallback is fabricated.
+        ranked: List[List[Tuple[Dict, int]]] = []
+        for idx, (word, _) in enumerate(words_sorted):
+            placements = [p for p in self._generate_placements(word) if not validate_placement(self.grid, p)]
+            scored = [(p, self._score_placement_with_diversity(p, word, idx)) for p in placements]
+            scored.sort(key=lambda x: x[1], reverse=True)  # stable: ties keep scan order
+            ranked.append(scored)
+
+        plan = self._plan_placements(ranked)
+
+        members = [i for i in range(len(words_sorted)) if plan[i] is not None]
+        others = [i for i in range(len(words_sorted)) if plan[i] is None]
+
         results = []
+        for i in members + others:
+            word, word_len = words_sorted[i]
+            chosen = [plan[i]] if plan[i] is not None else []
+            rest = [item for item in ranked[i] if item[0] is not plan[i][0]] if plan[i] is not None else ranked[i]
+            top = (chosen + rest)[:max_suggestions_per_word]
 
-        # Track which cells are occupied to avoid overlaps
-        occupied_cells = set()
-        for row_idx, row in enumerate(self.grid):
-            for col_idx, cell in enumerate(row):
-                if cell and cell not in ("", ".", None):
-                    occupied_cells.add((row_idx, col_idx))
-
-        for idx, (word, word_len) in enumerate(words_sorted):
-            # Generate all possible placements
-            placements = self._generate_placements(word)
-
-            # Gate every candidate through the applier's own validator (the
-            # same conflict check apply-placement runs) so no suggestion
-            # reaches the API response that apply-placement would reject
-            # (issue #15). If nothing survives, this word gets no
-            # suggestions below — no fallback placement is fabricated.
-            placements = [p for p in placements if not validate_placement(self.grid, p)]
-
-            # Filter out placements that overlap with already placed words (except valid intersections)
-            valid_placements = []
-            for p in placements:
-                if not self._has_invalid_overlap(p, word, occupied_cells):
-                    valid_placements.append(p)
-
-            # If no valid placements due to overlaps, include all and note in reasoning
-            if not valid_placements:
-                valid_placements = placements
-
-            # Score each placement with diversity factor based on word index
-            scored_placements = [(p, self._score_placement_with_diversity(p, word, idx)) for p in valid_placements]
-
-            # Sort by score and take top N
-            scored_placements.sort(key=lambda x: x[1], reverse=True)
-            top_placements = scored_placements[:max_suggestions_per_word]
-
-            # Convert to suggestion objects
             suggestions = []
-            best_placement = None
-
-            for placement, score in top_placements:
-                # Check if this placement overlaps with already placed words
-                has_overlap = self._has_invalid_overlap(placement, word, occupied_cells)
-
-                reasoning = self._generate_reasoning(placement, score, word)
-                if has_overlap:
-                    reasoning = f"WARNING: Overlaps with placed words. {reasoning}"
-
+            for placement, score in top:
                 suggestions.append(
                     ThemePlacementSuggestion(
                         word=word,
@@ -141,31 +127,63 @@ class ThemePlacer:
                         # _score_placement_with_diversity) may exceed 100
                         # via diversity bonuses before this clamp.
                         score=max(0, min(100, score)),
-                        reasoning=reasoning,
+                        reasoning=self._generate_reasoning(placement, score, word),
                     ).to_dict()
                 )
-
-                # Track the best non-overlapping placement
-                if not has_overlap and best_placement is None:
-                    best_placement = placement
-
             results.append({"word": word, "length": word_len, "suggestions": suggestions})
 
-            # Apply the best placement to the grid to avoid future overlaps
-            # Only apply if we have a valid non-overlapping placement
-            if best_placement:
-                self.apply_placement(best_placement)
-                # Update occupied cells
-                row = best_placement["row"]
-                col = best_placement["col"]
-                direction = best_placement["direction"]
-                for i in range(word_len):
-                    if direction == "across":
-                        occupied_cells.add((row, col + i))
-                    else:
-                        occupied_cells.add((row + i, col))
-
         return results
+
+    def _plan_placements(self, ranked: List[List[Tuple[Dict, int]]]) -> List[Optional[Tuple[Dict, int]]]:
+        """
+        Choose one placement per word (or none) so the most words are placed
+        when applied in turn, then the highest total score.
+
+        Each step is checked and applied on a working copy with
+        apply_checked_placement — the same conflict check and the same black
+        squares the apply route writes — so a placement whose blacks or twins
+        would block a later word is seen here. Candidates are each word's top
+        PLAN_CANDIDATES_PER_WORD by score; ties resolve to the first plan found
+        (candidates tried best-first, "place" before "skip"), so the result is
+        deterministic.
+        """
+        n = len(ranked)
+        cands = [r[:PLAN_CANDIDATES_PER_WORD] for r in ranked]
+        # Upper bound on the score still obtainable from words i.. (best candidate each).
+        suffix_max = [0] * (n + 1)
+        for i in range(n - 1, -1, -1):
+            suffix_max[i] = suffix_max[i + 1] + (cands[i][0][1] if cands[i] else 0)
+
+        best: Dict = {"count": -1, "score": -1, "plan": [None] * n}
+        nodes = [0]
+
+        def dfs(i: int, grid: List[List], count: int, score: int, chosen: List[Optional[Tuple[Dict, int]]]) -> None:
+            nodes[0] += 1
+            if i == n:
+                if (count, score) > (best["count"], best["score"]):
+                    best["count"], best["score"], best["plan"] = count, score, list(chosen)
+                return
+            if nodes[0] > _PLAN_NODE_LIMIT and best["count"] >= 0:
+                return
+            reachable = count + sum(1 for c in cands[i:] if c)
+            if reachable < best["count"]:
+                return
+            if reachable == best["count"] and score + suffix_max[i] <= best["score"]:
+                return
+            for item in cands[i]:
+                trial = [row[:] for row in grid]
+                conflicts, _ = apply_checked_placement(trial, item[0])
+                if conflicts:
+                    continue
+                chosen.append(item)
+                dfs(i + 1, trial, count + 1, score + item[1], chosen)
+                chosen.pop()
+            chosen.append(None)
+            dfs(i + 1, grid, count, score, chosen)
+            chosen.pop()
+
+        dfs(0, [row[:] for row in self.grid], 0, 0, [])
+        return best["plan"]
 
     def _generate_placements(self, word: str) -> List[Dict]:
         """Generate all valid placements for a word."""
@@ -195,45 +213,13 @@ class ThemePlacer:
         return placements
 
     def _fits(self, word: str, row: int, col: int, direction: str) -> bool:
-        """Check if word fits at position without conflicts."""
-        word_len = len(word)
-
-        for i in range(word_len):
-            if direction == "across":
-                cell = self.grid[row][col + i]
-            else:  # down
-                cell = self.grid[row + i][col]
-
-            # Check for conflicts
-            # Empty cells can be '', '.', or None
-            if cell and cell not in ("", ".", None) and cell != word[i]:
+        """Check if word fits at position without letter or black-square conflicts."""
+        for i in range(len(word)):
+            r, c = (row, col + i) if direction == "across" else (row + i, col)
+            state, letter = _cell_state(self.grid, r, c)
+            if state == "black" or (state == "letter" and letter != word[i]):
                 return False
-
         return True
-
-    def _has_invalid_overlap(self, placement: Dict, word: str, occupied_cells: set) -> bool:
-        """
-        Check if placement has invalid overlap with occupied cells.
-        Valid overlaps are when the same letter appears at the intersection.
-        """
-        row = placement["row"]
-        col = placement["col"]
-        direction = placement["direction"]
-        word_len = len(word)
-
-        for i in range(word_len):
-            if direction == "across":
-                cell_pos = (row, col + i)
-            else:
-                cell_pos = (row + i, col)
-
-            if cell_pos in occupied_cells:
-                # Check if it's a valid intersection (same letter)
-                r, c = cell_pos
-                existing_letter = self.grid[r][c]
-                if existing_letter != word[i]:
-                    return True  # Invalid overlap - different letters
-        return False  # No invalid overlap
 
     def _score_placement_with_diversity(self, placement: Dict, word: str, word_index: int) -> int:
         """
@@ -375,12 +361,9 @@ class ThemePlacer:
         direction = placement["direction"]
 
         for i in range(len(word)):
-            if direction == "across":
-                cell = self.grid[row][col + i]
-            else:
-                cell = self.grid[row + i][col]
-
-            if cell and cell == word[i]:
+            r, c = (row, col + i) if direction == "across" else (row + i, col)
+            state, letter = _cell_state(self.grid, r, c)
+            if state == "letter" and letter == word[i]:
                 count += 1
 
         return count
