@@ -47,7 +47,7 @@ function gridSigOf(grid, gridSize) {
 
 const SUPERSEDED_MSG = 'Suggestions updated for the changed grid.';
 
-function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, editingPaused = false }) {
+function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin, onBatchEnd, onClose, editingPaused = false }) {
   const [file, setFile] = useState(null);
   const [themeWords, setThemeWords] = useState([]);
   const [suggestions, setSuggestions] = useState(null);
@@ -274,79 +274,86 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onClose, edi
       return;
     }
 
-    setApplyingAll(true);
-    let successCount = 0;
-    const skipped = []; // `WORD (reason)`, in suggestion order
-    let currentGrid = grid; // Track grid state through applications
-    const requestDocId = docId;
+    // Apply All is one undo step (novice-readiness spec 0.2.11 §3.9): the host opens its batch
+    // before the first request and it closes on every path out, the early returns included.
+    onBatchBegin?.();
+    try {
+      setApplyingAll(true);
+      let successCount = 0;
+      const skipped = []; // `WORD (reason)`, in suggestion order
+      let currentGrid = grid; // Track grid state through applications
+      const requestDocId = docId;
 
-    toast.loading('Applying all theme words...', { id: 'apply-all' });
+      toast.loading('Applying all theme words...', { id: 'apply-all' });
 
-    for (const wordData of suggestions) {
-      if (!mountedRef.current) break; // panel closed: send nothing further
-      // Skip words with no valid placements
-      if (!wordData.suggestions || wordData.suggestions.length === 0) {
-        skipped.push(`${wordData.word} (no valid placement)`);
-        continue;
-      }
-
-      // Get the best (first) suggestion
-      const bestSuggestion = wordData.suggestions[0];
-
-      // Skip if it has conflicts (WARNING in reasoning)
-      if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
-        skipped.push(
-          `${wordData.word} (skipped due to conflicts: ${bestSuggestion.reasoning})`
-        );
-        continue;
-      }
-
-      try {
-        // Apply this placement (word comes from wordData, not suggestion)
-        const response = await api.themeApplyPlacement({
-          grid: currentGrid,
-          placement: {
-            word: wordData.word,  // Use the actual word
-            row: bestSuggestion.row,
-            col: bestSuggestion.col,
-            direction: bestSuggestion.direction
-          }
-        });
-
-        if (response && response.grid) {
-          const sentGrid = currentGrid; // the grid this word's request was built from
-          currentGrid = response.grid; // Update grid for next placement
-
-          // Update parent grid. Only an explicit `true` counts; anything else is a dropped
-          // reply: the document the summary would describe is gone, so stop and say nothing
-          // (spec 0.2.8 §3.8, PD-6-G12).
-          const applied = onApplyPlacement?.(currentGrid, bestSuggestion, {
-            sentGrid,
-            docId: requestDocId,
-          });
-          if (applied !== true) {
-            toast.dismiss('apply-all');
-            setApplyingAll(false);
-            return;
-          }
-          successCount++;
+      for (const wordData of suggestions) {
+        if (!mountedRef.current) break; // panel closed: send nothing further
+        // Skip words with no valid placements
+        if (!wordData.suggestions || wordData.suggestions.length === 0) {
+          skipped.push(`${wordData.word} (no valid placement)`);
+          continue;
         }
-      } catch (error) {
-        skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);
+
+        // Get the best (first) suggestion
+        const bestSuggestion = wordData.suggestions[0];
+
+        // Skip if it has conflicts (WARNING in reasoning)
+        if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
+          skipped.push(
+            `${wordData.word} (skipped due to conflicts: ${bestSuggestion.reasoning})`
+          );
+          continue;
+        }
+
+        try {
+          // Apply this placement (word comes from wordData, not suggestion)
+          const response = await api.themeApplyPlacement({
+            grid: currentGrid,
+            placement: {
+              word: wordData.word,  // Use the actual word
+              row: bestSuggestion.row,
+              col: bestSuggestion.col,
+              direction: bestSuggestion.direction
+            }
+          });
+
+          if (response && response.grid) {
+            const sentGrid = currentGrid; // the grid this word's request was built from
+            currentGrid = response.grid; // Update grid for next placement
+
+            // Update parent grid. Only an explicit `true` counts; anything else is a dropped
+            // reply: the document the summary would describe is gone, so stop and say nothing
+            // (spec 0.2.8 §3.8, PD-6-G12).
+            const applied = onApplyPlacement?.(currentGrid, bestSuggestion, {
+              sentGrid,
+              docId: requestDocId,
+            });
+            if (applied !== true) {
+              toast.dismiss('apply-all');
+              setApplyingAll(false);
+              return;
+            }
+            successCount++;
+          }
+        } catch (error) {
+          skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);
+        }
       }
-    }
 
-    setApplyingAll(false);
+      setApplyingAll(false);
 
-    // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
-    // the words this action applied; every skipped word is listed with its reason.
-    const skippedText = skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}` : '';
-    if (successCount > 0) {
-      toast.success(`Applied ${successCount} theme words successfully!${skippedText}`, {
-        id: 'apply-all',
-      });
-    } else {
-      toast.error(`Could not apply any theme words${skippedText}`, { id: 'apply-all' });
+      // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
+      // the words this action applied; every skipped word is listed with its reason.
+      const skippedText = skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}` : '';
+      if (successCount > 0) {
+        toast.success(`Applied ${successCount} theme words successfully!${skippedText}`, {
+          id: 'apply-all',
+        });
+      } else {
+        toast.error(`Could not apply any theme words${skippedText}`, { id: 'apply-all' });
+      }
+    } finally {
+      onBatchEnd?.();
     }
   };
 

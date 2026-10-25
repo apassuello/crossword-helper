@@ -905,7 +905,7 @@ function userGrid() {
 }
 
 /** Mounts the hook over a real grid state; start({}, 'doc-1') has been called and the run is `running`. */
-async function runningMachine({ docId = 'doc-1', grid = userGrid() } = {}) {
+async function runningMachine({ docId = 'doc-1', grid = userGrid(), onRunCommitted } = {}) {
   vi.spyOn(api, 'startFill').mockResolvedValue({ task_id: 't-53' });
   vi.spyOn(api, 'cancelFill').mockResolvedValue({});
   const hook = renderHook(
@@ -918,6 +918,7 @@ async function runningMachine({ docId = 'doc-1', grid = userGrid() } = {}) {
         onGridUpdate: setG,
         onStart: vi.fn(),
         onToast: vi.fn(),
+        onRunCommitted,
       });
       return { ...m, grid: g, setGrid: setG };
     },
@@ -1925,5 +1926,66 @@ describe('useAutofillMachine Task 6.17: adoptForkedDocId (novice-readiness spec 
     rerender({ docId: 'doc-2' });
     complete({ success: false, grid: CLI_FULL_4, slots_filled: 4, total_slots: 8, fill_percentage: 50 });
     expect(result.current.offer).not.toBeNull();
+  });
+});
+
+describe('useAutofillMachine U.2: onRunCommitted (spec 0.2.11 section 3.9, Autofill)', () => {
+  const partial = {
+    success: false, grid: CLI_PART_4, slots_filled: 5, total_slots: 8, fill_percentage: 62,
+  };
+
+  it('a successful run reports one commit whose snapshot is the Start snapshot', async () => {
+    const onRunCommitted = vi.fn();
+    const { result } = await runningMachine({ onRunCommitted });
+    send({ status: 'running', progress: 1, data: { grid: CLI_PART_4 } }); // a merge: records nothing
+    expect(onRunCommitted).not.toHaveBeenCalled();
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    expect(onRunCommitted).toHaveBeenCalledTimes(1);
+    expect(onRunCommitted.mock.calls[0][0]).toBe(result.current.startSnapshot);
+  });
+
+  it('a successful run for a replaced document reports nothing', async () => {
+    const onRunCommitted = vi.fn();
+    const { rerender } = await runningMachine({ onRunCommitted });
+    rerender({ docId: 'doc-2' });
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    expect(onRunCommitted).not.toHaveBeenCalled();
+  });
+
+  it('an outcome that restores the Start snapshot reports nothing', async () => {
+    const onRunCommitted = vi.fn();
+    await runningMachine({ onRunCommitted });
+    complete(partial);
+    expect(onRunCommitted).not.toHaveBeenCalled();
+  });
+
+  it('keepFill reports one commit whose snapshot is the grid as it is when clicked', async () => {
+    const onRunCommitted = vi.fn();
+    const { result } = await runningMachine({ onRunCommitted });
+    complete(partial);
+    act(() => {
+      result.current.setGrid((g) =>
+        g.map((row, r) => row.map((c, k) => (r === 0 && k === 1 ? { ...c, letter: 'Q' } : c)))
+      );
+    });
+    const asClicked = result.current.grid;
+    expect(asClicked).not.toBe(result.current.startSnapshot);
+    act(() => {
+      result.current.keepFill('doc-1');
+    });
+    expect(onRunCommitted).toHaveBeenCalledTimes(1);
+    expect(onRunCommitted.mock.calls[0][0]).toBe(asClicked);
+    expect(onRunCommitted.mock.calls[0][0]).not.toBe(result.current.startSnapshot);
+  });
+
+  it('a keepFill that is a no-op (no offer, wrong document) reports nothing', async () => {
+    const onRunCommitted = vi.fn();
+    const { result } = await runningMachine({ onRunCommitted });
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8 });
+    onRunCommitted.mockClear();
+    act(() => {
+      result.current.keepFill('doc-1'); // no offer after a success
+    });
+    expect(onRunCommitted).not.toHaveBeenCalled();
   });
 });

@@ -190,9 +190,9 @@ export function fillsAnyCell(snapshotGrid, cliGrid) {
 }
 
 /**
- * @param {{grid: object[][], gridSize: number, docId: string, onGridUpdate: (updater: (prevGrid: object[][]) => object[][]) => void, onStart?: () => void, onToast?: (t: {kind: string, message: string}) => void}} params
+ * @param {{grid: object[][], gridSize: number, docId: string, onGridUpdate: (updater: (prevGrid: object[][]) => object[][]) => void, onStart?: () => void, onToast?: (t: {kind: string, message: string}) => void, onRunCommitted?: (before: object[][]) => void}} params
  */
-export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast }) {
+export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStart, onToast, onRunCommitted }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
 
   // Latest props, read at fire time (mirrors useSaveMachine's docRef).
@@ -209,6 +209,10 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   const onToastRef = useRef(onToast);
   onStartRef.current = onStart;
   onToastRef.current = onToast;
+  // Undo wiring (novice-readiness spec 0.2.11 §3.9, Autofill): told when a run's result was
+  // committed to the grid, with the grid to restore on undo.
+  const onRunCommittedRef = useRef(onRunCommitted);
+  onRunCommittedRef.current = onRunCommitted;
   const startDocIdRef = useRef(null); // document id at the accepted start()
   const startSnapshotRef = useRef(null); // the red-free Start copy that restore writes back
   const lastGridRef = useRef(null); // last data.grid received on any event of the current run
@@ -376,6 +380,8 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
               onGridUpdateRef.current((prevGrid) =>
                 markBlocked(mergeGridPreserveThemeLocked(prevGrid, cliGrid), red)
               );
+              // One undo step whose snapshot is the Start snapshot (§3.9); no second copy is taken.
+              onRunCommittedRef.current?.(startSnapshotRef.current);
             }
             transition({
               state: 'done',
@@ -665,6 +671,9 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
       if (!offerRef.current || !lastGridRef.current) return;
       if (!sameDocument() || forDocId !== startDocIdRef.current) return;
       const lastGrid = lastGridRef.current;
+      // One undo step whose snapshot is the grid as it is when clicked (§3.9): the user may have
+      // edited or undone since the run ended.
+      onRunCommittedRef.current?.(gridRef.current);
       onGridUpdateRef.current((prev) => mergeGridPreserveThemeLocked(prev, lastGrid));
       transition({ offer: null });
     },

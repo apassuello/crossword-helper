@@ -8,6 +8,7 @@ import { useHealth } from './hooks/useHealth';
 import { usePersistentState } from './hooks/usePersistentState';
 import { useSaveMachine } from './hooks/useSaveMachine';
 import { useAutofillMachine, LIVE_STATES } from './hooks/useAutofillMachine';
+import { useUndoHistory } from './hooks/useUndoHistory';
 import { useToasts } from './components/bench/Toast';
 import { allSlots } from './hooks/useGridGeometry';
 import { useNumbering, localNumber } from './hooks/useNumbering';
@@ -134,6 +135,9 @@ function App() {
   // `invalidateNumberingRef` lets onStart reach useNumbering's `invalidate` although the
   // hook is called after this one (see above); it is filled in right after useNumbering.
   const invalidateNumberingRef = useRef(() => {});
+  // Likewise `recordRunRef` lets the machine report a committed run to the undo history, which
+  // is built below (it needs `editingPausedRef`, derived from the machine's state).
+  const recordRunRef = useRef(() => {});
   const autofill = useAutofillMachine({
     grid,
     gridSize,
@@ -141,6 +145,7 @@ function App() {
     onGridUpdate: (updater) => setGrid(updater),
     onStart: () => invalidateNumberingRef.current(),
     onToast: pushToast,
+    onRunCommitted: (before) => recordRunRef.current(before),
   });
 
   // D1 (novice-readiness spec 0.2.6 section 2.3): while a run is live no grid writer
@@ -150,6 +155,17 @@ function App() {
   const editingPaused = LIVE_STATES.has(autofill.state);
   const editingPausedRef = useRef(false);
   editingPausedRef.current = editingPaused;
+
+  // Undo and redo (novice-readiness spec 0.2.11 §3.9 (U1)). One step per user action, recorded
+  // at the handlers below, not inside `setGrid`: autofill merges, numbering and Verify write
+  // through it too and are not steps.
+  const {
+    record: recordStep,
+    beginBatch,
+    commitBatch,
+    clear: clearHistory,
+  } = useUndoHistory({ grid, gridSize, setGrid, editingPausedRef });
+  recordRunRef.current = recordStep;
 
   // Server-authoritative numbering + validation (Task 8, F2). Replaces the former
   // client-only word-start numbering pass and the validation stub: fires on
@@ -304,6 +320,7 @@ function App() {
         return false;
       }
       const restored = normalizeSavedGrid(entry.grid);
+      clearHistory(); // history ends with the document (§3.9)
       if (entry.size !== gridSizeRef.current) {
         skipNextInitRef.current = true;
         setGridSize(entry.size);
@@ -318,7 +335,7 @@ function App() {
       setRestoredBanner(banner ? { name: entry.name, savedAt: entry.savedAt, sig } : null);
       return true;
     },
-    [adoptSavedAt]
+    [adoptSavedAt, clearHistory]
   );
   useEffect(() => {
     let cancelled = false;
@@ -353,6 +370,7 @@ function App() {
 
   const initializeGrid = (size) => {
     replacementsRef.current += 1;
+    clearHistory(); // history ends with the document (§3.9)
     const newGrid = Array(size).fill(null).map(() =>
       Array(size).fill(null).map(() => ({
         letter: '',
@@ -429,25 +447,28 @@ function App() {
     // neither the cell nor its partner changes.
     if (!canToggleBlack(grid, row, col, symmetryEnabled)) return;
 
+    recordStep(grid);
     setGrid((prev) => writeToggleBlack(prev, row, col, symmetryEnabled));
     // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
     // black-square layout change. No manual renumber/validate here.
-  }, [grid, symmetryEnabled]);
+  }, [grid, symmetryEnabled, recordStep]);
 
   const toggleThemeLock = useCallback((row, col) => {
     if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
+    recordStep(grid);
     setGrid((prev) => writeToggleThemeLock(prev, row, col));
-  }, [grid]);
+  }, [grid, recordStep]);
 
   const setLetter = useCallback((row, col, letter) => {
     if (editingPausedRef.current) return;
     if (!grid || grid[row][col].isBlack) return;
 
+    recordStep(grid);
     setGrid((prev) => writeLetter(prev, row, col, letter));
     // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
-  }, [grid]);
+  }, [grid, recordStep]);
 
   // Controlled-grid focus/direction handlers (CrosswordGrid, Task 5).
   // selectedCell {row,col,direction} maps to focus {row,col} + selectedDir=direction.
@@ -474,9 +495,10 @@ function App() {
     if (editingPausedRef.current) return;
     if (!selectedCell || !grid) return;
 
+    recordStep(grid);
     setGrid((prev) => writePatternWord(prev, selectedCell, word));
     // Letter fill — no renumber/validate (structural signature unchanged).
-  }, [selectedCell, grid]);
+  }, [selectedCell, grid, recordStep]);
 
   const handleVerifyWords = useCallback(async () => {
     if (editingPausedRef.current) return;
@@ -587,9 +609,10 @@ function App() {
     if (editingPausedRef.current || !pendingClean) return;
     const { blanks, cleaned, message } = pendingClean;
     setPendingClean(null);
+    recordStep(gridRef.current);
     setGrid(prev => writeCleanedGrid(prev, cleaned, blanks));
     pushToast({ kind: 'info', message });
-  }, [pendingClean, pushToast]);
+  }, [pendingClean, pushToast, recordStep]);
 
   // novice-readiness spec 0.2.8 §3.8 (F1, F4, PD-6-G12): a reply for a replaced document is
   // dropped, as Verify and Clean do; the rest is merged against the grid it was sent from.
@@ -599,15 +622,19 @@ function App() {
     if (requestDocId !== docIdRef.current) return false;
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
+    // One step for Apply This Placement; inside an Apply All batch the history folds the call
+    // into the batch's single step, so the call is the same either way (§3.9).
+    recordStep(gridRef.current);
     setGrid((prev) => writeAppliedTheme(prev, updatedGrid, sentGrid));
 
     pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
     return true;
-  }, [pushToast]);
+  }, [pushToast, recordStep]);
 
   const handleGridImport = useCallback((importedData) => {
     if (editingPausedRef.current) return;
     replacementsRef.current += 1; // spec 0.2.10 §3.4: cancels a waiting Open
+    clearHistory(); // history ends with the document (§3.9)
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different (skip the re-init effect so the
@@ -646,7 +673,7 @@ function App() {
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, autofill.discardRun, adoptSavedAt]);
+  }, [gridSize, autofill.discardRun, adoptSavedAt, clearHistory]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
@@ -836,6 +863,8 @@ function App() {
           gridSize={gridSize}
           docId={docId}
           onApplyPlacement={handleThemeWordApplied}
+          onBatchBegin={beginBatch}
+          onBatchEnd={commitBatch}
           editingPaused={editingPaused}
           onClose={() => setShowThemePanel(false)}
         />

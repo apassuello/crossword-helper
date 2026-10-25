@@ -485,11 +485,17 @@ describe('App save wiring (§3.4)', () => {
   };
 
   // A live run whose Start snapshot is the blank grid while the live grid carries an "A".
-  const startLiveRunWithMergedLetter = async (user, container) => {
+  // `startedWith`: a letter typed at (0,0) BEFORE Start, so the Start snapshot itself differs from
+  // the saved (blank) content. Without it the snapshot equals the saved content, the document
+  // reads clean while the run is live, and the save machine cancels the autosave as a return to
+  // the saved content (novice-readiness spec 0.2.11 §3.9, History), which is not what the
+  // autosave tests below exercise.
+  const startLiveRunWithMergedLetter = async (user, container, { startedWith } = {}) => {
     await waitFor(() => expect(cells(container)).toHaveLength(225));
+    if (startedWith) await typeLetter(user, container, 0, 0, startedWith);
     const snapshot = structuredClone(probe.panelProps.grid);
     await typeLetter(user, container, 3, 3, 'A');
-    expect(letters(container)).toEqual(['A']);
+    expect(letters(container)).toEqual(startedWith ? [startedWith, 'A'] : ['A']);
     probe.autofillOverride = { state: 'running', startSnapshot: snapshot };
     await user.click(screen.getByText('Symmetry')); // re-render picks up the override
     await user.click(screen.getByText('Symmetry'));
@@ -606,11 +612,11 @@ describe('App save wiring (§3.4)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { container } = renderApp();
-    await startLiveRunWithMergedLetter(user, container);
+    await startLiveRunWithMergedLetter(user, container, { startedWith: 'B' });
     await act(async () => vi.advanceTimersByTime(30000));
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
     const written = saveArg(storage.save.mock.calls[0], 0);
-    expect(written.grid.flat().map((c) => c.letter).filter(Boolean)).toEqual([]);
+    expect(written.grid.flat().map((c) => c.letter).filter(Boolean)).toEqual(['B']);
     expect(written.grid[3][3].letter).toBe('');
   });
 

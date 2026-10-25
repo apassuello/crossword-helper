@@ -8,7 +8,7 @@
  * and the error toast is asserted through the DOM (error kind → role="alert").
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, screen } from '@testing-library/react';
 import { useSaveMachine } from '../useSaveMachine';
@@ -204,6 +204,63 @@ describe('useSaveMachine', () => {
     // …then a fresh edit re-dirties it.
     rerender({ doc: { id: 'a' }, isDirty: true });
     expect(result.current.status).toBe('dirty');
+  });
+
+  // novice-readiness spec 0.2.11 section 3.9: a return to the saved content (undo or otherwise)
+  // reads as the state before the edit and cancels the armed autosave.
+  it('U.2: a return to the saved content after an edit shows the saved state and cancels the autosave', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a', v: 1 }, isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(result.current.status).toBe('saved');
+    expect(storage.save).toHaveBeenCalledTimes(1);
+
+    rerender({ doc: { id: 'a', v: 1 }, isDirty: false }); // parent marks clean after the save
+    rerender({ doc: { id: 'a', v: 2 }, isDirty: true }); // an edit
+    expect(result.current.savedLabel).toBe('unsaved changes');
+
+    rerender({ doc: { id: 'a', v: 1 }, isDirty: false }); // undo back to the saved content
+    expect(result.current.status).toBe('saved');
+    expect(result.current.savedLabel).not.toBe('unsaved changes');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000 - 1);
+    });
+    expect(storage.save).toHaveBeenCalledTimes(1); // the armed autosave was cancelled
+  });
+
+  it('U.2: a return to the content of a never-saved document reads as it did before the edit', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a', v: 1 }, isDirty: false });
+    rerender({ doc: { id: 'a', v: 2 }, isDirty: true });
+    expect(result.current.status).toBe('dirty');
+    rerender({ doc: { id: 'a', v: 1 }, isDirty: false });
+    expect(result.current.status).toBe('pristine');
+    expect(result.current.savedLabel).toBe('');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+
+  it('U.2: the parent marking clean in onSaved leaves `saved` (a return to clean is not applied to it)', async () => {
+    const { result } = renderHook(
+      () => {
+        const [dirty, setDirty] = useState(true);
+        return useSaveMachine({
+          doc: { id: 'a', v: 1 },
+          isDirty: dirty,
+          contentSig: 's',
+          onSaved: () => setDirty(false),
+        });
+      },
+      { wrapper }
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(result.current.status).toBe('saved');
+    expect(result.current.savedLabel).toMatch(/^saved locally/);
   });
 
   it('the saved label ages from "just now" to "1m ago" over 60s without a new save', async () => {
