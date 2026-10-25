@@ -144,6 +144,16 @@ describe('useUndoHistory', () => {
     expect(letters(r().grid)).toBe('.../.../...');
   });
 
+  it('redo does nothing while a batch is open, with a step waiting on the redo stack', () => {
+    const { edit, r } = setup();
+    edit((g) => put(g, 0, 0, { letter: 'A' }));
+    act(() => r().undo());
+    expect(r().canRedo).toBe(true);
+    act(() => r().beginBatch());
+    act(() => r().redo());
+    expect(letters(r().grid)).toBe('.../.../...');
+  });
+
   it('clear() empties both stacks and ends an open batch without recording it', () => {
     const { edit, r } = setup();
     edit((g) => put(g, 0, 0, { letter: 'A' }));
