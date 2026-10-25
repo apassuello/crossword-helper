@@ -3248,6 +3248,7 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
 | New: TH2b | With suggestions showing, place a black square through an offered placement | The list refreshes; that placement is no longer offered; nothing stale can be applied |
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
+| New: TH4 | Import `example_11x11.json`, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE, read the suggestions, then Apply All Best Placements | Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | New: SAVE-SIZE | Save a 21x21 grid, switch to 11x11, reload or Open saved | The saved grid restores at its own size, with its letters (S3) |
 | New: SAVE-TABS | Open one saved grid in two tabs, edit and save in both | The second save forks `<name> (copy)`; neither tab's work is lost (S4) |
