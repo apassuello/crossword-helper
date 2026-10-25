@@ -11,6 +11,7 @@ import App from '../App';
 import { ToastProvider } from '../components/bench/Toast';
 import { api } from '../api/client';
 import storage from '../lib/storage';
+import { saveArg, resolvingSave } from './saveArgs';
 
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), loading: vi.fn() }),
@@ -57,7 +58,7 @@ beforeEach(() => {
   vi.spyOn(storage, 'list').mockResolvedValue([]);
   vi.spyOn(storage, 'remove').mockResolvedValue(undefined);
   vi.spyOn(storage, 'save').mockImplementation((doc) =>
-    Promise.resolve({ savedAt: new Date().toISOString(), id: doc.id, name: 'n', forked: false })
+    Promise.resolve({ savedAt: new Date().toISOString(), id: saveArg([doc], 0).id, name: 'n', forked: false })
   );
   vi.spyOn(storage, 'saveSync').mockImplementation(() => ({ savedAt: new Date().toISOString() }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -101,7 +102,7 @@ describe('Delete the open grid\'s own entry (§3.4 Q1)', () => {
     await typeLetter(user, container, 5, 5, 'B');
     await advance(30000);
     expect(storage.save).toHaveBeenCalledTimes(1);
-    expect(storage.save.mock.calls[0][0].id).toBe('G');
+    expect(saveArg(storage.save.mock.calls[0], 0).id).toBe('G');
   });
 
   it('deleting another entry leaves the open document\'s status alone', async () => {

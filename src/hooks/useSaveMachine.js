@@ -84,7 +84,9 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   // The savedAt this tab loaded or last wrote (S4). Deliberately NOT reset on a
   // doc.id change: Open saved / restore call setDocId and adoptSavedAt in one
   // handler, and an effect-time reset would overwrite the adopted value. A stale
-  // value for a brand-new id is harmless (storage.save finds no entry to compare).
+  // value for a brand-new id is harmless only because every save reads it when it EXECUTES
+  // (buildOpts in runSave) and the Web Lock grants in request order: the first save of a new id
+  // creates the entry and updates this value before the second reads it (Phase 6R review I1).
   const knownSavedAtRef = useRef(null);
   // Set by forget(): the stored entry is gone and the pending timer with it. A document that
   // was already dirty has no clean->dirty edge to arm on, so the next change to `doc` does
@@ -120,14 +122,47 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   function runSave(extra, explicit, silent = false) {
     clearAutosave(); // this attempt consumes any pending timer
     setStatus('saving');
-    const opts = { expectedSavedAt: knownSavedAtRef.current, ...extra };
-    const written = docRef.current;
-    // The pagehide path (`silent`) writes through the synchronous entry point, outside the
-    // Web Lock: the Promise executor runs it before runSave returns, and a throw becomes
-    // the rejection (novice-readiness spec 0.2.9 §3.4 (Q3)).
-    const write = silent
-      ? new Promise((resolve) => resolve(storage.saveSync(written, opts)))
-      : storage.save(written, opts);
+    const requested = docRef.current;
+    // `written` is the document this save writes. Locked saves resolve it when they EXECUTE
+    // (inside the Web Lock, via storage.save's function form): the same document's latest
+    // content, or the requested one if it has been replaced since (that save still writes
+    // it; the guard below keeps its resolution off the new document).
+    let written = requested;
+    let builtDoc = null;
+    const buildDoc = () => {
+      if (builtDoc) return builtDoc; // resolved once: the lock calls it once, a test double may read it again
+      const current = docRef.current;
+      written = current && current.id === requested.id ? current : requested;
+      builtDoc = written;
+      return written;
+    };
+    // `expectedSavedAt` is read at execution time too, so a write that landed first (an
+    // earlier save, or a pagehide saveSync) is never mistaken for a second tab's.
+    // If the document was replaced meanwhile, `knownSavedAtRef` now belongs to the new one,
+    // so the replaced document's save keeps the value it was requested with.
+    const requestedKnown = knownSavedAtRef.current;
+    let builtOpts = null;
+    const buildOpts = () => {
+      if (!builtOpts) {
+        builtOpts = {
+          expectedSavedAt: docRef.current?.id === requested.id ? knownSavedAtRef.current : requestedKnown,
+          ...extra,
+        };
+      }
+      return builtOpts;
+    };
+    let write;
+    if (silent) {
+      // The pagehide path writes through the synchronous entry point, outside the Web Lock
+      // and cannot wait on a queued save: the Promise executor runs it before runSave returns,
+      // and a throw becomes the rejection (novice-readiness spec 0.2.9 §3.4 (Q3), Leaving the page).
+      write = new Promise((resolve) => resolve(storage.saveSync(buildDoc(), buildOpts())));
+    } else {
+      // The Web Lock grants requests in order, and a grant follows the previous callback's
+      // settlement by at least a task, so the earlier save's `.then` below (which updates
+      // `knownSavedAtRef`) has run before the next one reads it.
+      write = storage.save(buildDoc, buildOpts);
+    }
     return write.then(
       (res) => {
         // The entry is written. Only the in-memory bookkeeping for the CURRENT document is

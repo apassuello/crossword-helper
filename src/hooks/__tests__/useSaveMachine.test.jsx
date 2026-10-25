@@ -29,13 +29,34 @@ const flush = () =>
     await Promise.resolve();
   });
 
+// What storage.save was handed, with its function-form arguments (resolved inside the lock
+// by the real storage) resolved at call time, as the lock would: [doc, opts] per call.
+let saveCalls;
+
+const recordSave = (doc, opts) =>
+  saveCalls.push([
+    typeof doc === 'function' ? doc() : doc,
+    typeof opts === 'function' ? opts() : opts,
+  ]);
+
+/** storage.save answers `value` (resolved or rejected, once or always) and still records its call. */
+function saveImpl(kind, once, value) {
+  const impl = (doc, opts) => {
+    recordSave(doc, opts);
+    return kind === 'resolve' ? Promise.resolve(value) : Promise.reject(value);
+  };
+  return once ? storage.save.mockImplementationOnce(impl) : storage.save.mockImplementation(impl);
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
+  saveCalls = [];
   // Default: saves succeed, stamping the current (fake) clock so the saved
   // freshness label can age deterministically.
-  vi.spyOn(storage, 'save').mockImplementation(() =>
-    Promise.resolve({ savedAt: new Date().toISOString() })
-  );
+  vi.spyOn(storage, 'save').mockImplementation((doc, opts) => {
+    recordSave(doc, opts);
+    return Promise.resolve({ savedAt: new Date().toISOString() });
+  });
   vi.spyOn(storage, 'load').mockResolvedValue(null);
 });
 
@@ -113,7 +134,7 @@ describe('useSaveMachine', () => {
   });
 
   it('on reject → error + red toast, and the retry re-arms so the next 30s saves again', async () => {
-    storage.save.mockRejectedValue(new Error('offline'));
+    saveImpl('reject', false, new Error('offline'));
     const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
 
     await act(async () => {
@@ -148,10 +169,8 @@ describe('useSaveMachine', () => {
     });
 
     expect(storage.save).toHaveBeenCalledTimes(1);
-    expect(storage.save).toHaveBeenLastCalledWith(
-      expect.objectContaining({ v: 3 }),
-      expect.anything()
-    );
+    expect(saveCalls.at(-1)[0]).toEqual(expect.objectContaining({ v: 3 }));
+    expect(saveCalls.at(-1)[1]).toBeTruthy();
   });
 
   it('manual save() goes saving→saved immediately, without waiting 30s', async () => {
@@ -227,7 +246,7 @@ describe('useSaveMachine', () => {
       renderMachine({ doc: { id: 'a' }, isDirty: true });
       await tick30();
       expect(storage.save).toHaveBeenCalledTimes(1);
-      const [, opts] = storage.save.mock.calls[0];
+      const [, opts] = saveCalls[0];
       expect(opts).toEqual({ expectedSavedAt: null });
       expect('name' in opts).toBe(false);
     });
@@ -236,7 +255,7 @@ describe('useSaveMachine', () => {
       const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
       act(() => result.current.adoptSavedAt('T1'));
       await tick30();
-      expect(storage.save.mock.calls[0][1]).toEqual({ expectedSavedAt: 'T1' });
+      expect(saveCalls[0][1]).toEqual({ expectedSavedAt: 'T1' });
     });
 
     it('adoptSavedAt does not change status', () => {
@@ -246,17 +265,17 @@ describe('useSaveMachine', () => {
     });
 
     it('a successful save records its savedAt as the next expectedSavedAt', async () => {
-      storage.save.mockResolvedValue({ savedAt: 'S1', id: 'a', name: 'n', forked: false });
+      saveImpl('resolve', false, { savedAt: 'S1', id: 'a', name: 'n', forked: false });
       const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
       await tick30();
       await act(async () => {
         await result.current.save();
       });
-      expect(storage.save.mock.calls[1][1]).toEqual({ expectedSavedAt: 'S1' });
+      expect(saveCalls[1][1]).toEqual({ expectedSavedAt: 'S1' });
     });
 
     it('T3: a failed autosave keeps the retry toast, label and +30s re-arm', async () => {
-      storage.save.mockRejectedValue(new Error('x'));
+      saveImpl('reject', false, new Error('x'));
       const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
       await tick30();
       expect(screen.getByRole('alert')).toHaveTextContent(RETRY);
@@ -272,7 +291,7 @@ describe('useSaveMachine', () => {
         ok = await result.current.saveNamed('Puzzle');
       });
       expect(ok).toBe(true);
-      expect(storage.save.mock.calls[0][1].name).toBe('Puzzle');
+      expect(saveCalls[0][1].name).toBe('Puzzle');
       expect(result.current.status).toBe('saved');
     });
 
@@ -281,7 +300,7 @@ describe('useSaveMachine', () => {
       await act(async () => {
         await result.current.saveNamed('Puzzle', { replaceEntryId: 'b' });
       });
-      expect(storage.save.mock.calls[0][1].replaceEntryId).toBe('b');
+      expect(saveCalls[0][1].replaceEntryId).toBe('b');
     });
 
     it('saveNamed clears the pending autosave timer (no second save at +30s)', async () => {
@@ -294,7 +313,7 @@ describe('useSaveMachine', () => {
     });
 
     it('T6: a rejected saveNamed shows the quota toast only, resolves false, status error', async () => {
-      storage.save.mockRejectedValue(new Error('quota'));
+      saveImpl('reject', false, new Error('quota'));
       const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
       let ok;
       await act(async () => {
@@ -309,7 +328,7 @@ describe('useSaveMachine', () => {
     });
 
     it('PD-6-G6: after a failed explicit save the 30 s autosave re-arm continues, with no second toast', async () => {
-      storage.save.mockRejectedValueOnce(new Error('quota'));
+      saveImpl('reject', true, new Error('quota'));
       const { result } = renderMachine({ doc: { id: 'a' }, isDirty: true });
       await act(async () => {
         await result.current.saveNamed('Puzzle');
@@ -317,14 +336,14 @@ describe('useSaveMachine', () => {
       expect(storage.save).toHaveBeenCalledTimes(1);
       await tick30();
       expect(storage.save).toHaveBeenCalledTimes(2);
-      expect('name' in storage.save.mock.calls[1][1]).toBe(false);
+      expect('name' in saveCalls[1][1]).toBe(false);
       expect(result.current.status).toBe('saved');
       expect(screen.queryByText(RETRY)).toBeNull();
     });
 
     it('T9: a forked result calls onForked once and the next save uses its savedAt', async () => {
       const onForked = vi.fn();
-      storage.save.mockResolvedValueOnce({
+      saveImpl('resolve', true, {
         forked: true,
         id: 'n',
         name: 'X (copy)',
@@ -337,12 +356,12 @@ describe('useSaveMachine', () => {
       await act(async () => {
         await result.current.save();
       });
-      expect(storage.save.mock.calls[1][1]).toEqual({ expectedSavedAt: 'T9' });
+      expect(saveCalls[1][1]).toEqual({ expectedSavedAt: 'T9' });
     });
 
     it('a forked saveNamed also calls onForked and resolves true', async () => {
       const onForked = vi.fn();
-      storage.save.mockResolvedValueOnce({
+      saveImpl('resolve', true, {
         forked: true,
         id: 'n',
         name: 'X (copy)',
@@ -366,7 +385,7 @@ describe('useSaveMachine', () => {
       await act(async () => {
         await result.current.save();
       });
-      expect(storage.save.mock.calls[0][1]).toEqual({ expectedSavedAt: 'T5' });
+      expect(saveCalls[0][1]).toEqual({ expectedSavedAt: 'T5' });
     });
   });
 
@@ -379,7 +398,7 @@ describe('useSaveMachine', () => {
         await result.current.saveNamed('N');
       });
       expect(onSaved).toHaveBeenCalledTimes(1);
-      expect(onSaved.mock.calls[0][0]).toBe(storage.save.mock.calls[0][0]);
+      expect(onSaved.mock.calls[0][0]).toBe(saveCalls[0][0]);
       expect(onSaved.mock.calls[0][0]).toBe(doc);
     });
 
@@ -409,7 +428,7 @@ describe('useSaveMachine', () => {
     });
 
     it('a throwing onForked cannot make saveNamed reject or leave status at saving', async () => {
-      storage.save.mockResolvedValue({ savedAt: 's', id: 'n', name: 'X (copy)', forked: true });
+      saveImpl('resolve', false, { savedAt: 's', id: 'n', name: 'X (copy)', forked: true });
       const onForked = vi.fn(() => {
         throw new Error('boom');
       });
@@ -639,7 +658,9 @@ describe('useSaveMachine: a save resolution only acts on the document it wrote',
     const saving = vi.spyOn(storage, 'save');
     await fireAutosave();
     await flushLocks();
-    expect(saving.mock.calls[0][1].expectedSavedAt).toBe(S1);
+    // The function-form opts are resolved inside the lock; the stored entry shows what they read.
+    expect(saving).toHaveBeenCalledTimes(1);
+    expect(stored().find((e) => e.id === 'b').savedAt).not.toBe(S1);
     expect(stored().map((e) => e.name)).not.toContain('B (copy)');
   });
 
@@ -679,5 +700,70 @@ describe('useSaveMachine: a save resolution only acts on the document it wrote',
     await flushLocks();
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onForked).toHaveBeenCalledTimes(1);
+  });
+
+  // ---- I1 (Phase 6R final review): two saves of one document queued behind the lock ----
+  // A save builds `expectedSavedAt` and snapshots its document when it EXECUTES inside the lock
+  // (novice-readiness spec 0.2.9 §3.4 (S4)), so a write that landed first never forks it.
+  const flushAllLocks = async () => {
+    for (let i = 0; i < 4; i += 1) await flushLocks();
+  };
+
+  it('I1: autosave queued on the lock, then a named Save of the same document -> one entry, no fork', async () => {
+    seed(entry('a', S0));
+    const onForked = vi.fn();
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onForked });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    let named;
+    act(() => {
+      named = result.current.saveNamed('A');
+    });
+    await flushAllLocks();
+    await expect(named).resolves.toBe(true);
+    expect(stored().map((e) => e.name)).toEqual(['A']);
+    expect(onForked).not.toHaveBeenCalled();
+  });
+
+  it('I1: pagehide (saveSync) while an autosave is queued on the lock, page survives -> no fork', async () => {
+    seed(entry('a', S0));
+    const onForked = vi.fn();
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true, onForked });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave(); // queued, not granted
+    act(() => {
+      window.dispatchEvent(new Event('pagehide')); // saveSync writes at once, outside the lock
+    });
+    await flushAllLocks();
+    expect(stored().map((e) => e.id)).toEqual(['a']);
+    expect(onForked).not.toHaveBeenCalled();
+  });
+
+  it('I1: a brand-new id with a stale known savedAt: the chosen name lands on the entry, not a copy', async () => {
+    const onForked = vi.fn();
+    const { result } = renderMachine({ doc: { id: 'b', n: 1 }, isDirty: true, onForked });
+    act(() => result.current.adoptSavedAt(S0)); // left over from the previous document
+    await fireAutosave();
+    let named;
+    act(() => {
+      named = result.current.saveNamed('Bee');
+    });
+    await flushAllLocks();
+    await named;
+    expect(stored().map((e) => e.name)).toEqual(['Bee']);
+    expect(onForked).not.toHaveBeenCalled();
+  });
+
+  it('I1: a named save keeps its name and replaceEntryId when queued behind an autosave', async () => {
+    seed(entry('a', S0), entry('old', S0));
+    const { result } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    act(() => result.current.adoptSavedAt(S0));
+    await fireAutosave();
+    act(() => {
+      result.current.saveNamed('Renamed', { replaceEntryId: 'old' });
+    });
+    await flushAllLocks();
+    expect(stored().map((e) => e.id).sort()).toEqual(['a']);
+    expect(stored()[0].name).toBe('Renamed');
   });
 });

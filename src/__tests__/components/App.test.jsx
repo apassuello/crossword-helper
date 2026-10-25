@@ -13,6 +13,7 @@ import App from '../../App';
 import { ToastProvider } from '../../components/bench/Toast';
 import { localNumber } from '../../hooks/useNumbering';
 import storage from '../../lib/storage';
+import { saveArg, resolvingSave } from '../saveArgs';
 import { api } from '../../api/client';
 import { contentSigOf } from '../../App';
 
@@ -470,7 +471,7 @@ describe('App save wiring (§3.4)', () => {
     probe.autofillOverride = null;
     probe.panelProps = null;
     vi.spyOn(storage, 'list').mockResolvedValue([]);
-    vi.spyOn(storage, 'save').mockResolvedValue(result());
+    vi.spyOn(storage, 'save').mockImplementation(resolvingSave(result()));
   });
 
   afterEach(() => {
@@ -534,7 +535,7 @@ describe('App save wiring (§3.4)', () => {
     fireEvent.change(input, { target: { value: 'Puzzle 1' } });
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: 'Puzzle 1' });
+    expect(saveArg(storage.save.mock.calls[0], 1)).toMatchObject({ name: 'Puzzle 1' });
     await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
   });
 
@@ -563,7 +564,7 @@ describe('App save wiring (§3.4)', () => {
     expect(storage.save).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Replace' }));
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: 'Other', replaceEntryId: 'x' });
+    expect(saveArg(storage.save.mock.calls[0], 1)).toMatchObject({ name: 'Other', replaceEntryId: 'x' });
   });
 
   it('the document\'s own current name is not a collision', async () => {
@@ -608,7 +609,7 @@ describe('App save wiring (§3.4)', () => {
     await startLiveRunWithMergedLetter(user, container);
     await act(async () => vi.advanceTimersByTime(30000));
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    const written = storage.save.mock.calls[0][0];
+    const written = saveArg(storage.save.mock.calls[0], 0);
     expect(written.grid.flat().map((c) => c.letter).filter(Boolean)).toEqual([]);
     expect(written.grid[3][3].letter).toBe('');
   });
@@ -621,8 +622,8 @@ describe('App save wiring (§3.4)', () => {
     await nameInput();
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    expect(storage.save.mock.calls[0][0].grid[3][3].letter).toBe('');
-    expect(storage.save.mock.calls[0][1]).toMatchObject({ name: expect.any(String) });
+    expect(saveArg(storage.save.mock.calls[0], 0).grid[3][3].letter).toBe('');
+    expect(saveArg(storage.save.mock.calls[0], 1)).toMatchObject({ name: expect.any(String) });
   });
 
   it('S2: after a save during a run, savedSig is the snapshot signature (live merges stay clean, the run ending reads unsaved)', async () => {
@@ -822,9 +823,9 @@ describe('App restore on load (§3.4)', () => {
     probe.panelProps = null;
     probe.saveArgs = null;
     vi.spyOn(storage, 'list').mockResolvedValue([]);
-    vi.spyOn(storage, 'save').mockResolvedValue({
+    vi.spyOn(storage, 'save').mockImplementation(resolvingSave({
       savedAt: '2026-10-24T10:00:00.000Z', id: 'saved-id', name: 'Mine', forked: false,
-    });
+    }));
   });
 
   afterEach(() => {
@@ -928,8 +929,8 @@ describe('App restore on load (§3.4)', () => {
       vi.advanceTimersByTime(30000);
     });
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    expect(storage.save.mock.calls[0][0].id).toBe('saved-id');
-    expect(storage.save.mock.calls[0][1]).toMatchObject({ expectedSavedAt: SAVED_AT });
+    expect(saveArg(storage.save.mock.calls[0], 0).id).toBe('saved-id');
+    expect(saveArg(storage.save.mock.calls[0], 1)).toMatchObject({ expectedSavedAt: SAVED_AT });
   });
 
   it('the dismiss button closes the banner', async () => {
@@ -1045,9 +1046,9 @@ describe('App Open saved (§3.4)', () => {
     probe.saveArgs = null;
     vi.spyOn(storage, 'load').mockResolvedValue(null);
     vi.spyOn(storage, 'list').mockResolvedValue([]);
-    vi.spyOn(storage, 'save').mockResolvedValue({
+    vi.spyOn(storage, 'save').mockImplementation(resolvingSave({
       savedAt: '2026-10-24T10:00:00.000Z', id: 'e15', name: 'Fifteen', forked: false,
-    });
+    }));
   });
 
   afterEach(() => {
@@ -1139,8 +1140,8 @@ describe('App Open saved (§3.4)', () => {
       vi.advanceTimersByTime(30000);
     });
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
-    expect(storage.save.mock.calls[0][0].id).toBe('e15');
-    expect(storage.save.mock.calls[0][1]).toMatchObject({ expectedSavedAt: SAVED_AT });
+    expect(saveArg(storage.save.mock.calls[0], 0).id).toBe('e15');
+    expect(saveArg(storage.save.mock.calls[0], 1)).toMatchObject({ expectedSavedAt: SAVED_AT });
   });
 
   it('the opened grid is born clean, selection is cleared and the restore banner is dismissed', async () => {

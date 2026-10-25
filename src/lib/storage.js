@@ -166,13 +166,23 @@ export function load() {
  * survives (novice-readiness spec 0.2.8 §3.4, M2). A save whose entry no longer
  * exists writes it under its own id; it does not fork (Q1). The whole
  * read-and-write runs inside the cross-tab lock when available.
- * @param {object} doc  serializable grid document carrying a stable `id`
- * @param {{name?: string, expectedSavedAt?: string|null, replaceEntryId?: string}} [opts]
+ *
+ * `doc` and `opts` may each be a function: it is called INSIDE the lock, immediately before
+ * the write, so a caller that waits for the lock reads its `expectedSavedAt` and snapshots
+ * its document when the save executes, not when it was requested (spec 0.2.9 §3.4 (S4);
+ * Phase 6R review I1).
+ * @param {object|(() => object)} doc  serializable grid document carrying a stable `id`
+ * @param {{name?: string, expectedSavedAt?: string|null, replaceEntryId?: string}
+ *   |(() => object)} [opts]
  * @returns {Promise<{savedAt: string, id: string, name: string, forked: boolean}>}
  *   rejects if a write throws
  */
 export function save(doc, opts = {}) {
-  return withLock(() => writeEntry(doc, opts));
+  return withLock(() => {
+    const resolvedDoc = typeof doc === 'function' ? doc() : doc;
+    const resolvedOpts = typeof opts === 'function' ? opts() : opts;
+    return writeEntry(resolvedDoc, resolvedOpts);
+  });
 }
 
 /**
