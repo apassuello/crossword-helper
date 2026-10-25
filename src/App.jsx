@@ -452,35 +452,47 @@ function App() {
     [forget]
   );
 
+  // One user edit: record the grid it starts from, then write. `write` is a pure grid-to-grid
+  // function, applied as a functional update (never record from inside one: StrictMode runs
+  // updaters twice). `gridRef` is advanced to the edit's result so a second edit in the same tick
+  // starts from it, not from the stale render-time grid, and so records its own "before"
+  // (novice-readiness spec 0.2.18 §3.9, "What one step is"). The next render resets the ref.
+  const editGrid = useCallback((write) => {
+    const base = gridRef.current;
+    recordStep(base);
+    gridRef.current = write(base);
+    setGrid(write);
+  }, [recordStep]);
+
   const toggleBlackSquare = useCallback((row, col) => {
     if (editingPausedRef.current) return;
+    const grid = gridRef.current;
     if (!grid) return;
     // novice-readiness spec 0.2.7 §3.3 (G7): refuse before any write, so
     // neither the cell nor its partner changes.
     if (!canToggleBlack(grid, row, col, symmetryEnabled)) return;
 
-    recordStep(grid);
-    setGrid((prev) => writeToggleBlack(prev, row, col, symmetryEnabled));
+    editGrid((prev) => writeToggleBlack(prev, row, col, symmetryEnabled));
     // Structural edit: useNumbering renumbers (server-wins) + revalidates off the
     // black-square layout change. No manual renumber/validate here.
-  }, [grid, symmetryEnabled, recordStep]);
+  }, [symmetryEnabled, editGrid]);
 
   const toggleThemeLock = useCallback((row, col) => {
     if (editingPausedRef.current) return;
+    const grid = gridRef.current;
     if (!grid || grid[row][col].isBlack) return;
 
-    recordStep(grid);
-    setGrid((prev) => writeToggleThemeLock(prev, row, col));
-  }, [grid, recordStep]);
+    editGrid((prev) => writeToggleThemeLock(prev, row, col));
+  }, [editGrid]);
 
   const setLetter = useCallback((row, col, letter) => {
     if (editingPausedRef.current) return;
+    const grid = gridRef.current;
     if (!grid || grid[row][col].isBlack) return;
 
-    recordStep(grid);
-    setGrid((prev) => writeLetter(prev, row, col, letter));
+    editGrid((prev) => writeLetter(prev, row, col, letter));
     // Letter edit — never renumbers/revalidates (plan Global Constraint 3).
-  }, [grid, recordStep]);
+  }, [editGrid]);
 
   // Controlled-grid focus/direction handlers (CrosswordGrid, Task 5).
   // selectedCell {row,col,direction} maps to focus {row,col} + selectedDir=direction.
@@ -505,12 +517,11 @@ function App() {
   const handlePatternSelect = useCallback((word) => {
     // Fill word into grid at selected position
     if (editingPausedRef.current) return;
-    if (!selectedCell || !grid) return;
+    if (!selectedCell || !gridRef.current) return;
 
-    recordStep(grid);
-    setGrid((prev) => writePatternWord(prev, selectedCell, word));
+    editGrid((prev) => writePatternWord(prev, selectedCell, word));
     // Letter fill — no renumber/validate (structural signature unchanged).
-  }, [selectedCell, grid, recordStep]);
+  }, [selectedCell, editGrid]);
 
   const handleVerifyWords = useCallback(async () => {
     if (editingPausedRef.current) return;
