@@ -1,5 +1,5 @@
 /**
- * useUndoHistory (novice-readiness spec 0.2.11 §3.9 (U1)): React wiring over the pure
+ * useUndoHistory (novice-readiness spec 0.2.18 §3.9 (U1)): React wiring over the pure
  * `lib/history`. History is recorded at the App's user-action handlers, never inside `setGrid`,
  * because autofill, numbering and Verify write through it too.
  *

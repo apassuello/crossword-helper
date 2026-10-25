@@ -488,7 +488,7 @@ describe('App save wiring (§3.4)', () => {
   // `startedWith`: a letter typed at (0,0) BEFORE Start, so the Start snapshot itself differs from
   // the saved (blank) content. Without it the snapshot equals the saved content, the document
   // reads clean while the run is live, and the save machine cancels the autosave as a return to
-  // the saved content (novice-readiness spec 0.2.11 §3.9, History), which is not what the
+  // the saved content (novice-readiness spec 0.2.18 §3.9, "What a step holds"), which is not what the
   // autosave tests below exercise.
   const startLiveRunWithMergedLetter = async (user, container, { startedWith } = {}) => {
     await waitFor(() => expect(cells(container)).toHaveLength(225));
