@@ -1217,6 +1217,20 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
     expect(events).toEqual(['begin', 'request', 'apply', 'request', 'end']);
     expect(onBatchEnd).toHaveBeenCalledTimes(1);
     expect(onBatchEnd.mock.calls[0][0]).toBe(token);
+    // PR #90 Greptile third review: a closed run shows no summary and its loading toast goes
+    const applyAll = (c) => c[1] && c[1].id === 'apply-all';
+    expect(toast.success.mock.calls.filter(applyAll)).toHaveLength(0);
+    expect(toast.error.mock.calls.filter(applyAll)).toHaveLength(0);
+    expect(toast.dismiss.mock.calls.filter((c) => c[0] === 'apply-all')).toHaveLength(1);
+  });
+
+  it('a run that finished normally leaves its summary up when the panel closes after it', async () => {
+    const { onBatchEnd, unmount } = await setup(() => true);
+    await click(/apply all best placements/i);
+    await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
+    expect(toast.success.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all')).toHaveLength(1);
+    unmount();
+    expect(toast.dismiss.mock.calls.filter((c) => c[0] === 'apply-all')).toHaveLength(0);
   });
 
   it('Apply This Placement opens no batch', async () => {
