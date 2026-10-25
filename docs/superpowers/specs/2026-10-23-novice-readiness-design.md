@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.12** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.13** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25
@@ -705,7 +705,10 @@ real reason (above) instead of a stale offer.
   `wordlists: []` with 400 `NO_WORDLIST`; an absent `wordlists` key still means `["comprehensive"]`.
 - **Item 3 (CLI-normalize):** the default `normalize` rule keeps letters only:
   `normalize "Hello, World!"` → `HELLOWORLD`. The named rules in `conventions.py` keep their behaviour;
-  only the default rule changes.
+  only the default rule changes. The default rule uppercases with `str.upper()` after the fold, so a
+  letter with no NFKD decomposition is kept and `ß` becomes `SS` (`normalize "Straße"` → `STRASSE`;
+  `Æ`, `Ø`, `Œ` are kept as they are). This is deliberately unlike the word-list parser (item 1), which
+  skips them: `normalize` suggests an entry, and `SS` is the usual crossword spelling of `ß`.
 - **Item 4 (TH4):** stretch, with #19/#20.
 
 ---
@@ -987,3 +990,8 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   Ruled (owner 2026-10-25, Q10 option (a)): reject it with 400 `NO_WORDLIST`. Beat: (b) no route change,
   recording that the API can still reach the demo list. Found by the Phase 4–6 cross-task review (Q10).
   §8 PD-L7 ruled as written by the owner the same day.
+- 0.2.13 (2026-10-25): §4 item 3 states how the default `normalize` rule uppercases. Task 7.5 built
+  `str.upper()` after the fold (`Straße` → `STRASSE`), while item 1 says "Folding uppercases only ASCII
+  letters" and PD-L7 says letters are "folded as §4 item 1 folds them", which reads as `STRAßE`. Ruled
+  (owner 2026-10-25, "double S"): keep `str.upper()`. Beat: uppercasing ASCII letters only (`STRAßE`, not
+  enterable in a grid). Found by the controller reading Task 7.5's report against §4 item 1.
