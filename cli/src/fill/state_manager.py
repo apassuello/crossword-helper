@@ -9,6 +9,7 @@ import gzip
 import json
 import os
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -452,9 +453,10 @@ class StateManager:
 
         for file_path in self.storage_dir.glob("*.json*"):
             try:
-                # Get file modification time
-                mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
-                age_days = (datetime.now() - mtime).days
+                # Age in epoch seconds, not naive local datetimes: across a
+                # DST change those gain or lose an hour, so an 8-day-old file
+                # read as 7 days on the day clocks went back and survived.
+                age_days = int((time.time() - file_path.stat().st_mtime) // 86400)
 
                 if age_days > max_age_days:
                     file_path.unlink()
