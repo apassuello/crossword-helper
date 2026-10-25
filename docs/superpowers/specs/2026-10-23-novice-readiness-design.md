@@ -703,7 +703,9 @@ real reason (above) instead of a stale offer.
   stored line, and a requested word, by `WordList.canonical_word` of the word `parse_line` returns, so an
   add or a removal of `CAFE` acts on a stored `CAFÉ;50`, and one of `GRAPE` on `grape,40`. A line
   `parse_line` rejects keeps the old key, its text before `;` uppercased. A removal drops every stored line
-  with the key; an add's rewrite keeps the first of them, the one the list shows.
+  with the key; an add's rewrite keeps the first of them, the one the list shows. An add writes each line
+  uppercased unless uppercasing would change its key, as `"ß".upper()` → `"SS"` does; such a line is written
+  as given, so a stored or added `STRAßE` stays skipped instead of becoming `STRASSE`.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
   Nor from the API: `POST /api/pattern` and `POST /api/pattern/with-progress` reject an explicit
@@ -1006,4 +1008,6 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   and left the line, as did `GRAPE` for `grape,40`, and adding `CAFE` wrote a second line that the list then
   hid. Ruled by default (owner go-ahead to the fix plan, 2026-10-25): key both edits on the folded word.
   Beat: keeping the raw key and recording that only a stored spelling can be edited. Found by Greptile on
-  PR #87 (P1, thread 4370995355).
+  PR #87 (P1, thread 4370995355). Also: an add's rewrite uppercased every line, turning a skipped `STRAßE`
+  into a valid `STRASSE`; a line whose key uppercasing changes is now written as given (found by Task 7.8's
+  implementer; ruled by default, beat: writing every line as read, which drops the uppercase convention).
