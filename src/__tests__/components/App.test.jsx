@@ -15,7 +15,7 @@ import { localNumber } from '../../hooks/useNumbering';
 import storage from '../../lib/storage';
 import { saveArg, resolvingSave } from '../saveArgs';
 import { api } from '../../api/client';
-import { contentSigOf } from '../../App';
+import { contentSigOf } from '../../lib/contentSig';
 
 // Probes for the New grid rows (novice-readiness spec 0.2.7 §3.2). Each wraps the
 // real module and only records or overrides what a test needs: distinguishable

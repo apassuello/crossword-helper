@@ -2,10 +2,12 @@
  * Pure undo/redo history of grid content snapshots (novice-readiness spec §3.9 (U1),
  * "What a step holds" and "Restoring"). No React; every function returns new values.
  *
- * Coupling: a snapshot holds exactly the fields `contentSigOf` in `App.jsx` reads (size and each
- * cell's letter, isBlack, isThemeLocked, isAutofilled), so restoring a snapshot reproduces the
- * content signature and an undo back to the saved content makes the document clean (§3.9).
+ * Coupling: a snapshot holds exactly the fields `cellContentOf` (lib/contentSig) reads (size and
+ * each cell's letter, isBlack, isThemeLocked, isAutofilled) and carries `sig`, the `contentSigOf`
+ * of the grid it was taken from, so restoring a snapshot reproduces the content signature and an
+ * undo back to the saved content makes the document clean (§3.9).
  */
+import { cellContentOf, contentSigOf } from './contentSig';
 
 export const HISTORY_LIMIT = 100;
 
@@ -13,13 +15,12 @@ export function snapshotContent(grid, gridSize) {
   return {
     size: gridSize,
     cells: grid.map((row) =>
-      row.map((c) => ({
-        letter: c.letter,
-        isBlack: c.isBlack,
-        isThemeLocked: c.isThemeLocked,
-        isAutofilled: c.isAutofilled === true,
-      }))
+      row.map((c) => {
+        const [letter, isBlack, isThemeLocked, isAutofilled] = cellContentOf(c);
+        return { letter, isBlack, isThemeLocked, isAutofilled };
+      })
     ),
+    sig: contentSigOf(gridSize, grid),
   };
 }
 

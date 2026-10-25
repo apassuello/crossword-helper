@@ -9,7 +9,7 @@ import {
   canUndo,
   canRedo,
 } from '../history';
-import { contentSigOf } from '../../App';
+import { contentSigOf } from '../contentSig';
 
 const cell = (over = {}) => ({
   letter: '',

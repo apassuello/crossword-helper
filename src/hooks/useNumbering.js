@@ -83,7 +83,7 @@ export function numberingMapFromGrid(grid) {
 
 /**
  * Structural signature of a grid: size + isBlack layout ONLY. Mirrors
- * App's `contentSigOf` shape but deliberately excludes `.letter` and every
+ * `contentSigOf` (lib/contentSig) shape but deliberately excludes `.letter` and every
  * derived field (`.number`, `.isError`, `.isThemeLocked`, ...) — renumbering
  * must fire on black-square/size changes only, never on letter edits
  * (plan Global Constraint 3).

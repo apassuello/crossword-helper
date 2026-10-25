@@ -25,6 +25,7 @@ import {
   canUndo as historyCanUndo,
   canRedo as historyCanRedo,
 } from '../lib/history';
+import { contentSigOf } from '../lib/contentSig';
 
 export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
   const [, setVersion] = useState(0);
@@ -68,9 +69,7 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
     if (!before || !grid) return;
     pendingRef.current = null;
     if (before.size !== gridSize) return;
-    // `snapshotContent` holds exactly the fields `contentSigOf` (App.jsx) reads, so equal JSON is an
-    // equal content signature; App is not imported here because it imports this module.
-    if (JSON.stringify(before) === JSON.stringify(snapshotContent(grid, gridSize))) return;
+    if (before.sig === contentSigOf(gridSize, grid)) return;
     historyRef.current = pushStep(historyRef.current, before);
     bump();
   });
