@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.core.wordlist_reader import read_wordlist_words_ordered
+from backend.core.wordlist_reader import line_key, read_wordlist_words_ordered
 
 
 class WordListManager:
@@ -261,22 +261,25 @@ class WordListManager:
         # Ensure directory exists
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Existing lines keyed by word, so stored ;N scores survive a rewrite
+        # Existing lines keyed by the folded word the list shows (novice-readiness
+        # spec 0.2.14 section 4 item 1), so stored ;N scores survive a rewrite;
+        # of several lines with one key the first, the one the list shows, stays
         lines: Dict[str, str] = {}
         if filepath.exists():
             with open(filepath, "r", encoding="utf-8") as f:
                 for raw in f:
                     raw = raw.strip()
                     if raw and not raw.startswith("#"):
-                        lines[raw.split(";", 1)[0].strip().upper()] = raw.upper()
+                        lines.setdefault(line_key(raw), raw.upper())
 
         # New entries: "WORD" or canonical "WORD;N". A scored entry replaces
         # the stored line; a bare entry never erases a stored score.
         for entry in words:
-            entry = entry.strip().upper()
+            entry = entry.strip()
             if not entry:
                 continue
-            word = entry.split(";", 1)[0].strip()
+            word = line_key(entry)
+            entry = entry.upper()
             if ";" not in entry and word in lines:
                 continue
             lines[word] = entry
@@ -315,13 +318,15 @@ class WordListManager:
         if not filepath.exists():
             raise FileNotFoundError(f"Wordlist '{name}' not found")
 
-        doomed = {w.strip().upper() for w in words}
+        # Keyed as add_words keys (novice-readiness spec 0.2.14 section 4 item 1):
+        # a removal drops every stored line whose key is a requested word's key
+        doomed = {line_key(w) for w in words}
         kept: List[str] = []
         with open(filepath, "r", encoding="utf-8") as f:
             for raw in f:
                 stripped = raw.strip()
                 if stripped and not stripped.startswith("#"):
-                    if stripped.split(";", 1)[0].strip().upper() in doomed:
+                    if line_key(stripped) in doomed:
                         continue
                 kept.append(stripped)
 
