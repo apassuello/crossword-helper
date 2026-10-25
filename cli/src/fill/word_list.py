@@ -17,6 +17,11 @@ REGULAR_LETTERS = set("DHCLUMPFGYBWKV")  # Regular usage
 UNCOMMON_LETTERS = set("JQXZ")  # Difficult letters
 
 
+# Layout of the .pkl written by WordList.to_cache. Bump it whenever what a load
+# produces changes; from_cache refuses any other value. "1.0" was the pre-fold layout.
+CACHE_VERSION = 2
+
+
 def fold_letters(text: str) -> str:
     """
     Fold letters towards A-Z: Unicode NFKD decomposition, then drop combining marks.
@@ -384,7 +389,7 @@ class WordList:
             "words": self.words,
             "length_index": self._length_index,
             "first_letter_index": self._first_letter_index,
-            "version": "1.0",  # For future compatibility
+            "version": CACHE_VERSION,
         }
 
         try:
@@ -423,6 +428,15 @@ class WordList:
             # Validate cache structure
             if not isinstance(cache_data, dict):
                 raise ValueError("Invalid cache format")
+
+            # novice-readiness spec 0.2.12 section 4 (L11): a cache written before the
+            # fold ("version": "1.0") can hold unfolded words; refuse it so from_file
+            # falls back to the text list.
+            if cache_data.get("version") != CACHE_VERSION:
+                raise ValueError(
+                    f"Cache layout {cache_data.get('version')!r} is not {CACHE_VERSION!r} "
+                    "(written before the accent fold); rebuild it with build-cache"
+                )
 
             required_keys = {"words", "length_index", "first_letter_index"}
             if not required_keys.issubset(cache_data.keys()):

@@ -363,6 +363,65 @@ class TestFromFileCacheFallback:
         assert len(err_lines) == 1
         assert str(cache.resolve()) in err_lines[0]
 
+    @staticmethod
+    def _write_pre_fold_cache(cache, texts):
+        """Write a cache in the layout from before the fold (version "1.0").
+
+        Built by hand, not through to_cache, so it stays the old layout.
+        """
+        import pickle
+
+        words = [ScoredWord(text=t, score=50, length=len(t)) for t in texts]
+        length_index = {}
+        first_letter_index = {}
+        for w in words:
+            length_index.setdefault(w.length, []).append(w)
+            first_letter_index.setdefault(w.text[0], []).append(w)
+        with open(cache, "wb") as f:
+            pickle.dump(
+                {
+                    "words": words,
+                    "length_index": length_index,
+                    "first_letter_index": first_letter_index,
+                    "version": "1.0",
+                },
+                f,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+
+    def test_pre_fold_cache_is_not_served(self, tmp_path, capsys):
+        """novice-readiness spec 0.2.12 section 4 (L11): a cache from before the fold can hold an accented CAFE."""
+        txt = tmp_path / "list.txt"
+        txt.write_text("CAF\u00c9\nDOGS\n", encoding="utf-8")
+        cache = tmp_path / "list.pkl"
+        self._write_pre_fold_cache(cache, ["CAF\u00c9", "DOGS"])
+        os.utime(txt, (1_000_000, 1_000_000))
+        os.utime(cache, (1_000_010, 1_000_010))
+        wl = WordList.from_file(str(txt))
+        assert sorted(w.text for w in wl.words) == ["CAFE", "DOGS"]
+        assert str(cache.resolve()) in capsys.readouterr().err
+
+    def test_cache_written_after_the_fold_is_used(self, tmp_path, capsys):
+        txt = tmp_path / "list.txt"
+        txt.write_text("CAF\u00c9\nDOGS\n", encoding="utf-8")
+        cache = tmp_path / "list.pkl"
+        WordList(["ZEBRA"]).to_cache(str(cache))
+        os.utime(txt, (1_000_000, 1_000_000))
+        os.utime(cache, (1_000_010, 1_000_010))
+        wl = WordList.from_file(str(txt))
+        assert [w.text for w in wl.words] == ["ZEBRA"]
+        assert capsys.readouterr().err == ""
+
+    def test_cache_older_than_text_reads_the_text(self, tmp_path):
+        txt = tmp_path / "list.txt"
+        txt.write_text("CAF\u00c9\nDOGS\n", encoding="utf-8")
+        cache = tmp_path / "list.pkl"
+        WordList(["ZEBRA"]).to_cache(str(cache))
+        os.utime(cache, (1_000_000, 1_000_000))
+        os.utime(txt, (1_000_010, 1_000_010))
+        wl = WordList.from_file(str(txt))
+        assert sorted(w.text for w in wl.words) == ["CAFE", "DOGS"]
+
 
 class TestScoredWord:
     """Test ScoredWord dataclass."""
