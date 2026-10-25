@@ -1,8 +1,9 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.17** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.18** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
-PD-L7 ruled as written by owner 2026-10-25
+PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
+ruled by owner 2026-10-25
 
 ---
 
@@ -64,10 +65,22 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
     `backend/core/theme_placer.py`) stays stretch. **What it beat:** promoting both in full (the
     backend half is the least certain part and sits outside the CLI); keeping both stretch (a novice
     is told the wrong cause and offered placements that fail).
+  - **Undo and redo (U1, 2026-10-25):** a must-have (§3.9): "The undo should be there". Defaults
+    accepted: a document replacement clears history, one letter is one step, and the top bar shows
+    `Undo`/`Redo` buttons as well as the keys. **What it beat:** a README known-limitations line (honest
+    but leaves a novice with no way back from a mistake). Undo adds to the two rulings above that beat
+    an undo button, and replaces neither: a failed run still restores the Start grid by itself, and
+    Clean still asks before removing letters.
+  - **Fundamentals in acceptance (2026-10-25):** §6 verifies the whole basic workflow, not only the
+    cases this spec changed: grid import, theme word loading, the shipped word lists, grid setup,
+    export, restore, pattern search, "and everything of the like … basic usability requirements, for an
+    end-to-end crossword building workflow" (owner). Theme locks need not survive the JSON export round
+    trip; if they don't, the README says so (owner). **What it beat:** acceptance covering only the
+    changed cases, which would leave an untouched basic feature broken without anyone noticing.
 - **Must-have, in order:** §5 install, §2 autofill safety (with #41 and #40's default, §2.5), §3.1 hiding, §3.3 black squares,
   §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
-  (TH5), §3.7 grid-writer provenance, §3.8 theme suggestions (#19 panel half, #20), §4 word-list and CLI
-  rulings.
+  (TH5), §3.7 grid-writer provenance, §3.8 theme suggestions (#19 panel half, #20), §3.9 undo and
+  redo, §4 word-list and CLI rulings.
 - **Stretch, if the must-haves land:** #19's backend half, except defect 1, which 0.2.16 made a must-have
   with #57 item 4 (theme placement, §4 item 4). SR2 (search
   results below the viewport, the rest of #45) was stretch until 0.2.15 made it a must-have, §4 item 2.
@@ -331,7 +344,7 @@ before relying on case 3 (b) outside repair and hybrid.
   `running`, the machine's `onGridUpdate` is the only writer of letters and black squares. Every other
   `setGrid` caller in `App.jsx`, and every control that leads to one (typing and Backspace in
   `CrosswordGrid`, the black-square and theme-lock toggles, Search placement, theme apply, import,
-  Verify and Clean, grid size, New grid §3.2, Open saved §3.4), is disabled. Each writer also returns
+  Verify and Clean, grid size, New grid §3.2, Open saved §3.4, Undo and Redo §3.9), is disabled. Each writer also returns
   early when the check fails at write time, not only at render, so an async handler (Verify, Clean)
   whose response lands after Start writes nothing. `useNumbering` is already gated on the same
   states. While gated, the grid shows `Editing is paused while autofill runs.`
@@ -684,6 +697,53 @@ not the black squares the real applier writes, so the second and later suggestio
 still be refused on apply. With fresh suggestions on every grid change, a novice sees the refusal's
 real reason (above) instead of a stale offer.
 
+---
+
+### 3.9 Undo and redo (U1)
+
+**[SPEC]** (owner 2026-10-25: "The undo should be there"; the three defaults below accepted the same day)
+- **Controls.** `Undo` and `Redo` buttons in the top bar, each disabled when there is nothing to undo or
+  redo. Keys: Cmd+Z (macOS) / Ctrl+Z undo; Cmd+Shift+Z / Ctrl+Shift+Z and Ctrl+Y redo. The keys work
+  wherever focus is, except in an `input`, `textarea`, `select` or contenteditable element, which keep
+  their own text undo. The grid's own key listener is not enough, because after Apply All or Search the
+  focus is on a panel button.
+- **What one step is.** Each of these user actions, when it changes the grid, is one undo step: typing or
+  deleting one letter (one letter is one step, ruled; beat: coalescing a typed word, which needs a rule
+  for where a word ends); a black-square toggle together with its symmetric partner; a theme-lock toggle;
+  placing a Search result; `Apply This Placement`; one whole `Apply All Best Placements`, whatever number
+  of words it applies (its requests are sequential and async, so the step opens before the first request
+  and closes where §3.8's summary is computed); an accepted Clean; and a finished autofill run that
+  changed the grid, including "Keep partial fill". A run whose outcome restores the Start snapshot (§2.3)
+  changed nothing and adds no step.
+- **Not steps.** Verify's red marks (`isError`), autofill's red cells (`isBlocked`), numbering, autofill's
+  in-progress merges, and selection.
+- **What a step holds.** A snapshot of the grid's content before the action: exactly the fields
+  `contentSigOf` reads (size and each cell's `letter`, `isBlack`, `isThemeLocked`, `isAutofilled`). Undoing
+  back to the saved content therefore makes the document clean again, and `isAutofilled` provenance (§3.7)
+  comes back with the letters. For an autofill run, the "before" snapshot is the machine's Start snapshot
+  (§2.3); no second copy is taken. History is recorded at these user-action handlers in `App`, not inside
+  `setGrid`, because autofill, numbering and Verify also write through `setGrid`.
+- **Restoring.** Undo replaces the current content with the step's snapshot and pushes the current content
+  onto the redo stack. Redo does the reverse. Both clear `isError` and `isBlocked` on every cell, since a
+  red mark on a letter that undo removed or restored is stale. Numbering follows the restored black
+  squares as it does after any edit. Any new step clears the redo stack. History keeps the latest 100
+  steps.
+- **History ends with the document.** New grid, a grid-size change, Import and Open saved (including
+  restore on load) clear both stacks (ruled; beat: undoing across a replacement, which would restore
+  content under a different document identity, §3.4; each replacement already asks a confirm). A save
+  fork (§3.4 S4) is the same document continuing, so history survives it.
+- **Gating.** Undo and Redo are grid writers under D1 (§2.3): disabled while a run is live, and each
+  returns early when the check fails at write time.
+- **Async responses after an undo.** An undo or redo counts as a grid change for every rule that already
+  protects edits made while a request is in flight: Verify and Clean apply their response to the current
+  grid (S1), a theme apply response merges against the grid its request was built from (§3.8), and any
+  grid change dismisses an open Clean confirm (§3.5).
+- Tests: one step per action in the list, with Apply All of three words as one step; undo then redo
+  restores both contents exactly, including `isAutofilled` and `isThemeLocked`; undo back to the saved
+  content clears the dirty state; restore clears `isError` and `isBlocked`; a new edit clears redo; each
+  replacement clears both stacks; a fork keeps them; undo and redo do nothing while a run is live; the
+  keys are ignored in a text input; the buttons' disabled states follow the stacks.
+
 ## 4. Word lists and CLI rulings (#57)
 
 **[SPEC]**
@@ -799,11 +859,22 @@ the old one:
 | New: CL-CLEAN-GUARD | Theme-lock a word, type an invalid word elsewhere, press Clean; once with Cancel, once with the confirm accepted | The confirm shows `Clean will remove N letters` with `N` equal to the non-theme-locked letters in the slots Clean flags (Clean blanks every cell of a flagged slot, so a crossing letter counts too); Cancel changes nothing, including `isError`; accepting removes those letters and every theme-locked letter is unchanged |
 | New: PORT | Start with `PORT=<other>` while :5000 is held, and with the port in use; the Vite proxy with the same `PORT` | The app serves on `<other>`; the in-use case prints `Port <n> is in use. Start with PORT=<other> python3 run.py`, no traceback |
 | New: SETUP-MISSING | `setup.sh` with each tool (python3, node, npm) absent in turn; `FLASK_DEBUG=1 python3 run.py` | Each prints its `Missing: <tool> <minimum version> — install from <url>` and exits 1; debug is off unless `FLASK_DEBUG=1` |
+| New: F-WORKFLOW | On a fresh clone, following only the README: New grid 15x15, black squares with `Symmetry` on, load theme words with `Choose File`, `Apply All Best Placements`, fill one slot from a Search result, `Start Autofill` for the rest, `Verify words`, `Clean grid` if anything is red, `Undo` and `Redo` once each, `Save grid` under a name, reload, `Open saved`, Export JSON, HTML and Text | Every step can be done from the README and the visible controls alone, with no dead end; each step shows its result on the grid or in a message; across the whole run the browser console shows no uncaught error and the network log no 5xx response (both counts pasted into the log) |
+| New: F-TOUR | Follow README "Using the app" literally, start to finish | Every step works as written; every backticked control is where the README says |
+| New: F-IMPORT | `Upload File` with `example_11x11.json`, `example_15x15.json` and `example_21x21.json`; `Paste JSON` with one of them; import over a grid with letters; a malformed file and malformed pasted text | The grid matches the file (size and black squares); importing over letters asks the replace confirm; malformed input shows a plain message, no crash or blank grid, and the current grid is unchanged |
+| New: F-EDIT | New grid at 11x11, 15x15 and 21x21; type letters; arrows, Enter, Tab and Backspace as the grid's hint line describes; place and remove black squares with `Symmetry` on and off; Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z after each kind of edit | Each key does what the hint line says; the mirror square follows the toggle; numbering and the GRID stats (Total, Black, Filled, Words) update after each change; undo and redo step back and forth one edit at a time (§3.9) |
+| New: F-THEME-LOAD | `Choose File` with a list holding a lowercase word, a blank line, a duplicate, a 2-letter word and a word longer than the grid; then `Apply This Placement` on one suggestion | Valid words load in uppercase, once each; the invalid words are named with a reason; the applied word is on the grid and shown as theme-locked |
+| New: F-LISTS | First start: the Lists panel; `Statistics` and `Preview` of a shipped list; `Upload Wordlist` with a plain ASCII list holding a word no shipped list has; `Add Words`; delete the uploaded list | The shipped lists are shown and selected by default; the uploaded list can be ticked in Search and in Autofill, and Search finds its unique word; deleting asks a confirm and removes it from Search and Autofill |
+| New: F-SEARCH | On the default lists: `C?T`, a 6-letter all-`?` pattern, a pattern no word matches (e.g. `Q?Z??`); place one result in an empty slot | Every result matches the pattern and its length; the no-match case shows a message, not an empty panel; the placed word fills exactly that slot |
+| New: F-EXPORT | Export JSON, HTML and Text, each after `Preview`; import the exported JSON into a new grid | Each export downloads a file whose content matches the grid; the JSON round trip restores letters and black squares. The log records whether theme locks survive; if they don't, the row still passes and the run's close adds a README known-limitations line (owner, §1) |
+| New: F-RESTORE | A grid with letters, black squares and a theme-locked word; reload; then `Open saved` on its named save | Letters, black squares and the theme lock survive both paths |
+| New: F-FEEDBACK | Across every browser row: each action that writes the grid or calls the server (apply, place, Verify, Clean, Save, import, export, upload, autofill, undo, redo) | Each shows visible feedback (a message, a toast or a grid change) within 2 s, or a busy state (2 s: Claude's threshold); every error message names the problem in plain language, with no stack trace, raw JSON or bare HTTP code |
 | Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
 | New: TH2b | With suggestions showing, place a black square through an offered placement | The list refreshes; that placement is no longer offered; nothing stale can be applied |
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
 | New: TH4 | Import `example_11x11.json`, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE, read the suggestions, then Apply All Best Placements | Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
+| New: UNDO | On a grid with typed letters: undo and redo each step kind of §3.9 (letter, black square with its mirror, theme lock, Search placement, `Apply This Placement`, a three-word `Apply All Best Placements`, an accepted Clean, a finished autofill run), with the buttons and with the keys; undo back to the last save; type after an undo; New grid and Import; press Cmd/Ctrl+Z inside the Search pattern field | Each step undoes and redoes as one step, restoring letters, black squares, theme locks and autofill marks exactly, with no red cell left; undoing back to the last save clears `unsaved changes`; typing after an undo greys `Redo`; New grid and Import grey both buttons; Cmd/Ctrl+Z in the Search field edits the text only |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, SR2, CLI-normalize | Per §4 |
 | New: AF-LOCK | Type letters, run Repair on the 11x11, cancel and let one run end | Typed letters intact in every progress sample and at the end |
@@ -813,7 +884,7 @@ the old one:
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 | New: AF-REFILL | Run Repair, choose "Keep partial fill", type a letter, press Start again | The typed letter is intact; the run is not refused because of the autofilled letters; the lock list sent excludes them |
 | New: AF-LOCKED-CROSS | Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start | The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement |
-| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved | None of them changes the grid; `Editing is paused while autofill runs.` shows |
+| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys) | None of them changes the grid; `Editing is paused while autofill runs.` shows |
 | New: AF-OFFLIST | Type a word not in the lists (case 2), Start | The run proceeds; those cells show red; the toast `Typed words not in the selected word lists: <WORD>` shows |
 | New: AF-NOLISTS | Untick every word list | Start is disabled with `Select at least one word list` (I5) |
 | New: AF-VERIFY-STALE | Press Verify (and, separately, Clean), type a letter while the request is in flight | The typed letter survives the response; an open Clean confirm is dismissed by the typing (S1) |
@@ -1054,3 +1125,11 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   answered 500). Ruled: cap the list in `validate_theme_words`, which all three theme routes call. Beat:
   rewriting the search to be iterative (more change to a pushed search than the crash needs). Ruled
   in the PR #89 review follow-up; 0.2.16 is unchanged.
+- 0.2.18 (2026-10-25): undo and redo become a must-have, §3.9 (owner: "The undo should be there"; the three
+  defaults accepted the same day: a replacement clears history, one letter is one step, top-bar buttons as
+  well as the keys). Undo and Redo join §2.3's D1 writer list and §6's AF-GATE row. §6 gains UNDO and the
+  fundamentals rows F-WORKFLOW, F-TOUR, F-IMPORT, F-EDIT, F-THEME-LOAD, F-LISTS, F-SEARCH, F-EXPORT,
+  F-RESTORE and F-FEEDBACK (owner: verify the whole basic workflow, "basic usability requirements, for an
+  end-to-end crossword building workflow"). F-EXPORT does not require theme locks to round-trip; a README
+  line covers it if they don't (owner). Beat: a README line for the missing undo; acceptance limited to the
+  cases this spec changed.
