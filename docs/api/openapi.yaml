@@ -99,7 +99,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/PatternResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Bad request (validation error). Includes `NO_WORDLIST` (explicit
+            `wordlists: []`) and `UNKNOWN_WORDLIST` (a name that does not
+            resolve; the names are in `error.details.unknown_wordlists`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '504':
           description: Pattern search timeout (subprocess.TimeoutExpired)
           content:
@@ -267,7 +274,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProgressTaskResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Bad request (validation error). Includes `NO_WORDLIST` (explicit
+            `wordlists: []`) and `UNKNOWN_WORDLIST` (a name that does not
+            resolve; the names are in `error.details.unknown_wordlists`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1656,7 +1670,11 @@ components:
           items:
             type: string
           default: ["comprehensive"]
-          description: Wordlist names to search
+          description: |
+            Wordlist names to search. Omitting the key means
+            `["comprehensive"]`. An explicit empty array is rejected with 400
+            `NO_WORDLIST` (never a search of the CLI's built-in demo list);
+            an unknown name is rejected with 400 `UNKNOWN_WORDLIST`.
         max_results:
           type: integer
           default: 20

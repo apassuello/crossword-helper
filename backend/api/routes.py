@@ -77,8 +77,16 @@ def pattern_search():
 
         # Resolve wordlist paths — unknown names are a client error, never a
         # silent fallback to the CLI's builtin demo list (see the
-        # default_words fallback in cli/src/cli.py's pattern command)
+        # default_words fallback in cli/src/cli.py's pattern command). The same
+        # goes for an explicit empty list (NO_WORDLIST); only an absent key
+        # means ["comprehensive"]. novice-readiness spec 0.2.12 §4 (SR4).
         wordlist_names = data.get("wordlists", ["comprehensive"])
+        if not wordlist_names:
+            return handle_error(
+                "NO_WORDLIST",
+                "No wordlist selected: 'wordlists' must name at least one list (omit the field for the default)",
+                400,
+            )
         wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
         if missing:
             return handle_error(
@@ -510,8 +518,17 @@ def pattern_search_with_progress():
         # Validate request
         data = validate_pattern_request(request.json)
 
-        # Resolve wordlist paths — reject unknown names before starting work
+        # Resolve wordlist paths — reject unknown names, and an explicit empty
+        # list (NO_WORDLIST, never the CLI's builtin demo list), before starting
+        # work; only an absent key means ["comprehensive"].
+        # novice-readiness spec 0.2.12 §4 (SR4).
         wordlist_names = data.get("wordlists", ["comprehensive"])
+        if not wordlist_names:
+            return handle_error(
+                "NO_WORDLIST",
+                "No wordlist selected: 'wordlists' must name at least one list (omit the field for the default)",
+                400,
+            )
         wordlist_paths, missing = resolve_wordlist_paths_strict(wordlist_names)
         if missing:
             return handle_error(
