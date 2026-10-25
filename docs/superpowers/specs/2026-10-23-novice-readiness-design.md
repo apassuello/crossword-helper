@@ -729,8 +729,8 @@ real reason (above) instead of a stale offer.
   turn with the same conflict check and the same black squares the apply step writes. The search keeps the
   plan that places the most words among a bounded set of each word's best candidates, then the highest
   total score. The search also has a fixed budget of steps, so on a crowded set of words it can stop
-  before it has tried every combination and keep the best plan found so far, which may place one word
-  fewer than the best possible plan; the plan is always valid. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
+  before it has tried every combination and keep the best plan found so far, which may place
+  fewer words than the best possible plan; the plan is always valid. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
   Placements` applies the plan before any word it leaves out; such a word is then skipped with the
   server's reason (TH3). Out of scope: the rule for letters that abut a placed word side by side (#19
   defect 3).
