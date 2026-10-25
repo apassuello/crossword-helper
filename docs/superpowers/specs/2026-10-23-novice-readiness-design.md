@@ -659,7 +659,7 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   included (S5): `setLetter`, `toggleBlackSquare` (both the
   cell and its symmetric partner), `toggleThemeLock`, `handlePatternSelect`, `handleThemeWordApplied`, `handleGridImport`,
   `handleCleanGrid`, and New grid (§3.2); restore-on-load and Open saved (§3.4) are the exceptions and
-  load provenance as saved. A cell the user retypes with the same letter is user-typed.
+  load provenance as saved, as do Undo and Redo (§3.9), which restore it with the content. A cell the user retypes with the same letter is user-typed.
 - Tests: one per writer in the list above, including a same-letter write, asserts `isAutofilled` is
   `false` afterwards.
 - Saved grids carry the field per cell (§3.4); an entry without it reads as `false`. JSON export may
