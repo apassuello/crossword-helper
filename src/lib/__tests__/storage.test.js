@@ -421,6 +421,21 @@ describe('cross-tab serialisation via navigator.locks (novice-readiness spec 0.2
     return seen;
   };
 
+  it('list({ ordered: true }) reads inside the lock; a plain clean list does not take it', async () => {
+    const seen = [];
+    localStorage.getItem.mockImplementation((k) => {
+      seen.push(inside);
+      return store.has(k) ? store.get(k) : null;
+    });
+    await list();
+    expect(calls).toEqual([]);
+    seen.length = 0;
+    await list({ ordered: true });
+    expect(calls).toEqual([SAVE_KEY]);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+  });
+
   it('save resolves a function-form doc and opts INSIDE the lock, not when called', async () => {
     const where = [];
     await save(

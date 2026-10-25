@@ -29,9 +29,11 @@ export default function GridPanel({
   const refreshSaved = () => storage.list().then(setSaved);
   // novice-readiness spec 0.2.8 §3.4 (Q1, Greptile #77 GridPanel.jsx:88): Open reads the entry
   // again by id when the user confirms it, not from the list snapshot. An entry that has gone
-  // away shows the refreshed list and nothing is adopted.
+  // away shows the refreshed list and nothing is adopted. The read is `ordered`: it waits in the
+  // lock queue behind this tab's pending saves, so Open shows what they wrote and the save
+  // machine's known savedAt is the stored one (Phase 6R re-review N1).
   const openEntry = (entry) =>
-    storage.list().then((entries) => {
+    storage.list({ ordered: true }).then((entries) => {
       const fresh = entries.find((e) => e.id === entry.id);
       if (fresh) onOpenSaved(fresh);
       else setSaved(entries);
