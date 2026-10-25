@@ -229,8 +229,9 @@ describe('Apply This Placement and Apply All', () => {
     const { container } = await openTheme();
     const { grid, docId } = captured.theme;
     const words = ['CAT', 'DOG', 'EMU'];
+    let token;
     await act(async () => {
-      captured.theme.onBatchBegin();
+      token = captured.theme.onBatchBegin();
     });
     let sent = grid;
     for (let i = 0; i < 3; i++) {
@@ -241,7 +242,7 @@ describe('Apply This Placement and Apply All', () => {
       sent = reply;
     }
     await act(async () => {
-      captured.theme.onBatchEnd();
+      captured.theme.onBatchEnd(token);
     });
     expect(letters(container)).toEqual(['C', 'A', 'T', 'D', 'O', 'G', 'E', 'M', 'U']);
     undo();
@@ -254,11 +255,14 @@ describe('Apply This Placement and Apply All', () => {
   it('a batch that ends early (a dropped reply) still closes, and records what it did apply', async () => {
     const { container } = await openTheme();
     const { grid, docId } = captured.theme;
-    await act(async () => captured.theme.onBatchBegin());
+    let token;
+    await act(async () => {
+      token = captured.theme.onBatchBegin();
+    });
     await act(async () => {
       captured.theme.onApplyPlacement(replyWith(grid, 'CAT', 0), { word: 'CAT' }, { sentGrid: grid, docId });
     });
-    await act(async () => captured.theme.onBatchEnd());
+    await act(async () => captured.theme.onBatchEnd(token));
     expect(captured.h.canUndo).toBe(true);
     undo();
     expect(letters(container)).toEqual([]);
@@ -267,18 +271,24 @@ describe('Apply This Placement and Apply All', () => {
   it('a batch whose every reply was dropped records no step', async () => {
     await openTheme();
     const { grid } = captured.theme;
-    await act(async () => captured.theme.onBatchBegin());
+    let token;
+    await act(async () => {
+      token = captured.theme.onBatchBegin();
+    });
     await act(async () => {
       captured.theme.onApplyPlacement(replyWith(grid, 'CAT', 0), { word: 'CAT' }, { sentGrid: grid, docId: 'another-doc' });
     });
-    await act(async () => captured.theme.onBatchEnd());
+    await act(async () => captured.theme.onBatchEnd(token));
     expect(captured.h.canUndo).toBe(false);
   });
 
   it('during a batch a user edit is folded into it and Undo does nothing', async () => {
     const { user, container } = await openTheme();
     const { grid, docId } = captured.theme;
-    await act(async () => captured.theme.onBatchBegin());
+    let token;
+    await act(async () => {
+      token = captured.theme.onBatchBegin();
+    });
     await act(async () => {
       captured.theme.onApplyPlacement(replyWith(grid, 'CAT', 0), { word: 'CAT' }, { sentGrid: grid, docId });
     });
@@ -286,10 +296,28 @@ describe('Apply This Placement and Apply All', () => {
     type(container, 'Q');
     undo();
     expect(letters(container).sort()).toEqual(['A', 'C', 'Q', 'T']);
-    await act(async () => captured.theme.onBatchEnd());
+    await act(async () => captured.theme.onBatchEnd(token));
     undo();
     expect(letters(container)).toEqual([]);
     expect(captured.h.canUndo).toBe(false);
+  });
+
+  it('PR #90 Greptile P2: the Undo and Redo buttons are disabled while a batch is open, enabled after', async () => {
+    const { user, container } = await openTheme();
+    const { grid, docId } = captured.theme;
+    await act(async () => {
+      captured.theme.onApplyPlacement(replyWith(grid, 'CAT', 0), { word: 'CAT' }, { sentGrid: grid, docId });
+    });
+    const undoBtn = () => screen.getByText('Undo').closest('button');
+    expect(undoBtn()).not.toBeDisabled();
+    let token;
+    await act(async () => {
+      token = captured.theme.onBatchBegin();
+    });
+    expect(undoBtn()).toBeDisabled();
+    expect(screen.getByText('Redo').closest('button')).toBeDisabled();
+    await act(async () => captured.theme.onBatchEnd(token));
+    expect(undoBtn()).not.toBeDisabled();
   });
 });
 

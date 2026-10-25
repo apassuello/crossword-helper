@@ -20,7 +20,7 @@
 
 import React from 'react';
 
-export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false, savePrompt = null, canUndo = false, canRedo = false, onUndo, onRedo }) {
+export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggleTheme, dark, editingPaused = false, savePrompt = null, canUndo = false, canRedo = false, batchOpen = false, onUndo, onRedo }) {
   const offline = !status.online;
   const kind = offline ? 'err' : status.degraded ? 'warn' : 'ok';
   const label = offline ? 'offline' : status.degraded ? 'degraded' : 'online';
@@ -50,11 +50,11 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
           {label}
         </span>
         <div className="xw-topbar-divider" />
-        {/* Undo/Redo (novice-readiness spec 0.2.18 §3.9): greyed when the stack is empty or a run is live. */}
+        {/* Undo/Redo (novice-readiness spec 0.2.18 §3.9): greyed when the stack is empty, a run is live or an Apply All batch is open (the handlers ignore clicks then). */}
         <button
           className="xw-icon-btn"
           onClick={onUndo}
-          disabled={!canUndo || editingPaused}
+          disabled={!canUndo || editingPaused || batchOpen}
           title="Undo (Cmd/Ctrl+Z)"
         >
           <span>Undo</span>
@@ -62,7 +62,7 @@ export function TopBar({ status, savedLabel, onVerify, onSave, onClean, onToggle
         <button
           className="xw-icon-btn"
           onClick={onRedo}
-          disabled={!canRedo || editingPaused}
+          disabled={!canRedo || editingPaused || batchOpen}
           title="Redo (Cmd/Ctrl+Shift+Z or Ctrl+Y)"
         >
           <span>Redo</span>

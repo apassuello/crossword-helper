@@ -1170,6 +1170,17 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
     expect(events).toEqual(['begin', 'request', 'apply', 'request', 'apply', 'end']);
   });
 
+  it('PR #90 Greptile P1: onBatchEnd receives exactly the token onBatchBegin returned', async () => {
+    const token = { id: 'batch-token-7' };
+    const { onBatchBegin, onBatchEnd } = await setup(() => true);
+    onBatchBegin.mockImplementation(() => token);
+    await click(/apply all best placements/i);
+    await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
+    expect(onBatchEnd).toHaveBeenCalledTimes(1);
+    expect(onBatchEnd.mock.calls[0]).toHaveLength(1);
+    expect(onBatchEnd.mock.calls[0][0]).toBe(token);
+  });
+
   it('Apply This Placement opens no batch', async () => {
     const { onBatchBegin, onBatchEnd } = await setup(() => true);
     await act(async () => {

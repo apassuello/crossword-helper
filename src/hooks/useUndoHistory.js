@@ -11,9 +11,19 @@
  * therefore two steps, provided the second `record` was handed the grid the first edit produced
  * (App's `editGrid` does that); two identical "before"s collapse into one step.
  *
- * A batch (Apply All) is one step: `beginBatch()` takes the "before" content; every `record`
- * while it is open is folded into it; `undo`/`redo` do nothing; `commitBatch()` decides the one
- * step; `clear()` ends the batch without recording it.
+ * A batch (Apply All) is one step: `beginBatch()` takes the "before" content and returns a token
+ * (a monotonically increasing id); every `record` while it is open is folded into it;
+ * `undo`/`redo` do nothing; `commitBatch(token)` decides the one step, and only for the batch that
+ * token opened. A missing, stale or cleared token is ignored, so a slow run cannot close a later
+ * run's batch (PR #90 Greptile P1). `clear()` ends the batch without recording it, which makes
+ * every token issued before it stale.
+ *
+ * `beginBatch()` over a batch that is still open first commits that orphan, then opens a new one.
+ * That holds because only a closed panel's in-flight run can leave a batch open: the Apply All
+ * button is disabled while `applyingAll` and only one panel mounts, so a second `beginBatch`
+ * can only come from a remounted panel while the old run is still waiting on a request.
+ * `batchOpen` exposes the open state so the Undo and Redo buttons grey while it lasts (PR #90
+ * Greptile P2).
  *
  * Undo and redo are grid writers under D1 and return early while `editingPausedRef.current`.
  */
@@ -39,7 +49,8 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
   const gridSizeRef = useRef(gridSize);
   gridRef.current = grid;
   gridSizeRef.current = gridSize;
-  const batchRef = useRef(null); // { before } while an Apply All batch is open
+  const batchRef = useRef(null); // { before, token } while an Apply All batch is open
+  const tokenSeqRef = useRef(0); // last batch token issued
   const pendingRef = useRef([]); // queued "before" snapshots, decided after the next render
 
   const record = useCallback((before) => {
@@ -49,12 +60,16 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
   }, []);
 
   const beginBatch = useCallback(() => {
-    if (batchRef.current || !gridRef.current) return;
-    batchRef.current = { before: snapshotContent(gridRef.current, gridSizeRef.current) };
+    if (!gridRef.current) return undefined;
+    if (batchRef.current) pendingRef.current.push(batchRef.current.before); // commit the orphan
+    const token = ++tokenSeqRef.current;
+    batchRef.current = { before: snapshotContent(gridRef.current, gridSizeRef.current), token };
+    bump(); // batchOpen is read from the ref at render
+    return token;
   }, []);
 
-  const commitBatch = useCallback(() => {
-    if (!batchRef.current) return;
+  const commitBatch = useCallback((token) => {
+    if (!batchRef.current || token !== batchRef.current.token) return;
     pendingRef.current.push(batchRef.current.before);
     batchRef.current = null;
     bump(); // an effect after the next render sees every write the batch queued
@@ -110,6 +125,7 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
     clear,
     canUndo: historyCanUndo(historyRef.current),
     canRedo: historyCanRedo(historyRef.current),
+    batchOpen: batchRef.current !== null,
   };
 }
 
