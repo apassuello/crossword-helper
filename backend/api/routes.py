@@ -22,6 +22,7 @@ from backend.api.validators import (
 )
 from backend.core.cli_adapter import CLI_STARTUP_BUDGET_SECONDS, get_adapter
 from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR, is_valid_task_id
+from backend.core.wordlist_reader import read_wordlist_words
 from backend.core.wordlist_resolver import (
     get_default_wordlist_paths,
     resolve_wordlist_paths,
@@ -755,38 +756,6 @@ def fill_with_progress():
         return handle_error("INTERNAL_ERROR", str(e), 500)
 
 
-def _read_wordlist_words(path):
-    """Words of one list file, accepted by the rules the solver loads lists with.
-
-    novice-readiness spec 0.2.12 section 4 (L11, P5): the same line parser
-    (WordList.parse_line), fold and validity check as WordList.from_file, so
-    accented words fold, "word,score" lines load, and a word the solver rejects
-    is rejected here. WordList.from_file is not used because it also builds the
-    solver's indices and these routes only need the set of words.
-    A list that fails while being read contributes the words read before the
-    failure, and an unreadable one contributes nothing (unchanged behaviour).
-    """
-    from cli.src.fill.word_list import WordList
-
-    words = set()
-    try:
-        checker = WordList()
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parsed = WordList.parse_line(line)
-                if not parsed:
-                    continue
-                w = WordList.canonical_word(parsed[0])
-                if checker._is_valid_word(w):
-                    words.add(w)
-    except Exception:
-        pass  # swallow and skip, keeping what was read before the failure
-    return words
-
-
 @api.route("/grid/verify-words", methods=["POST"])
 def verify_words():
     """POST /api/grid/verify-words - Check all slots against wordlist.
@@ -826,7 +795,7 @@ def verify_words():
         # novice-readiness spec 0.2.12 section 4 (L11, P5): the list is read by
         # the solver's own parser, so verify accepts exactly what fill accepts.
         for wp in all_wl_paths:
-            for w in _read_wordlist_words(wp):
+            for w in read_wordlist_words(wp):
                 words_set.add(w)
                 words_by_length.setdefault(len(w), set()).add(w)
 
@@ -1013,7 +982,7 @@ def clean_grid():
         # novice-readiness spec 0.2.12 section 4 (L11, P5): same parser as the
         # solver and verify_words(), so clean flags exactly what verify paints.
         for wp in wl_paths:
-            words_set.update(_read_wordlist_words(wp))
+            words_set.update(read_wordlist_words(wp))
 
         def get_letter(r, c):
             """Extract letter from cell at (r,c). Returns None for black, '' for empty."""
