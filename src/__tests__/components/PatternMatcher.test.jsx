@@ -9,7 +9,7 @@
  * endpoint and the direct /api/pattern endpoint (used after SSE completes).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PatternMatcher from '../../components/PatternMatcher';
@@ -249,6 +249,95 @@ describe('PatternMatcher Component', () => {
 
       await user.click(comprehensiveCheckbox);
       expect(comprehensiveCheckbox.checked).toBe(false);
+    });
+  });
+
+  // novice-readiness spec 0.2.12 §4 (SR4): the CLI's built-in fallback list is
+  // not reachable from the UI, so zero ticked lists means no request at all.
+  describe('Search needs a word list (spec 0.2.12 §4 SR4)', () => {
+    const HINT = 'Select at least one word list';
+    let fetchSpy;
+
+    beforeEach(() => {
+      fetchSpy = vi.spyOn(global, 'fetch');
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    const searchPosts = () =>
+      fetchSpy.mock.calls.filter(
+        call => call[0] === '/api/pattern/with-progress' && call[1]?.method === 'POST'
+      );
+
+    const listBox = async name => {
+      await waitFor(() => {
+        expect(document.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(0);
+      });
+      return Array.from(document.querySelectorAll('input[type="checkbox"]')).find(cb =>
+        cb.closest('label')?.textContent?.includes(name)
+      );
+    };
+
+    it('default (comprehensive ticked): enabled, no hint, click sends a request', async () => {
+      const user = userEvent.setup();
+      render(<PatternMatcher {...defaultProps} />);
+      await listBox('Comprehensive');
+
+      const button = screen.getByRole('button', { name: /^search$/i });
+      expect(button).not.toBeDisabled();
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+      await user.click(button);
+      await waitFor(() => expect(searchPosts()).toHaveLength(1));
+    });
+
+    it('last list unticked: disabled, hint present, click sends nothing', async () => {
+      const user = userEvent.setup();
+      render(<PatternMatcher {...defaultProps} />);
+      await user.click(await listBox('Comprehensive'));
+
+      const button = screen.getByRole('button', { name: /^search$/i });
+      expect(button).toBeDisabled();
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+      await user.click(button);
+      expect(searchPosts()).toHaveLength(0);
+    });
+
+    it('unticked, then a list ticked: enabled, hint gone, request sent', async () => {
+      const user = userEvent.setup();
+      render(<PatternMatcher {...defaultProps} />);
+      const box = await listBox('Comprehensive');
+      await user.click(box);
+      expect(screen.getByRole('button', { name: /^search$/i })).toBeDisabled();
+
+      await user.click(box);
+      const button = screen.getByRole('button', { name: /^search$/i });
+      expect(button).not.toBeDisabled();
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T');
+      await user.click(button);
+      await waitFor(() => expect(searchPosts()).toHaveLength(1));
+    });
+
+    it('zero ticked, Enter in the pattern input: disabled, hint present, no request', async () => {
+      const user = userEvent.setup();
+      render(<PatternMatcher {...defaultProps} />);
+      await user.click(await listBox('Comprehensive'));
+
+      expect(screen.getByRole('button', { name: /^search$/i })).toBeDisabled();
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText(/enter pattern/i), 'C?T{Enter}');
+      // searchPattern must return early: no request, no loading state, no SSE connect
+      expect(searchPosts()).toHaveLength(0);
+      expect(mockSSEConnect).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /^search$/i })).toBeDisabled();
     });
   });
 
