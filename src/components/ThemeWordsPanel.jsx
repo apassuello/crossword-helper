@@ -66,12 +66,17 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
   const requestTokenRef = useRef(0);
 
   // novice-readiness spec 0.2.8 §3.8 (F1), 0.2.19: Apply All stops sending once the panel
-  // is closed (unmounted) and drops a reply that lands after the close.
+  // is closed (unmounted), drops a reply that lands after the close, and shows no summary for
+  // the closed run. Its loading toast is dismissed at unmount (not at reply time, when a
+  // reopened panel's run could own the shared 'apply-all' id); runningRef gates that so a
+  // finished run's summary is left alone.
   const mountedRef = useRef(true);
+  const runningRef = useRef(false);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (runningRef.current) toast.dismiss('apply-all');
     };
   }, []);
 
@@ -284,6 +289,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
       let currentGrid = grid; // Track grid state through applications
       const requestDocId = docId;
 
+      runningRef.current = true;
       toast.loading('Applying all theme words...', { id: 'apply-all' });
 
       for (const wordData of suggestions) {
@@ -331,6 +337,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
             });
             if (applied !== true) {
               toast.dismiss('apply-all');
+              runningRef.current = false;
               setApplyingAll(false);
               return;
             }
@@ -341,7 +348,9 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
         }
       }
 
+      if (!mountedRef.current) return; // panel closed: no summary for a run the user closed (F1); the unmount dismissed its toast
       setApplyingAll(false);
+      runningRef.current = false;
 
       // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
       // the words this action applied; every skipped word is listed with its reason.
