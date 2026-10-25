@@ -123,3 +123,9 @@ afterEach(() => {
   localStorageMock.removeItem.mockClear();
   localStorageMock.clear.mockClear();
 });
+
+// jsdom does not implement scrollIntoView; PatternMatcher calls it when results arrive
+// (novice-readiness spec 0.2.15 §4 item 2, SR2). Tests that assert on it install a spy.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

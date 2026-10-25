@@ -14,7 +14,7 @@
  * the hook is ported onto src/api/client.js (issue #12).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PatternMatcher from '../../components/PatternMatcher';
@@ -88,5 +88,54 @@ describe('PatternMatcher SSE completion (real hook)', () => {
 
     expect(screen.queryByText(/results \(/i)).not.toBeInTheDocument();
     expect(button).toBeDisabled();
+  });
+
+  // novice-readiness spec 0.2.15 §4 item 2 (SR2): jsdom has no scrollIntoView.
+  describe('results scroll into view', () => {
+    let original;
+    beforeEach(() => {
+      original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+    afterEach(() => {
+      Element.prototype.scrollIntoView = original;
+    });
+
+    async function searchWith(results) {
+      const user = userEvent.setup();
+      render(<PatternMatcher {...props} />);
+      const input = screen.getByPlaceholderText(/enter pattern/i);
+      const button = screen.getByRole('button', { name: /search/i });
+      await runSearch(user, input, button, 'C?T');
+      await completeStream(0, results);
+      return user;
+    }
+
+    it('scrolls the results section into view once when results arrive', async () => {
+      await searchWith([{ word: 'CAT', score: 95 }]);
+      await waitFor(() => expect(shownWords()).toEqual(['CAT']));
+
+      const spy = Element.prototype.scrollIntoView;
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.instances[0]).toBe(document.querySelector('.results-section'));
+    });
+
+    it('does not scroll when the search returns no results', async () => {
+      await searchWith([]);
+      expect(await screen.findByText(/no matching words found/i)).toBeInTheDocument();
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('does not scroll again when the sort order changes afterwards', async () => {
+      const user = await searchWith([
+        { word: 'CAT', score: 95 },
+        { word: 'COT', score: 50 },
+      ]);
+      await waitFor(() => expect(shownWords().length).toBe(2));
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+
+      await user.selectOptions(screen.getByDisplayValue('Score'), 'alpha');
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    });
   });
 });
