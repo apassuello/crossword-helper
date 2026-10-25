@@ -122,29 +122,39 @@ function withLock(fn) {
 }
 
 /**
+ * The whole read of `list`, run INSIDE the lock: re-read (another tab may have migrated
+ * meanwhile) and finish any pending legacy migration.
+ */
+function readEntriesInLock() {
+  const { entries, pending, needsWrite } = readState();
+  if (!pending) return entries;
+  try {
+    if (needsWrite) localStorage.setItem(SAVE_KEY, JSON.stringify(entries));
+    dropLegacyKey();
+  } catch {
+    // Near the quota: keep the legacy key; the merged entries are still readable.
+  }
+  return entries;
+}
+
+/**
  * All saved grids, newest first. Never rejects: any read failure resolves `[]`
  * (novice-readiness spec 0.2.8 §3.4, M1). A legacy migration whose write fails
  * still returns the merged readable entries and keeps the legacy key, so a later
  * read retries it (Greptile #77 storage.js:126).
+ * `{ ordered: true }` always reads inside the lock, so the read queues behind this tab's
+ * pending saves and sees what they wrote (Open saved of the open document's own entry,
+ * Phase 6R re-review N1). Without it a clean read skips the lock.
+ * @param {{ordered?: boolean}} [opts]
  * @returns {Promise<object[]>}
  */
-export function list() {
+export function list({ ordered = false } = {}) {
   return Promise.resolve()
     .then(() => {
+      if (ordered) return withLock(readEntriesInLock);
       const first = readState();
       if (!first.pending) return first.entries;
-      return withLock(() => {
-        // Re-read inside the lock: another tab may have migrated meanwhile.
-        const { entries, pending, needsWrite } = readState();
-        if (!pending) return entries;
-        try {
-          if (needsWrite) localStorage.setItem(SAVE_KEY, JSON.stringify(entries));
-          dropLegacyKey();
-        } catch {
-          // Near the quota: keep the legacy key; the merged entries are still readable.
-        }
-        return entries;
-      });
+      return withLock(readEntriesInLock);
     })
     .catch(() => []);
 }

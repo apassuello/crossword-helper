@@ -83,6 +83,44 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('N1: reopening the open document\'s own entry while its autosave waits for the lock', () => {
+  it('Open reads behind the queued save: it shows what storage holds, the label leaves "saving", the next edit does not fork', async () => {
+    store.set(SAVE_KEY, JSON.stringify([entryOf('G', 'Gee', { '1,1': { letter: 'F' } })]));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+    const { container } = renderApp();
+    await waitFor(() => expect(letters(container)).toEqual(['F']));
+    await typeLetter(user, container, 3, 3, 'A'); // dirty
+    await advance(30000); // the autosave fires; its lock request is queued
+    expect(pending).toHaveLength(1);
+
+    await act(async () => { await user.click(screen.getByRole('button', { name: 'Open saved' })); });
+    await screen.findByText('Gee');
+    await act(async () => {
+      await user.click(within(screen.getByText('Gee').closest('li')).getByRole('button', { name: 'Open' }));
+    });
+    // The grid has content, so Open asks first; confirming re-reads the entry.
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Replace' }));
+    });
+    await act(async () => { await grant(); });
+    await act(async () => { await grant(); });
+
+    // (i) the grid shows the entry as storage holds it, (ii) the label left "saving…"
+    expect(stored().map((e) => e.id)).toEqual(['G']);
+    expect(letters(container).sort()).toEqual(['A', 'F']);
+    expect(screen.queryByText('saving…')).toBeNull();
+    expect(screen.queryByText('unsaved changes')).toBeNull();
+
+    // (iii) + (iv) the tab's known savedAt is storage's: the next edit saves in place
+    await typeLetter(user, container, 5, 5, 'B');
+    await advance(30000);
+    await act(async () => { await grant(); });
+    expect(stored().map((e) => e.name)).toEqual(['Gee']);
+    expect(letters(container).sort()).toEqual(['A', 'B', 'F']);
+  });
+});
+
 describe('N2: an import while a save of the old document waits for the lock', () => {
   it('a grant between the import\'s setters and its render leaves the imported grid clean', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
