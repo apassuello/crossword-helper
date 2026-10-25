@@ -688,7 +688,7 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
 - **Applying against the grid that was sent (0.2.8, review F1, F4).** A theme apply response is merged
   against the grid its request was built from: a cell the user changed after the request was sent keeps
   the user's value. A response landing after the document was replaced is dropped (PD-6-G12). Apply All
-  stops when the Theme panel closes: it sends no further request and drops a reply that lands after the close.
+  stops when the Theme panel closes: it sends no further request and drops a reply that lands after the close, and shows no summary.
 - Tests: a grid change while suggestions show triggers one refetch and drops the old list; Apply on a
   superseded entry is a no-op; Apply All with a 400 conflict, a 500 and a network failure reports three
   different reasons and counts only its own applies.
@@ -1154,3 +1154,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   PR #90 found that a reply landing after the close was folded into the next Apply All's undo step,
   splitting one action across two steps; F1 now drops that reply. Beat: greying Apply All until the
   closed run's reply returns (a new prop, and a button greyed for a cause the user cannot see).
+  Same-day review fix: Greptile's review of `dd113ac` found the dropped reply still reached the Apply All
+  summary, which could report success for a replaced document's words or failure for an intended drop; a
+  closed run now shows no summary and its loading toast is dismissed when the panel closes. Beat: per-run
+  toast ids (they only buy a toast that outlives the panel, which F1 says it should not).
