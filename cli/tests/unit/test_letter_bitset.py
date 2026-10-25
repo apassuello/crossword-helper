@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from src.domain.letter_bitset import LetterBitsetIndex
 from src.fill.trie_pattern_matcher import TriePatternMatcher
-from src.fill.word_list import WordList
+from src.fill.word_list import ScoredWord, WordList
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COMPREHENSIVE_WORDLIST = REPO_ROOT / "data" / "wordlists" / "comprehensive.txt"
@@ -230,11 +230,13 @@ class TestQueryMethodRelationships:
 def _word_list_spanning_n_letters(n: int) -> WordList:
     """Build a WordList whose words collectively use exactly n distinct uppercase letters.
 
-    WordList._is_valid_word accepts any str.isalpha() and str.isupper() text,
-    so uppercase Greek and Cyrillic characters extend the Latin block's 26
-    when n > 26 (per the task-2 brief). Distinct letters are packed 3 to a
-    word to satisfy WordList's minimum length; a final short group is padded
-    with an already-used letter, which adds no new distinct letter.
+    WordList validation requires ASCII A-Z (novice-readiness spec 0.2.12 section 4, L11), so a
+    WordList can no longer hold more than 26 distinct letters through its public constructors.
+    The 64-letter boundary tests need more, so the ScoredWords are placed directly into the
+    list and its indices, bypassing validation. LetterBitsetIndex.from_word_list reads only
+    the words, so the boundary it checks is the same. Uppercase Greek and Cyrillic characters
+    extend the Latin block's 26 when n > 26. Distinct letters are packed 3 to a word; a final
+    short group is padded with an already-used letter, which adds no new distinct letter.
     """
     latin = [chr(code) for code in range(ord("A"), ord("Z") + 1)]
     greek = [chr(code) for code in range(0x0391, 0x03AA) if chr(code).isalpha() and chr(code).isupper()]
@@ -250,9 +252,15 @@ def _word_list_spanning_n_letters(n: int) -> WordList:
             chunk.append(letters[0])
         words.append("".join(chunk))
 
-    word_list = WordList(words)
+    word_list = WordList()
+    for text in words:
+        scored = ScoredWord(text=text, score=50, length=len(text))
+        word_list.words.append(scored)
+        word_list._length_index.setdefault(len(text), []).append(scored)
+        word_list._first_letter_index.setdefault(text[0], []).append(scored)
     distinct_letters = {ch for word in words for ch in word}
     assert len(distinct_letters) == n, "test setup bug: word pool does not span exactly n distinct letters"
+    assert len(word_list) == len(words), "test setup bug: every word must be present in the list"
     return word_list
 
 

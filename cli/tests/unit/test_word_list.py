@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from src.fill.word_list import ScoredWord, WordList
+from src.fill.word_list import ScoredWord, WordList, fold_letters
 
 
 class TestWordList:
@@ -381,3 +381,77 @@ class TestScoredWord:
         word3 = ScoredWord(text="DOG", score=75, length=3)
         assert word1 == word2
         assert word1 != word3
+
+
+class TestFoldLetters:
+    """novice-readiness spec 0.2.12 section 4 (L11): NFKD, combining marks dropped, case preserved."""
+
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            ("CAFÉ", "CAFE"),
+            ("café", "cafe"),
+            ("NAÏVE", "NAIVE"),
+            ("ÜBER", "UBER"),
+            ("CAFE\u0301", "CAFE"),
+            ("\uff23\uff21\uff34", "CAT"),
+            ("STRAßE", "STRAßE"),
+            ("plain", "plain"),
+        ],
+    )
+    def test_fold(self, text, expected):
+        assert fold_letters(text) == expected
+
+    def test_idempotent(self):
+        once = fold_letters("NAÏVE café")
+        assert fold_letters(once) == once
+
+
+class TestCanonicalWord:
+    def test_sharp_s_is_not_uppercased_to_ss(self):
+        assert WordList.canonical_word("ß") == "ß"
+
+    def test_folds_strips_and_uppercases_ascii(self):
+        assert WordList.canonical_word("  café ") == "CAFE"
+
+    def test_non_ascii_after_fold_is_left_unchanged(self):
+        assert WordList.canonical_word("STRAßE") == "STRAßE"
+
+
+class TestIsValidWordAscii:
+    def test_accented_rejected(self):
+        assert WordList()._is_valid_word("CAFÉ") is False
+
+    def test_ascii_accepted(self):
+        assert WordList()._is_valid_word("CAFE") is True
+
+    def test_greek_capitals_rejected(self):
+        assert WordList()._is_valid_word("ΑΒΓ") is False
+
+
+class TestFoldInEveryLoadPath:
+    def test_constructor_folds(self):
+        assert [w.text for w in WordList(["CAFÉ"]).words] == ["CAFE"]
+
+    def test_constructor_folds_scored_tuple(self):
+        wl = WordList([("café", 60)])
+        assert [(w.text, w.score) for w in wl.words] == [("CAFE", 60)]
+
+    def test_duplicates_detected_after_fold_keep_first(self):
+        wl = WordList(["CAFE", "CAFÉ"])
+        assert [w.text for w in wl.words] == ["CAFE"]
+
+    def test_add_words_skips_unfoldable(self):
+        wl = WordList(["STRAßE", "ÆON", "BJØRN", "ΑΒΓ", "CAT"])
+        assert [w.text for w in wl.words] == ["CAT"]
+
+    def test_parse_line_folds_word_part(self):
+        assert WordList.parse_line("CAFÉ;50") == ("CAFE", 50)
+        assert WordList.parse_line("café,40") == ("cafe", 40)
+        assert WordList.parse_line("NAÏVE") == ("NAIVE", None)
+
+    def test_from_file_folds(self, tmp_path):
+        f = tmp_path / "w.txt"
+        f.write_text("CAFÉ;50\nnaïve\nSTRAßE\n", encoding="utf-8")
+        wl = WordList.from_file(str(f), use_cache=False)
+        assert sorted(w.text for w in wl.words) == ["CAFE", "NAIVE"]

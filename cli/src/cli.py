@@ -105,8 +105,9 @@ def _load_wordlist_words(wordlist_files) -> list:
 
     Each non-comment line goes through `WordList.parse_line`: plain `WORD` gives
     score None (WordList computes one), `WORD;50` and `word,50` keep the file
-    score, and malformed or header lines are skipped. Words are not uppercased
-    here; `WordList` does that. The only consumer is `_execute_resume`, which
+    score, and malformed or header lines are skipped. `parse_line` folds the
+    word's accents (novice-readiness spec 0.2.12 section 4, L11); `WordList`
+    uppercases and validates it. The only consumer is `_execute_resume`, which
     passes the result straight to `WordList`.
     """
     all_words = []
@@ -819,7 +820,7 @@ def fill(
                         continue
                     # One line format (spec 4): WORD, WORD;SCORE or word,SCORE. A malformed
                     # line or a "word,score" header parses to None and is skipped. The
-                    # file score is kept; WordList uppercases and validates the word.
+                    # file score is kept; WordList folds, uppercases and validates the word.
                     parsed = WordList.parse_line(line)
                     if parsed and parsed[0]:
                         all_words.append(parsed)
@@ -2390,9 +2391,11 @@ def parse_wordlist(wordlist_file: str, json_output: bool):
     """
     Parse a word list file and report accepted words and skipped lines.
 
-    A line is accepted iff WordList.parse_line parses it and the uppercased
-    word passes WordList._is_valid_word. Blank and '#' lines are ignored.
-    Duplicates (after uppercasing) keep the first occurrence. A missing file
+    A line is accepted iff WordList.parse_line parses it and the folded,
+    uppercased word (WordList.canonical_word) passes WordList._is_valid_word,
+    which requires ASCII A-Z (novice-readiness spec 0.2.12 section 4, L11).
+    Blank and '#' lines are ignored. Duplicates (after folding) keep the
+    first occurrence. A missing file
     is a click usage error (exit 2), as for import-nyt.
 
     Examples:
@@ -2413,7 +2416,7 @@ def parse_wordlist(wordlist_file: str, json_output: bool):
                 skipped.append({"line": lineno, "text": line, "reason": "malformed score"})
                 continue
             word, score = parsed
-            word = word.upper()
+            word = WordList.canonical_word(word)
             if not validator._is_valid_word(word):
                 reason = "length outside 3-21" if not 3 <= len(word) <= 21 else "not letters only"
                 skipped.append({"line": lineno, "text": line, "reason": reason})
