@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.15** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.16** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25
@@ -68,7 +68,8 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
   §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
   (TH5), §3.7 grid-writer provenance, §3.8 theme suggestions (#19 panel half, #20), §4 word-list and CLI
   rulings.
-- **Stretch, if the must-haves land:** #19's backend half and #57 item 4 (theme placement). SR2 (search
+- **Stretch, if the must-haves land:** #19's backend half, except defect 1, which 0.2.16 made a must-have
+  with #57 item 4 (theme placement, §4 item 4). SR2 (search
   results below the viewport, the rest of #45) was stretch until 0.2.15 made it a must-have, §4 item 2.
 - **Out of scope:** Windows; solver fill quality beyond #40's default; #26 #28 #29 #36 #37 #38 #39 #52
   #59 (solver internals or pause/resume, which has no UI); #18 #56 #60 (developer-facing); #43; #64 (NaN%, see the §3.3 NOTE); #65 (403 on a POST-created list: API-level, not on the novice path).
@@ -720,7 +721,17 @@ real reason (above) instead of a stale offer.
   letter with no NFKD decomposition is kept and `ß` becomes `SS` (`normalize "Straße"` → `STRASSE`;
   `Æ`, `Ø`, `Œ` are kept as they are). This is deliberately unlike the word-list parser (item 1), which
   skips them: `normalize` suggests an entry, and `SS` is the usual crossword spelling of `ß`.
-- **Item 4 (TH4):** stretch, with #19/#20.
+- **Item 4 (TH4):** each theme word's suggestions are its best placements on the grid as it is, found
+  independently of the other theme words, so `No valid placements found for this word` appears only when
+  the word fits nowhere on the current grid. A word that fits nowhere gets no suggestions (no placement
+  marked with a warning is offered in their place). The first suggestion of each word that can be placed
+  together with others is its place in a joint plan: one placement per word, checked as if applied in
+  turn with the same conflict check and the same black squares the apply step writes. The search keeps the
+  plan that places the most words among a bounded set of each word's best candidates, then the highest
+  total score. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
+  Placements` applies the plan before any word it leaves out; such a word is then skipped with the
+  server's reason (TH3). Out of scope: the rule for letters that abut a placed word side by side (#19
+  defect 3).
 
 ---
 
@@ -786,6 +797,7 @@ the old one:
 | Hidden | CL1, A-SBS, new: EXPORT-HIDE | Control absent; the Export panel shows no PDF or `.puz` option, no "Include clues" checkbox, and no PDF or `.puz` line under Format Information |
 | New: TH2b | With suggestions showing, place a black square through an offered placement | The list refreshes; that placement is no longer offered; nothing stale can be applied |
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
+| New: TH4 | Import `example_11x11.json`, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE, read the suggestions, then Apply All Best Placements | Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
 | Lists, CLI | L11, SR4, SR2, CLI-normalize | Per §4 |
@@ -1023,3 +1035,11 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   word-list-box half was fixed in `03e4f59`, so SR2 is what remains). §4 item 2 states the behaviour and §6's
   Lists row gains SR2. Ruled (owner): scroll the results into view. Beat: moving results above the
   checklist (layout and README order change), collapsing the checklist (a new control).
+- 0.2.16 (2026-10-25): TH4 moves from stretch to must-have (owner 2026-10-25: features the release shows
+  must be reliable). On `example_11x11.json` the placer committed each word's best placement before
+  suggesting the next, so OBSERVATION's column 5 left MIRRORIMAGE and PERFORMANCE with `No valid
+  placements` although each fits three places on the user's grid, and the refused word depended on line
+  order in the upload. §4 item 4 states the behaviour; §6 gains TH4. Supersedes P17's "#19's backend half
+  stays stretch" for #19 defect 1 (the plan uses the blacks the apply step writes); defect 3 stays out of
+  scope. Ruled by default (owner go-ahead to fix TH4); beat: Apply All re-requesting suggestions after each
+  apply (greedy, places one word on this grid).
