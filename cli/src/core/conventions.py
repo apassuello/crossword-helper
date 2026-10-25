@@ -8,6 +8,8 @@ crossword puzzle conventions (e.g., "Tina Fey" → "TINAFEY").
 import re
 from typing import Dict, List, Tuple
 
+from ..fill.word_list import fold_letters
+
 
 class ConventionHelper:
     """Normalizes crossword entries according to standard conventions."""
@@ -94,14 +96,18 @@ class ConventionHelper:
                     },
                 )
 
-        # Default rule: no pattern matched
-        normalized = text.replace(" ", "").upper()
+        # Default rule: no pattern matched. novice-readiness spec 0.2.12 section 4
+        # (CLI-normalize) and section 8 PD-L7: keep letters only, folded as section 4
+        # item 1 folds them (fold_letters), uppercased; no letter gives "". Letters
+        # with no NFKD decomposition (ae, o-slash, oe, sharp s) survive the fold and
+        # are kept; str.upper() turns sharp s into SS.
+        normalized = "".join(ch for ch in fold_letters(text) if ch.isalpha()).upper()
         return (
             normalized,
             {
                 "type": "default",
-                "description": "Default: remove spaces, uppercase",
-                "explanation": "No specific pattern matched - applying default normalization",
+                "description": "Letters only",
+                "explanation": "No specific pattern matched - keeping letters only, uppercased",
                 "examples": [],
                 "confidence": "medium",
             },
