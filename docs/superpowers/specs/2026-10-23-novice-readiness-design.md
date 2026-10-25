@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.18** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.19** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -688,7 +688,7 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
 - **Applying against the grid that was sent (0.2.8, review F1, F4).** A theme apply response is merged
   against the grid its request was built from: a cell the user changed after the request was sent keeps
   the user's value. A response landing after the document was replaced is dropped (PD-6-G12). Apply All
-  stops sending requests when the Theme panel closes.
+  stops when the Theme panel closes: it sends no further request and drops a reply that lands after the close.
 - Tests: a grid change while suggestions show triggers one refetch and drops the old list; Apply on a
   superseded entry is a no-op; Apply All with a 400 conflict, a 500 and a network failure reports three
   different reasons and counts only its own applies.
@@ -1150,3 +1150,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   by default; beat: loading the valid words of a file with an invalid one, new behaviour); F-LISTS and
   F-EXPORT name the real controls, and theme locks are known not to survive export, so the README line
   lands in Phase U.
+- 0.2.19 (2026-10-25): §3.8 Apply All stops when the panel closes. Greptile's second review of `5d389ac` on
+  PR #90 found that a reply landing after the close was folded into the next Apply All's undo step,
+  splitting one action across two steps; F1 now drops that reply. Beat: greying Apply All until the
+  closed run's reply returns (a new prop, and a button greyed for a cause the user cannot see).
