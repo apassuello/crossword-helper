@@ -152,3 +152,35 @@ describe('TopBar while editingPaused (Task 4.4, D1)', () => {
     expect(getByText('Clean grid').closest('button')).not.toBeDisabled();
   });
 });
+
+describe('TopBar Undo and Redo (novice-readiness spec 0.2.18 §3.9)', () => {
+  it('renders Undo and Redo buttons whose titles name their shortcuts', () => {
+    const { getByRole } = render(<TopBar {...baseProps({ canUndo: true, canRedo: true })} />);
+    expect(getByRole('button', { name: 'Undo' }).getAttribute('title')).toMatch(/Cmd\/Ctrl\+Z/);
+    expect(getByRole('button', { name: 'Redo' }).getAttribute('title')).toMatch(/Cmd\/Ctrl\+Shift\+Z/);
+  });
+
+  it('each button is disabled when its stack is empty', () => {
+    const { getByRole } = render(<TopBar {...baseProps({ canUndo: false, canRedo: true })} />);
+    expect(getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(getByRole('button', { name: 'Redo' })).not.toBeDisabled();
+  });
+
+  it('both are disabled while autofill is live, even with steps on the stacks', () => {
+    const { getByRole } = render(
+      <TopBar {...baseProps({ canUndo: true, canRedo: true, editingPaused: true })} />
+    );
+    expect(getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(getByRole('button', { name: 'Redo' })).toBeDisabled();
+  });
+
+  it('clicking an enabled button calls its handler', () => {
+    const props = baseProps({ canUndo: true, canRedo: true, onUndo: vi.fn(), onRedo: vi.fn() });
+    const { getByRole } = render(<TopBar {...props} />);
+    fireEvent.click(getByRole('button', { name: 'Undo' }));
+    fireEvent.click(getByRole('button', { name: 'Redo' }));
+    expect(props.onUndo).toHaveBeenCalledTimes(1);
+    expect(props.onRedo).toHaveBeenCalledTimes(1);
+  });
+});
+
