@@ -3288,11 +3288,11 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 
 | Area | Cases | Pass criterion |
 |---|---|---|
-| Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
+| Lists, CLI | L11, SR4, SR2, CLI-normalize | Per §4 |
 
-**Case definitions:** L11 = upload fixture F7 (non-ASCII) through Lists → "Upload Wordlist", read the dry-run preview and the stored list (`GET /api/wordlists/custom/<name>`): per §4 the accented words appear folded (`CAFÉ`→`CAFE`, `NAÏVE`→`NAIVE`, `ÜBER`→`UBER`) and `ß`/`Æ`/`Ø` words are skipped with `not letters only`; SR4 = untick every list, Search tab: the Search button is disabled with `Select at least one word list`; CLI-normalize = `$SB/e1.sh "cd <clone> && python -m cli.src.cli normalize 'Hello, World!' --json-output"` → `normalized` `HELLOWORLD`.
+**Case definitions:** L11 = upload fixture F7 (non-ASCII) through Lists → "Upload Wordlist", read the dry-run preview and the stored list (`GET /api/wordlists/custom/<name>`): per §4 the accented words appear folded (`CAFÉ`→`CAFE`, `NAÏVE`→`NAIVE`, `ÜBER`→`UBER`) and `ß`/`Æ`/`Ø` words are skipped with `not letters only`; SR4 = untick every list, Search tab: the Search button is disabled with `Select at least one word list`; SR2 = default list ticked, search `C?T` in the Search tab at 1440×900 and 1024×768 (the iframe method): once results render, the first `.result-item` lies inside `.xw-inspector`'s visible rect with no user scroll (spec 0.2.15 §4 item 2); CLI-normalize = `$SB/e1.sh "cd <clone> && python -m cli.src.cli normalize 'Hello, World!' --json-output"` → `normalized` `HELLOWORLD`.
 
-- [ ] **Step 1:** run the three cases; blocks in the run log. **Step 2: Coverage check, no typed values.** Extract the spec's Area column and confirm each appears in the run log's coverage table:
+- [ ] **Step 1:** run the four cases; blocks in the run log. **Step 2: Coverage check, no typed values.** Extract the spec's Area column and confirm each appears in the run log's coverage table:
 
 ```bash
 SPEC=docs/superpowers/specs/2026-10-23-novice-readiness-design.md
