@@ -21,7 +21,9 @@
  * `beginBatch()` over a batch that is still open first commits that orphan, then opens a new one.
  * That holds because only a closed panel's in-flight run can leave a batch open: the Apply All
  * button is disabled while `applyingAll` and only one panel mounts, so a second `beginBatch`
- * can only come from a remounted panel while the old run is still waiting on a request.
+ * can only come from a remounted panel while the old run is still waiting on a request. The orphan
+ * cannot grow after the close: the closed panel drops its in-flight reply (spec 0.2.19, PR #90
+ * Greptile P1 (second review)), so the orphan's step is final when the new batch commits it.
  * `batchOpen` exposes the open state so the Undo and Redo buttons grey while it lasts (PR #90
  * Greptile P2).
  *

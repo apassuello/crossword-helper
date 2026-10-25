@@ -1124,7 +1124,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
     });
     const onBatchBegin = vi.fn(() => events.push('begin'));
     const onBatchEnd = vi.fn(() => events.push('end'));
-    render(
+    const { unmount } = render(
       <ThemeWordsPanel
         grid={createEmptyGrid(15)}
         gridSize={15}
@@ -1140,7 +1140,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
     );
     upload();
     await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(3));
-    return { events, onBatchBegin, onBatchEnd };
+    return { events, onBatchBegin, onBatchEnd, unmount };
   };
   const click = (name) =>
     act(async () => {
@@ -1178,6 +1178,44 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
     await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
     expect(onBatchEnd).toHaveBeenCalledTimes(1);
     expect(onBatchEnd.mock.calls[0]).toHaveLength(1);
+    expect(onBatchEnd.mock.calls[0][0]).toBe(token);
+  });
+
+  it('PR #90 Greptile P1 (second review): a reply that lands after the panel closed is dropped, and the batch still ends with its token', async () => {
+    const token = { id: 'batch-token-9' };
+    const { events, onBatchBegin, onBatchEnd, unmount } = await setup(() => true);
+    onBatchBegin.mockImplementation(() => {
+      events.push('begin');
+      return token;
+    });
+    let resolveSecond;
+    const second = { promise: new Promise((res) => (resolveSecond = res)), resolve: (v) => resolveSecond(v) };
+    const flush = () =>
+      act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    api.themeApplyPlacement
+      .mockImplementationOnce(async () => {
+        events.push('request');
+        return { grid: createEmptyGrid(15) };
+      })
+      .mockImplementationOnce(() => {
+        events.push('request');
+        return second.promise;
+      });
+    await click(/apply all best placements/i);
+    await waitFor(() => expect(events).toEqual(['begin', 'request', 'apply', 'request']));
+    unmount(); // the panel closes while word 2's request is out
+    await act(async () => {
+      second.resolve({ grid: createEmptyGrid(15) });
+    });
+    await flush();
+    await flush();
+    expect(events.filter((e) => e === 'apply')).toHaveLength(1);
+    expect(events).toEqual(['begin', 'request', 'apply', 'request', 'end']);
+    expect(onBatchEnd).toHaveBeenCalledTimes(1);
     expect(onBatchEnd.mock.calls[0][0]).toBe(token);
   });
 
