@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import App, { contentSigOf } from '../App';
+import App from '../App';
+import { contentSigOf } from '../lib/contentSig';
 import { ToastProvider } from '../components/bench/Toast';
 import storage from '../lib/storage';
 import { saveArg, resolvingSave } from './saveArgs';

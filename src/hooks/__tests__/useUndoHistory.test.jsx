@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { useState } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useUndoHistory } from '../useUndoHistory';
-import { contentSigOf } from '../../App';
+import { contentSigOf } from '../../lib/contentSig';
 
 const blank = (n = 3) =>
   Array.from({ length: n }, () =>

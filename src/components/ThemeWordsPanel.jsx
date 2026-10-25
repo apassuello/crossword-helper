@@ -29,7 +29,7 @@ function describeApplyFailure(error) {
 
 // novice-readiness spec 0.2.7 §3.8 (TH2b): the per-cell [letter, isBlack] plus
 // gridSize. Deliberately local: isError, number, isHighlighted, isThemeLocked and
-// isAutofilled must not trigger a refetch, so App's contentSigOf is not reused.
+// isAutofilled must not trigger a refetch, so lib/contentSig's contentSigOf is not reused.
 function gridSigOf(grid, gridSize) {
   if (!Array.isArray(grid)) return JSON.stringify([gridSize, null]);
   return JSON.stringify([
