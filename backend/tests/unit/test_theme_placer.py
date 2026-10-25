@@ -437,3 +437,61 @@ class TestPlanNodeCap:
                 break
             applied += 1
         assert applied >= 4, applied
+
+
+# ---------------------------------------------------------------------------
+# Spec 0.2.17 section 4 item 4: a theme list over MAX_THEME_WORDS is refused.
+# The plan search recurses one frame per word, so an unbounded list raised
+# RecursionError (HTTP 500) on the suggest route.
+# ---------------------------------------------------------------------------
+
+
+def _distinct_words(n):
+    import itertools
+    import string
+
+    return ["".join(t) for t in itertools.islice(itertools.product(string.ascii_uppercase, repeat=3), n)]
+
+
+class TestMaxThemeWords:
+    def test_over_the_cap_is_invalid_and_names_both_numbers(self):
+        from backend.core.theme_placer import MAX_THEME_WORDS
+
+        words = _distinct_words(1100)
+        result = ThemePlacer(7).validate_theme_words(words)
+        assert result["valid"] is False
+        assert f"Too many theme words: 1100 (maximum {MAX_THEME_WORDS})" in result["errors"]
+
+    def test_exactly_the_cap_is_valid_and_gets_suggestions(self):
+        from backend.core.theme_placer import MAX_THEME_WORDS
+
+        words = _distinct_words(MAX_THEME_WORDS)
+        placer = ThemePlacer(7)
+        assert placer.validate_theme_words(words)["valid"] is True
+        results = placer.suggest_placements(words)
+        assert len(results) == MAX_THEME_WORDS
+
+    def test_one_over_the_cap_is_invalid(self):
+        from backend.core.theme_placer import MAX_THEME_WORDS
+
+        result = ThemePlacer(7).validate_theme_words(_distinct_words(MAX_THEME_WORDS + 1))
+        assert result["valid"] is False
+
+    def test_suggest_route_returns_400_with_the_cap_error_not_500(self, client):
+        resp = client.post("/api/theme/suggest-placements", json={"theme_words": _distinct_words(1100), "grid_size": 7})
+        assert resp.status_code == 400, resp.get_data(as_text=True)[:200]
+        assert any("Too many theme words" in e for e in resp.get_json()["validation"]["errors"])
+
+    def test_validate_route_reports_the_cap_error(self, client):
+        resp = client.post("/api/theme/validate", json={"theme_words": _distinct_words(1100), "grid_size": 7})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["valid"] is False
+        assert any("Too many theme words" in e for e in body["errors"])
+
+    def test_upload_route_reports_the_cap_error(self, client):
+        resp = client.post("/api/theme/upload", json={"content": "\n".join(_distinct_words(1100)), "grid_size": 7})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["validation"]["valid"] is False
+        assert any("Too many theme words" in e for e in body["validation"]["errors"])

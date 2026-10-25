@@ -516,6 +516,7 @@ paths:
       description: |
         Parse and validate theme words from file content.
         Checks word length, character validity, and duplicates.
+        More than 50 words is reported as a validation error.
       operationId: uploadThemeWords
       requestBody:
         required: true
@@ -557,6 +558,7 @@ paths:
         The words are listed with the joint plan's members first, in plan
         order, then the rest, so applying each word's first suggestion from
         top to bottom applies the plan before any word it leaves out.
+        A list of more than 50 words is refused with 400 and the error `Too many theme words`.
       operationId: suggestThemePlacements
       requestBody:
         required: true
@@ -582,8 +584,8 @@ paths:
         - Theme Management
       summary: Validate theme words
       description: |
-        Validate theme words (length, alphabetic characters) without
-        generating placement suggestions.
+        Validate theme words (length, alphabetic characters, at most 50 words)
+        without generating placement suggestions.
       operationId: validateThemeWords
       requestBody:
         required: true

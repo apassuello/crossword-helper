@@ -16,6 +16,16 @@ from backend.core.placement_validation import _cell_state, apply_checked_placeme
 PLAN_CANDIDATES_PER_WORD = 8
 _PLAN_NODE_LIMIT = 20000
 
+# Largest theme list the suggester accepts (spec 0.2.17 section 4 item 4).
+# Two reasons, both measured rather than assumed:
+# (1) Depth: the plan search in _plan_placements recurses one frame per
+#     submitted word, even a word with no candidates, so a list near Python's
+#     default recursion limit (1000) raised RecursionError and the route
+#     answered 500. 50 sits far under that limit.
+# (2) Latency: the TH4 review measured about 0.8 s for 40 long words on a
+#     21x21 grid at the node cap, and ranking cost grows with every word.
+MAX_THEME_WORDS = 50
+
 
 class ThemePlacementSuggestion:
     """A single placement suggestion for a theme word."""
@@ -453,6 +463,9 @@ class ThemePlacer:
         """
         errors = []
         warnings = []
+
+        if len(theme_words) > MAX_THEME_WORDS:
+            errors.append(f"Too many theme words: {len(theme_words)} (maximum {MAX_THEME_WORDS})")
 
         for word in theme_words:
             word_clean = word.strip().upper()

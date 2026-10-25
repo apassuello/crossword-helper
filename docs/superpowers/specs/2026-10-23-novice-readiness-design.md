@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.16** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.17** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25
@@ -733,7 +733,10 @@ real reason (above) instead of a stale offer.
   fewer words than the best possible plan; the plan is always valid. The words are listed plan members first, in plan order, then the rest, so `Apply All Best
   Placements` applies the plan before any word it leaves out; such a word is then skipped with the
   server's reason (TH3). Out of scope: the rule for letters that abut a placed word side by side (#19
-  defect 3).
+  defect 3). A theme list of more than 50 words is refused with a message naming the maximum
+  (`Too many theme words: N (maximum 50)`), because the plan search uses one stack frame per word and a
+  list near Python's recursion limit of 1000 crashed the request, and because response time grows with
+  every word.
 
 ---
 
@@ -1046,3 +1049,8 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   scope. Ruled by default (owner go-ahead to fix TH4); beat: Apply All re-requesting suggestions after each
   apply (greedy, places one word on this grid). The plan search's step budget is stated in §4 item 4: past
   it the search keeps the best plan found so far, so "most words" holds within that budget.
+- 0.2.17 (2026-10-25): §4 item 4 gains a maximum of 50 theme words (Greptile P1 on PR #89: the plan search
+  recurses once per submitted word, so about 1,000 words raised `RecursionError` and the suggest route
+  answered 500). Ruled: cap the list in `validate_theme_words`, which all three theme routes call. Beat:
+  rewriting the search to be iterative (more change to a pushed search than the crash needs). Ruled
+  in the PR #89 review follow-up; 0.2.16 is unchanged.

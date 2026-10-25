@@ -3164,6 +3164,23 @@ Added 2026-10-25 by owner ruling Q10 (a). Task 7.4 closes the UI path; this clos
 
 - [ ] **Step 1: Write the failing tests** (the adapter mocked on the route side only; the assertion on "CLI invoked" is the adapter mock's call count). **Step 2: Run:** `pytest backend/tests/unit/test_routes.py -v -k wordlist` — confirm only the `[]` rows fail. **Step 3: Implement. Step 4: Run, confirm pass.**
 - [ ] **Step 5: Commit:** `fix(api): the pattern routes reject an empty word-list selection` (stage the three files; read `git diff --cached --stat` first).
+
+### Task 7.9: a theme list over the maximum is refused (§4 item 4, spec 0.2.17, Greptile P1 on PR #89)
+
+Added 2026-10-25. The plan search recurses one frame per submitted word, so a list of about 1,000 words raised `RecursionError` and `suggest-placements` answered 500. Ruled: cap the list in validation; do not rewrite the search.
+
+**Files:**
+- Modify: `backend/core/theme_placer.py` (`MAX_THEME_WORDS`, `validate_theme_words`)
+- Test: `backend/tests/unit/test_theme_placer.py` (`TestMaxThemeWords`)
+
+**Behavioral criteria:**
+- `validate_theme_words` adds the error `Too many theme words: N (maximum M)` when it is given more than `MAX_THEME_WORDS` words, counting what it is given (the upload route dedups first, the suggest route does not).
+- `suggest-placements` returns 400 with `validation.errors` carrying it; `validate` returns 200 with `valid: false`; `upload` returns 200 with `validation.valid: false`, which the Theme panel already shows.
+- Exactly `MAX_THEME_WORDS` words are valid and get suggestions; one more is invalid.
+- Out of scope: rewriting the search to be iterative.
+
+- [ ] **Step 1: Write the failing tests. Step 2: Run** `pytest backend/tests/unit/test_theme_placer.py -k MaxThemeWords` and confirm the over-cap rows fail and the exactly-at-cap row passes. **Step 3: Implement. Step 4: Run, confirm pass.**
+- [ ] **Step 5: Commit:** `fix(theme): refuse more than 50 theme words, so the plan search cannot exceed the recursion limit`.
 ---
 
 ## Phase 8: acceptance (spec §6)
