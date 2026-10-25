@@ -1177,3 +1177,35 @@ def test_pf23_control_beam_without_adaptive_is_blocked_by_preflight(tmp_path):
         [str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "--timeout", "10"] + ["--algorithm", "beam"]
     )
     assert code == 3, (stdout, stderr)
+
+
+def test_theme_wordlist_is_folded_like_the_word_list_it_is_matched_against(tmp_path, monkeypatch):
+    """novice-readiness spec 0.2.12 section 4 (L11): a theme line CAFÉ must reach the solver as CAFE.
+
+    The word list folds CAFÉ to CAFE, so an unfolded theme set would silently stop matching it.
+    Narrowest seam that observes the set: the theme_words kwarg the repair engine is built with.
+    """
+    from click.testing import CliRunner
+
+    import cli.src.cli as cli_module
+    import cli.src.fill.iterative_repair as repair_module
+
+    seen = []
+    real = repair_module.IterativeRepair
+
+    class _Spy(real):
+        def __init__(self, *args, **kwargs):
+            seen.append(set(kwargs.get("theme_words") or ()))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(repair_module, "IterativeRepair", _Spy)
+    grid_path = tmp_path / "g.json"
+    grid_path.write_text(json.dumps({"size": 3, "grid": G33_ROWS}))
+    words = tmp_path / "cafe.txt"
+    words.write_text("CAFÉ;50\nCAT;50\nCOT;50\n", encoding="utf-8")
+    theme = tmp_path / "theme.txt"
+    theme.write_text("# comment\n\nCAFÉ\nnaïve\n", encoding="utf-8")
+    args = ["fill", str(grid_path), "-w", str(words), "--allow-nonstandard", "--json-output", "-a", "repair", "-t", "5"]
+    CliRunner().invoke(cli_module.cli, args + ["--theme-wordlist", str(theme)])
+    assert seen, "the repair engine was never constructed"
+    assert seen[0] == {"CAFE", "NAIVE"}
