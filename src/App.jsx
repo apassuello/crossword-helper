@@ -344,7 +344,15 @@ function App() {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
 
+  // novice-readiness spec 0.2.10 §3.4 (An Open that waits): counts document replacements by
+  // New grid (`initializeGrid`) and import (`handleGridImport`) only. A confirmed Open
+  // captures it before its ordered read and is dropped if it moved. `docId` is not a valid
+  // test: a save fork and an earlier Open's adoption change it without replacing the document.
+  const replacementsRef = useRef(0);
+  const beginOpen = useCallback(() => replacementsRef.current, []);
+
   const initializeGrid = (size) => {
+    replacementsRef.current += 1;
     const newGrid = Array(size).fill(null).map(() =>
       Array(size).fill(null).map(() => ({
         letter: '',
@@ -393,8 +401,12 @@ function App() {
   // spec 0.2.8 §2.3 (F2)). The shared adoption does the S3 skip-flag rule, the docId and savedAt adoption;
   // only on success does the run get discarded (no retained snapshot or Keep offer) and the
   // restore banner close (adoption with `banner: false` dismisses it).
+  // novice-readiness spec 0.2.10 §3.4 (An Open that waits): `token` is `beginOpen()` as of the
+  // user's confirm; the read may have waited for the lock, and an Open whose document was
+  // replaced by New grid or import since then is dropped with no message.
   const openSavedEntry = useCallback(
-    (entry) => {
+    (entry, token) => {
+      if (token !== replacementsRef.current) return;
       if (editingPausedRef.current) return;
       if (adoptSavedEntry(entry, { banner: false })) autofill.discardRun();
       else pushToast({ kind: 'error', message: 'Could not open this saved grid.' });
@@ -595,6 +607,7 @@ function App() {
 
   const handleGridImport = useCallback((importedData) => {
     if (editingPausedRef.current) return;
+    replacementsRef.current += 1; // spec 0.2.10 §3.4: cancels a waiting Open
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different (skip the re-init effect so the
@@ -764,6 +777,7 @@ function App() {
                 editingPaused={editingPaused}
                 onToggleBlack={toggleBlackSquare}
                 onNewGrid={createNewGrid}
+                onOpenBegin={beginOpen}
                 onOpenSaved={openSavedEntry}
                 onDeleted={onEntryDeleted}
               />

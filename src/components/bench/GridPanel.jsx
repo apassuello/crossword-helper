@@ -18,6 +18,7 @@ export default function GridPanel({
   editingPaused,
   onToggleBlack,
   onNewGrid,
+  onOpenBegin,
   onOpenSaved,
   onDeleted,
 }) {
@@ -31,13 +32,19 @@ export default function GridPanel({
   // again by id when the user confirms it, not from the list snapshot. An entry that has gone
   // away shows the refreshed list and nothing is adopted. The read is `ordered`: it waits in the
   // lock queue behind this tab's pending saves, so Open shows what they wrote and the save
-  // machine's known savedAt is the stored one (Phase 6R re-review N1).
-  const openEntry = (entry) =>
-    storage.list({ ordered: true }).then((entries) => {
+  // machine's known savedAt is the stored one (Phase 6R re-review N1). So a confirmed Open can
+  // wait, and novice-readiness spec 0.2.10 §3.4 (An Open that waits) applies: App's
+  // `onOpenBegin` token is taken at the confirm, before the read, and handed back with the
+  // entry so App drops the Open if New grid or import replaced the document meanwhile.
+  // Closing the panel does not cancel it: the user confirmed, and the request stands.
+  const openEntry = (entry) => {
+    const token = onOpenBegin?.();
+    return storage.list({ ordered: true }).then((entries) => {
       const fresh = entries.find((e) => e.id === entry.id);
-      if (fresh) onOpenSaved(fresh);
+      if (fresh) onOpenSaved(fresh, token);
       else setSaved(entries);
     });
+  };
   const hasSelection = Boolean(selectedCell) && Boolean(grid);
   const { row, col } = selectedCell || {};
   const allowed =
