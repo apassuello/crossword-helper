@@ -14,6 +14,7 @@ import { renderHook, act, screen } from '@testing-library/react';
 import { useSaveMachine } from '../useSaveMachine';
 import { ToastProvider } from '../../components/bench/Toast';
 import storage, { SAVE_KEY } from '../../lib/storage';
+import { saveArg } from '../../__tests__/saveArgs';
 
 const wrapper = ({ children }) => <ToastProvider>{children}</ToastProvider>;
 
@@ -674,6 +675,7 @@ describe('useSaveMachine: a save resolution only acts on the document it wrote',
     await flushLocks();
     // The function-form opts are resolved inside the lock; the stored entry shows what they read.
     expect(saving).toHaveBeenCalledTimes(1);
+    expect(saveArg(saving.mock.calls[0], 1).expectedSavedAt).toBe(S1); // the exact 6.21 pin
     expect(stored().find((e) => e.id === 'b').savedAt).not.toBe(S1);
     expect(stored().map((e) => e.name)).not.toContain('B (copy)');
   });
