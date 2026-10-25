@@ -837,8 +837,10 @@ def fill(
             if not json_output:
                 click.echo(f"⭐ Loading theme wordlist from {theme_wordlist}...")
 
-            with open(theme_wordlist, "r") as f:
-                theme_words = {line.strip().upper() for line in f if line.strip() and not line.startswith("#")}
+            with open(theme_wordlist, "r", encoding="utf-8") as f:
+                # Fold like the word list these are matched against (novice-readiness
+                # spec 0.2.12 section 4 (L11)): a theme CAFÉ must equal the list's CAFE.
+                theme_words = {WordList.canonical_word(line) for line in f if line.strip() and not line.startswith("#")}
 
             if not json_output:
                 click.echo(f"  ⭐ Loaded {len(theme_words)} theme words (will be prioritized)")
