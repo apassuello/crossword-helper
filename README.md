@@ -157,6 +157,9 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
   ([#78](https://github.com/apassuello/crossword-helper/issues/78)). Red marks stay on words that crossed
   a removed word; run `Verify words` again to refresh them
   ([#79](https://github.com/apassuello/crossword-helper/issues/79)).
+- **Autofill:** use `Repair (Recommended)`. With `Beam Search` or `Classic CSP`, a fill can stop with the
+  grid unchanged and no red cell, because a letter already in the grid fits no word; Repair reworks that
+  letter instead ([#75](https://github.com/apassuello/crossword-helper/issues/75)).
 - **Theme:** `Apply All Best Placements` can count a word you already placed by hand in its summary
   ([#80](https://github.com/apassuello/crossword-helper/issues/80)).
 - **Saves with the app open in two tabs:** if the other tab changes the same save while `Verify words`,
