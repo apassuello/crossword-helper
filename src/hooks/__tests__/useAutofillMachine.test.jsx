@@ -1899,6 +1899,26 @@ describe('useAutofillMachine Task 6.17: adoptForkedDocId (novice-readiness spec 
     expect(lettersOf(result.current.grid)[1]).toBe('');
   });
 
+  // M4 (Phase 6R final review): `onForked` runs in a promise callback, so App's setDocId commits
+  // a render later; an event in that window must already read as the same document.
+  it('M4: a success `complete` between adopt and the re-render is applied, not dropped', async () => {
+    const { result } = await runningMachine();
+    act(() => result.current.adoptForkedDocId('doc-1', 'doc-2')); // no re-render yet
+    complete({ success: true, grid: CLI_FULL_4, slots_filled: 8, total_slots: 8, fill_percentage: 100 });
+    expect(lettersOf(result.current.grid)[1]).toBe('EFGH');
+    expect(result.current.state).toBe('done');
+  });
+
+  it('M4: an error event between adopt and the re-render restores the Start grid', async () => {
+    const { result } = await runningMachine();
+    send({ status: 'running', progress: 10, data: { grid: CLI_FULL_4 } });
+    expect(lettersOf(result.current.grid)[1]).toBe('EFGH');
+    act(() => result.current.adoptForkedDocId('doc-1', 'doc-2')); // no re-render yet
+    send({ status: 'error', message: 'Solver crashed' });
+    expect(result.current.state).toBe('failed');
+    expect(lettersOf(result.current.grid)[1]).toBe('');
+  });
+
   it('adopt then a partial result: the Keep offer shows for the new id', async () => {
     const { result, rerender } = await runningMachine();
     act(() => result.current.adoptForkedDocId('doc-1', 'doc-2'));

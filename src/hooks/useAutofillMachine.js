@@ -674,11 +674,15 @@ export function useAutofillMachine({ grid, gridSize, docId, onGridUpdate, onStar
   /**
    * A save fork mints a new id for the SAME document (novice-readiness spec 0.2.8 §2.3 (F2)).
    * Replace the stored Start id only when it is `oldId`; otherwise a no-op, so a replaced
-   * document (New grid, Open saved, import) still reads as a different one. Between this call
-   * and the render that commits App's `setDocId`, one merge is dropped (one progress frame).
+   * document (New grid, Open saved, import) still reads as a different one. App's `setDocId`
+   * commits a render later, and `docIdRef` follows the param only at render, so the current-id
+   * ref is advanced here too: an event arriving in that window (a terminal `complete` or error
+   * included) must read as the same document, not be dropped.
    */
   const adoptForkedDocId = useCallback((oldId, newId) => {
-    if (startDocIdRef.current === oldId) startDocIdRef.current = newId;
+    if (startDocIdRef.current !== oldId) return;
+    startDocIdRef.current = newId;
+    docIdRef.current = newId;
   }, []);
 
   /** New grid / Open saved: drop the run's retained snapshot and offer (spec 0.2.6 §3.2). No-op while live. */
