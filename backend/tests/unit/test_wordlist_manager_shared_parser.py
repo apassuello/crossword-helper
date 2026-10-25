@@ -206,6 +206,32 @@ class TestEditsKeyOnTheFoldedWord:
         m.add_words("custom", ["DOGS"])
         assert "CAFÉ;50" in _file_lines(tmp_path)
 
+    def test_add_rewrite_keeps_the_accepted_line_over_a_rejected_one_sharing_its_key(self, tmp_path):
+        """Spec 0.2.14 4.1: the add keeps the line the list shows, not a rejected line first."""
+        m = _manager(tmp_path, ["GRAPE;abc", "GRAPE;40", "APPLE"])
+        m.add_words("custom", ["PEAR"])
+        lines = _file_lines(tmp_path)
+        assert "GRAPE;40" in lines
+        assert "GRAPE;ABC" not in lines
+        m._cache.clear()
+        assert "GRAPE" in m.load("custom")
+
+    def test_pin_add_rewrite_keeps_the_accepted_line_when_it_comes_first(self, tmp_path):
+        """Passes before the fix too."""
+        m = _manager(tmp_path, ["GRAPE;40", "GRAPE;abc", "APPLE"])
+        m.add_words("custom", ["PEAR"])
+        lines = _file_lines(tmp_path)
+        assert "GRAPE;40" in lines
+        assert "GRAPE;ABC" not in lines
+        m._cache.clear()
+        assert "GRAPE" in m.load("custom")
+
+    def test_pin_add_rewrite_keeps_a_lone_rejected_line(self, tmp_path):
+        """Passes before the fix too."""
+        m = _manager(tmp_path, ["GRAPE;abc"])
+        m.add_words("custom", ["PEAR"])
+        assert "GRAPE;ABC" in _file_lines(tmp_path)
+
     def test_pin_rejected_line_keeps_the_old_key(self, tmp_path):
         """Passes before the fix too: parse_line rejects APPLE;x, so the old key applies."""
         m = _manager(tmp_path, ["APPLE;x"])
