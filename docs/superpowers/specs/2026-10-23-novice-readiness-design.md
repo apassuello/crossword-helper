@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.9** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.10** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
 
@@ -539,6 +539,14 @@ scope here.
 - "Open saved", a button in the Grid panel (§3.2), lists every save (name, size, saved time) with "Open"
   and "Delete". Opening asks the §3.2 confirm when the current grid has content, and is disabled while an
   autofill run is in progress.
+- **An Open that waits (0.2.10, PR #77 review of `bc5cdc2`).** Open reads the entry inside the save lock,
+  behind this tab's queued saves (re-review N1), so a confirmed Open can wait. It then adopts the entry
+  unless, since the user confirmed it, the document was replaced by New grid (§3.2) or import (§3.7); a
+  replaced document drops the Open with no message. A save fork during the wait does not cancel it (the
+  fork is the same document under a new id, as autofill follows it: §2.3 M1, F2), and neither does an
+  earlier Open's adoption: Opens adopt in the order confirmed, so the last one confirmed is the open
+  document. Grid edits during the wait do not cancel it; the §3.2 confirm already said unsaved changes
+  are lost. Closing the panel does not cancel it either: the user confirmed, and the request stands.
 - **Failed writes (G4):** a failed **explicit** Save shows `Could not save: browser storage is full.
   Delete a saved grid or export this one.` and is never swallowed. A failed **autosave** keeps today's
   behaviour, pinned by existing tests: the toast `Couldn’t save — will retry.` (U+2019), the
@@ -955,3 +963,11 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   two-tab fix put every save behind `navigator.locks.request`, whose grant is asynchronous and may never run
   on a closing tab. Resolved for Q3: a lost reload is the common case; the two-tab race on that one path is
   rare. Found by the Task 6.20 review; to be measured in the Phase 6R browser drive (close the tab, reopen).
+- 0.2.10 (2026-10-25): §3.4 An Open that waits. Greptile's review of `bc5cdc2` on PR #77: the N1 fix made
+  Open read inside the save lock, so a confirmed Open could wait, and on the grant it replaced a grid the
+  user had created or imported meanwhile. Ruled (owner 2026-10-25, "proceed", option (a)): only New grid
+  or import since the confirm cancels it. Beat: (b) any edit cancels it (an Open the user asked for then
+  silently never happens); (c) confirm again on the grant (new UI for a window whose length in normal
+  use is unmeasured **[?]**). A document-id snapshot was rejected as the test: a save fork and an
+  earlier Open both change the id and would drop an Open the user asked for. Greptile's "or the panel
+  closes" is declined: closing the panel is not a new instruction.
