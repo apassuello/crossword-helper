@@ -105,6 +105,26 @@ describe('Delete the open grid\'s own entry (§3.4 Q1)', () => {
     expect(saveArg(storage.save.mock.calls[0], 0).id).toBe('G');
   });
 
+  it('M2: a Symmetry toggle after deleting a dirty open grid arms nothing; the next letter does', async () => {
+    const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+    const { container } = renderApp();
+    await waitFor(() => expect(cells(container)).toHaveLength(225));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await openG(user, container);
+    await typeLetter(user, container, 3, 3, 'A'); // dirty, autosave not yet fired
+    storage.list.mockResolvedValue([]);
+    await deleteG(user);
+    expect(screen.getByText('unsaved changes')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Symmetry' })); // a new `doc`, no grid edit
+    await advance(90000);
+    expect(storage.save).not.toHaveBeenCalled();
+
+    await typeLetter(user, container, 5, 5, 'B');
+    await advance(30000);
+    expect(storage.save).toHaveBeenCalledTimes(1);
+    expect(saveArg(storage.save.mock.calls[0], 0).id).toBe('G');
+  });
+
   it('deleting another entry leaves the open document\'s status alone', async () => {
     const user = userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
     const { container } = renderApp();

@@ -226,7 +226,13 @@ function App() {
   // and the `saved` status. If the grid moved on, isDirty stays true and the machine
   // returns to `dirty` (see useSaveMachine).
   const onSaved = useCallback((written) => setSavedSig(contentSigOf(written.size, written.grid)), []);
-  const { savedLabel, saveNamed, adoptSavedAt, forget } = useSaveMachine({ doc, isDirty, onForked, onSaved });
+  const { savedLabel, saveNamed, adoptSavedAt, forget } = useSaveMachine({
+    doc,
+    isDirty,
+    contentSig,
+    onForked,
+    onSaved,
+  });
 
   // The Save button opens the name prompt (§3.4 G3); autosave never does. The prompt
   // mounts only once list() has resolved, so it never shows a prefill the user could

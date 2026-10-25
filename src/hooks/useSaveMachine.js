@@ -26,6 +26,9 @@
  * It is driven by two controlled props:
  *   - `doc`     : the serializable grid document, carrying a stable `id`.
  *   - `isDirty` : parent-owned "there are unsaved changes" flag.
+ * plus `contentSig`, the signature of the grid content: after `forget()` only a change of it
+ * (a grid edit) re-arms the autosave. Locked saves hand `storage.save` functions for their
+ * document and opts, which the Web Lock resolves when it grants the save (see `runSave`).
  *
  * Key invariants (mirroring useHealth's timer/cleanup discipline):
  *   - Entering `dirty` arms exactly ONE 30s autosave timer. Further edits
@@ -59,14 +62,14 @@ const QUOTA_MESSAGE =
   'Could not save: browser storage is full. Delete a saved grid or export this one.';
 
 /**
- * @param {{doc: {id: string}, isDirty: boolean, onForked?: (info: {id: string, name: string}) => void,
+ * @param {{doc: {id: string}, isDirty: boolean, contentSig?: string, onForked?: (info: {id: string, name: string}) => void,
  *   onSaved?: (written: object) => void}} params
  * @returns {{status: 'pristine'|'dirty'|'saving'|'saved'|'error', savedLabel: string,
  *   save: () => Promise<void>,
  *   saveNamed: (name: string, opts?: {replaceEntryId?: string}) => Promise<boolean>,
  *   adoptSavedAt: (savedAt: string|null) => void, forget: () => void}}
  */
-export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
+export function useSaveMachine({ doc, isDirty, contentSig, onForked, onSaved }) {
   const { pushToast } = useToasts();
 
   const [status, setStatus] = useState('pristine');
@@ -90,8 +93,10 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
   const knownSavedAtRef = useRef(null);
   const adoptionRef = useRef(0); // bumped synchronously by adoptSavedAt (a document was replaced)
   // Set by forget(): the stored entry is gone and the pending timer with it. A document that
-  // was already dirty has no clean->dirty edge to arm on, so the next change to `doc` does
-  // (novice-readiness spec 0.2.9 §3.4 (Q1)).
+  // was already dirty has no clean->dirty edge to arm on, so the next grid edit (a change of
+  // `contentSig`) does: novice-readiness spec 0.2.9 §3.4 (Q1), "the delete itself arms no
+  // autosave. The next grid edit autosaves it". A Symmetry toggle or a numbering reply changes
+  // `doc` but is not a grid edit.
   const forgottenRef = useRef(false);
   const isDirtyRef = useRef(isDirty); // latest dirtiness, read by the pagehide handler
 
@@ -239,7 +244,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
    * novice-readiness spec 0.2.8 §3.4 (Q1): the open document's stored entry was deleted.
    * Clear any pending autosave and read `unsaved changes`, WITHOUT arming and without
    * touching `isDirty`/`savedSig`/the known `savedAt`: the next real edit arms as usual (a clean
-   * document flips `isDirty`; a dirty one arms on its next `doc` change, spec 0.2.9 §3.4 (Q1)),
+   * document flips `isDirty`; a dirty one arms on its next grid edit, spec 0.2.9 §3.4 (Q1)),
    * and its save recreates the entry under the same id (storage.save).
    */
   const forget = useCallback(() => {
@@ -297,7 +302,8 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id, isDirty]);
 
-  // After forget(), a change to `doc` while already dirty arms the autosave (no edge to do it).
+  // After forget(), a grid edit (the parent's content signature changing) while already dirty
+  // arms the autosave (no clean->dirty edge to do it).
   useEffect(() => {
     if (forgottenRef.current && isDirty && timerRef.current === null) {
       forgottenRef.current = false;
@@ -305,7 +311,7 @@ export function useSaveMachine({ doc, isDirty, onForked, onSaved }) {
       armAutosave();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [contentSig]);
 
   // S2: with an onSaved supplied the parent marks the written doc clean in the same
   // batch as `saved`; `isDirty` still true here means an edit landed after the write.

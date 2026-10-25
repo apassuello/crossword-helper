@@ -464,7 +464,7 @@ describe('useSaveMachine forget() (§3.4 Q1)', () => {
   });
 
   it('clears an autosave already pending', async () => {
-    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, isDirty: true });
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, contentSig: 's1', isDirty: true });
     act(() => result.current.forget());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60000);
@@ -472,13 +472,27 @@ describe('useSaveMachine forget() (§3.4 Q1)', () => {
     expect(storage.save).not.toHaveBeenCalled();
     expect(result.current.savedLabel).toBe('unsaved changes');
 
-    // Already dirty when forgotten, so there is no clean->dirty edge: the next change to
-    // `doc` must arm the autosave itself (spec 0.2.9 §3.4 (Q1)).
-    rerender({ doc: { id: 'a', n: 2 }, isDirty: true });
+    // Already dirty when forgotten, so there is no clean->dirty edge: the next grid edit (a
+    // content-signature change) must arm the autosave itself (spec 0.2.9 §3.4 (Q1): "The
+    // next grid edit autosaves it").
+    rerender({ doc: { id: 'a', n: 2 }, contentSig: 's2', isDirty: true });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30000);
     });
     expect(storage.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('M2: after forget() on a dirty document, a change to `doc` that is not a grid edit arms nothing', async () => {
+    const { result, rerender } = renderMachine({ doc: { id: 'a', n: 1 }, contentSig: 's1', isDirty: true });
+    act(() => result.current.forget());
+    // A Symmetry toggle or a numbering reply: new `doc` identity, same content signature.
+    rerender({ doc: { id: 'a', n: 2 }, contentSig: 's1', isDirty: true });
+    rerender({ doc: { id: 'a', n: 3 }, contentSig: 's1', isDirty: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(90000);
+    });
+    expect(storage.save).not.toHaveBeenCalled();
+    expect(result.current.savedLabel).toBe('unsaved changes');
   });
 
   it('leaves saved state to a later save: from saved it reads unsaved, a real edit re-saves', async () => {
