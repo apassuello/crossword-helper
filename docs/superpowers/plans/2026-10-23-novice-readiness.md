@@ -3111,7 +3111,7 @@ git commit -m "fix(ui): Search is disabled until a word list is selected"
 **Behavioral criteria:**
 - The default rule (no named rule matched) keeps letters only and uppercases: `normalize "Hello, World!"` → `HELLOWORLD` (§4 item 3).
 - The named rules in `RULES` (`two_word_names`, `title_with_article`, `hyphenated`, `apostrophe`) are unchanged in pattern, transform and examples; they are checked first, in the same order (§4: "keep their behaviour; only the default rule changes").
-- The default rule's `rule_info["type"]` stays `"default"`. Its `description`/`explanation` text must stop saying "remove spaces, uppercase" because that no longer describes it (docstring-as-testable-claim); proposed default wording `Default: keep letters only, uppercase`. **Planning default `PD-L7` (spec §8): wording, non-ASCII letters, empty result.** The behaviour for non-ASCII letters is not asserted by any normative row.
+- The default rule's `rule_info["type"]` stays `"default"`. Its `description`/`explanation` text must stop saying "remove spaces, uppercase" because that no longer describes it (docstring-as-testable-claim). **`PD-L7` (spec §8, ruled as written by owner 2026-10-25) governs:** "Description `Letters only`; letters are folded as §4 item 1 folds them; input with no letter gives an empty string." The fold is 7.1's `fold_letters`, not a second letter rule. (Supersedes this task's earlier proposed wording `Default: keep letters only, uppercase`.)
 - Comments cite `novice-readiness spec 0.2.4 §4 (CLI-normalize)`.
 
 **Normative cases** (`python -m cli.src.cli normalize "<text>" --json-output`, field `normalized`):
@@ -3123,8 +3123,12 @@ git commit -m "fix(ui): Search is disabled until a word list is selected"
 | `The Office` | `THEOFFICE` | `title_with_article` |
 | `self-aware` | `SELFAWARE` | `hyphenated` |
 | `can't` | `CANT` | `apostrophe` |
+| an input that reaches the default rule and contains an accented letter (e.g. `É`) | the folded letters (`É` → `E`), uppercased | `default` |
+| an input with no letter (e.g. `123 !?`), reaching the default rule | `""` | `default` |
 
-- [ ] **Step 1: Write the failing test** (CLI through `CliRunner` or subprocess, as neighbouring CLI tests do). **Step 2: Run:** `pytest cli/tests/unit/test_conventions.py -v` — confirm only the first row fails. **Step 3: Implement. Step 4: Run, confirm pass; then `pytest backend/tests/test_api.py -k Normalize -v`.**
+(PD-L7 rows: the implementer picks inputs that provably reach the default rule against `RULES`, and states them in the report.)
+
+- [ ] **Step 1: Write the failing test** (CLI through `CliRunner` or subprocess, as neighbouring CLI tests do). **Step 2: Run:** `pytest cli/tests/unit/test_conventions.py -v` — confirm only the default-rule rows fail. **Step 3: Implement. Step 4: Run, confirm pass; then `pytest backend/tests/test_api.py -k Normalize -v`.**
 - [ ] **Step 5: Commit:**
 
 ```bash
@@ -3134,6 +3138,31 @@ git commit -m "fix(cli): the default normalize rule keeps letters only"
 ```
 
 (Stage only the files this task changed; drop `cli/src/cli.py` / `docs/specs/CLI_SPEC.md` from `git add` if untouched, and read `git diff --cached --stat` before committing.)
+
+### Task 7.6: the pattern routes reject an empty word-list selection (§4 item 2, spec 0.2.12, Q10)
+
+Added 2026-10-25 by owner ruling Q10 (a). Task 7.4 closes the UI path; this closes the API path.
+
+**Files:**
+- Modify: `backend/api/routes.py` (`pattern_search`, `pattern_search_with_progress`; or `validate_pattern_request` if both routes share the check there)
+- Modify: `docs/api/openapi.yaml` (`/pattern`, `/pattern/with-progress`: the `wordlists` description and the 400 response)
+- Test: `backend/tests/unit/test_routes.py` (extend)
+
+**Behavioral criteria:**
+- An explicit `"wordlists": []` returns 400 with code `NO_WORDLIST`, and the CLI is not invoked. An absent `wordlists` key still resolves to `["comprehensive"]`. Unknown names still return `UNKNOWN_WORDLIST`.
+- Both routes behave identically; `pattern_search_with_progress` rejects before starting work. Both route comments state the rule and cite `novice-readiness spec 0.2.12 §4 (SR4)`.
+- Out of scope: other routes that call `resolve_wordlist_paths_strict`. Report, do not change, any that take an empty list the same way.
+
+**Normative cases** (both routes):
+
+| request `wordlists` | status | code | CLI invoked |
+|---|---|---|---|
+| absent | 200 | — | yes, with the `comprehensive` path |
+| `[]` | 400 | `NO_WORDLIST` | no |
+| `["no-such-list"]` | 400 | `UNKNOWN_WORDLIST` | no |
+
+- [ ] **Step 1: Write the failing tests** (the adapter mocked on the route side only; the assertion on "CLI invoked" is the adapter mock's call count). **Step 2: Run:** `pytest backend/tests/unit/test_routes.py -v -k wordlist` — confirm only the `[]` rows fail. **Step 3: Implement. Step 4: Run, confirm pass.**
+- [ ] **Step 5: Commit:** `fix(api): the pattern routes reject an empty word-list selection` (stage the three files; read `git diff --cached --stat` first).
 ---
 
 ## Phase 8: acceptance (spec §6)

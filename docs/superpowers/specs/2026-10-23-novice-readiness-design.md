@@ -1,7 +1,8 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.11** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.12** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
-§8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30
+§8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
+PD-L7 ruled as written by owner 2026-10-25
 
 ---
 
@@ -700,6 +701,8 @@ real reason (above) instead of a stale offer.
   accept `ß` as `SS`.
 - **Item 2 (SR4):** with no word list selected, the Search button is disabled with the hint
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
+  Nor from the API: `POST /api/pattern` and `POST /api/pattern/with-progress` reject an explicit
+  `wordlists: []` with 400 `NO_WORDLIST`; an absent `wordlists` key still means `["comprehensive"]`.
 - **Item 3 (CLI-normalize):** the default `normalize` rule keeps letters only:
   `normalize "Hello, World!"` → `HELLOWORLD`. The named rules in `conventions.py` keep their behaviour;
   only the default rule changes.
@@ -875,7 +878,7 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | PD-L4 | §5 | `run.py`: exit code on port in use, a malformed `PORT`, `FLASK_DEBUG` values | Exit 1; a malformed `PORT` is not handled; only `FLASK_DEBUG=1` turns debug on. |
 | ★ PD-L5 | §5 | `backend/app.py` has its own `__main__` launcher with `debug=True` | Same rule as `run.py`: debug only with `FLASK_DEBUG=1`, port from `PORT` (the §5 safety note applies to any launcher). |
 | PD-L6 | §4 | A bare `ß`, `Æ` or `Ø` line is too short and is classified by length first | Unchanged; the fold rows use longer words (`STRAßE`, `ÆON`, `BJØRN`). |
-| PD-L7 | §4 | `normalize` default rule: description text, non-ASCII letters, no letters at all | Description `Letters only`; letters are folded as §4 item 1 folds them; input with no letter gives an empty string. |
+| PD-L7 | §4 | `normalize` default rule: description text, non-ASCII letters, no letters at all | Description `Letters only`; letters are folded as §4 item 1 folds them; input with no letter gives an empty string. Ruled as written (owner 2026-10-25). |
 
 **[NOTE]** Two code facts the plan follows the spec on, recorded so a reviewer does not read them as
 gaps: `handleEvent`'s "all slots filled" test uses counts today, where §2.3 says "the result grid has no
@@ -978,3 +981,9 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   with no warning ever displayed. Default (owner batch, review 2026-11-08): accept, since the grid was
   blank when Open was clicked and the wait is expected to be short (its length in normal use is unmeasured **[?]**). Beat: cancelling on any
   edit (option (b) of 0.2.10). Found by the advisor reading 0.2.10 against `GridPanel`'s `onOpen`.
+- 0.2.12 (2026-10-25): §4 item 2 extends "not reachable" from the UI to the API. Both pattern routes took an
+  explicit `wordlists: []` as no list, called the CLI with no word list paths, and searched its built-in demo
+  list, against `pattern_search`'s own comment ("never a silent fallback to the CLI's builtin demo list").
+  Ruled (owner 2026-10-25, Q10 option (a)): reject it with 400 `NO_WORDLIST`. Beat: (b) no route change,
+  recording that the API can still reach the demo list. Found by the Phase 4–6 cross-task review (Q10).
+  §8 PD-L7 ruled as written by the owner the same day.
