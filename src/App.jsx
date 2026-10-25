@@ -148,6 +148,7 @@ function App() {
     redo,
     canUndo,
     canRedo,
+    batchOpen,
   } = useUndoHistory({ grid, gridSize, setGrid, editingPausedRef });
   recordRunRef.current = recordStep;
 
@@ -747,6 +748,7 @@ function App() {
         editingPaused={editingPaused}
         canUndo={canUndo}
         canRedo={canRedo}
+        batchOpen={batchOpen}
         onUndo={undo}
         onRedo={redo}
         onSave={openSavePrompt}

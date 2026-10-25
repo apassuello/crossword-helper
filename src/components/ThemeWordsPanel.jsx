@@ -276,7 +276,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
 
     // Apply All is one undo step (novice-readiness spec 0.2.18 §3.9): the host opens its batch
     // before the first request and it closes on every path out, the early returns included.
-    onBatchBegin?.();
+    const batchToken = onBatchBegin?.();
     try {
       setApplyingAll(true);
       let successCount = 0;
@@ -353,7 +353,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
         toast.error(`Could not apply any theme words${skippedText}`, { id: 'apply-all' });
       }
     } finally {
-      onBatchEnd?.();
+      onBatchEnd?.(batchToken);
     }
   };
 

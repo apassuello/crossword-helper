@@ -182,5 +182,15 @@ describe('TopBar Undo and Redo (novice-readiness spec 0.2.18 §3.9)', () => {
     expect(props.onUndo).toHaveBeenCalledTimes(1);
     expect(props.onRedo).toHaveBeenCalledTimes(1);
   });
+
+  it('Undo and Redo are disabled while an Apply All batch is open, even with history on both stacks', () => {
+    const props = baseProps({ canUndo: true, canRedo: true, onUndo: vi.fn(), onRedo: vi.fn() });
+    const { getByText, rerender } = render(<TopBar {...props} />);
+    expect(getByText('Undo').closest('button')).not.toBeDisabled();
+    expect(getByText('Redo').closest('button')).not.toBeDisabled();
+    rerender(<TopBar {...props} batchOpen />);
+    expect(getByText('Undo').closest('button')).toBeDisabled();
+    expect(getByText('Redo').closest('button')).toBeDisabled();
+  });
 });
 
