@@ -3185,11 +3185,11 @@ Added 2026-10-25. The plan search recurses one frame per submitted word, so a li
 
 ## Phase U: undo and redo (spec 0.2.18 §3.9)
 
-Worktree `../crossword-helper-undo`, branch `feat/undo-redo` (off `fix/theme-joint-plan`; rebase onto `origin/main` once PR #89 merges). Never push. The history lives in the UI: undo restores grid content the user already had, and no crossword rule is involved, so the CLI-first rule does not apply. Each task starts with failing tests, RED evidence recorded before any `src/` edit. Phase-end gates: `npx vitest run`, `npm run build`, `bash scripts/docs-check.sh`, `bash scripts/check-guards.sh --full-tree`, each run alone. Then the browser drive (Task U.4) is mandatory.
+Worktree `../crossword-helper-undo`, branch `feat/undo-redo`, on `origin/main` after PR #89. Never push. The history lives in the UI: undo restores grid content the user already had, and no crossword rule is involved, so the CLI-first rule does not apply. Each task starts with failing tests, RED evidence recorded before any `src/` edit. Phase-end gates: `npx vitest run`, `npm run build`, `bash scripts/docs-check.sh`, `bash scripts/check-guards.sh --full-tree`, each run alone. Then the browser drive (Task U.4) is mandatory.
 
 ### Task U.1: the history module (§3.9 "What a step holds", "Restoring")
 
-**Files:** Create: `src/lib/history.js`. Test: `src/__tests__/lib/history.test.js`.
+**Files:** Create: `src/lib/history.js`. Test: `src/lib/__tests__/history.test.js` (where lib tests live).
 
 **Interfaces (pure, no React):**
 - `snapshotContent(grid, gridSize) -> Snapshot`: `{ size, cells }` where each cell holds exactly `letter`, `isBlack`, `isThemeLocked`, `isAutofilled`, the fields `contentSigOf` in `App.jsx` reads. Name that coupling in a comment, citing §3.9.
@@ -3201,25 +3201,26 @@ Worktree `../crossword-helper-undo`, branch `feat/undo-redo` (off `fix/theme-joi
 - A push clears redo, and step 101 drops the oldest.
 - `restoreContent` clears `isError` and `isBlocked`.
 - The two `null` returns happen on empty stacks.
-- `contentSigOf(restoreContent(g, snapshotContent(h)))` equals `contentSigOf(h)` for grids `g` and `h` of one size. Export `contentSigOf` from `App.jsx` only if the test needs it; otherwise compare the four fields.
+- `contentSigOf(restoreContent(g, snapshotContent(h)))` equals `contentSigOf(h)` for grids `g` and `h` of one size. `contentSigOf` is already exported from `App.jsx`.
 
 - [ ] Step 1: tests. Step 2: run them, RED (the module does not exist). Step 3: implement. Step 4: run the file and `npx vitest run`. Step 5: commit `feat(undo): a pure history of grid content snapshots`.
 
 ### Task U.2: wire the history into the user-action handlers (§3.9 "What one step is", "History ends with the document", "Gating", "Async responses")
 
-**Files:** Modify: `src/App.jsx`, `src/components/ThemeWordsPanel.jsx` (Apply All's begin/commit), and `src/hooks/useAutofillMachine.js` (report a committed run with its Start snapshot). Tests: the existing `App` and component test files, plus a new `src/__tests__/undoWiring.test.jsx` if that reads better.
+**Files:** Modify: `src/App.jsx`, `src/components/ThemeWordsPanel.jsx` (Apply All's begin/commit), `src/hooks/useAutofillMachine.js` (report a committed run), and `src/hooks/useSaveMachine.js` (a return to the saved content shows the saved state and cancels the pending autosave; today dirty→clean without its own save is a no-op). Tests: the existing `App` and component test files, plus a new `src/__tests__/undoWiring.test.jsx` if that reads better.
 
 **Interfaces:** a hook, e.g. `useUndoHistory({ gridRef, gridSize, setGrid, editingPausedRef })`, returning `{ record(prevGrid), beginBatch(), commitBatch(), undo(), redo(), clear(), canUndo, canRedo }`. The implementer owns the mechanics; the behaviour below is binding.
 
 **Criteria:**
-- **One step each** when content changes: `setLetter` (type or Backspace), `toggleBlackSquare` (the cell and its mirror as one step), `toggleThemeLock`, `handlePatternSelect`, `handleThemeWordApplied` from `Apply This Placement`, `acceptClean`. A handler whose write returns the same grid reference records nothing.
-- **Apply All is one step**, whatever the number of words: `ThemeWordsPanel`'s `handleApplyAllPlacements` opens the batch before its first request and commits it where the TH3 summary is computed (§3.8), and the per-word `onApplyPlacement` calls inside it record nothing of their own. If it applied nothing, there is no step.
-- **Autofill:** a finished run that changed the grid (success, or "Keep partial fill") records one step whose snapshot is the machine's existing Start snapshot (`startSnapshotRef`, §2.3). A run whose outcome restores the Start snapshot records nothing. The run's merges and progress record nothing.
+- **A change is a content-signature change**, `contentSigOf` before and after, never a reference compare: `writeLetter` always returns a new grid, so a same-letter retype would otherwise record an empty step. Same letter over an autofilled cell is a change.
+- **One step each** when content changes: `setLetter` (type or Backspace), `toggleBlackSquare` (the cell and its mirror as one step), `toggleThemeLock`, `handlePatternSelect`, `handleThemeWordApplied` from `Apply This Placement`, `acceptClean`.
+- **Apply All is one step**, whatever the number of words: `ThemeWordsPanel`'s `handleApplyAllPlacements` opens the batch before its first request and closes it in a `finally`, so the early `return` (a run started, or the document replaced mid-loop) also closes it. The per-word `onApplyPlacement` calls inside it record nothing of their own; a new signal (props or a context) tells the batch apart from a standalone `Apply This Placement`, since the call arguments are identical. If the content did not change, there is no step. While the batch is open, user edits are folded into it (no step of their own) and Undo and Redo do nothing. `clear()` ends an open batch without recording it.
+- **Autofill:** two commit points, each gated on the machine's `sameDocument()` check. The `d.success` branch records one step whose snapshot is the machine's Start snapshot (`startSnapshotRef`, §2.3). `keepFill` records one step whose snapshot is the grid as it is when clicked (`gridRef.current`), since the user may have edited or undone after the run ended. A run whose outcome restores the Start snapshot records nothing. Merges, progress, `finishRun`'s restore, Start's `clearBlocked` and off-list `markBlocked` record nothing.
 - **Not recorded:** Verify (`applyVerifyErrors`), `clearAllErrors`, `useNumbering` writes, autofill merges.
 - **Clear both stacks** in `createNewGrid` (New grid and size change), `handleGridImport`, `adoptSavedEntry` (Open saved and restore on load). A save fork (`onForked`) keeps them.
 - **Gating:** `undo` and `redo` return early when `editingPausedRef.current` is true (D1), like every other writer.
 - **Async:** after an undo, a Verify or Clean response in flight applies to the current grid under the existing S1 rules, and an open Clean confirm is dismissed (§3.5). Pin both with tests: undo while a Verify request is pending, then resolve it.
-- Undo back to the saved content makes `isDirty` false.
+- A return to the saved content (by undo or otherwise) makes `isDirty` false, shows the saved state instead of `unsaved changes`, and cancels the armed autosave. Test it through `useSaveMachine`, not `isDirty` alone.
 
 - [ ] Step 1: tests, one per criterion, with Apply All of three words as one step. Step 2: RED. Step 3: implement. Step 4: run the touched files and `npx vitest run`. Step 5: commit `feat(undo): every user edit is one undo step, Apply All and a finished autofill run included`.
 
@@ -3233,12 +3234,13 @@ Worktree `../crossword-helper-undo`, branch `feat/undo-redo` (off `fix/theme-joi
 - When handled, the event's default is prevented.
 - The grid's own listener (`CrosswordGrid.jsx` `dispatchGridKey`) does not also act on Z.
 - Pressing a key after a click on a panel button (focus outside the grid) still undoes.
+- TH5 still holds with the two new buttons: at 1024 px the top bar and `Save grid` are visible and clickable.
 
 - [ ] Step 1: tests (key events on `document`, on the grid, on a focused text input; disabled states). Step 2: RED. Step 3: implement. Step 4: run the files, `npx vitest run`, `npm run build`. Step 5: commit `feat(undo): Undo and Redo in the top bar, with Cmd/Ctrl+Z and redo keys`.
 
 ### Task U.4: README and the browser drive (no new code; the owner's GUI gate)
 
-**Files:** Modify: `README.md` ("Using the app": the top bar line names `Undo` and `Redo` and the keys).
+**Files:** Modify: `README.md` ("Using the app": the top bar line names `Undo` and `Redo` and the keys; "Known limitations": one plain line that a JSON export does not keep theme locks, owner 2026-10-25, since the export carries no `isThemeLocked`).
 
 - [ ] Step 1: README edit; `bash scripts/docs-check.sh`, with the result read on its own line.
 - [ ] Step 2: phase-end gates, each run alone.
@@ -3324,10 +3326,10 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | New: F-TOUR | Follow README "Using the app" literally, start to finish | Every step works as written; every backticked control is where the README says |
 | New: F-IMPORT | `Upload File` with `example_11x11.json`, `example_15x15.json` and `example_21x21.json`; `Paste JSON` with one of them; import over a grid with letters; a malformed file and malformed pasted text | The grid matches the file (size and black squares); importing over letters asks the replace confirm; malformed input shows a plain message, no crash or blank grid, and the current grid is unchanged |
 | New: F-EDIT | New grid at 11x11, 15x15 and 21x21; type letters; arrows, Enter, Tab and Backspace as the grid's hint line describes; place and remove black squares with `Symmetry` on and off; Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z after each kind of edit | Each key does what the hint line says; the mirror square follows the toggle; numbering and the GRID stats (Total, Black, Filled, Words) update after each change; undo and redo step back and forth one edit at a time (§3.9) |
-| New: F-THEME-LOAD | `Choose File` with a list holding a lowercase word, a blank line, a duplicate, a 2-letter word and a word longer than the grid; then `Apply This Placement` on one suggestion | Valid words load in uppercase, once each; the invalid words are named with a reason; the applied word is on the grid and shown as theme-locked |
-| New: F-LISTS | First start: the Lists panel; `Statistics` and `Preview` of a shipped list; `Upload Wordlist` with a plain ASCII list holding a word no shipped list has; `Add Words`; delete the uploaded list | The shipped lists are shown and selected by default; the uploaded list can be ticked in Search and in Autofill, and Search finds its unique word; deleting asks a confirm and removes it from Search and Autofill |
+| New: F-THEME-LOAD | (a) `Choose File` with a list holding a lowercase word, a blank line and a duplicate, then `Apply This Placement` on one suggestion; (b) `Choose File` with a list that also holds a 2-letter word and a word longer than the grid | (a) The words load in uppercase, once each, and the applied word is on the grid and shown as theme-locked; (b) nothing loads and the message names an invalid word with its reason (today's rule: one invalid word rejects the file) |
+| New: F-LISTS | First start: the Lists panel; `Show Stats` and the `Words (N)` list of a shipped list; `Upload Wordlist` with a plain ASCII list holding a word no shipped list has, reading the upload's `Preview`; `Add Words`; delete the uploaded list | The shipped lists are shown and selected by default; the uploaded list can be ticked in Search and in Autofill, and Search finds its unique word; deleting asks a confirm and removes it from Search and Autofill |
 | New: F-SEARCH | On the default lists: `C?T`, a 6-letter all-`?` pattern, a pattern no word matches (e.g. `Q?Z??`); place one result in an empty slot | Every result matches the pattern and its length; the no-match case shows a message, not an empty panel; the placed word fills exactly that slot |
-| New: F-EXPORT | Export JSON, HTML and Text, each after `Preview`; import the exported JSON into a new grid | Each export downloads a file whose content matches the grid; the JSON round trip restores letters and black squares. The log records whether theme locks survive; if they don't, the row still passes and the run's close adds a README known-limitations line (owner, §1) |
+| New: F-EXPORT | Export JSON, HTML and Text, each after `Preview` (HTML's preview says it is not available and points to Export); import the exported JSON into a new grid | Each export downloads a file whose content matches the grid; the JSON round trip restores letters and black squares. The export carries no theme lock, so locks do not survive; README "Known limitations" says so (owner, §1; added in Phase U) |
 | New: F-RESTORE | A grid with letters, black squares and a theme-locked word; reload; then `Open saved` on its named save | Letters, black squares and the theme lock survive both paths |
 | New: F-FEEDBACK | Across every browser row: each action that writes the grid or calls the server (apply, place, Verify, Clean, Save, import, export, upload, autofill, undo, redo) | Each shows visible feedback (a message, a toast or a grid change) within 2 s, or a busy state (2 s: Claude's threshold); every error message names the problem in plain language, with no stack trace, raw JSON or bare HTTP code |
 
@@ -3352,7 +3354,7 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
 | New: TH4 | Import `example_11x11.json`, upload OBSERVATION, MIRRORIMAGE, PERFORMANCE, read the suggestions, then Apply All Best Placements | Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
-| New: UNDO | On a grid with typed letters: undo and redo each step kind of §3.9 (letter, black square with its mirror, theme lock, Search placement, `Apply This Placement`, a three-word `Apply All Best Placements`, an accepted Clean, a finished autofill run), with the buttons and with the keys; undo back to the last save; type after an undo; New grid and Import; press Cmd/Ctrl+Z inside the Search pattern field | Each step undoes and redoes as one step, restoring letters, black squares, theme locks and autofill marks exactly, with no red cell left; undoing back to the last save clears `unsaved changes`; typing after an undo greys `Redo`; New grid and Import grey both buttons; Cmd/Ctrl+Z in the Search field edits the text only |
+| New: UNDO | On a grid with typed letters: undo and redo each step kind of §3.9 (letter, black square with its mirror, theme lock, Search placement, `Apply This Placement`, a three-word `Apply All Best Placements`, an accepted Clean, a finished autofill run), with the buttons and with the keys; undo back to the last save; type after an undo; New grid and Import; press Cmd/Ctrl+Z inside the Search pattern field | Each step undoes and redoes as one step, restoring letters, black squares and theme locks exactly, and autofill marks as read from the saved entry in `localStorage` after a Save (they are not drawn on the grid), with no red cell left; undoing back to the last save clears `unsaved changes`; typing after an undo greys `Redo`; New grid and Import grey both buttons; Cmd/Ctrl+Z in the Search field edits the text only |
 | New: SAVE-SIZE | Save a 21x21 grid, switch to 11x11, reload or Open saved | The saved grid restores at its own size, with its letters (S3) |
 | New: SAVE-TABS | Open one saved grid in two tabs, edit and save in both | The second save forks `<name> (copy)`; neither tab's work is lost (S4) |
 
