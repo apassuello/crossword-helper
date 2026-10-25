@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.14** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.15** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25
@@ -68,8 +68,8 @@ are sections of `docs/dev/qa/2026-10-22-fresh-install-run.md`; its evidence file
   §3.2 new grid, §3.4 saves, §3.5 grid-edit guards (#62, #63, Clean), §3.6 Theme panel and top bar
   (TH5), §3.7 grid-writer provenance, §3.8 theme suggestions (#19 panel half, #20), §4 word-list and CLI
   rulings.
-- **Stretch, if the must-haves land:** #19's backend half and #57 item 4 (theme placement); SR2 (search results
-  below the viewport, the rest of #45).
+- **Stretch, if the must-haves land:** #19's backend half and #57 item 4 (theme placement). SR2 (search
+  results below the viewport, the rest of #45) was stretch until 0.2.15 made it a must-have, §4 item 2.
 - **Out of scope:** Windows; solver fill quality beyond #40's default; #26 #28 #29 #36 #37 #38 #39 #52
   #59 (solver internals or pause/resume, which has no UI); #18 #56 #60 (developer-facing); #43; #64 (NaN%, see the §3.3 NOTE); #65 (403 on a POST-created list: API-level, not on the novice path).
 
@@ -711,6 +711,9 @@ real reason (above) instead of a stale offer.
   `Select at least one word list`. The CLI's built-in fallback list is not reachable from the UI.
   Nor from the API: `POST /api/pattern` and `POST /api/pattern/with-progress` reject an explicit
   `wordlists: []` with 400 `NO_WORDLIST`; an absent `wordlists` key still means `["comprehensive"]`.
+  **SR2:** when a search returns results, the Search panel scrolls the results section into view, so the
+  first results are visible without the user scrolling past the word-list checklist. The panel's layout and
+  control order are unchanged.
 - **Item 3 (CLI-normalize):** the default `normalize` rule keeps letters only:
   `normalize "Hello, World!"` → `HELLOWORLD`. The named rules in `conventions.py` keep their behaviour;
   only the default rule changes. The default rule uppercases with `str.upper()` after the fold, so a
@@ -785,7 +788,7 @@ the old one:
 | New: TH3 | Apply one placement, then Apply All Best Placements, with one word that conflicts | The summary counts only Apply All's own applies and names the skipped word with the server's reason |
 | New: TH5 | Open the Theme panel at the desktop viewport and at 1024 px, the QA run's smallest desktop width (phone width is out of scope) | The top bar and Save are visible and clickable; Save succeeds with the panel open |
 | Autofill | A2, A3, A4 | Panel returns to idle by itself; every letter typed before Start is unchanged |
-| Lists, CLI | L11, SR4, CLI-normalize | Per §4 |
+| Lists, CLI | L11, SR4, SR2, CLI-normalize | Per §4 |
 | New: AF-LOCK | Type letters, run Repair on the 11x11, cancel and let one run end | Typed letters intact in every progress sample and at the end |
 | New: AF-BLOCK | Type a partial pattern no word fits (e.g. `QX` in the first two cells of a 3-letter slot, pattern `QX?`; a fully typed off-list word is case 2, not a block) | Run does not start; those cells red; message as §2.3. A valid word typed elsewhere in the grid stays black, not red (C1: only directly dead slots count) |
 | New: AF-BLOCK-LEN | Tick a single list that has no word of some slot length in the grid (`awk '{print length($1)}' <list> \| sort -n \| uniq -c` shows which lengths it has); type a valid word elsewhere; Start | Run does not start; `The selected word lists have no words of length N.`; no cell red, including the typed word. Repeat on an empty grid: the same block (M2) |
@@ -1016,3 +1019,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   "keeps the first" kept the rejected line and an unrelated add dropped `GRAPE` from the list; the kept line
   is now the first one `parse_line` accepts (found by the 7.8 review; ruled by default, beat: a separate
   key for rejected lines, which would stop `APPLE` removing a stored `APPLE;x`).
+- 0.2.15 (2026-10-25): SR2 moves from stretch to must-have (owner 2026-10-25: #45 blocks the release; its
+  word-list-box half was fixed in `03e4f59`, so SR2 is what remains). §4 item 2 states the behaviour and §6's
+  Lists row gains SR2. Ruled (owner): scroll the results into view. Beat: moving results above the
+  checklist (layout and README order change), collapsing the checklist (a new control).
