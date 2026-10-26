@@ -76,16 +76,16 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-IMPORT | PASS on `494ddb8` | I1, I2, I3, I4, I5, I6 |
 | New: F-EDIT | PASS on `494ddb8` | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11 |
 | New: F-THEME-LOAD | PASS on `494ddb8` | T1, T2, T3 |
-| New: F-LISTS | PASS on `494ddb8` (default-selection wording: ruling asked) | L1, L2, L3, L4, L5, L6, L7 |
+| New: F-LISTS | PASS on `494ddb8` (default-selection wording: ruling asked, not given; the PASS reading stands by default) | L1, L2, L3, L4, L5, L6, L7 |
 | New: F-SEARCH | PASS on `494ddb8` | S1, S2, S3, S4 |
 | New: F-EXPORT | PASS on `494ddb8` (HTML and Text on manual export; automated clicks saved no file, instrument fault) | X1, X2, X3, X4, X5, X6, X7 |
 | New: F-RESTORE | PASS on `494ddb8` | R1, R2 |
-| New: F-FEEDBACK | | |
-| Hidden | PASS on `494ddb8` (#53 and #54 still open though their symptoms are gone) | CL1, A-SBS, EXPORT-HIDE |
+| New: F-FEEDBACK | FAIL (nit) on `494ddb8` (a Save that forks `<name> (copy)` shows no feedback; error wording plain, with rough edges; see Close) | every browser row's `F-FEEDBACK notes:` line |
+| Hidden | PASS on `494ddb8` (#53 and #54 closed 2026-10-26 with this evidence) | CL1, A-SBS, EXPORT-HIDE |
 | New: TH2b | PASS on `494ddb8` | TH2b |
-| New: TH3 | FAIL on `494ddb8` (Known #80: the summary count includes the earlier single apply) | TH3 |
+| New: TH3 | FAIL (nit) on `494ddb8` (Known #80: the summary count includes the earlier single apply; accepted by default, owner did not rule) | TH3 |
 | New: TH4 | PASS on `494ddb8` (each word lists 3 suggestions; 2 placed, OBSERVATION skipped with the server reason) | TH4 |
-| New: TH5 | PASS on `494ddb8` (Observation: the Save name prompt lies under the Theme panel) | TH5 |
+| New: TH5 | PASS on `494ddb8` (Observation: the Save name prompt lies under the Theme panel; filed as #93, serious) | TH5 |
 | New: UNDO | PASS on `494ddb8` | U1, U2, U3, U4, U5, U6, U7, U7b, U8, U9, U10 |
 | Autofill | PASS on `494ddb8` (A2 and A4: 11x11 filled 44/44 in about 1 s at panel defaults, typed letters unchanged; A3: Cancel on the 15x15 ends in `Cancelled by user` with `Keep partial fill` / `Reset`, Start back after `Reset`) | A2, A3, A4 |
 | Lists, CLI | PASS on `494ddb8` (L11 folds and skips as ruled; SR4 hint and disabled button; SR2 first result inside the inspector at both sizes; `normalize` gives `HELLOWORLD`, needs the venv under E1) | L11, SR4, SR2, CLI-normalize |
@@ -1286,3 +1286,66 @@ STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
 - Observations (not judged against a criterion): the README-style invocation `python -m cli.src.cli ...` needs the venv active under E1; without it `python` does not exist on `$SB/bin`. That is the E1 sandbox (symlinks to `python3` only), not the app.
 - Evidence: `CLI-normalize.txt` (the venv run's output and rc 0 as shown above; the file holds the output only)
 - Verdict: PASS · Severity: — · Known: none needed
+
+## Close (Task 8.7 Steps 2–3, 2026-10-26)
+
+Code under test: `494ddb8` (origin/main) for every row from F-TOUR's re-run on; the 8.3 install rows ran on
+`e4e881e` (header). Verdicts per area are the Coverage table above; its counts, by command:
+
+```
+$ sed -n '/^## Coverage/,/^## Cases/p' <run-log> | awk -F'|' '/^\| /{...print the Verdict's first word, plus "(nit)"}' | sort | uniq -c
+   2 FAIL (nit)
+  42 PASS
+```
+
+Coverage check (plan Step 2): `areas.txt` holds 44 spec §6 areas; the loop printed nothing against this log.
+Positive control: on a copy with the `| New: TH4 |` row deleted it printed `MISSING: New: TH4`. The check is
+a substring match, so it proves each area name appears, not that its row is filled; the empty-Verdict scan
+found only `New: F-FEEDBACK`, closed below.
+
+### FAIL and BLOCKED, with owning phase
+
+| Area | Verdict | Owning phase | Disposition |
+|---|---|---|---|
+| New: TH3 | FAIL (nit) | Phase 6 (Theme panel, spec §3.8) | Known #80 (`nit`): Apply All counts a word it re-places where the single apply already put it. Accepted by default; the owner did not rule. |
+| New: F-FEEDBACK | FAIL (nit) | Phase 6 (saves) | See below. No matching open issue. |
+| New: F-TOUR | PASS on `494ddb8` | Phase 6 (Theme panel) | FAIL on `e4e881e`, fixed by #92 (`494ddb8`), re-run cold PASS. |
+
+No row is BLOCKED. Serious findings: none failed a criterion; one Observation was filed as serious: **#93**
+(TH5: Save grid's name prompt opens under the Theme panel; at 1024 px its field, Save and Cancel cannot be
+clicked, only Enter saves), put in scope for the next fix session by the owner.
+
+### F-FEEDBACK verdict
+
+Judged across every browser row's `F-FEEDBACK notes:` line (rows before the brief added that line —
+the install rows, F-TOUR and F-WORKFLOW — are judged from their steps).
+
+- **Within 2 s:** no note records a reaction later than 2 s; autofill and imports show a busy state.
+- **Visible feedback — FAIL (nit):** a Save that forks `<name> (copy)` (SAVE-TABS) shows no message, no
+  status line and no toast, so a novice cannot tell the grid was saved under another name. Silent but not
+  judged a failure, because the grid or the panel visibly changes: `Open saved` (grid replaced, no message;
+  onto an unchanged or empty grid nothing changes), a Search placement written around a theme-locked cell
+  (SR-PLACE), the refreshed theme suggestions (TH2b), typing during a run (AF-GATE, banner shown), and
+  Export (only "Generating … file..." — no message when no file arrives, F-EXPORT X2/X3).
+- **Error wording — PASS with rough edges:** no stack trace, raw JSON or bare HTTP code was seen. Rough
+  edges: import errors append the browser's parser text after "Error:" (F-IMPORT I5, I6); Verify's
+  "1 unfillable: X______________" shows the slot as an underscore pattern (CL-CLEAN-GUARD); Apply All's
+  skip reason gives zero-based coordinates, "Letter conflict at (5, 6)" (TH3, TH4), and the Theme panel lists
+  placements as zero-based "Row 7, Col 8" while the grid counts from 1 (SR-PLACE).
+
+### Issues touched by this run
+
+- Filed: #91 (`serious`, fixed in #92), #93 (`serious`, next fix session).
+- Closed with evidence: #53, #54 (both removed from the UI by `c663ff3`; CL1 and A-SBS above).
+- Known and unchanged: #78 (Clean toast count), #79 (a crossing letter stays red after Clean), #80 (TH3).
+
+### Instrument notes for the next run
+
+- The browser tool's automated `Export` clicks save no file after a tab's first download (F-EXPORT X2/X3).
+- Its SSE `/api/progress/` statuses are unreliable (503 logged for a 200); the server log is the oracle.
+- Its console and network logs record only after the first read on a tab; start them before the first action.
+- `window.confirm` is used only by word-list delete (`WordListPanel.jsx`); stub it at that click.
+- The server log has two files: `serve-494ddb8.log` up to F-RESTORE's group and TH3, `serve-494ddb8-b.log`
+  after the server was restarted at 21:3x on the same clone. TH3's window holds ~33k scripted calls from its
+  own word search and is not a usable request count (0 5xx).
+- Plan 8.7's CLI-normalize command needs `source venv/bin/activate &&` under E1, which links `python3` only.
