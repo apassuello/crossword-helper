@@ -6,7 +6,7 @@ Spec: `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` §6 (0.2.20
 
 ## Header
 
-- Sha under test: `e4e881e` (origin/main after PR #90). Every clone checks out exactly that sha.
+- Sha under test: `494ddb8` (origin/main after PR #92) for F-TOUR's re-run and every row after it; the 8.3 install rows and F-TOUR's first run ran on `e4e881e` (origin/main after PR #90). Each clone checks out exactly its sha; see "Sha moved" below.
 - Sha moved (2026-10-26): F-TOUR failed at `e4e881e` (#91); the fix merged as `494ddb8` (PR #92), which also
   carries this branch's Task 8.1 README, so README and code under test are one sha from here. The 8.3 rows
   above ran on `e4e881e`; F-TOUR's re-run and every row after it run on a fresh clone of `494ddb8`
@@ -514,7 +514,7 @@ status rc=0
 - Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
 - 5xx (header ruling): server log 0 of 41 requests in the window (`requests: 41 5xx: 0 4xx: 1`; the one 4xx is my own deliberate `GET /api/wordlists/custom/lists-upload` → 404 in L7, after the delete); browser tool: 2 of 31 `/api/` requests reported 503, both `GET /api/progress/<id>` (SSE) that the server log records as 200 (the known tool artefact).
 - F-FEEDBACK notes: file choice shows "Selected: lists-upload.txt (0.0 KB)" at once; `Upload` shows the `Preview` (counts and words) within the 1.5 s read; `Confirm` adds the card, `Words (5)` and the count (7) within 2 s, with no toast; `Add Words to List` updates `Words: 7` within 1.8 s, no toast; `Delete` asks the confirm (stubbed, message captured) and the card is gone within 2 s, no toast. Search shows `Results (1)` or "No matching words found" within 2 s. No error arose.
-- Observations (not judged against a criterion): (1) the criterion says "the shipped lists are shown and selected by default": all six shipped lists are shown, but only one, Comprehensive Dictionary, is ticked by default, in both Search and Autofill; read as "a default selection is in force", this passes, read as "all six ticked" it would not — the orchestrator is asked to rule on the wording. (2) the uploaded list's name was derived from the file name (`lists-upload`) and shown as `Lists-Upload`; the upload form's `Wordlist Name:` was prefilled and not edited. (3) a newly uploaded list is unticked in Search and Autofill until the user ticks it. (4) `Show Stats` shows the same fields (Category, Words, Difficulty) that the card already carries; the toggle changes only its label to `Hide Stats`. (5) the delete message names the path `custom/lists-upload`, not the display name.
+- Observations (not judged against a criterion): (1) the criterion says "the shipped lists are shown and selected by default": all six shipped lists are shown, but only one, Comprehensive Dictionary, is ticked by default, in both Search and Autofill; read as "a default selection is in force", this passes, read as "all six ticked" it would not — the owner was asked to rule on the wording and did not; the PASS reading stands by default (the code default `useState(['comprehensive'])` in `PatternMatcher.jsx` and spec §4's absent-`wordlists` rule agree with it). (2) the uploaded list's name was derived from the file name (`lists-upload`) and shown as `Lists-Upload`; the upload form's `Wordlist Name:` was prefilled and not edited. (3) a newly uploaded list is unticked in Search and Autofill until the user ticks it. (4) `Show Stats` shows the same fields (Category, Words, Difficulty) that the card already carries; the toggle changes only its label to `Hide Stats`. (5) the delete message names the path `custom/lists-upload`, not the display name.
 - Evidence: `fixture-lists-upload.txt`, `serve-F-LISTS.log`
 - Verdict: PASS · Severity: — · Known: —
 
@@ -626,7 +626,7 @@ status rc=0
   - Open issue #53 ("Clues tool is a placeholder ("Arrives in a later task") that no open issue tracks") describes the 2026-10-22 state, a placeholder panel; on `494ddb8` the control is absent, which is what the criterion asks, so #53's symptom is not reproducible as written.
 - Console errors / 5xx: see EXPORT-HIDE.
 - F-FEEDBACK notes: no grid or server action in this case.
-- Observations: #53 is open although the placeholder is gone from the rail; the orchestrator may want to say whether the issue should be closed or re-pointed.
+- Observations: #53 was open although the placeholder is gone from the rail; closed 2026-10-26 with this case as evidence (removed by `c663ff3`).
 - Evidence: `serve-Hidden.log`
 - Verdict: PASS · Severity: — · Known: #53 (symptom no longer present)
 
@@ -638,7 +638,7 @@ status rc=0
   - Open issue #54 ("Suggest Black Square" is a permanently disabled button pointing at Task 20 of an archived plan) describes the 2026-10-22 state; on `494ddb8` there is no such button.
 - Console errors / 5xx: see EXPORT-HIDE.
 - F-FEEDBACK notes: opening the panel changed the page at once (read after 0.6 s); no server action.
-- Observations: as for #53, #54 is open though its symptom is gone from the UI; its server routes were not probed here.
+- Observations: as for #53, #54 was open though its symptom is gone from the UI; closed 2026-10-26 with this case as evidence (removed by `c663ff3`). Its server routes were not probed here and still exist.
 - Evidence: `serve-Hidden.log`
 - Verdict: PASS · Severity: — · Known: #54 (symptom no longer present)
 
@@ -796,7 +796,7 @@ status rc=0
 - F-FEEDBACK notes: `Apply This Placement` → toast `Applied PUZZLE to grid` and the grid change by the 2.5 s read (the read was after a fixed wait; a tighter bound was not measured). `Apply All Best Placements` → the summary toast at the first read (253 ms), grid changed by the 1.2 s read. The skipped-word message is plain language with the server's own reason ("Letter conflict at (5, 6): trying to place 'B' but cell already contains 'A'"), shortened with "(+1 more)", no stack trace, raw JSON or bare HTTP code; the cell coordinates are zero-based panel positions, while the grid's ruler counts from 1.
 - Observations (not judged against a criterion): (1) Attempt 2's Apply All placed STARLIGHT (col 6), PUZZLE (col 7) and CROSSWORD (col 8) as three adjacent down words, so the grid reads as side-by-side letters (#19 defect 3, out of scope; the word set was the cleanest I found that has one conflict, no set with one conflict and no abutting turned up in the search). (2) Attempt 1 also shows #80: its "3" counted STARLIGHT, applied by hand a moment earlier.
 - Evidence: `serve-TH3.log`, `fixture-theme-th3.txt`, `TH3-dryrun.txt`, `TH3-capture.json` (the page-side captures of both attempts)
-- Verdict: FAIL · Severity: nit (as filed) · Known: #80
+- Verdict: FAIL · Severity: nit (as filed) · Known: #80 · accepted by default (the owner was asked whether re-placing counts as Apply All's own apply and did not rule; #80's suggested reading, "no", is the one applied)
 
 ### TH4 — Import example_11x11, upload OBSERVATION/MIRRORIMAGE/PERFORMANCE, read suggestions, Apply All Best Placements (`494ddb8`)
 - Phase: 8.5 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (id 1893513511, shared with TH5, closed at the end of TH5); tab 1893513492, not created by this row, was open throughout and not touched. Criterion (plan 8.5, TH4): "Every word lists at least one suggestion; Apply All places two words and names the third as skipped with the server's reason". Acceptance row for the release-blocking fix (spec 0.2.16; issue #57 item 4 and #19 defect 1: a false "No valid placements" for later theme words); a FAIL on "every word lists at least one suggestion" would count as serious.
@@ -830,7 +830,7 @@ status rc=0
 - F-FEEDBACK notes: Save → `saved locally · just now` in the header by the first read (150 ms after the submit) and the entry in `localStorage`; no toast text for the save itself beyond that status. The prompt gives no hint that part of it is hidden under the Theme panel; no error message appeared.
 - Observations (not judged against a criterion): (1) the Save name prompt sits under the Theme panel (z-index 20 against 1000), described above; (2) at both widths the panel starts below the 54 px header, so the 2026-10-22 defect (panel over the top bar) does not reproduce.
 - Evidence: `serve-TH5.log`, `TH5-1440-save-prompt-behind-panel.jpg`
-- Verdict: PASS · Severity: — · Known: none matched (Observation 1 raised for ruling)
+- Verdict: PASS · Severity: — · Known: none matched; Observation 1 filed as #93 (`serious`, owner 2026-10-26: in scope for the next fix session)
 
 ### UNDO — undo and redo of every step kind of §3.9, the last save, typing after an undo, New grid and Import, Cmd/Ctrl+Z in the Search field (`494ddb8`)
 - Phase: 8.5 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (id 1893513513, closed at the end); tab 1893513492, not created by this row, was open throughout and not touched. Criterion (plan 8.5, UNDO): "Each step undoes and redoes as one step, restoring letters, black squares and theme locks exactly, and autofill marks as read from the saved entry in `localStorage` after a Save (they are not drawn on the grid), with no red cell left; undoing back to the last save clears `unsaved changes`; typing after an undo greys `Redo`; New grid and Import grey both buttons; Cmd/Ctrl+Z in the Search field edits the text only". A lost letter, black square or lock on undo or redo would be serious.
