@@ -73,7 +73,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: MACOS | PASS | MACOS |
 | New: F-WORKFLOW | PASS on `494ddb8` | F-WORKFLOW |
 | New: F-TOUR | PASS on `494ddb8` (FAIL on `e4e881e`, #91) | F-TOUR, F-TOUR re-run |
-| New: F-IMPORT | | |
+| New: F-IMPORT | PASS on `494ddb8` | I1, I2, I3, I4, I5, I6 |
 | New: F-EDIT | | |
 | New: F-THEME-LOAD | | |
 | New: F-LISTS | | |
@@ -433,3 +433,20 @@ status rc=0
 - Observations (not judged against a criterion): `Keep fill` is not named in the README but is the visible next step; W12's confirm says "Unsaved changes are lost" when the grid open is the save itself, unchanged; opening it shows no message, and the grid does not visibly change.
 - Evidence: `fixture-theme-workflow2.txt`, `serve-F-WORKFLOW.log`, `F-WORKFLOW-verify.jpg`, `F-WORKFLOW-export.json`, `F-WORKFLOW-export.html`, `F-WORKFLOW-export.txt`
 - Verdict: PASS · Severity: — · Known: #78 (Clean's toast count)
+
+### F-IMPORT — Upload File and Paste JSON, replace confirm, malformed input (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab group
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), app reloaded; console and network logs cleared. This clears the earlier F-WORKFLOW row's save "Workflow theme grid" (that row is recorded PASS with its evidence), so an empty `Open saved` is expected here. Server log start line 216. Fixtures: `example_11x11.json`, `example_15x15.json`, `example_21x21.json` copied from the clone's `data/grids/`; own fixtures `fixture-malformed-truncated.json` (first 300 bytes of `example_11x11.json`) and `fixture-malformed-paste.txt` ("this is not JSON at all, just words").
+- Steps and observed (the grid is read from the page's SVG: size from its width, black squares from the filled `rect`s, letters from its `text` nodes; each compared with the file's `grid` rows joined by `|`):
+  - I1 Import tab → `Upload File` → `example_11x11.json` → Preview "Size: 11×11 / Cells: 121 / Filled: 0" → `Import Grid` (grid was blank, no confirm). Page: size 11, 20 black squares; file: size 11, 20 `#`; row strings identical (`True`). Stats `Total 121 | Black 20·16.5% | Filled 0.0% | Words 44`.
+  - I2 `example_15x15.json` uploaded over the 11x11 (20 blacks, no letters): `Import Grid` → "Replace the current grid? Unsaved changes are lost." with `Replace` / `Cancel`. `Cancel` → grid unchanged (11, 20 blacks). `Import Grid` again → `Replace` → "Processing..." at 1 ms, grid changed by 318 ms. Page: size 15, 36 blacks; file: 15, 36 `#`; identical (`True`). Stats `Total 225 | Black 36·16.0% | Filled 0.0% | Words 78`. The confirm also appears over a grid that holds only black squares (criterion silent on that case; recorded, not judged).
+  - I3 Clicked cell (r1,c1), typed `CAT` → row 1 `CAT..#....#....`, `Filled 1.6%`. Uploaded `example_21x21.json` → Preview "Size: 21×21 / Cells: 441 / Filled: 0" → `Import Grid` → "Replace the current grid? Unsaved changes are lost." → `Cancel` → grid unchanged (size 15, row 1 `CAT..#....#....`) → `Import Grid` → `Replace` → "Processing..." at 2 ms, grid by 317 ms. Page: size 21, 72 blacks; file: 21, 72 `#`; identical (`True`); the letters are gone (`Filled 0.0%`, `Total 441 | Black 72·16.3% | Words 144`).
+  - I4 `Paste JSON` with the 11x11 file's content (same data, whitespace compacted) → `Validate JSON` → Preview "Size: 11×11 / Cells: 121 / Filled: 0" → `Import Grid` → the same replace confirm (grid was the 21x21 with blacks) → `Replace` → "Processing..." 303 ms, grid by 617 ms. Page: size 11, 20 blacks; identical to the file (`True`).
+  - I5 Typed `HI` (cells r1c2, r1c3): grid `.HI#...#...|...#...#...|...........|###....#...|......#....|...#...#...|....#......|...#....###|...........|...#...#...|...#...#...`, `Total 121 | Black 20·16.5% | Filled 2.0% | Words 44`. Uploaded `fixture-malformed-truncated.json` → the panel shows "Error:" "Failed to parse file: Unexpected end of JSON input", no Preview, no `Import Grid` button; the grid read back is identical to the grid before (`same: true`).
+  - I6 `Paste JSON` with "this is not JSON at all, just words" → `Validate JSON` → "Error:" "Invalid JSON: Unexpected token 'h', "this is not"... is not valid JSON"; no `Import Grid` button; grid read back identical to before (`same: true`), same stats `Filled 2.0%` (`F-IMPORT-malformed-paste.jpg`).
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 29 requests in the window (start line 216, `serve-F-IMPORT.log`; the log helper: `requests: 29 5xx: 0 4xx: 0`); browser tool 0 of 16 `/api/` requests.
+- F-FEEDBACK notes: upload and paste show a Preview at once (within 2 s); `Import Grid` over a non-blank grid shows the replace confirm at 1 ms; `Replace` shows "Processing..." within 3 ms and the grid changes within 0.65 s; an import over a blank grid changes the grid with no message. Errors: "Failed to parse file: Unexpected end of JSON input" and "Invalid JSON: Unexpected token 'h', "this is not"... is not valid JSON" — a plain "Error:" heading, no stack trace, raw JSON or HTTP code, but the browser's own parser wording follows the plain prefix.
+- Observations (not judged against a criterion): the replace confirm also shows when the grid has black squares and no letters; both error texts carry the JS parser's message after the prefix. The first Upload File import (I1) was not preceded by a confirm because the grid was entirely blank.
+- Evidence: `fixture-malformed-truncated.json`, `fixture-malformed-paste.txt`, `serve-F-IMPORT.log`, `F-IMPORT-malformed-paste.jpg`
+- Verdict: PASS · Severity: — · Known: —
