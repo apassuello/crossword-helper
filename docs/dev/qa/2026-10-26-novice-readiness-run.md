@@ -7,6 +7,10 @@ Spec: `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` §6 (0.2.20
 ## Header
 
 - Sha under test: `e4e881e` (origin/main after PR #90). Every clone checks out exactly that sha.
+- Sha moved (2026-10-26): F-TOUR failed at `e4e881e` (#91); the fix merged as `494ddb8` (PR #92), which also
+  carries this branch's Task 8.1 README, so README and code under test are one sha from here. The 8.3 rows
+  above ran on `e4e881e`; F-TOUR's re-run and every row after it run on a fresh clone of `494ddb8`
+  (`clone2-494ddb8.txt`, `setup.sh` rc 0 in `SETUP-494ddb8.log`).
 - Platform: macOS only, on this Mac, sandboxed (owner 2026-10-25; spec 0.2.20). E1 = Homebrew `python3` and
   `node`/`npm`/`npx`, reached through `$SB/bin` (symlinks to those four binaries only) under `env -i` by
   `$SB/e1.sh`. Under E1, `pip3` resolves to `/usr/bin/pip3`, since `$SB/bin` links no `pip3`; ENV-1 probe in
@@ -62,7 +66,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: CLEAN-PREV | PASS | CLEAN-PREV |
 | New: MACOS | PASS | MACOS |
 | New: F-WORKFLOW | | |
-| New: F-TOUR | FAIL (re-run cold after the fix) | F-TOUR |
+| New: F-TOUR | PASS on `494ddb8` (FAIL on `e4e881e`, #91) | F-TOUR, F-TOUR re-run |
 | New: F-IMPORT | | |
 | New: F-EDIT | | |
 | New: F-THEME-LOAD | | |
@@ -358,3 +362,45 @@ status rc=0
 - Evidence: `8.5a-clean-storage.txt`, `serve-8.5a.log`, `fixture-theme-workflow.txt`, `F-TOUR-autofill-click-under-theme.png`, `F-TOUR-after-theme-close.jpg`
 - Instrument note: the browser tool's key name `period` does not type `.`; the key text `.` does.
 - Verdict: FAIL (owner 2026-10-26: FAIL, filed and fixed in Phase 6, row re-run cold) · Severity: minor (the `×` is visible, nothing is lost) · Known: none filed (`gh issue list --state all` for "theme panel", "overlay", "rail", "Theme Words"); nearest is #50 item 3, the Theme panel covering the top bar, fixed in `b303186`, a different defect
+
+### F-TOUR — README "Using the app", followed literally (re-run cold on `494ddb8`, after #91)
+- Phase: 8.5a · Env: E1, fresh clone of `494ddb8` (`clone2-494ddb8.txt`, `SETUP-494ddb8.log`), served by `$SB/e1.sh` · Browser: Chrome at `http://127.0.0.1:5000`, a tab group of this run's own (no other tab drove the origin), served bundle hash `zj6fU8fZ` (the same hash as the #91 branch build driven before the merge)
+- Deviation from "literally": `127.0.0.1:5000` in place of the README's `localhost:5000`, as in the first run (plan ENV-3).
+- Pre-run: storage cleared from `/api/health` before the app loaded (`F-TOUR2-clean-storage.txt`: 3 keys → 0, no IndexedDB).
+- Steps and observed:
+  - Grid, type letters: top-left square, `CAT` → `letters: "CAT" | Total225 | Black0·0.0% | Filled1.3% | Words30`.
+  - `Black square`, Space, `.` with `Symmetry` on → `Total225 | Black6·2.7% | Filled1.4% | Words39` (each with its mirror); `Symmetry` off (`xw-tool-btn xw-tool-btn-small `), Space → `Total225 | Black7·3.1% | Filled1.4% | Words39`; back on (`... on`).
+  - `11×11` → "Replace the current grid? Unsaved changes are lost." → Replace → `Total121 | Black0·0.0% | Filled0.0% | Words22 | undoDisabled=true`; `21×21` → `Total441 | ... | Words42 | confirm=false`; `15×15` → `Total225 | ... | Words30 | confirm=false`.
+  - `Open saved` with no save stored → the list renders empty and nothing else changes (observation below).
+  - Lists: rail `on` `["Lists","Symmetry"]`, "Word List Management"; `📤 Upload Wordlist` form buttons `Cancel Upload · [file] · Upload · Cancel`.
+  - Search `C?T`, Comprehensive Dictionary ticked by default → `Results (7)`.
+  - Theme `Choose File` (`fixture-theme-workflow.txt`) → `Loaded Words (3)`; `Apply All Best Placements` → "Applied 3 theme words successfully!", `Total225 | Black6·2.7% | Filled10.0% | Words42`, letters `ANAGRAMCROSSWORDPUZZLE`, panel open, rail `["Theme","Symmetry"]`.
+  - **Autofill (the #91 step):** rail `Autofill` with the Theme panel open → `{"panel":false,"railOn":["Autofill","Symmetry"],"startAutofill":true,"header":"Autofill · 40 empty slots, 2 theme words"}` (`F-TOUR2-autofill-rail-closes-theme.jpg`).
+  - `Start Autofill` (Repair, 5 min, Comprehensive Dictionary): busy state 7 ms after the click ("Starting autofill… / 0% / Cancel"); result within 3 s: "No word fits the highlighted letters." with `Reset`, column 8 highlighted. Server: `POST /api/fill/with-progress` 202, progress 200.
+  - Import: `Upload File`, `Paste JSON`, "Choose JSON file". Export: "JSON (for reimport) / HTML (printable) / Text (simple) / Preview / Export"; `Preview` (JSON) → `{ "size": 15, "grid": [ ...`.
+  - `Undo` → `Total225 | Black0·0.0% | Filled0.0% | Words30`, no letters (the whole Apply All); `Redo` → `Black6·2.7% | Filled10.0% | Words42`, `ANAGRAMCROSSWORDPUZZLE`. Cmd+Z and Cmd+Shift+Z, focus on BODY: the same two states.
+  - `Verify words` → "4 of 18 words flagged — 1 invalid: PUZZLE; 3 unfillable: RP______, _______SZ______, ANAGRAMSZ______" (PUZZLE is not in `comprehensive.txt`; ANAGRAM and CROSSWORD are).
+  - `Clean grid` → "Nothing removed: theme-locked letters are kept."
+  - `Save grid` → "Name this grid", suggested `15×15 2026-10-26 10:00` → `Save` → status "saved locally · just now"; `Open saved` → `15×15 2026-10-26 10:00 / 15×15 · 2026-10-26 10:04 / Open / Delete`.
+  - `Open` → "Replace the current grid? Unsaved changes are lost." → Replace → `undoDisabled:true, redoDisabled:true`, grid restored (`Black6·2.7% | Filled10.0% | Words42`).
+- Theme placement: Apply All placed ANAGRAM down column 8 with no black square after its M, so the down entry runs through CROSSWORD's S and PUZZLE's Z (grid read from the page; `#` black, `.` empty):
+
+```
+ 1 .......A.......
+ 2 .......N.......
+ 3 .......A.......
+ 4 .......G.......
+ 5 .......R.......
+ 6 .......A.......
+ 7 ....#..M...#...
+ 8 ..#CROSSWORD#..
+ 9 ...#PUZZLE#....
+10 ...............
+```
+
+  ANAGRAM is the first 7 letters of a 15-letter entry, which is why the Autofill header counts 2 theme words (`getThemeEntries` counts only fully theme-locked slots) and why autofill and Verify report column 8. The first run produced the same placement from the same fixture. This is #19 defect 3, ruled out of scope (spec §4 item 4, §1 keeps #19's backend half stretch).
+- Observation (no spec text; not judged): `Open saved` with nothing saved renders an empty list and no message, so the click shows no response. Saves exist only after `Save grid` or the 30 s autosave (`AUTOSAVE_MS`), which the first run's slower pace reached and this one did not.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 55 requests (`serve-F-TOUR2.log`); browser tool 1, `GET /api/progress/7eb849ef-…` 503 on the `C?T` search, which the server log records as 200.
+- Evidence: `F-TOUR2-clean-storage.txt`, `clone2-494ddb8.txt`, `SETUP-494ddb8.log`, `serve-F-TOUR2.log`, `F-TOUR2-autofill-rail-closes-theme.jpg`
+- Verdict: PASS · Severity: — · Known: #19 defect 3 (theme word abutting fill), out of scope
