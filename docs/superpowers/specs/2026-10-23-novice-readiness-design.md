@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.19** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.20** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -836,7 +836,7 @@ real reason (above) instead of a stale offer.
   - `npm install` becomes `npm ci`, which never writes `package-lock.json`, so setup leaves the tracked
     tree clean (#49). `npm ci` fails outright if `package.json` and the lock disagree, so the plan first
     runs it on a fresh clone with the Node LTS the README names; if it fails, the lock is regenerated
-    once with that Node and committed, and SETUP-1, SETUP-3 and E2-SETUP-1 confirm it.
+    once with that Node and committed, and SETUP-1 and SETUP-3 confirm it.
 - **`run.py`:** `debug=False` by default; `FLASK_DEBUG=1` turns debug on. The docstring and the README's
   dev-mode section say so.
 - **Port (I6):** `run.py` reads the `PORT` environment variable, default 5000 (it hard-codes 5000 today).
@@ -855,20 +855,21 @@ goal is installs by people who will not know it is on.
 ## 6. Acceptance
 
 **[SPEC]** The plan's last task re-runs these cases on a fresh clone under the 2026-10-22 run's method
-(E1 and E2 environments, the iframe viewport method of L3/L4), recording each in a new run log next to
+(on macOS only: E1, the Mac's Homebrew `python3` and `node` under a clean `env -i` environment, run after a previous install is removed; the iframe viewport method of L3/L4), recording each in a new run log next to
 the old one:
 
 | Area | Cases | Pass criterion |
 |---|---|---|
-| Install | SETUP-1, SETUP-2, SETUP-3, E2-SETUP-1, SERVE-1 | Setup completes, the tree stays clean, debug off |
+| Install | SETUP-1, SETUP-2, SETUP-3, SERVE-1 | Setup completes, the tree stays clean, debug off |
 | New: ZIP | SETUP-1 and the README `pattern`, `analyze` and `fill` examples on a GitHub "Download ZIP" extract (not a clone), following the README's `chmod +x setup.sh` | Setup completes; the examples run; Search for `C?T` returns CAT, COT and CUT; `chmod +x` alone is enough |
-| New: LINUX | `./setup.sh` on Debian or Ubuntu (a Docker `debian:12` and `ubuntu:24.04` container is acceptable) with and without `python3-venv`; `npm ci` on Node 18 | With: completes. Without: exits 1 with the `Install python3-venv` message and no partial `venv/` left; a re-run after installing it succeeds. Node 18: `npm ci` completes and leaves `package-lock.json` unchanged |
 | Grid | G1, G3, G8, G9 | New grid, discoverable black squares, no Heatmap toggle, save restored |
 | New: SAVE-NAMED | Autosave a grid, then Save under a name, Open saved, Delete; fill storage until a write fails | Autosave keeps one entry per grid; the name prompt appears only on Save; Open asks the confirm; the quota text shows on an explicit Save |
 | Grid guards | New: SR-PLACE (place a Search result across a black square and a theme-locked cell); new: CL-CLEAR (Verify flags cells, retype them, Clean) | Protected cells unchanged; no red cells after "Grid is clean" |
 | New: CL-CLEAN-GUARD | Theme-lock a word, type an invalid word elsewhere, press Clean; once with Cancel, once with the confirm accepted | The confirm shows `Clean will remove N letters` with `N` equal to the non-theme-locked letters in the slots Clean flags (Clean blanks every cell of a flagged slot, so a crossing letter counts too); Cancel changes nothing, including `isError`; accepting removes those letters and every theme-locked letter is unchanged |
 | New: PORT | Start with `PORT=<other>` while :5000 is held, and with the port in use; the Vite proxy with the same `PORT` | The app serves on `<other>`; the in-use case prints `Port <n> is in use. Start with PORT=<other> python3 run.py`, no traceback |
 | New: SETUP-MISSING | `setup.sh` with each tool (python3, node, npm) absent in turn; `FLASK_DEBUG=1 python3 run.py` | Each prints its `Missing: <tool> <minimum version> — install from <url>` and exits 1; debug is off unless `FLASK_DEBUG=1` |
+| New: CLEAN-PREV | On a Mac that had the 2026-10-22 version (`4678406`) installed and used: clear the origin's browser storage, serve `4678406` and save one grid, delete its folder (keeping the browser's storage), then a fresh clone, `./setup.sh` and open the app | Setup builds a new `venv/` whose `venv/bin/python --version` equals E1's `python3 --version`; `which -a python3 node npm npx pip3` under E1 is pasted; the app loads with no blank page and its console-error count is pasted; each of the old version's saved entries either opens or is reported in a plain message, never a crash. If `4678406` cannot serve, the storage part is NOT-TESTABLE with the reason pasted |
+| New: MACOS | `setup.sh` as macOS runs it; the Python requirements on Homebrew `python3` 3.14; port 5000 before any server starts | `head -1 setup.sh` and `/bin/bash --version` are pasted and setup completes under that bash; the pip install log is kept and `grep -c 'Building wheel'` on it reads 0 (wheels only); `lsof -nP -iTCP:5000 -sTCP:LISTEN` is pasted, and where :5000 is free the log says the in-use path is covered by PORT |
 | New: F-WORKFLOW | On a fresh clone, following only the README: New grid 15x15, black squares with `Symmetry` on, load theme words with `Choose File`, `Apply All Best Placements`, fill one slot from a Search result, `Start Autofill` for the rest, `Verify words`, `Clean grid` if anything is red, `Undo` and `Redo` once each, `Save grid` under a name, reload, `Open saved`, Export JSON, HTML and Text | Every step can be done from the README and the visible controls alone, with no dead end; each step shows its result on the grid or in a message; across the whole run the browser console shows no uncaught error and the network log no 5xx response (both counts pasted into the log) |
 | New: F-TOUR | Follow README "Using the app" literally, start to finish | Every step works as written; every backticked control is where the README says |
 | New: F-IMPORT | `Upload File` with `example_11x11.json`, `example_15x15.json` and `example_21x21.json`; `Paste JSON` with one of them; import over a grid with letters; a malformed file and malformed pasted text | The grid matches the file (size and black squares); importing over letters asks the replace confirm; malformed input shows a plain message, no crash or blank grid, and the current grid is unchanged |
@@ -1158,3 +1159,12 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   summary, which could report success for a replaced document's words or failure for an intended drop; a
   closed run now shows no summary and its loading toast is dismissed when the panel closes. Beat: per-run
   toast ids (they only buy a toast that outlives the panel, which F1 says it should not).
+- 0.2.20 (2026-10-26): §6 acceptance runs on macOS only, on this Mac, sandboxed. Owner 2026-10-25 19:14,
+  Arthur: "focus only my friends setup (macOS, previous installation to clean, including python/package
+  installation, clean slate and fresh start)". Owner 2026-10-25 19:50, Arthur: "This Mac, sandboxed". The
+  friend's setup, per Arthur: Homebrew Python, nothing installed outside the project venv. E1 becomes the
+  Mac's Homebrew `python3` and `node` under `env -i`. E2 (Xcode CLT python) and the LINUX row are dropped;
+  Linux stays supported in §1 and §5 but no run accepts it. New rows: CLEAN-PREV (the previous install
+  removed, the browser's storage from it kept) and MACOS (bash 3.2, wheels on 3.14, :5000). Beat: a cloud
+  session (Ubuntu 24.04 x86_64 with Python and Node preinstalled and no browser, so it cannot exercise the
+  friend's macOS and Homebrew setup) and a cloud plus local split (too costly).

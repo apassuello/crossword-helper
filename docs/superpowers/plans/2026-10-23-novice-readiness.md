@@ -3250,7 +3250,7 @@ Worktree `../crossword-helper-undo`, branch `feat/undo-redo`, on `origin/main` a
 ## Phase 8: acceptance (spec §6)
 
 **Method (binding, from `docs/dev/qa/2026-10-22-fresh-install-run.md`).**
-- Fresh clones of `origin/main` after Phase U merges (the phases landed on `main` through PRs; the old `feat/novice-readiness` tip predates them): E1 = CPython 3.13.7 (uv download only) + current Node LTS; E2 = the Xcode CLT `/usr/bin/python3` first on `PATH` + the same Node. Wrapper scripts run one command string under `env -i` (ENV-1, ENV-2).
+- Fresh clones of `origin/main` after Phase U merges (the phases landed on `main` through PRs; the old `feat/novice-readiness` tip predates them): Platform: macOS only, on this Mac, sandboxed (owner 2026-10-25 19:14 and 19:50; spec 0.2.20). E1 = the Mac's Homebrew `python3` (`/opt/homebrew/bin/python3`, 3.14.3 here) and Homebrew `node`/`npm`/`npx` (26.7.0, Homebrew's current release, which is what a friend's `brew install node` gives), reached through `$SB/bin`, a directory holding only symlinks to those four binaries, so nothing else from `/opt/homebrew/bin` leaks in. A wrapper script runs one command string under `env -i` (ENV-1). E2 and the Linux row are dropped.
 - Functional cases run top-level on `http://127.0.0.1:5000` (ENV-3: the browser tool cannot set the window size; `localhost` carries a stored page zoom). Layout cases (TH5 at the desktop viewport and at 1024 px; the Lists rows if re-run) are measured inside a same-origin iframe sized exactly 1440×900 and 1024×768, reading the iframe's own `innerWidth/innerHeight`, as L3 and L4 did.
 - Evidence goes to `/Users/apa/projects/crossword-helper/.handoff/artifacts/<YYYY-MM-DD>-novice-readiness/` (gitignored; exists only in the main checkout). Reuse `…/2026-10-22-fresh-install/driver/api_probe.py` and `api_probe2.py` as the model for API-level observations (they hard-code `/private/tmp/crossword-fresh/crossword-helper/data/grids/` and `http://127.0.0.1:5000/api`; copy and adapt the paths, do not edit the originals).
 - The run log is `docs/dev/qa/YYYY-MM-DD-novice-readiness-run.md`, dated the day it runs, using the old log's case-block format verbatim (`### <ID> — <title>` / Phase · Env · Viewport / Steps / Expected / Observed / Evidence / Verdict: PASS|FAIL|BLOCKED|NOT-IMPLEMENTED|UNSPECIFIED|NOT-TESTABLE · Severity · Known). Observed values are pasted command output, never typed.
@@ -3271,50 +3271,47 @@ Worktree `../crossword-helper-undo`, branch `feat/undo-redo`, on `origin/main` a
 
 **Files:** Create: `docs/dev/qa/YYYY-MM-DD-novice-readiness-run.md` (header only); scratch `SB=$(mktemp -d)` for tools, clones and fixtures.
 
-**Wrappers, verbatim shape (from the 2026-10-22 run; `$SB` is this run's sandbox):**
+**Wrapper, verbatim shape (from the 2026-10-22 run; `$SB` is this run's sandbox):**
 
 ```bash
 # $SB/e1.sh — one command string under the E1 environment
-exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:$SB/tools/python/<cpython-3.13.7-dir>/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm LANG=en_US.UTF-8 /bin/bash -c "$1"
-# $SB/e2.sh — the same without the E1 python segment
-exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm LANG=en_US.UTF-8 /bin/bash -c "$1"
+exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm LANG=en_US.UTF-8 /bin/bash -c "$1"
 ```
 
 - [ ] **Step 1: Pin the artefact.** `git fetch origin && git rev-parse --short origin/main` is the sha under test. Everything below clones exactly that sha.
-- [ ] **Step 2: Tools.** `UV_PYTHON_INSTALL_DIR="$SB/tools/python" uv python install 3.13.7`; Node LTS tarball into `$SB/tools/node` with its SHA-256 verified against `SHASUMS256.txt`; write `e1.sh`, `e2.sh`; run the ENV-1/ENV-2 probe (`python3 --version`, `which -a python3 node npm`, `env`) through each and keep the output.
-- [ ] **Step 3: Clones.** `git clone https://github.com/apassuello/crossword-helper.git "$SB/e1/crossword-helper"` (a fresh clone, as a novice gets) and `…/e2/crossword-helper`; `git -C <clone> checkout <sha>`; `git -C <clone> status --short` empty in both (CLONE-1).
+- [ ] **Step 2: Tools.** `mkdir -p "$SB/bin" "$SB/home" && ln -s /opt/homebrew/bin/python3 /opt/homebrew/bin/node /opt/homebrew/bin/npm /opt/homebrew/bin/npx "$SB/bin/"`; write `e1.sh`; run the ENV-1 probe (`python3 --version`, `node --version`, `which -a python3 node npm npx pip3`, `env`) through it and keep the output.
+- [ ] **Step 2b: Previous install, then clean slate (owner 2026-10-25 19:14; spec CLEAN-PREV).** In this order:
+  1. Before anything is served, clear the browser's storage for `http://127.0.0.1:5000` (and `http://localhost:3000`): Phase 6, Phase U and the 2026-10-22 runs used that origin, so it holds new-version entries that would contaminate the fixture. Paste `localStorage.length` = 0 from the console.
+  2. `git clone https://github.com/apassuello/crossword-helper.git "$SB/old/crossword-helper"`, then `git -C "$SB/old/crossword-helper" checkout 4678406`, the version a friend who installed before the novice-readiness work has. Run its own setup the way its README then said, under `e1.sh`, and read the exit code on its own line.
+  3. If it fails, a partial `venv/` and `node_modules/` is a realistic previous install: record the exit code and the failing output, keep the folder, and go on. If the old version serves, start it on `127.0.0.1:5000`, make and save one grid in the browser, paste `Object.keys(localStorage)`, then stop the server. If it cannot serve, the storage part of CLEAN-PREV is NOT-TESTABLE with the reason pasted; never write a storage entry by hand.
+  4. Clean slate: stop anything on :5000 and :3000, then `rm -rf "$SB/old"` (the whole folder, with `venv/`, `node_modules/` and `frontend/dist/`). Keep the browser storage on purpose, because the friend's browser keeps it too. Paste `ls -a "$SB/home"` and `/opt/homebrew/bin/python3 -m pip list --user` to show nothing was installed outside the folder.
+- [ ] **Step 3: Clones.** `git clone https://github.com/apassuello/crossword-helper.git "$SB/e1/crossword-helper"` (a fresh clone, as a novice gets); `git -C <clone> checkout <sha>`; `git -C <clone> status --short` empty in the clone (CLONE-1).
 - [ ] **Step 4: Fixtures.** Recreate F7 (non-ASCII: the words of L11, `CAFÉ`, `NAÏVE`, `ÜBER`, plus one `ß`, one `Æ` and one `Ø` word) from the 2026-10-22 definition (`FIX-1` in the old log; fixtures are under `/private/tmp/crossword-fresh/fixtures/` only while that directory survives). Fixtures for AF-BLOCK-LEN and AF-LOCKED-CROSS are built in Task 8.6 when needed. Keep all under `$SB/fixtures`.
-- [ ] **Step 5: Write the header** of the run log: clone sha, E1/E2 interpreter and Node versions (pasted), the ENV-3 viewport method sentence, and a coverage table with one row per §6 "Area" cell (copied from the spec, one line each) whose Verdict column is filled by Tasks 8.3-8.7.
+- [ ] **Step 5: Write the header** of the run log: clone sha, the E1 interpreter and Node versions (pasted), the ENV-3 viewport method sentence, and a coverage table with one row per §6 "Area" cell (copied from the spec, one line each) whose Verdict column is filled by Tasks 8.3-8.7.
 - [ ] **Step 6: Commit the header:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness acceptance run, header and environment"`.
 
-### Task 8.3: install-side rows (E1, E2, host)
+### Task 8.3: install-side rows (E1, host)
 
 §6 rows, copied verbatim (the checklist is these rows; do not paraphrase):
 
 | Area | Cases | Pass criterion |
 |---|---|---|
-| Install | SETUP-1, SETUP-2, SETUP-3, E2-SETUP-1, SERVE-1 | Setup completes, the tree stays clean, debug off |
+| Install | SETUP-1, SETUP-2, SETUP-3, SERVE-1 | Setup completes, the tree stays clean, debug off |
 | New: ZIP | SETUP-1 and the README `pattern`, `analyze` and `fill` examples on a GitHub "Download ZIP" extract (not a clone), following the README's `chmod +x setup.sh` | Setup completes; the examples run; Search for `C?T` returns CAT, COT and CUT; `chmod +x` alone is enough |
 | New: PORT | Start with `PORT=<other>` while :5000 is held, and with the port in use; the Vite proxy with the same `PORT` | The app serves on `<other>`; the in-use case prints `Port <n> is in use. Start with PORT=<other> python3 run.py`, no traceback |
 | New: SETUP-MISSING | `setup.sh` with each tool (python3, node, npm) absent in turn; `FLASK_DEBUG=1 python3 run.py` | Each prints its `Missing: <tool> <minimum version> — install from <url>` and exits 1; debug is off unless `FLASK_DEBUG=1` |
+| New: CLEAN-PREV | On a Mac that had the 2026-10-22 version (`4678406`) installed and used: clear the origin's browser storage, serve `4678406` and save one grid, delete its folder (keeping the browser's storage), then a fresh clone, `./setup.sh` and open the app | Setup builds a new `venv/` whose `venv/bin/python --version` equals E1's `python3 --version`; `which -a python3 node npm npx pip3` under E1 is pasted; the app loads with no blank page and its console-error count is pasted; each of the old version's saved entries either opens or is reported in a plain message, never a crash. If `4678406` cannot serve, the storage part is NOT-TESTABLE with the reason pasted |
+| New: MACOS | `setup.sh` as macOS runs it; the Python requirements on Homebrew `python3` 3.14; port 5000 before any server starts | `head -1 setup.sh` and `/bin/bash --version` are pasted and setup completes under that bash; the pip install log is kept and `grep -c 'Building wheel'` on it reads 0 (wheels only); `lsof -nP -iTCP:5000 -sTCP:LISTEN` is pasted, and where :5000 is free the log says the in-use path is covered by PORT |
 
-**Case procedures (the 2026-10-22 definitions, re-run):** SETUP-1 = `$SB/e1.sh "cd <clone> && chmod +x setup.sh && ./setup.sh"` timed, exit code read on its own line; SETUP-2 = `venv/bin/python --version`, `venv/bin/pip list`, `npm ls --depth=0`, `ls -l frontend/dist/index.html`; SETUP-3 = `git status --short` and `git diff --stat` in the clone after setup (pass: empty, "the tree stays clean"); E2-SETUP-1 = the same setup in the E2 clone; SERVE-1 = `source venv/bin/activate`, `python3 run.py` in the background, `curl` of `/` (200, contains `<div id="root">`) and `/api/health`, and the server banner must read debug off (no "Debugger is active", no PIN). ZIP: `git archive --format=zip -o "$SB/zip/crossword-helper.zip" <sha>`, extract with `unzip` into a new empty directory, `chmod -x setup.sh` first if the extract kept the mode (GitHub's ZIP does not reliably), then follow the README only: `chmod +x setup.sh && ./setup.sh`, the README `pattern`, `analyze` and `fill` examples verbatim, then `python3 run.py` and, in the browser, Search `C?T`. PORT and SETUP-MISSING: the exact commands of Task 1.2 Step 5 and Task 1.4 Step 6, run under E1, with `PORT` also exported to `npm run dev` and `curl http://127.0.0.1:3000/api/health` through the proxy.
+**Case procedures (the 2026-10-22 definitions, re-run):** SETUP-1 = `$SB/e1.sh "cd <clone> && chmod +x setup.sh && ./setup.sh"` timed, exit code read on its own line; SETUP-2 = `venv/bin/python --version`, `venv/bin/pip list`, `npm ls --depth=0`, `ls -l frontend/dist/index.html`; SETUP-3 = `git status --short` and `git diff --stat` in the clone after setup (pass: empty, "the tree stays clean"); SERVE-1 = `source venv/bin/activate`, `python3 run.py` in the background, `curl` of `/` (200, contains `<div id="root">`) and `/api/health`, and the server banner must read debug off (no "Debugger is active", no PIN). ZIP: `git archive --format=zip -o "$SB/zip/crossword-helper.zip" <sha>`, extract with `unzip` into a new empty directory, `chmod -x setup.sh` first if the extract kept the mode (GitHub's ZIP does not reliably), then follow the README only: `chmod +x setup.sh && ./setup.sh`, the README `pattern`, `analyze` and `fill` examples verbatim, then `python3 run.py` and, in the browser, Search `C?T`. PORT and SETUP-MISSING: the exact commands of Task 1.2 Step 5 and Task 1.4 Step 6, run under E1, with `PORT` also exported to `npm run dev` and `curl http://127.0.0.1:3000/api/health` through the proxy. CLEAN-PREV = the fresh clone of Step 3 after Task 8.2 Step 2b, with the observables its row names; a FAIL on the old-storage part returns to Phase 6 (saves). MACOS = read during SETUP-1: `head -1 setup.sh` and `/bin/bash --version` first, the setup run with its output teed to `$SB/logs/setup-e1.log`, then `grep -c 'Building wheel' $SB/logs/setup-e1.log` on its own line; `lsof` of :5000 before Step 1 starts.
 
-- [ ] **Step 1:** run each case, one `### <ID>` block per case in the run log (SETUP-1, SETUP-2, SETUP-3, E2-SETUP-1, SERVE-1, ZIP, PORT, SETUP-MISSING), evidence files under the evidence dir.
-- [ ] **Step 2:** fill the coverage-table rows for these four areas. Any FAIL: STOP and report.
+- [ ] **Step 1:** run each case, one `### <ID>` block per case in the run log (SETUP-1, SETUP-2, SETUP-3, SERVE-1, ZIP, PORT, SETUP-MISSING, CLEAN-PREV, MACOS), evidence files under the evidence dir.
+- [ ] **Step 2:** fill the coverage-table rows for these six areas. Any FAIL: STOP and report.
 - [ ] **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, install rows"`.
 
-### Task 8.4: Linux row (containers)
+### Task 8.4: dropped
 
-§6 row, verbatim:
-
-| Area | Cases | Pass criterion |
-|---|---|---|
-| New: LINUX | `./setup.sh` on Debian or Ubuntu (a Docker `debian:12` and `ubuntu:24.04` container is acceptable) with and without `python3-venv`; `npm ci` on Node 18 | With: completes. Without: exits 1 with the `Install python3-venv` message and no partial `venv/` left; a re-run after installing it succeeds. Node 18: `npm ci` completes and leaves `package-lock.json` unchanged |
-
-**Procedure (per image `debian:12` and `ubuntu:24.04`):** mount the E1 clone read-only at `/src`, copy it to `/work` inside the container, `apt-get update`, install `python3`, `nodejs`, `npm` (not `python3-venv`), run `./setup.sh`, read its exit code on its own line, `ls -d venv` (must be absent), keep the output. Then `apt-get install -y python3-venv`, run `./setup.sh` again. Record `node --version` and `python3 --version` from the container (the distribution Node must be 18 or later for the README's "distribution package" path; if it is not, record that as the finding). Node 18 `npm ci`: with a Node 18 in the container, `npm ci` then `git diff --exit-code -- package-lock.json` (exit 0 = unchanged). If Docker is unavailable: record BLOCKED and STOP; do not substitute.
-
-- [ ] **Step 1:** run both images; one case block per image-and-state. **Step 2:** fill the coverage row. **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, linux rows"`.
+Linux acceptance is out of this run (owner 2026-10-25 19:14, macOS only; spec 0.2.20). Linux stays supported by `setup.sh` (spec §1, §5); no run re-accepts it.
 
 ### Task 8.5a: fundamentals rows (browser and README, E1), run before the detailed rows
 
@@ -3335,7 +3332,7 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 
 **Order:** F-TOUR and F-WORKFLOW first, on the fresh E1 clone with clean browser storage, since they are the novice's first session; then F-IMPORT, F-EDIT, F-THEME-LOAD, F-LISTS, F-SEARCH, F-EXPORT, F-RESTORE. F-FEEDBACK is judged across every browser row of 8.5a-8.6 and closed in Task 8.7. Console errors and 5xx responses are read with the browser tool's console and network logs, and the counts pasted, never typed. Fixtures (the theme list for F-THEME-LOAD, the ASCII word list for F-LISTS) go under `$SB/fixtures`.
 
-**Theme locks in F-EXPORT (owner):** not required to round-trip. If they don't, the row passes and Task 8.7 adds one plain-language line to README "Known limitations".
+**Theme locks in F-EXPORT (owner):** not required to round-trip. If they don't, the row passes; README "Known limitations" already says so (added in Phase U, `5659f30`).
 
 - [ ] **Step 1:** run each case in the browser at `http://127.0.0.1:5000` (E1 server running); one `### <ID>` block per case; evidence in the evidence dir. **Step 2:** fill the coverage rows. Any FAIL: STOP and report. **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, fundamentals rows"`.
 
@@ -3359,6 +3356,8 @@ exec /usr/bin/env -i HOME="$SB/home" PATH="$SB/tools/node/bin:/usr/bin:/bin:/usr
 | New: SAVE-TABS | Open one saved grid in two tabs, edit and save in both | The second save forks `<name> (copy)`; neither tab's work is lost (S4) |
 
 **Case definitions carried from the 2026-10-22 run:** G1 (new 15×15 from the Grid tool), G3 (place a black square), G8 (Heatmap toggle), G9 (Save, reload, grid persists), CL1 (Clues tool), A-SBS (Suggest Black Square in the Autofill panel), TH2b/TH3/TH5 as defined in that log; the new ids are defined by the rows above. TH5 and any layout measurement use the iframe method at 1440×900 and 1024×768. The quota step of SAVE-NAMED fills `localStorage` from the page until a write throws, then presses Save.
+
+UNDO's last case (Cmd/Ctrl+Z inside the Search pattern field) was not driven in Phase U (its drive pressed Cmd+Z in the save-name input); it is driven here.
 
 - [ ] **Step 1:** run each case in the browser at `http://127.0.0.1:5000` (E1 server running); one block per case id; screenshots/JSON in the evidence dir. **Step 2:** fill the coverage rows. Any FAIL: STOP and report. **Step 3: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness run, grid and theme rows"`.
 
@@ -3408,6 +3407,6 @@ wc -l < "$SB/areas.txt"
 while IFS= read -r a; do grep -qF -- "$a" "$RUN" || echo "MISSING: $a"; done < "$SB/areas.txt"
 ```
 Positive control: `areas.txt` is non-empty and the loop prints nothing only if every area is present; run it once against a copy of the log with one row deleted and confirm it prints `MISSING`.
-- [ ] **Step 3: Close the log.** Add the summary the old log's `summary.txt` served (verdict per area, pasted from the coverage table), and record every FAIL/BLOCKED with its owning phase. Close F-FEEDBACK from the observations of every browser row. If F-EXPORT recorded that theme locks do not survive the JSON round trip, add one plain-language line to README "Known limitations" and commit it with the log (owner, spec §1).
+- [ ] **Step 3: Close the log.** Add the summary the old log's `summary.txt` served (verdict per area, pasted from the coverage table), and record every FAIL/BLOCKED with its owning phase. Close F-FEEDBACK from the observations of every browser row.
 - [ ] **Step 4: Doc guard:** `bash scripts/docs-check.sh`, read the result on its own line.
 - [ ] **Step 5: Commit:** `git add docs/dev/qa/<run-log>`; `git diff --cached --stat`; `git commit -m "docs(qa): novice-readiness acceptance run, lists, CLI and close"`.
