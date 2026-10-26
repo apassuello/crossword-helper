@@ -82,7 +82,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-RESTORE | PASS on `494ddb8` | R1, R2 |
 | New: F-FEEDBACK | | |
 | Hidden | PASS on `494ddb8` (#53 and #54 still open though their symptoms are gone) | CL1, A-SBS, EXPORT-HIDE |
-| New: TH2b | | |
+| New: TH2b | PASS on `494ddb8` | TH2b |
 | New: TH3 | | |
 | New: TH4 | | |
 | New: TH5 | | |
@@ -760,3 +760,21 @@ status rc=0
 - Observations (not judged against a criterion): (1) "Removed 3 invalid words" counts the unfillable `X______________` slot as a third word although only two words were typed; the confirm's 9 letters are unaffected by it. (2) The locked `N` stays red after Clean, so after the guard works the grid still shows a red theme letter, as in #79.
 - Evidence: `serve-CL-CLEAN-GUARD.log`, `fixture-theme-grid-guards.txt`
 - Verdict: PASS · Severity: — · Known: #78 (toast count), #79 (residual red)
+
+### TH2b — Suggestions after a black square lands on an offered placement (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (id 1893513509, closed at the end of TH5); tab 1893513492, not created by this row, was open throughout and not touched. Criterion (plan 8.5, TH2b): "The list refreshes; that placement is no longer offered; nothing stale can be applied". Carried definition: `2026-10-22-fresh-install-run.md` TH2b (there FAIL, Known #19: the list did not change).
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), then `http://127.0.0.1:5000/` loaded; console and network tracking started at the first call after the load. Server log start line 1712 (window = lines 1713-1749, `serve-TH2b.log`). Fixture `fixture-theme-th2b.txt` (`ELEPHANT`, `GIRAFFE`, `ZEBRA`, `TIGER`). Panel positions are zero-based; the grid's own row and column numbers (header ruler) are one-based, so panel (row 8, col 7) is the grid's r9c8.
+- Steps and observed:
+  - Instrument slip, discarded: my first attempt dispatched synthetic mouse events without `clientX/clientY`, so the `.` landed on other cells (blacks at r8c7/r8c9 and later r9c6/r7c10, none on the cell I clicked). I discarded that grid with `15×15` → in-page confirm `Replace`, which gave a grid with 0 black squares and no theme words, and reran the row from the theme upload. The numbers below are from the rerun only.
+  - Empty 15×15 (grid string, rows joined by `/`: 15 rows of `...............`). Theme `Choose File` → `theme-th2b.txt`: `Loaded Words (4)` ELEPHANT (8) GIRAFFE (7) ZEBRA (5) TIGER (5).
+  - Suggestion list BEFORE (read from the DOM, panel positions): `ELEPHANT: (8,5 across) (6,3 across) (6,5 across) ; GIRAFFE: (0,6 down) (4,7 down) (4,6 down) ; ZEBRA: (7,0 across) (7,5 across) (6,5 across) ; TIGER: (5,7 down) (5,6 down) (5,8 down)` — 12 placements.
+  - Selected r9c8 (DOM click with real client coordinates), typed `.` (real key event). Black squares read from the SVG: `r7c8`, `r9c8` (Symmetry on adds the mirror). In panel terms the blacks are (6,7) and (8,7).
+  - Suggestion list AFTER (about 2.5 s later): `ELEPHANT: (9,5 across) (5,5 across) (5,6 across) ; GIRAFFE: (1,8 down) (4,6 down) (4,8 down) ; ZEBRA: (6,0 across) (7,5 across) (7,0 across) ; TIGER: (7,5 across) (5,6 down) (5,8 down)` — 12 placements.
+  - Checked by script, each listed placement's cells against the blacks: BEFORE, 6 placements crossed a black — `ELEPHANT 8,5 across`, `ELEPHANT 6,3 across`, `ELEPHANT 6,5 across`, `GIRAFFE 4,7 down`, `ZEBRA 6,5 across`, `TIGER 5,7 down`; AFTER, 0 cross a black, and none of those 6 is still offered (0 stale).
+  - Clicked the first `✓ Apply This Placement` in the new list (ELEPHANT, panel (9,5) across). Toast, first read ~1.2 s: "Applied ELEPHANT to grid". Grid before (no letters, blacks r7c8 r9c8) → after: `.............../.............../.............../.............../.............../.#........#..../.......#......./.............../.......#......./....#ELEPHANT#./.............../.............../.............../.............../...............`. ELEPHANT sits in the grid's row 10, c6-c13, 8 locked cells (accent triangles counted: 8); the two blacks I placed (r7c8, r9c8) are intact and ELEPHANT crosses neither; the applier added blacks r10c5 and r10c14 around the word and r6c2/r6c11 as their mirror-pair, as the Apply path did in SR-PLACE.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 37 requests in the window (`requests: 37 5xx: 0 4xx: 0`: `/api/health` 10, `/api/grid/validate` 6, `/api/number` 6, `/api/theme/suggest-placements` 6, `/api/theme/upload` 2, `/api/theme/apply-placement` 1). Browser tool: 0 of 24 `/api/` requests 5xx, all 200.
+- F-FEEDBACK notes: the black square and the refreshed list appeared by the 2.5 s read (the read was after a fixed wait; a tighter bound was not measured); no message tells the user the offered placements changed. `Apply This Placement` toast "Applied ELEPHANT to grid" and the grid change by the ~1.2 s read. No error message appeared.
+- Observations (not judged against a criterion): (1) The refreshed list holds 12 placements again, so a user cannot see that placements were removed. (2) Setup note: `15×15` on a grid with content asks an in-page `Replace` / `Cancel` confirm.
+- Evidence: `serve-TH2b.log`, `fixture-theme-th2b.txt`
+- Verdict: PASS · Severity: — · Known: #19 does not apply (the stale-list defect of the 2026-10-22 run no longer reproduces)
