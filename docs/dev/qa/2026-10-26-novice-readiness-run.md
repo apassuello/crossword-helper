@@ -88,7 +88,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: TH5 | PASS on `494ddb8` (Observation: the Save name prompt lies under the Theme panel) | TH5 |
 | New: UNDO | PASS on `494ddb8` | U1, U2, U3, U4, U5, U6, U7, U7b, U8, U9, U10 |
 | Autofill | PASS on `494ddb8` (A2 and A4: 11x11 filled 44/44 in about 1 s at panel defaults, typed letters unchanged; A3: Cancel on the 15x15 ends in `Cancelled by user` with `Keep partial fill` / `Reset`, Start back after `Reset`) | A2, A3, A4 |
-| Lists, CLI | | |
+| Lists, CLI | PASS on `494ddb8` (L11 folds and skips as ruled; SR4 hint and disabled button; SR2 first result inside the inspector at both sizes; `normalize` gives `HELLOWORLD`, needs the venv under E1) | L11, SR4, SR2, CLI-normalize |
 | New: AF-LOCK | PASS on `494ddb8` (cancel exercised under Beam: a Repair run ends in under 1 s) | AF-LOCK |
 | New: AF-BLOCK | PASS on `494ddb8` (`QX` blocked in pre-flight on the 11x11 example, the request itself accepted 202) | AF-BLOCK |
 | New: AF-BLOCK-LEN | PASS on `494ddb8` (Classic Crosswordese: `no words of length 6, 7, 11.`, no red cell, typed-word and empty grid) | AF-BLOCK-LEN |
@@ -1183,4 +1183,106 @@ STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
 - F-FEEDBACK notes: `Start Autofill` on the 11x11 -> `Successfully filled 44/44 slots!` and the filled grid by the 1.0 s poll; blocked attempt a -> `No word fits the highlighted letters.` with the slot tinted red within 0.5 s (plain language, no stack trace); on the 15x15, progress text updated about every 3 s and the final `Successfully filled 78/78 slots!` appeared at 18.6 s with the grid filled at once; no error text, no toast read.
 - Observations (not judged against a criterion): (1) 15x15 Repair at defaults took 18.6 s here; the 2026-10-22 run's A3 on this grid never reached an end because it was cancelled at 3 s, so there is no earlier time to compare. (2) The panel's `Autofill · N empty slots` header counts fell and rose between progress samples on the 15x15 (35, 38, 28) while a run was live, then read 0 at the end.
 - Evidence: `AF-DEFAULTS-11a-fills.json`, `AF-DEFAULTS-11a-sse.json`, `AF-DEFAULTS-11b-fills.json`, `AF-DEFAULTS-11b-sse.json`, `AF-DEFAULTS-15-fills.json`, `AF-DEFAULTS-15-sse.json`, `serve-AF-DEFAULTS.log`, `fixture-example_11x11.json`, `fixture-example_15x15.json`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### L11 — Upload fixture F7 (non-ASCII): accented words fold, `ß`/`Æ`/`Ø` words are skipped with `not letters only` (`494ddb8`)
+- Phase: 8.7 · Env: E1, the `494ddb8` clone (server log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (id 1893513523, closed at the end; tab 1893513492 untouched). Carried definition: L11 of `docs/dev/qa/2026-10-22-fresh-install-run.md` (there UNSPECIFIED, `CAFÉ` stored with its accent). Criterion (plan 8.7, spec §4 item 1): "the accented words appear folded (`CAFÉ`→`CAFE`, `NAÏVE`→`NAIVE`, `ÜBER`→`UBER`) and `ß`/`Æ`/`Ø` words are skipped with `not letters only`".
+- Pre-run: console and network tracking started right after the tab was created and the page loaded, both read once with `clear: true` (console: "No console messages found for this tab."), then the page was reloaded and the first action followed. Storage not cleared for this row (`localStorage.length` 3; the grid restored on load is irrelevant to Lists). Server log start line 714 (window = lines 715 to 769, `serve-Lists-CLI.log`, shared by the four cases of this task). Fixture `fixture-F7-nonascii.txt` (six lines, copied from `$SB/fixtures/F7-nonascii.txt`): `CAFÉ`, `NAÏVE`, `ÜBER`, `STRAßE`, `ÆTHER`, `SMØRBRØD`.
+- Steps and observed:
+  - U1 Lists rail → `Upload Wordlist` (`ALL WORDLISTS (6)`); the form shows `Wordlist Name:` (prefilled `F7-nonascii` from the file) and `Select File:`. the browser tool's file-input upload of the fixture → "Selected: F7-nonascii.txt (0.0 KB)". `Upload` → the dry-run Preview, pasted from `.wordlist-panel` text:
+    ```
+    Preview
+
+    3 valid words
+
+    3 skipped
+
+    not letters only: 3
+    CAFE	
+    NAIVE	
+    UBER	
+    Confirm
+    Cancel
+    ```
+    The Preview names the three kept words folded and gives the skip reason only as a count (`not letters only: 3`); it does not list which words were skipped.
+  - U2 To see which words were skipped, the same dry run was replayed once from Bash (`POST /api/wordlists/import`, body `name` `f7-dry`, the fixture `content`, `dry_run` true; `GET /api/wordlists/custom/f7-dry` afterwards → 404, so nothing was stored). Response:
+    ```
+    {"skipped":[{"line":4,"reason":"not letters only","text":"STRAßE"},{"line":5,"reason":"not letters only","text":"ÆTHER"},{"line":6,"reason":"not letters only","text":"SMØRBRØD"}],"words":[{"score":null,"word":"CAFE"},{"score":null,"word":"NAIVE"},{"score":null,"word":"UBER"}]}
+    ```
+    The skipped words are `STRAßE` (line 4), `ÆTHER` (5) and `SMØRBRØD` (6), each with reason `not letters only`.
+  - U3 `Confirm` → `POST /api/wordlists/import` 201 (the preceding dry run 200), `ALL WORDLISTS (7)`, card `F7-Nonascii` with tags `custom`, `uploaded`; its detail: "Uploaded from F7-nonascii.txt / Category: custom / Words: 3 / Words (3)": `CAFE`, `NAIVE`, `UBER`.
+  - U4 Stored list, `GET /api/wordlists/custom/f7-nonascii` → 200:
+    ```
+    {"metadata":{"key":"custom/f7-nonascii","name":"F7-Nonascii","word_count":3},"words":["CAFE","NAIVE","UBER"]}
+    ```
+    Folds: `CAFÉ`→`CAFE`, `NAÏVE`→`NAIVE`, `ÜBER`→`UBER` observed in the Preview, the card and the stored list; `ß`, `Æ`, `Ø` words skipped with `not letters only`.
+  - U5 Cleanup. The native `window.confirm` was stubbed immediately before the `Delete` click (it blocks the browser extension; the stub records the message and returns true): `window.__confirms` → `["Delete wordlist \"custom/F7-nonascii\"? This cannot be undone."]`. After: `ALL WORDLISTS (6)`, no `F7-Nonascii` card, `GET /api/wordlists` lists six keys with no `f7`, `data/wordlists/custom/` in the clone holds only `demo_words.txt`. The clone's custom lists are as before the row.
+- Console errors: browser tool, onlyErrors, tracking on since before the first action, read after SR2 (covers all four browser cases) → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 55 requests in the window, which covers L11, SR4, SR2 and CLI-normalize (`requests: 55 5xx: 0 4xx: 2`; the two 4xx are my own deliberate GETs: `custom/f7-dry` → 404 in U2 and `custom/F7-nonascii` → 404 after the delete). Browser tool: 2 of 30 `/api/` requests reported 503, both `GET /api/progress/<id>` (SSE, SR2's two searches) that the server log records as 200 (the known tool artefact).
+- F-FEEDBACK notes: file choice shows "Selected: F7-nonascii.txt (0.0 KB)" at once; `Upload` shows the Preview (counts, reason count, folded words) within the 1.5 s read; `Confirm` adds the card, `Words (3)` and the count (7) within 1.5 s, no toast; `Delete` asks the confirm (stubbed, message captured) and the card is gone within 1.5 s, no toast. No error arose.
+- Observations (not judged against a criterion): (1) the Preview reports skipped words only as a reason count, not by name; a novice who loses `STRAßE` is not told which word. (2) After the delete, `GET /api/wordlists/custom/f7-nonascii` (lowercase) still answered 200 with the three words (browser fetch at 23:05:38 and curl at 23:05:42, server log lines 29 and 31) while the exact-case `custom/F7-nonascii` answered 404, the file was gone from disk, and `GET /api/wordlists` no longer listed it. Whether that is a case-insensitive lookup or a stale cache I did not establish; no UI path reads that URL. (3) The upload name was derived from the file name (`F7-nonascii`) and shown as `F7-Nonascii`; the key is the lowercased `custom/f7-nonascii` but the delete message names `custom/F7-nonascii`.
+- Evidence: `fixture-F7-nonascii.txt`, `serve-Lists-CLI.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### SR4 — With every word list unticked the Search button is disabled with `Select at least one word list` (`494ddb8`)
+- Phase: 8.7 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, the tab of L11. Carried definition: SR4 of `docs/dev/qa/2026-10-22-fresh-install-run.md` (there UNSPECIFIED: the search ran and returned `CAT` from a source `builtin`, the button not disabled). Criterion (plan 8.7, spec §4 item 2): "untick every list, Search tab: the Search button is disabled with `Select at least one word list`".
+- Pre-run: as L11 (same tab, tracking on, window as under L11).
+- Steps and observed:
+  - V1 Search tab, `Search in wordlists:` six boxes read from the DOM: `Comprehensive Dictionary` ticked, the other five unticked (no `F7-Nonascii` entry, deleted in L11).
+  - V2 Pattern `C?T` entered (so an empty pattern cannot be the reason for a disabled button). Search button before unticking: `{disabled: false, text: "Search"}`.
+  - V3 Unticked the one ticked box (DOM `.click()`). Boxes read back: `[false,false,false,false,false,false]`. Search button: `{disabled: true, text: "Search"}`; pattern still `C?T`. Panel text, top: `Pattern Search / Search / Select at least one word list / Use ? for unknown letters. Example: C?T finds CAT, COT, CUT / Search in wordlists: ...`. The hint `Select at least one word list` is shown.
+- Console errors, 5xx: see L11 (one window, one console read for the four cases).
+- F-FEEDBACK notes: unticking the last box disables the button and shows the hint within 0.5 s; no request is sent, no error text.
+- Observations (not judged against a criterion): none. The 2026-10-22 SR4 behaviour (search ran on a `builtin` source) does not reproduce.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: none needed
+
+### SR2 — After a Search, the first result lies inside the inspector's visible rect with no user scroll, at 1440×900 and 1024×768 (`494ddb8`)
+- Phase: 8.7 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, the tab of L11, navigated to `/api/health` and a same-origin iframe added (ENV-3) at each size. Criterion (plan 8.7, spec §4 item 2 and 0.2.15): "default list ticked, search `C?T` in the Search tab at 1440×900 and 1024×768 (the iframe method): once results render, the first `.result-item` lies inside `.xw-inspector`'s visible rect with no user scroll".
+- Pre-run: as L11. Per size: a fresh iframe loaded `/`, Search tab opened, the default list read (only `Comprehensive Dictionary` ticked, as in F-LISTS), pattern `C?T` entered, `.xw-inspector` `scrollTop` read before pressing Search, then the Search button clicked by script; no wheel, key or scroll call was made by me.
+- Steps and observed (rects in the iframe's own viewport pixels, from `getBoundingClientRect`):
+  - W1 1440×900. iframe `innerWidth`×`innerHeight` = 1440×900. Before Search: `.xw-inspector` `scrollTop` 0, `scrollHeight` 846, `clientHeight` 846. Results header `Results (7)`; first `.result-item` text `CAT / 31 / comprehensive / 3 letters`.
+    ```
+    .xw-inspector      {"x":981,"y":54,"w":459,"h":846,"top":54,"bottom":900,"left":981,"right":1440}   visible rect (clipped to viewport): top 54, bottom 900, left 981, right 1440
+    first .result-item {"x":1013,"y":467.8046875,"w":379,"h":56.71875,"top":467.8046875,"bottom":524.5234375,"left":1013,"right":1392}
+    after: scrollTop 340.5, scrollHeight 1186, clientHeight 846
+    ```
+    467.8 ≥ 54 and 524.5 ≤ 900, 1013 ≥ 981 and 1392 ≤ 1440: inside.
+  - W2 1024×768. iframe `innerWidth`×`innerHeight` = 1024×768. Before Search: `scrollTop` 0, `scrollHeight` 747, `clientHeight` 706. `Results (7)`; first `.result-item` text `CAT / 31 / comprehensive / 3 letters`.
+    ```
+    .xw-inspector      {"x":645,"y":54,"w":379,"h":714,"top":54,"bottom":768,"left":645,"right":1024}   visible rect: top 54, bottom 768, left 645, right 1024
+    first .result-item {"x":677,"y":327.8046875,"w":299,"h":56.71875,"top":327.8046875,"bottom":384.5234375,"left":677,"right":976}
+    after: scrollTop 480.5, scrollHeight 1186, clientHeight 706
+    ```
+    327.8 ≥ 54 and 384.5 ≤ 768, 677 ≥ 645 and 976 ≤ 1024: inside.
+  - W3 `scrollTop` went from 0 to 340.5 (1440×900) and to 480.5 (1024×768) by itself after the results rendered; that is the panel scrolling the results into view (spec §4 item 2), not a user scroll.
+- Console errors, 5xx: see L11 (the two browser-tool 503s are the SSE GETs of these two searches, logged 200 by the server).
+- F-FEEDBACK notes: results appeared and the section scrolled into view within the 0.25 s polling steps plus 1.2 s settle; no spinner reading was taken beyond that; no error text.
+- Observations (not judged against a criterion): at 1024×768 the first result sits at y 328 of 768, at 1440×900 at y 468 of 900; both below the panel top, so the checklist and the word-list boxes are scrolled off, as the spec intends.
+- Evidence: —
+- Verdict: PASS · Severity: — · Known: none needed
+
+### CLI-normalize — `normalize 'Hello, World!'` returns `HELLOWORLD` (`494ddb8`)
+- Phase: 8.7 · Env: E1, the `494ddb8` clone · Browser: none (Bash). Criterion (plan 8.7, spec §4 item 3): `normalize "Hello, World!"` → `HELLOWORLD`, `normalized` `HELLOWORLD`.
+- Pre-run: the command as given, `$SB/e1.sh "cd $SB/e1/crossword-helper && python -m cli.src.cli normalize 'Hello, World!' --json-output"`, first returned `/bin/bash: python: command not found` (rc 127): under E1 `$SB/bin` links `python3`, not `python`, and the clone's `venv` is not active. Re-run with `source venv/bin/activate &&` before it, as the task allowed.
+- Steps and observed: `$SB/e1.sh "cd $SB/e1/crossword-helper && source venv/bin/activate && python -m cli.src.cli normalize 'Hello, World!' --json-output"` → rc 0, output:
+  ```
+  {
+    "original": "Hello, World!",
+    "normalized": "HELLOWORLD",
+    "rule": {
+      "type": "default",
+      "description": "Letters only",
+      "explanation": "No specific pattern matched - keeping letters only, uppercased",
+      "examples": [],
+      "confidence": "medium"
+    },
+    "alternatives": []
+  }
+  ```
+  `normalized` is `HELLOWORLD`.
+- Console errors, 5xx: not a browser case; the command does not touch the server.
+- F-FEEDBACK notes: not applicable (CLI).
+- Observations (not judged against a criterion): the README-style invocation `python -m cli.src.cli ...` needs the venv active under E1; without it `python` does not exist on `$SB/bin`. That is the E1 sandbox (symlinks to `python3` only), not the app.
+- Evidence: `CLI-normalize.txt` (the venv run's output and rc 0 as shown above; the file holds the output only)
 - Verdict: PASS · Severity: — · Known: none needed
