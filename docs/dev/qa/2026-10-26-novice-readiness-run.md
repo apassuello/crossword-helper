@@ -11,6 +11,12 @@ Spec: `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` §6 (0.2.20
   carries this branch's Task 8.1 README, so README and code under test are one sha from here. The 8.3 rows
   above ran on `e4e881e`; F-TOUR's re-run and every row after it run on a fresh clone of `494ddb8`
   (`clone2-494ddb8.txt`, `setup.sh` rc 0 in `SETUP-494ddb8.log`).
+- F-WORKFLOW theme list (owner 2026-10-26): a list whose Apply All placements do not abut each other, so the
+  workflow past autofill is exercised; the first list (PUZZLE/CROSSWORD/ANAGRAM) hits #19 defect 3, shown in
+  F-TOUR's re-run. The list was chosen by an API dry run of suggest + apply against the black pattern, not by
+  a browser run, so the 127.0.0.1:5000 storage was untouched.
+- Export downloads (owner 2026-10-26): allowed for F-WORKFLOW and F-EXPORT; each file is copied into the
+  evidence dir and compared with the grid.
 - Platform: macOS only, on this Mac, sandboxed (owner 2026-10-25; spec 0.2.20). E1 = Homebrew `python3` and
   `node`/`npm`/`npx`, reached through `$SB/bin` (symlinks to those four binaries only) under `env -i` by
   `$SB/e1.sh`. Under E1, `pip3` resolves to `/usr/bin/pip3`, since `$SB/bin` links no `pip3`; ENV-1 probe in
@@ -65,7 +71,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: SETUP-MISSING | PASS | SETUP-MISSING |
 | New: CLEAN-PREV | PASS | CLEAN-PREV |
 | New: MACOS | PASS | MACOS |
-| New: F-WORKFLOW | | |
+| New: F-WORKFLOW | PASS on `494ddb8` | F-WORKFLOW |
 | New: F-TOUR | PASS on `494ddb8` (FAIL on `e4e881e`, #91) | F-TOUR, F-TOUR re-run |
 | New: F-IMPORT | | |
 | New: F-EDIT | | |
@@ -404,3 +410,26 @@ status rc=0
 - 5xx (header ruling): server log 0 of 55 requests (`serve-F-TOUR2.log`); browser tool 1, `GET /api/progress/7eb849ef-…` 503 on the `C?T` search, which the server log records as 200.
 - Evidence: `F-TOUR2-clean-storage.txt`, `clone2-494ddb8.txt`, `SETUP-494ddb8.log`, `serve-F-TOUR2.log`, `F-TOUR2-autofill-rail-closes-theme.jpg`
 - Verdict: PASS · Severity: — · Known: #19 defect 3 (theme word abutting fill), out of scope
+
+### F-WORKFLOW — the whole basic workflow from the README and visible controls (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab group
+- Pre-run: storage cleared from `/api/health` (3 keys → 0), app reloaded; console and network logs cleared. Fixture `fixture-theme-workflow2.txt` (CROSSWORD, ENIGMA, REBUS, all in `comprehensive.txt`); black pattern copied by hand from `data/grids/example_15x15.json` (36 squares).
+- Steps and observed:
+  - W1 New grid `15×15` → `Total225 | Black0·0.0% | Filled0.0% | Words30`, no confirm (empty grid).
+  - W2 Black squares, `Symmetry` on (`... on`): 18 squares via click + `.`, mirrors placed → `Total225 | Black36·16.0% | Filled0.0% | Words78`, the example's pattern.
+  - W3 Theme `Choose File` → `Loaded Words (3)`.
+  - W4 `Apply All Best Placements` → toasts "Applied "CROSSWORD" to grid!", "Applied "ENIGMA" to grid!", "Applied "REBUS" to grid!"; `Total225 | Black38·16.9% | Filled10.7% | Words82` (2 boundary blacks added). ENIGMA down column 10 rows 1-6, REBUS across row 7 cols 11-15, CROSSWORD across row 8 cols 4-12, each ended by a black square or the edge.
+  - W5 Fill one slot from Search: selected 1-Across (r1c1); rail `Search` closed nothing and showed "Selected: Row 1, Col 1 (across)" / "Click a word to fill it in the grid"; pattern `?????` → `Results (50)`; clicked the first result → row 1 `AEONS....E.....`, Filled 13.4%.
+  - W6 `Start Autofill` (header "Autofill · 78 empty slots, 3 theme words"; Repair, 5 min, Comprehensive Dictionary): busy 7 ms after the click; "Repairing: 8 conflicts left / 85% / Cancel" at 5 s; ended before 141 s with "Filled 80/80 slots — 8 entries may be invalid (use Verify Words to check)", `Keep fill` / `Reset`. `Keep fill` → `Filled100.0%`, theme words unchanged.
+  - W7 `Verify words` → "8 of 80 words flagged — 8 invalid: EAEN, OSRS, NRECE, RPYRO, ABEIT, NSSS, SENRR, ELANH", flagged letters red (`F-WORKFLOW-verify.jpg`).
+  - W8 `Clean grid` → "Clean will remove 34 letters" / `Clean` / `Cancel` → `Clean` → "Removed 8 invalid words (37 cells cleared), kept 72 valid words"; `Filled81.8%` (153 letters of 187: 34 removed, as the confirm said; the toast's 37 counts kept theme-locked letters, #78).
+  - W9 `Undo` → `Filled100.0%`; `Redo` → `Filled81.8%`, 153 letters.
+  - W10 `Save grid` → "Name this grid", typed `Workflow theme grid` → `Save` → "saved locally · just now"; storage `[{"name":"Workflow theme grid","savedAt":"2026-10-26T09:18:19.991Z"}]`.
+  - W11 Reload → "Restored "Workflow theme grid" (saved 2026-10-26 10:18)" with `Start blank`; grid string identical to the one read before the reload.
+  - W12 `Open saved` → `Workflow theme grid / 15×15 · 2026-10-26 10:18 / Open / Delete` → `Open` → "Replace the current grid? Unsaved changes are lost." → `Replace` → identical grid, `Undo` disabled.
+  - W13 Export JSON, HTML, Text → toasts "Generating JSON file...", "Generating HTML file...", "Generating TEXT file..."; `~/Downloads/crossword.json`, `.html`, `.txt` (copied as `F-WORKFLOW-export.*`). JSON grid vs the screen: letters and blanks match, 38 blacks, 153 letters; text == JSON; HTML 225 cells == JSON.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 55 requests in the F-WORKFLOW window (`serve-F-WORKFLOW.log`); browser tool 0 of 40 `/api/` requests (its log after the W11 reload).
+- Observations (not judged against a criterion): `Keep fill` is not named in the README but is the visible next step; W12's confirm says "Unsaved changes are lost" when the grid open is the save itself, unchanged; opening it shows no message, and the grid does not visibly change.
+- Evidence: `fixture-theme-workflow2.txt`, `serve-F-WORKFLOW.log`, `F-WORKFLOW-verify.jpg`, `F-WORKFLOW-export.json`, `F-WORKFLOW-export.html`, `F-WORKFLOW-export.txt`
+- Verdict: PASS · Severity: — · Known: #78 (Clean's toast count)
