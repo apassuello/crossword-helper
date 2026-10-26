@@ -91,7 +91,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | Lists, CLI | | |
 | New: AF-LOCK | PASS on `494ddb8` (cancel exercised under Beam: a Repair run ends in under 1 s) | AF-LOCK |
 | New: AF-BLOCK | PASS on `494ddb8` (`QX` blocked in pre-flight on the 11x11 example, the request itself accepted 202) | AF-BLOCK |
-| New: AF-BLOCK-LEN | | |
+| New: AF-BLOCK-LEN | PASS on `494ddb8` (Classic Crosswordese: `no words of length 6, 7, 11.`, no red cell, typed-word and empty grid) | AF-BLOCK-LEN |
 | New: AF-DEFAULTS | | |
 | New: AF-SUB2 | PASS on `494ddb8` (second stream via curl for 15 s on a 30.7 s Repair run on a blank 15×15) | AF-SUB2 |
 | New: AF-REFILL | PASS on `494ddb8` (partial fill via a cancelled Beam run; Start returns after Reset) | AF-REFILL |
@@ -1011,4 +1011,33 @@ status rc=0
 - F-FEEDBACK notes: `Start Autofill` -> `No word fits the highlighted letters.` in the panel and the two cells red, within the 2.5 s read (plain language, no stack trace, raw JSON or bare HTTP code); no toast; no busy state was visible.
 - Observations (not judged against a criterion): (1) The request is accepted (202) and the block arrives as a `complete` event with `blocked: true`, which is §2.2's design; "Run does not start" therefore means no solver, not no request. (2) The panel header still reads `Autofill · 43 empty slots` beside the block message.
 - Evidence: `AF-BLOCK-fills.json`, `AF-BLOCK-sse.json`, `serve-AF-BLOCK.log`, `fixture-example_11x11.json`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### AF-BLOCK-LEN — A single list with no words of some slot length: blocked with `no words of length ...`, no red cell, on a grid with a typed word and on an empty grid (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the AF-BLOCK row's tab (id 1893513519, closed at the end of this row; tab 1893513492 untouched). Criterion (plan 8.6, AF-BLOCK-LEN): "Tick a single list that has no word of some slot length in the grid (`awk '{print length($1)}' <list> | sort -n | uniq -c` shows which lengths it has); type a valid word elsewhere; Start" -> "Run does not start; `The selected word lists have no words of length N.`; no cell red, including the typed word. Repeat on an empty grid: the same block (M2)".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), `http://127.0.0.1:5000/` loaded; the console and network tracking on this tab was started before the AF-BLOCK row's first action and the console was cleared again at this row's start (read with `clear`, no messages). Server log start line 463 (window = lines 464-487, `serve-AF-BLOCK-LEN.log`). Fixture `example_11x11.json` imported (`Import` -> `Upload File` -> `Import Grid`).
+- List chosen: `Classic Crosswordese` (`data/wordlists/core/crosswordese.txt`), chosen because its lengths are 3 to 5 only; the panel's `Comprehensive Dictionary` was unticked after ticking it, so it is the single ticked list (DOM: ticked labels `["Classic Crosswordese"]`; request `wordlists` `["core/crosswordese"]`). The grid has slots of length 6, 7 and 11 (the `blocked_slots` below).
+- Plan command, run from Bash on that list (raw file, which has `#` comment lines and blank lines, so lengths 0 and 1 are comments/blanks):
+```
+$ awk '{print length($1)}' core/crosswordese.txt | sort -n | uniq -c
+   4 0
+   6 1
+  20 3
+ 320 4
+  97 5
+```
+  The words, comments excluded (`grep -v '^#' | awk -F';' '{print length($1)}'`, no `;` in the file): 20 of length 3, 320 of length 4, 97 of length 5. The list has no word of length 6, 7 or 11 (and none of 8, 9, 10, which the grid does not need). The server loaded `431` words from it (the last `running` sample: `Loaded 431 words, starting autofill`).
+- Instrument (rule 13): patch installed before Start. Proof: `__fills[0].body` non-empty with keys `size, grid, locked_cells, wordlists, timeout, min_score, algorithm, ...`, `"locked_cells":[[10,4],[10,5],[10,6]]`; status 202; task `233ee861-98d7-47ab-a97c-86ae3aeff40a`; 6 progress samples. Files (`ls -l`): `AF-BLOCK-LEN-fills.json` 1241 bytes, `AF-BLOCK-LEN-sse.json` 3501 bytes (typed-word run); `AF-BLOCK-LEN-empty-fills.json` 1221 bytes, `AF-BLOCK-LEN-empty-sse.json` 3500 bytes (empty-grid run).
+- Steps and observed:
+  - L1 Typed word: `ERA` at r10c4-c6 (real clicks and key events; `ERA` is in the ticked list, as `grep -c` of `^ERA` gave 1). Grid before Start (DOM): `...#...#.../...#...#.../.........../###....#.../......#..../...#...#.../....#....../...#....###/.........../...#...#.../...#ERA#...`. `Start Autofill`: at the 2.5 s read the panel was `Autofill · 43 empty slots` / `The selected word lists have no words of length 6, 7, 11.` / `Reset`; no banner, no `Cancel`.
+  - L2 Last SSE sample: `complete`, `success` false, `blocked` true, `reason` `no_word_of_length`, `blocked_cells` `[]`, `off_list_cells` `[]`; `blocked_slots` 13 entries, with lengths 11 (r2c0 across, r8c0 across, c5 down from r0), 6 (r4c0 across, r6c5 across, c4 down from r0, c6 down from r5) and 7 (c0, c1, c2 down from r4; c8, c9, c10 down from r0). One of the 11-long down slots has the typed `R` in it (pattern `??????????R`) and is still reported as a length block, with `blocked_cells` empty.
+  - L3 Red cells read from the DOM (`__red()`): `[]`: none, including `ERA`. The grid after the run is the same string as before Start. The request was accepted (`POST /api/fill/with-progress` 202); the block is the `complete` event of the stream, no solver progress sample.
+  - L4 Empty grid (M2): `Reset`, then `ERA` removed by clicking r10c6 with three `Backspace` and r10c4 with one (the first attempt left the `E`; the DOM read `...#E..#...`, then all removed); the DOM grid before Start has no letter (script `true`). Same list. `Start Autofill`: `Autofill · 44 empty slots` / `The selected word lists have no words of length 6, 7, 11.` / `Reset`; `locked_cells` `[]`; status 202; last sample `complete`, `blocked` true, `reason` `no_word_of_length`, `blocked_cells` `[]`, the same 13 slots; `__red()` `[]`.
+- Message vs the criterion: the criterion writes `The selected word lists have no words of length N.`; the observed text lists every missing length, `The selected word lists have no words of length 6, 7, 11.`, as spec §2.3 / PD-5F ("distinct lengths ascending joined by `, `") says. The grid needs three missing lengths, so a single `N` cannot occur on it; recorded as met.
+- Judgement against the criterion: blocked with the length message on the grid with a typed valid word and on the empty grid; no cell red in either (the typed word stays black); no solver ran (the request itself is accepted, 202, as in AF-BLOCK): met as written.
+- Console errors: browser tool, onlyErrors, tracking on before the first action of the AF-BLOCK row, read at the end of this row -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 24 requests in the window (`requests: 24 5xx: 0 4xx: 0`; 2 `POST /api/fill/with-progress` 202). Browser tool: 0 of 28 `/api/` requests (cumulative for the tab since the AF-BLOCK row) were 5xx.
+- F-FEEDBACK notes: `Start Autofill` (typed word) -> the message above in the panel within the 2.5 s read; `Start Autofill` (empty grid) -> the same message within the 2.5 s read; no toast, no red cell; plain language, no stack trace, raw JSON or bare HTTP code.
+- Observations (not judged against a criterion): (1) The panel header says `43 empty slots` / `44 empty slots` beside the block message. (2) A slot holding a typed letter but with no word of its length at all is reported as a length block, not `no_word_fits`, so no cell goes red; that is the check order of spec §2.1 as the run shows it.
+- Evidence: `AF-BLOCK-LEN-fills.json`, `AF-BLOCK-LEN-sse.json`, `AF-BLOCK-LEN-empty-fills.json`, `AF-BLOCK-LEN-empty-sse.json`, `serve-AF-BLOCK-LEN.log`
 - Verdict: PASS · Severity: — · Known: none needed
