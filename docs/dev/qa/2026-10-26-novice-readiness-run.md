@@ -77,7 +77,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-EDIT | PASS on `494ddb8` | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11 |
 | New: F-THEME-LOAD | PASS on `494ddb8` | T1, T2, T3 |
 | New: F-LISTS | PASS on `494ddb8` (default-selection wording: ruling asked) | L1, L2, L3, L4, L5, L6, L7 |
-| New: F-SEARCH | | |
+| New: F-SEARCH | PASS on `494ddb8` | S1, S2, S3, S4 |
 | New: F-EXPORT | | |
 | New: F-RESTORE | | |
 | New: F-FEEDBACK | | |
@@ -516,4 +516,20 @@ status rc=0
 - F-FEEDBACK notes: file choice shows "Selected: lists-upload.txt (0.0 KB)" at once; `Upload` shows the `Preview` (counts and words) within the 1.5 s read; `Confirm` adds the card, `Words (5)` and the count (7) within 2 s, with no toast; `Add Words to List` updates `Words: 7` within 1.8 s, no toast; `Delete` asks the confirm (stubbed, message captured) and the card is gone within 2 s, no toast. Search shows `Results (1)` or "No matching words found" within 2 s. No error arose.
 - Observations (not judged against a criterion): (1) the criterion says "the shipped lists are shown and selected by default": all six shipped lists are shown, but only one, Comprehensive Dictionary, is ticked by default, in both Search and Autofill; read as "a default selection is in force", this passes, read as "all six ticked" it would not — the orchestrator is asked to rule on the wording. (2) the uploaded list's name was derived from the file name (`lists-upload`) and shown as `Lists-Upload`; the upload form's `Wordlist Name:` was prefilled and not edited. (3) a newly uploaded list is unticked in Search and Autofill until the user ticks it. (4) `Show Stats` shows the same fields (Category, Words, Difficulty) that the card already carries; the toggle changes only its label to `Hide Stats`. (5) the delete message names the path `custom/lists-upload`, not the display name.
 - Evidence: `fixture-lists-upload.txt`, `serve-F-LISTS.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### F-SEARCH — default lists: `C?T`, a 6-letter all-`?` pattern, a no-match pattern, placing a result (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 2 → 0; keys `xw_theme`, `crossword_symmetry_enabled`; the earlier row's list was already deleted and no grid was saved), app reloaded to the default blank 15×15 grid (`Total 225 | Black 0·0.0% | Filled 0.0% | Words 30`); console log cleared before the reload, network log after it. Server log start line 381 (window = lines 382 on, `serve-F-SEARCH.log`).
+- Default lists, read from the Search tab's checkboxes: ticked = `Comprehensive Dictionary`; unticked = `Classic Crosswordese (431 words)`, `Expressions & Slang`, `Foreign Classics`, `Foreign Words`, `Demo Words`.
+- Steps and observed (each result list read from the page's `.result-item` elements; the script checks every displayed word against the pattern as a regex, `?` → `[A-Z]`, anchored, so length is checked too):
+  - S1 Pattern `C?T` → `Results (7)`: `CAT, CIT, COT, CRT, CST, CDT, CUT`; mismatches against the pattern and length: 0. Independent count on the list file: `grep -ixE 'C[A-Z]T(;.*)?' data/wordlists/comprehensive.txt` → `CAT CDT CIT COT CRT CST CUT`, the same seven.
+  - S2 Pattern `??????` → `Results (50)`, 50 items, lengths found `[6]`, mismatches: 0 (first six: `ARENOT, ARIOSE, ARISEN, ARISTO, ARNIES, ARTIES`). The list file holds 7329 six-letter words (`grep -icE '^[A-Z]{6}(;.*)?$'`); the code passes `maxResults: 50` (`PatternMatcher.jsx:73`), so the panel shows 50 of them under the header `Results (50)`.
+  - S3 Pattern `Q?Z??` → no `Results` header and no result items; the panel shows the message "No matching words found" (read from the page text beside `Min Score: 0`). The file holds 0 words matching `^Q[A-Z]Z[A-Z]{2}`.
+  - S4 Place a result: clicked cell r1c1 (blank grid) → "Selected: Row 1, Col 1 (across)" / "Click a word to fill it in the grid", the slot being row 1, 15 cells. Grid before: 15 rows of 15 `.`. Pattern `???????????????` (15) → `Results (50)`, mismatches 0, first `BURSTINTOFLAMES`, `DRAWINGTOACLOSE`, `GATHERINGCLOUDS`. Clicked the second result, `DRAWINGTOACLOSE`. Grid after, read from the SVG: row 1 `DRAWINGTOACLOSE`; rows 2-15 all `...............`; 15 letters in the grid, all in that slot; stats `Total 225 | Black 0·0.0% | Filled 6.7% | Words 30`; no black square touched. No toast (toast elements read empty).
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 20 requests in the window (`requests: 20 5xx: 0 4xx: 0`); browser tool 2 of 10 `/api/` requests reported 503, both `GET /api/progress/<id>` that the server log records as 200 (the known tool artefact).
+- F-FEEDBACK notes: each search shows `Results (N)` or "No matching words found" within the 2.5 s of my fixed-wait read (a tighter bound was not measured); clicking a result changes the grid by the 1.2 s read, with no toast or message. No error arose.
+- Observations (not judged against a criterion): (1) the Results header reads `Results (50)` for the 6-letter pattern although 7329 words match, so a user cannot tell from the header that the list is capped at 50 (same for the 15-letter pattern); (2) selecting a cell does not copy the slot's pattern into the Search field (it still held `Q?Z??` after the click, until I typed the new pattern); (3) the grid was a 15-letter slot, a placement over a longer slot than a typical entry.
+- Evidence: `serve-F-SEARCH.log`
 - Verdict: PASS · Severity: — · Known: —
