@@ -98,7 +98,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-LOCKED-CROSS | PASS on `494ddb8` (`SEE` score 6 < floor 30 and off-list `TTE` typed; all six crossing slots filled, `stuck_cells` empty) | AF-LOCKED-CROSS |
 | New: AF-GATE | PASS on `494ddb8` (Beam run 238.7 s on a blank 15×15; every writer disabled or inert, banner shown throughout) | AF-GATE |
 | New: AF-OFFLIST | PASS on `494ddb8` (`TTE` off-list: run filled 44/44, three cells red, toast named `TTE`) | AF-OFFLIST |
-| New: AF-NOLISTS | | |
+| New: AF-NOLISTS | PASS on `494ddb8` (all lists unticked: Start disabled, hint `Select at least one word list`) | AF-NOLISTS |
 | New: AF-VERIFY-STALE | PASS on `494ddb8` (Verify and Clean responses held back by a page-side delay, an instrument) | AF-VERIFY-STALE |
 | New: AF-SAVE-RUN | PASS on `494ddb8` (reload at 36.9 s of a Beam run; saved and restored grid equal the Start grid) | AF-SAVE-RUN |
 | New: SAVE-SIZE | PASS on `494ddb8` | SAVE-SIZE (Open saved and reload) |
@@ -1083,4 +1083,19 @@ STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
 - F-FEEDBACK notes: `Start Autofill` -> the filled grid and `Successfully filled 44/44 slots!` within the 1 s read; the off-list toast as in AF-OFFLIST; no error message arose.
 - Observations (not judged against a criterion): (1) The `stuck_cells` path was not exercised: the run filled everything, so only the "fills the crossing slots" arm of the criterion was observed. (2) `ANGLEE` (score 32) is the only crossing word within 2 points of the floor.
 - Evidence: `AF-LOCKED-CROSS-fills.json`, `AF-LOCKED-CROSS-sse.json`, `serve-AF-LOCKED-CROSS.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### AF-NOLISTS — Every word list unticked: Start is disabled with `Select at least one word list` (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, a new tab (id 1893513521, closed at the end of the last row of this group; tab 1893513492 untouched). Criterion (plan 8.6, AF-NOLISTS; spec I5): "Untick every word list" -> "Start is disabled with `Select at least one word list` (I5)".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), `http://127.0.0.1:5000/` loaded; the browser tool's console and network reads were first called on this tab right after the page load, before the first action, console cleared then. Server log start line 557 (window = lines 558-569, `serve-AF-NOLISTS.log`). Empty default grid (no import).
+- Steps and observed:
+  - N1 Clicked `Autofill`. Panel header `Autofill · 30 empty slots`; DOM ticked list checkboxes before the change: Comprehensive Dictionary only (of Comprehensive Dictionary, Classic Crosswordese, Expressions & Slang, Foreign Classics, Foreign Words, Demo Words); `Start Autofill` `disabled` false.
+  - N2 Clicked the Comprehensive Dictionary checkbox (DOM `.click()`), the only ticked list, which leaves every list unticked. Read from the DOM after 600 ms: ticked labels `[]`; `Start Autofill` button `<button class="xw-primary-btn" disabled="">Start Autofill</button>`, `disabled` = `true`; the hint element (`xw-insp-mini`) textContent `Select at least one word list`.
+  - N3 No `/api/fill` request was made (browser tool's `/api/` list since the page load: `GET /api/wordlists` 200 and the load requests only; no POST).
+- Judgement against the criterion: Start is disabled and the text is exactly the criterion's: met as written.
+- Console errors: browser tool, onlyErrors, tracking on before the first action, read at the end of the row -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 12 requests in the window (`requests: 12 5xx: 0 4xx: 0`). Browser tool: 0 of 1 `/api/` requests in the last read were 5xx (`GET /api/wordlists` 200).
+- F-FEEDBACK notes: unticking the last list -> Start disabled and the hint `Select at least one word list` visible by the 600 ms read (not timed more closely); no server call, no error message.
+- Observations (not judged against a criterion): none.
+- Evidence: `serve-AF-NOLISTS.log`
 - Verdict: PASS · Severity: — · Known: none needed
