@@ -75,7 +75,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-TOUR | PASS on `494ddb8` (FAIL on `e4e881e`, #91) | F-TOUR, F-TOUR re-run |
 | New: F-IMPORT | PASS on `494ddb8` | I1, I2, I3, I4, I5, I6 |
 | New: F-EDIT | PASS on `494ddb8` | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11 |
-| New: F-THEME-LOAD | | |
+| New: F-THEME-LOAD | PASS on `494ddb8` | T1, T2, T3 |
 | New: F-LISTS | | |
 | New: F-SEARCH | | |
 | New: F-EXPORT | | |
@@ -472,4 +472,18 @@ status rc=0
 - F-FEEDBACK notes: typing, arrows, `Enter`, `Tab`, `Backspace`, black squares, undo and redo all change the grid and the stats line at once (same read after the key, well under 2 s); `New grid` over content shows the replace confirm at once, then the new grid on `Replace`. No message or toast appears for any of them and none is needed beyond the grid change. No error message arose.
 - Observations (not judged against a criterion): `Backspace` on an empty cell moves back one cell without clearing; the browser tool's `period` key name did not reach the app (the `.` key typed as text did), a tool artefact, not an app defect; the `Black square` tool button in the Grid panel was not driven here (the key path was). The first 11×11 `New grid` confirm text was not read in E1 (a script error preceded the read); the 15×15 and 21×21 ones are quoted above.
 - Evidence: `serve-F-EDIT.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### F-THEME-LOAD — theme file with lowercase, blank and duplicate lines; a file with an invalid word (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab (new tab, same Chrome group)
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), app reloaded; console and network logs cleared. This clears the earlier rows' saved grids (those rows are recorded with their evidence). Server log start line 309 (the file had 305 lines before an API-only dry run of the fixture words, which added 4). Both cases run on a `New grid` `15×15` (Grid rail, `15×15`: `Total 225 | Black 0·0.0% | Filled 0.0% | Words 30`). Fixtures `fixture-theme-load-a.txt` (lines: `crossword`, an empty line, `PUZZLE`, `ANAGRAM`, `PUZZLE`) and `fixture-theme-load-b.txt` (the same five lines plus `AB` and `INTERNATIONALIZATION`, 20 letters).
+- Steps and observed:
+  - T1 (a) Theme rail → `Choose File` → `theme-load-a.txt`. Panel: `Loaded Words (3)` listing `CROSSWORD (9)`, `PUZZLE (6)`, `ANAGRAM (7)` — read from the page text: uppercase, each once (the lowercase `crossword` shown as `CROSSWORD`, the duplicate `PUZZLE` once, the blank line gone). `Placement Suggestions` appeared with `CROSSWORD (9 letters)` first: "Row 7, Col 3 (across)", "100/100", "Centered placement (symmetric), Good horizontal position, Long word (9 letters)".
+  - T2 (a) Clicked the first `✓ Apply This Placement` (CROSSWORD, "Row 7, Col 3 (across)"). Toast: `Applied "CROSSWORD" to grid!`; stats `Total 225 | Black 2·0.9% | Filled 4.0% | Words 34`. Grid read from the SVG: letters `CROSSWORD` in row 8, columns 4-12 (the suggestion's row and column are 0-based). Theme-lock mark: `CrosswordGrid.jsx` draws a folded-corner `path` (`fill="var(--accent)"`) only for `cell.isThemeLocked && !cell.isBlack`; in the DOM exactly 9 cells carry that path: r8c4:C r8c5:R r8c6:O r8c7:S r8c8:S r8c9:W r8c10:O r8c11:R r8c12:D — the 9 letters of the word and no other cell.
+  - T3 (b) With that grid and the three words loaded, `Choose File` → `theme-load-b.txt`. Message shown in the panel under the file name, as two lines: `AB: Too short (minimum 3 letters)` and `INTERNATIONALIZATION: Too long for 15×15 grid`; the toast read: `Invalid theme words: AB: Too short (minimum 3 letters)`. Panel below the message still reads `Loaded Words (3)` `CROSSWORD (9)` `PUZZLE (6)` `ANAGRAM (7)`, the same list as in T1, and the grid keeps its theme-locked CROSSWORD (`Filled 4.0%` before and after); the suggestions were fetched again for the same three words.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 25 requests in the window (start line 309, `serve-F-THEME-LOAD.log`; the log helper: `requests: 25 5xx: 0 4xx: 0`); browser tool 0 of 11 `/api/` requests, all 200 (`/api/theme/upload` twice, `suggest-placements` twice, `apply-placement` once).
+- F-FEEDBACK notes: `Choose File` shows the loaded list and the suggestions within the 1.5 s of my first read (the read was after a fixed wait, so a tighter bound was not measured); `Apply This Placement` shows the toast `Applied "CROSSWORD" to grid!` and the grid change by the 1.2 s read; the invalid-file message appears in the panel and as a toast within the 1.5 s read. Error wording is plain: `AB: Too short (minimum 3 letters)`, `INTERNATIONALIZATION: Too long for 15×15 grid`; no stack trace, raw JSON or HTTP code.
+- Observations (not judged against a criterion): the toast names only the first invalid word (`AB`) while the panel lists both; the criterion's "nothing loads" is read as "the loaded list is unchanged", since a list was already loaded from (a); the panel keeps the old list rather than clearing it.
+- Evidence: `fixture-theme-load-a.txt`, `fixture-theme-load-b.txt`, `serve-F-THEME-LOAD.log`
 - Verdict: PASS · Severity: — · Known: —
