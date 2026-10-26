@@ -76,7 +76,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-IMPORT | PASS on `494ddb8` | I1, I2, I3, I4, I5, I6 |
 | New: F-EDIT | PASS on `494ddb8` | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11 |
 | New: F-THEME-LOAD | PASS on `494ddb8` | T1, T2, T3 |
-| New: F-LISTS | | |
+| New: F-LISTS | PASS on `494ddb8` (default-selection wording: ruling asked) | L1, L2, L3, L4, L5, L6, L7 |
 | New: F-SEARCH | | |
 | New: F-EXPORT | | |
 | New: F-RESTORE | | |
@@ -486,4 +486,34 @@ status rc=0
 - F-FEEDBACK notes: `Choose File` shows the loaded list and the suggestions within the 1.5 s of my first read (the read was after a fixed wait, so a tighter bound was not measured); `Apply This Placement` shows the toast `Applied "CROSSWORD" to grid!` and the grid change by the 1.2 s read; the invalid-file message appears in the panel and as a toast within the 1.5 s read. Error wording is plain: `AB: Too short (minimum 3 letters)`, `INTERNATIONALIZATION: Too long for 15×15 grid`; no stack trace, raw JSON or HTTP code.
 - Observations (not judged against a criterion): the toast names only the first invalid word (`AB`) while the panel lists both; the criterion's "nothing loads" is read as "the loaded list is unchanged", since a list was already loaded from (a); the panel keeps the old list rather than clearing it.
 - Evidence: `fixture-theme-load-a.txt`, `fixture-theme-load-b.txt`, `serve-F-THEME-LOAD.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### F-LISTS — Lists panel, Show Stats, upload with Preview, Add Words, tick in Search and Autofill, delete (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), app reloaded; console log cleared before the reload, the network log cleared after it. Server log start line 337 (window = lines 338 on, `serve-F-LISTS.log`). Fixture `fixture-lists-upload.txt`: `QWERTYZEBRA`, `FLIBBERTY`, `moonpie`, `SKYLARK`, `CATNIPS` (plain ASCII).
+- Unique-word proof, one command over the clone's `data/wordlists/` by explicit path (`-rixc`, whole line, case-insensitive; only files with a non-zero count are shown), then the substring form (`-rilc`, which prints a count per file) for `QWERTYZEBRA`:
+```
+== QWERTYZEBRA
+(non-zero files above)
+== AAAMAP        (control: a word seen in the head of comprehensive.txt)
+.../data/wordlists/comprehensive.txt:1
+.../data/wordlists/raw/top_200k.txt:1
+.../data/wordlists/raw/comprehensive_intl.txt:1
+(non-zero files above)
+== substring QWERTYZEBRA: every one of the 17 files printed `:0`, rc=1
+```
+  The control word is found in three files; the unique word in none. The whole-line form cannot match a `WORD;score` line, which is why the substring form was also run (also 0 everywhere).
+- Steps and observed:
+  - L1 Lists rail → "Word List Management", `Upload Wordlist`, category buttons, and `ALL WORDLISTS (6)`: Comprehensive Dictionary, Classic Crosswordese, Expressions & Slang, Foreign Classics, Foreign Words, Demo Words. Default selection read from the checkboxes: Search tab — only `Comprehensive Dictionary` ticked (the other five unticked); Autofill tab, `WORD LISTS`, `BUILT-IN` / `CUSTOM` — the same, only `Comprehensive Dictionary` ticked. The code default is `useState(['comprehensive'])` in `PatternMatcher.jsx`. See Observations for the criterion's wording.
+  - L2 Clicked `Classic Crosswordese` → the card shows `Show Stats` and `Add Words`; clicked `Show Stats` → the button became `Hide Stats` and the card reads "Words that appear frequently in crossword puzzles / Category: core / Words: 431 / Difficulty: medium / Words (431)" followed by the words `ERA ERE ERR EEL ATE ALE ALI ARE AGE ADO ASP END ...`. The file has 431 distinct non-comment, non-blank lines (`sort -u | wc -l` → 431; 437 before dedup).
+  - L3 `Upload Wordlist` → form with `Wordlist Name:` (prefilled `lists-upload`) and `Select File:`; chose the fixture → "Selected: lists-upload.txt (0.0 KB)" → `Upload` → `Preview`: "5 valid words" / "0 skipped" and the words `QWERTYZEBRA FLIBBERTY MOONPIE SKYLARK CATNIPS` (the lowercase `moonpie` shown in uppercase) with `Confirm` / `Cancel`. `Confirm` → `ALL WORDLISTS (7)`, new card `Lists-Upload` with tags `custom`, `uploaded`; its detail: "Uploaded from lists-upload.txt / Category: custom / Words: 5 / Words (5)": `CATNIPS FLIBBERTY MOONPIE QWERTYZEBRA SKYLARK`.
+  - L4 `Add Words` → `Add Words to List` with a textarea "Enter words (one per line)"; entered `ZEBRAFINCH` and `quokka` → `Add Words to List` → "Words: 7 / Words (7)": `CATNIPS FLIBBERTY MOONPIE QUOKKA QWERTYZEBRA SKYLARK ZEBRAFINCH`.
+  - L5 Search tab: the new list is in the selector, unticked, as `Lists-Upload (7 words)`; ticked it (Comprehensive still ticked). Pattern `QWERTYZEBRA` → `Results (1)`: `QWERTYZEBRA`, score `47`, source `lists-upload`, `11 letters`. Unticked Comprehensive (only `Lists-Upload (7 words)` ticked) → `Results (1)`, the same result. Control: only `Comprehensive Dictionary` ticked, same pattern → "No matching words found".
+  - L6 Autofill tab: the selector, under `CUSTOM`, lists `Lists-Upload (7)`, unticked; ticking it gives ticked = `Comprehensive Dictionary`, `Lists-Upload (7)`.
+  - L7 Lists tab, the `Lists-Upload` card selected, native `window.confirm` stubbed immediately before the `Delete` click (the native dialog blocks the browser extension; the stub records the message and returns true): `window.__confirms` → `["Delete wordlist \"custom/lists-upload\"? This cannot be undone."]`. After: `ALL WORDLISTS (6)`, no `Lists-Upload` card. Search selector: six lists, no `Lists-Upload`; Autofill selector: six lists, no `Lists-Upload` (the box ticked in L6 is gone with it); `GET /api/wordlists/custom/lists-upload` → 404; the clone's `data/wordlists/custom/` lists only `demo_words.txt`.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 41 requests in the window (`requests: 41 5xx: 0 4xx: 1`; the one 4xx is my own deliberate `GET /api/wordlists/custom/lists-upload` → 404 in L7, after the delete); browser tool: 2 of 31 `/api/` requests reported 503, both `GET /api/progress/<id>` (SSE) that the server log records as 200 (the known tool artefact).
+- F-FEEDBACK notes: file choice shows "Selected: lists-upload.txt (0.0 KB)" at once; `Upload` shows the `Preview` (counts and words) within the 1.5 s read; `Confirm` adds the card, `Words (5)` and the count (7) within 2 s, with no toast; `Add Words to List` updates `Words: 7` within 1.8 s, no toast; `Delete` asks the confirm (stubbed, message captured) and the card is gone within 2 s, no toast. Search shows `Results (1)` or "No matching words found" within 2 s. No error arose.
+- Observations (not judged against a criterion): (1) the criterion says "the shipped lists are shown and selected by default": all six shipped lists are shown, but only one, Comprehensive Dictionary, is ticked by default, in both Search and Autofill; read as "a default selection is in force", this passes, read as "all six ticked" it would not — the orchestrator is asked to rule on the wording. (2) the uploaded list's name was derived from the file name (`lists-upload`) and shown as `Lists-Upload`; the upload form's `Wordlist Name:` was prefilled and not edited. (3) a newly uploaded list is unticked in Search and Autofill until the user ticks it. (4) `Show Stats` shows the same fields (Category, Words, Difficulty) that the card already carries; the toggle changes only its label to `Hide Stats`. (5) the delete message names the path `custom/lists-upload`, not the display name.
+- Evidence: `fixture-lists-upload.txt`, `serve-F-LISTS.log`
 - Verdict: PASS · Severity: — · Known: —
