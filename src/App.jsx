@@ -701,8 +701,18 @@ function App() {
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
-  const selectTool = (id) =>
-    id === 'theme' ? setShowThemePanel(true) : setCurrentTool(id);
+  // Spec 0.2.21 section 3.6: a rail click on another tool closes the panel by the same
+  // path as its x (closeThemePanel), so the unmount-time stop of a running Apply All (0.2.19)
+  // runs identically.
+  const closeThemePanel = () => setShowThemePanel(false);
+  const selectTool = (id) => {
+    if (id === 'theme') {
+      setShowThemePanel(true);
+      return;
+    }
+    closeThemePanel();
+    setCurrentTool(id);
+  };
 
   // ToolRail GRID stats (module-level calculateGridStats) + word count (geometry).
   // Both are null-guarded so an uninitialized grid renders zeros, not a crash.
@@ -895,7 +905,7 @@ function App() {
           onBatchBegin={beginBatch}
           onBatchEnd={commitBatch}
           editingPaused={editingPaused}
-          onClose={() => setShowThemePanel(false)}
+          onClose={closeThemePanel}
         />
       )}
     </div>
