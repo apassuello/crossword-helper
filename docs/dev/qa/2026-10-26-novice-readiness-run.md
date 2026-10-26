@@ -87,7 +87,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: TH4 | PASS on `494ddb8` (each word lists 3 suggestions; 2 placed, OBSERVATION skipped with the server reason) | TH4 |
 | New: TH5 | PASS on `494ddb8` (Observation: the Save name prompt lies under the Theme panel) | TH5 |
 | New: UNDO | PASS on `494ddb8` | U1, U2, U3, U4, U5, U6, U7, U7b, U8, U9, U10 |
-| Autofill | | |
+| Autofill | PASS on `494ddb8` (A2 and A4: 11x11 filled 44/44 in about 1 s at panel defaults, typed letters unchanged; A3: Cancel on the 15x15 ends in `Cancelled by user` with `Keep partial fill` / `Reset`, Start back after `Reset`) | A2, A3, A4 |
 | Lists, CLI | | |
 | New: AF-LOCK | PASS on `494ddb8` (cancel exercised under Beam: a Repair run ends in under 1 s) | AF-LOCK |
 | New: AF-BLOCK | PASS on `494ddb8` (`QX` blocked in pre-flight on the 11x11 example, the request itself accepted 202) | AF-BLOCK |
@@ -1113,4 +1113,56 @@ STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
 - F-FEEDBACK notes: `Import Grid` -> the grid filled and the sidebar stats updated within the 1 s read; opening Autofill -> Start disabled with the hint at once (600 ms read); plain language, no error.
 - Observations (not judged against a criterion): none.
 - Evidence: `serve-FULL-GRID.log`, `fixture-example_15x15_filled_complete.json`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### A2 — Autofill with panel defaults on the 11x11 grid, letters typed first (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the AF-NOLISTS row's tab (id 1893513521; tab 1893513492 untouched). Carried definition: A2 of `docs/dev/qa/2026-10-22-fresh-install-run.md` (panel defaults on the 11x11). Criterion (plan 8.6, Autofill: A2, A3, A4): "Panel returns to idle by itself; every letter typed before Start is unchanged".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 2 -> 0), `http://127.0.0.1:5000/` loaded; the browser tool's console and network tracking on since before AF-NOLISTS's first action, console cleared at this group's start. Server log start line 595 for the whole Autofill group (A2, A3, A4: window = lines 596-661, `serve-Autofill.log`). Fixture `example_11x11.json` imported (Import -> Upload File -> Import Grid; copy `fixture-example_11x11.json`).
+- Panel defaults (DOM): algorithm `Repair (Recommended)` (value `repair`), timeout `5 min` (value 300), Min Score 30, ticked lists `["Comprehensive Dictionary"]`. Note the 2026-10-22 run's default Min Score was 50; it is 30 here.
+- Typed (real clicks and key events) `SEE` at r0c0-c2 and `ARE` at r8c0-c2. Grid before Start (DOM): `SEE#...#.../...#...#.../.........../###....#.../......#..../...#...#.../....#....../...#....###/ARE......../...#...#.../...#...#...`.
+- Instrument (rule 13): patch installed before Start. Proof: the captured request body is non-empty, `"locked_cells":[[0,0],[0,1],[0,2],[8,0],[8,1],[8,2]]`, `algorithm` `repair`, `min_score` 30, `timeout` 300, `wordlists` `["comprehensive"]`; status 202; task `6c7d80d6-60e6-4c92-a65d-f8bdef86f20c`; 11 progress samples (last: status `complete`, message `Complete`). Files (`ls -l`): `A2-fills.json` 1252 bytes, `A2-sse.json` 3737 bytes.
+- Steps and observed:
+  - T1 `Start Autofill`, polled each 1 s with the typed cells compared against the DOM at every poll: the first poll (1 s) already read `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset`; typed-cell mismatches over all polls: 0. Progress messages (SSE): `Starting CLI process...`, `Loading wordlist 1/1`, `Loaded 44024 words, starting autofill`, `43 empty slots, 0 dead ends, 0 blocking words`, `Stripped 0 blocking words`, `Complete! 44/44 slots filled`, `Successfully filled 44/44 slots`.
+  - T2 Terminal state after 3 more seconds (DOM): panel `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset`, buttons `["Reset"]`; no run-in-progress control, no Cancel. Grid after: `SEE#SAN#FRI/ANS#ONA#LON/CLAYPIGEONS/###OHMS#ODE/BOSNIA#BREA/ESA#ALS#IAM/MTNS#HIATUS/OER#NOTI###/AREYOUALONE/NIM#ISR#NEA/SAO#RES#EON`, no `.` left.
+  - T3 Typed-letter comparison by script (letters non-`.` in the before grid against the same cell after): changed cells `[]`; `SEE` and `ARE` unchanged.
+- Judgement against the criterion: the panel left the running state by itself (within 1 s) at `Successfully filled`, and all six typed letters are unchanged: met as written. The 2026-10-22 A2 FAIL (S2, run never ended at min score 50) does not reproduce at the panel's current defaults.
+- Console errors: browser tool, onlyErrors, read at the end of the Autofill group (after A4) -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): see the group line under A4: server log 0 of 60 requests. Browser tool: `POST /api/fill/with-progress` 202.
+- F-FEEDBACK notes: `Start Autofill` -> `Successfully filled 44/44 slots!` and the filled grid within 1 s; no toast read; no error message.
+- Observations (not judged against a criterion): none.
+- Evidence: `A2-fills.json`, `A2-sse.json`, `serve-Autofill.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### A3 — Cancel a run on the 15x15 grid, letters typed first (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the same tab (id 1893513521). Carried definition: A3 of `docs/dev/qa/2026-10-22-fresh-install-run.md` (Cancel on the 15x15, defaults). Criterion (plan 8.6, Autofill: A2, A3, A4): "Panel returns to idle by itself; every letter typed before Start is unchanged"; the carried expectation is that the UI is back to idle after Cancel.
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), page reloaded; console cleared at the group's start; server window as under A2. Fixture `example_15x15.json` imported (blank grid, `Filled: 0`; copy `fixture-example_15x15.json`). Panel defaults as in A2 (Repair, 5 min, Min Score 30, Comprehensive Dictionary), header `Autofill · 78 empty slots`.
+- Typed `SEE` at r0c0-c2 and `CAT` at r6c0-c2. Grid before Start (DOM): `SEE..#....#..../.....#....#..../.....#....#..../###........#.../......#......../...#...##....##/CAT.#....#...../.............../.....#....#..../##....##...#.../........#....../...#........###/....#....#...../....#....#...../....#....#.....`.
+- Instrument (rule 13): patch installed before Start. Proof: request body non-empty, `"locked_cells":[[0,0],[0,1],[0,2],[6,0],[6,1],[6,2]]`; status 202; task `03b71c44-4fda-4108-bb7d-9583ee61b354`; 10 progress samples. Files (`ls -l`): `A3-fills.json` 1884 bytes, `A3-sse.json` 3719 bytes.
+- Steps and observed:
+  - C1 `Start Autofill`, polled every 0.5 s: `Autofill · 78 empty slots | Stripped 0 blocking words | 30%` with a `Cancel` button at 0.5 s to 2.0 s, then `Autofill · 35 empty slots | Filling: 43/78 slots (500 steps) | 53%` at 2.5 s and 3.0 s (the on-screen header count fell while a progress grid was shown; the typed-letter check ran at each poll, see C3).
+  - C2 `Cancel` clicked (DOM `.click()`) at 3.0 s after Start. Within 0.5 s the panel read `Autofill · 78 empty slots | Cancelled by user | Keep partial fill | Reset`, and stayed so over the 5 s of polling that followed (no further change, no Cancel button). The network log shows `POST /api/fill/cancel/03b71c44-4fda-4108-bb7d-9583ee61b354` 200. The last SSE sample is `error` with message `CLI Error (code -15): Unknown error`; the panel text did not show it, it showed `Cancelled by user`.
+  - C3 Typed letters: mismatches against the DOM at every poll (6 before Cancel, 10 after): 0; the one progress sample that carries a grid (the `Filling: 43/78 slots (500 steps)` one) matches the six typed cells; grid after Cancel equals the before grid (changed cells `[]`).
+  - C4 Clicked `Reset`: panel `Autofill · 78 empty slots | OPTIONS`, buttons `["Start Autofill"]`, `Start Autofill` enabled; grid still equal to the before grid. So the idle state with Start is reached after `Reset`; after Cancel the panel itself shows the terminal state `Cancelled by user` with `Keep partial fill` / `Reset` (the §2.3 cancelled row, as in AF-LOCK and AF-REFILL).
+- Judgement against the criterion: the run stopped on Cancel, the panel is out of the running state and offers `Keep partial fill` / `Reset`, Start returns after `Reset`, and no typed letter changed: met as written. Read on one point: "idle" is taken as spec 2.3's cancelled state (not running, no Cancel), as AF-LOCK did; Start is not shown until `Reset` is pressed.
+- Console errors: see the group line under A4: "No console errors or exceptions found for this tab."
+- 5xx (header ruling): see the group line under A4. Server log lines for the cancel: `CLI process failed with return code -15` (the cancelled solver, as in the 2026-10-22 A3) and `POST /api/fill/cancel/03b71c44-4fda-4108-bb7d-9583ee61b354` 200.
+- F-FEEDBACK notes: `Start Autofill` -> progress text and `Cancel` within 0.5 s; `Cancel` -> `Cancelled by user` with `Keep partial fill` / `Reset` within 0.5 s; `Reset` -> options and `Start Autofill` back within 0.8 s; no error text shown in the panel.
+- Observations (not judged against a criterion): (1) The cancelled run's last SSE sample is an `error` event with `CLI Error (code -15): Unknown error`; the UI does not show it. (2) The Repair run on this 15x15 was still running 3 s in and had made no complete fill, so Cancel hit a live run.
+- Evidence: `A3-fills.json`, `A3-sse.json`, `serve-Autofill.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### A4 — Autofill, option "Repair (Recommended)" on the 11x11 grid, letters typed first (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the same tab (id 1893513521). Carried definition: A4 of `docs/dev/qa/2026-10-22-fresh-install-run.md` (option "Repair (Recommended)", 11x11; that run also set 2 min, here every other setting is the panel default). Criterion (plan 8.6, Autofill: A2, A3, A4): "Panel returns to idle by itself; every letter typed before Start is unchanged".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), page reloaded; `example_11x11.json` imported; `SEE` at r0c0-c2 and `ARE` at r8c0-c2 typed as in A2 (grid before Start identical to A2's).
+- The option, read from the select (DOM): options `Repair (Recommended)|repair`, `Hybrid (Beam + Repair)|hybrid`, `Beam Search|beam`, `Classic CSP|trie`. Selected by setting the select's value to the option whose text is `Repair (Recommended)` and firing `change`; read back: selected text `Repair (Recommended)`, value `repair`; timeout `5 min`, Min Score 30, lists `["Comprehensive Dictionary"]`.
+- Instrument (rule 13): patch installed before Start. Proof: request body non-empty, `"locked_cells":[[0,0],[0,1],[0,2],[8,0],[8,1],[8,2]]`, `algorithm` `repair`, `min_score` 30, `timeout` 300, `wordlists` `["comprehensive"]`; status 202; task `b2610c60-8e68-4003-a7e0-7bc81b586573`; 11 progress samples, last `complete`. Files (`ls -l`): `A4-fills.json` 1252 bytes, `A4-sse.json` 3736 bytes.
+- Steps and observed:
+  - R1 `Start Autofill`, polled each 0.5 s: `Autofill · 43 empty slots | Stripped 0 blocking words | 30%` at 0.5 s, `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset` at 1.0 s; typed-cell mismatches over all polls: 0.
+  - R2 After 3 more seconds: panel `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset`, buttons `["Reset"]`. Grid after: `SEE#SAN#FRI/ANS#ONA#LON/CLAYPIGEONS/###OHMS#ODE/BOSNIA#BREA/ESA#ALS#IAM/MTNS#HIATUS/OER#NOTI###/AREYOUALONE/NIM#ISR#NEA/SAO#RES#EON` (equal to A2's: the run is deterministic on the same input). Typed cells compared by script against the before grid: changed `[]`.
+- Judgement against the criterion: the panel left the running state by itself at `Successfully filled`, typed letters unchanged: met as written. The 2026-10-22 A4 FAIL (S2, partial 20/44 at min score 50) does not reproduce at the current defaults; this run did not set 2 min or min score 50, so it says nothing about that setting.
+- Console errors (group A2, A3, A4): browser tool, onlyErrors, tracking on since before AF-NOLISTS's first action, read after A4 -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling, group A2, A3, A4): server log 0 of 60 requests in the window (`requests: 60 5xx: 0 4xx: 0`; 3 `POST /api/fill/with-progress` 202, 1 `POST /api/fill/cancel/...` 200). Browser tool: 0 of 4 `/api/fill` requests were 5xx (three 202, one 200).
+- F-FEEDBACK notes: `Start Autofill` -> `Successfully filled 44/44 slots!` and the filled grid by the 1.0 s poll; no error message.
+- Observations (not judged against a criterion): none beyond A2.
+- Evidence: `A4-fills.json`, `A4-sse.json`, `serve-Autofill.log`
 - Verdict: PASS · Severity: — · Known: none needed
