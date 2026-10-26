@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.20** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.21** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -646,6 +646,10 @@ out of scope here; recorded only.
 - `ThemeWordsPanel.scss` today positions the panel `fixed` with `z-index: 1000`, which covers the top
   bar. That is the defect.
 - The panel's existing × close keeps working.
+- With the Theme panel open, a rail click on any other tool (Grid, Search, Autofill, Lists, Import,
+  Export) closes the panel by the same path as its ×, and shows that tool; the rail highlights the tool
+  shown. A click on Theme while it is open leaves it open; the VIEW toggles (`Symmetry`) are not tools
+  and leave it open. Closing this way is a close under §3.8, so a running Apply All stops (0.2.19).
 
 **[NOTE]** Why it is must-have: the Save button in `TopBar` is the only save control. There is no Cmd+S
 shortcut and no Escape handler, so a covered top bar makes Save unreachable until the panel is closed.
@@ -1168,3 +1172,8 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   removed, the browser's storage from it kept) and MACOS (bash 3.2, wheels on 3.14, :5000). Beat: a cloud
   session (Ubuntu 24.04 x86_64 with Python and Node preinstalled and no browser, so it cannot exercise the
   friend's macOS and Homebrew setup) and a cloud plus local split (too costly).
+- 0.2.21 (2026-10-26): §3.6 a rail click on another tool closes the Theme panel. Phase 8 F-TOUR failed at
+  the README's "The tool rail on the left switches between tools": with the panel open, a rail click only
+  changed the tool under the overlay, and the rail kept Theme highlighted (#91). Owner 2026-10-26: FAIL,
+  fixed here, row re-run cold. Beat: a README step naming the × (it documents the dead click instead of
+  removing it).
