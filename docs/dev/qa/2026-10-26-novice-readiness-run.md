@@ -102,7 +102,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-VERIFY-STALE | | |
 | New: AF-SAVE-RUN | | |
 | New: SAVE-SIZE | PASS on `494ddb8` | SAVE-SIZE (Open saved and reload) |
-| New: SAVE-TABS | | |
+| New: SAVE-TABS | PASS on `494ddb8` | SAVE-TABS |
 | New: PROV-SAME | | |
 | New: FULL-GRID | | |
 
@@ -670,4 +670,21 @@ status rc=0
 - F-FEEDBACK notes: `21×21`, `11×11`+`Replace`, `Open` each changed the grid and stats by the first read (0.8-1.0 s); `Save` → header "saved locally · just now" within 0.9 s; reload shows `Restored "Size test 21" (saved 2026-10-26 16:41)` at once; `Open` shows no message that a save was opened (as in F-RESTORE). No error message appeared.
 - Observations (not judged against a criterion): (1) `New grid` asks for the replace confirm on a grid that was just saved, because it holds letters. (2) A coordinate click and a click on the cell's `g` did not select a cell in this tab; the cell `rect` DOM click worked (tool-side, not a finding).
 - Evidence: `serve-SAVE-SIZE.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### SAVE-TABS — Two tabs on one saved grid: the second save forks `<name> (copy)` (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, two tabs of this row: tab 1 (the SAVE-SIZE tab, reloaded) and tab 2 (created for this row, closed at its end). Criterion (plan 8.5, spec S4): "The second save forks `<name> (copy)`; neither tab's work is lost".
+- Pre-run: storage as left by SAVE-SIZE (one entry, `Size test 21`); console log cleared on tab 1 at row start (tab 2's tracking began at the end). Server log start line 1495 (window = lines 1496-1510, `serve-SAVE-TABS.log`).
+- Steps and observed:
+  - Both tabs loaded `http://127.0.0.1:5000/`; each read `Restored "Size test 21" (saved 2026-10-26 16:41)` and the same 9 letters (`SIZEGRID` in row 1, `Q` at r21c21); stored `[["Size test 21",21,"2026-10-26T15:41:24.944Z"]]`.
+  - Tab 1: selected r3c1 (DOM click on the cell `rect`), typed `AAA` (real key events). Header "unsaved changes". `Save grid` → prompt prefilled `Size test 21` → `Save`: header "saved locally · just now" (read 4 times over 1.6 s), no other message and no name-collision confirm; stored `[["Size test 21",21,"2026-10-26T15:44:37.364Z"]]` (savedAt changed).
+  - Tab 2 (still holding the 16:41 state): selected r5c1, typed `BBB`; header "unsaved changes". `Save grid` → prompt prefilled `Size test 21` → `Save`. Page text read 5 times over 2 s (filtering for `saved|unsaved|copy|conflict|another tab|changed|replace`): only "Saved grids // Open saved"; no message, no confirm, and the header status line was **absent** (header text: `Undo | Redo | Verify words | Clean grid | Save grid | ◑`). Stored afterwards.
+  - `crossword_saved_grids` names/size/savedAt, as read: `[["Size test 21 (copy)",21,"2026-10-26T15:44:45.048Z"],["Size test 21",21,"2026-10-26T15:44:37.364Z"]]`; ids `cdb1432f-d24a-42fd-8cc2-38d37a927047` (copy) and `95623e67-8679-42b7-be50-f8d3b7319437`. Tab 2's `Open saved` listed: "Size test 21 (copy) / 21×21 · 2026-10-26 16:44 / Open / Delete / Size test 21 / 21×21 · 2026-10-26 16:44 / Open / Delete".
+  - Each entry's grid read from storage (letters by cell): `Size test 21` has `SIZEGRID`, `r3c1 A, r3c2 A, r3c3 A`, `r21c21 Q` (tab 1's edit, no `B`); `Size test 21 (copy)` has `SIZEGRID`, `r5c1 B, r5c2 B, r5c3 B`, `r21c21 Q` (tab 2's edit, no `A`). Neither edit is lost; neither entry holds both.
+  - Tab 1 afterwards: header "saved locally · just now", grid still carries `AAA` and no `B`.
+- Console errors: browser tool, onlyErrors, tab 1 and tab 2 → each "No console errors or exceptions found for this tab." (tab 2's tracking began at the end of the row).
+- 5xx (header ruling): server log 0 of 15 requests in the window (`requests: 15 5xx: 0 4xx: 0`: `/api/health` 7, `/api/grid/validate` 1, `/api/number` 1, assets). Browser tool: not read for `/api/` (tracking not started before the actions); the server log is the count.
+- F-FEEDBACK notes: tab 1's `Save` → "saved locally · just now" within 0.4 s. Tab 2's `Save` forked a new entry with **no visible feedback**: no message that the grid was saved under another name, no status line, no toast, read for 2 s; the user finds out only by opening `Open saved` and seeing `Size test 21 (copy)`. No error message appeared.
+- Observations (not judged against a criterion; the criterion asks that the second save forks and neither work is lost, both met): (1) the fork is silent, which a novice would read as a save that overwrote the first tab's work, or as nothing happening; the header status line was empty in tab 2 after the fork. (2) The stored `savedAt` of the two entries differ by 8 s, the interval between the two `Save` clicks.
+- Evidence: `serve-SAVE-TABS.log`
 - Verdict: PASS · Severity: — · Known: —
