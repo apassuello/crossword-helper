@@ -63,7 +63,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 |---|---|---|
 | Install | PASS | SETUP-1, SETUP-2, SETUP-3, SERVE-1 |
 | New: ZIP | PASS (README `analyze` example: UNSPECIFIED) | ZIP, ZIP-analyze |
-| Grid | | |
+| Grid | PASS on `494ddb8` | G1, G3, G8, G9 |
 | New: SAVE-NAMED | | |
 | Grid guards | | |
 | New: CL-CLEAN-GUARD | | |
@@ -566,4 +566,53 @@ status rc=0
 - F-FEEDBACK notes: `Apply This Placement` → toast and grid change by the first read (about 1.2 s); `Save grid` → prompt at once, header "saved locally · just now" after `Save` within 0.8 s; reload shows the restore message at once (read after 1 s); `New grid` modal and clear within 0.6 s; `Open` replaces the grid within 0.6 s but shows **no message** that a save was opened. No error message appeared.
 - Observations (not judged against a criterion): (1) The `Open` of a save onto an empty grid asks nothing and says nothing; W12 of F-WORKFLOW showed the confirm when the grid held letters. (2) The default name offered by `Save grid` is `11×11 <date time>`, local time (16:30) while `savedAt` stores UTC (15:30). (3) The synthetic `.` keydown instead of a real key press is the only non-real input; every letter went through real key events.
 - Evidence: `fixture-theme-restore.txt`, `serve-F-RESTORE.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### G1 — New 15×15 grid from the Grid tool (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (closed at the end). The G1, G3, G8 and G9 blocks share one tab, one server-log window and one console read (stated in each).
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), then `http://127.0.0.1:5000/` loaded. Server log start line 1389 (window = lines 1390-1435, `serve-Grid.log`, shared by G1/G3/G8/G9). Case definition read from `2026-10-22-fresh-install-run.md` `### G1` (then NOT-IMPLEMENTED: "There is no control to create a new grid or choose another size").
+- Steps and observed:
+  - Grid panel text read from the page: "Grid / Black square / New grid / 11×11 / 15×15 / 21×21 / Saved grids / Open saved". Stats on load `Total 225 Black 0·0.0% Filled 0.0% Words 30`.
+  - Clicked `11×11` → `Total 121 Black 0·0.0% Filled 0.0% Words 22`; clicked `15×15` → `Total 225 Black 0·0.0% Filled 0.0% Words 30`. No confirm appeared (the grid was empty). The grid SVG's `aria-label` after `15×15`: "15 by 15 crossword grid".
+- Console errors: see the end of G9 (one read for the area).
+- 5xx: see G9.
+- F-FEEDBACK notes: `11×11` and `15×15` each changed the grid and the stats line by the first read (0.7 s wait); no message or toast, none needed; no error arose.
+- Observations: the 2026-10-22 finding (no control to create a grid) no longer holds: the `New grid` group with three sizes is in the Grid panel.
+- Evidence: `serve-Grid.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### G3 — Place a black square, discoverable (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: same tab as G1 · Pre-run: continues G1's tab and storage; case definition read from `### G3` of the 2026-10-22 log (then FAIL: "Nothing in the page names it").
+- Steps and observed:
+  - Visible hint line read from the page: "Type letters · Arrows move · Space or . black square · Enter switch direction · Tab next word · Backspace clear". The Grid panel shows a `Black square` button, read as `disabled=true` before any cell is selected (the first button list: "Black square [disabled]").
+  - Real click on a cell (row 3, column 3) → `Black square` read `disabled=false`. Clicked it (DOM `.click()`): `Total 225 Black 0·0.0% … Words 30` → `Total 225 Black 2·0.9% Filled 0.0% Words 34`; black squares read from the SVG (cells whose fill rect carries the `blacksq` shadow filter) `["r3c3","r13c13"]` (the 180° mirror, `Symmetry` on); `Undo` became enabled.
+  - Key path: real click on another cell, typed `.` with the computer tool's type action → black squares `["r3c3","r6c8","r10c8","r13c13"]`, `Black 4·1.8% Words 38` (r6c8 and its mirror r10c8).
+- Console errors / 5xx: see G9.
+- F-FEEDBACK notes: the `Black square` click and the `.` key each changed the grid and stats within the first read (0.6 s wait); no message, none needed. No error arose.
+- Observations: the control is discoverable two ways on the page (the button, the hint line); it is greyed until a cell is selected and offers no text saying why (a novice who opens the panel first sees a disabled button with no hint beside it; the hint line is below the grid). Not judged against the criterion.
+- Evidence: `serve-Grid.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### G8 — No Heatmap toggle (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: same tab as G1 · Pre-run: continues G1's tab; case definition read from `### G8` of the 2026-10-22 log (then FAIL, Known I8: an inert `Heatmap` toggle).
+- Steps and observed:
+  - Full button list read from the page on load (text, `aria-label` or title): `Undo`, `Redo`, `Verify words`, `Clean grid`, `Save grid`, `◑` (Toggle theme), `Grid`, `Search`, `Autofill`, `Theme`, `Lists`, `Import`, `Export`, `Symmetry`, `Black square`, `11×11`, `15×15`, `21×21`, `Open saved`. No `Heatmap`.
+  - For each rail panel (Grid, Search, Autofill, Theme, Lists, Import, Export) the page text was tested with `/heat/i` after opening it: `false` for all seven. Elements with a `title` or `aria-label` matching `/heat/i`: 0.
+  - Server log window: no `/api/constraints` request (the window's requests: `/api/health`, `/api/grid/validate`, `/api/number`, `/api/wordlists`, assets).
+- Console errors / 5xx: see G9.
+- F-FEEDBACK notes: no grid or server action in this case.
+- Evidence: `serve-Grid.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### G9 — Save, reload, grid persists, restore message (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: same tab as G1 · Pre-run: continues G1's tab; case definition read from `### G9` of the 2026-10-22 log (then FAIL: blank grid after reload, no restore control).
+- Steps and observed:
+  - Grid before saving: `15×15`, black squares `["r3c3","r6c8","r10c8","r13c13"]`, real click on row 1 column 1 and typed `CAT` → stats `Total 225 Black 4·1.8% Filled 1.4% Words 38`.
+  - `Save grid` → an in-page "Name this grid" prompt, text input prefilled `15×15 2026-10-26 16:35`, buttons `Save` / `Cancel`. The header already read `saved locally · just no…` while the prompt was open (autosave). `Save` → header "saved locally · just now". `localStorage` `crossword_saved_grids`: 1 entry, `["15×15 2026-10-26 16:35",15,"2026-10-26T15:35:38.837Z"]` (name, size, savedAt).
+  - Reload (`http://127.0.0.1:5000/`): the page shows `Restored "15×15 2026-10-26 16:35" (saved 2026-10-26 16:35)` with a `Start blank` button and a close `×`. Read back from the SVG: letters `CAT`, black squares `["r3c3","r6c8","r10c8","r13c13"]`, stats `Total 225 Black 4·1.8% Filled 1.4% Words 38`, identical to before the save.
+- Console errors (one read for G1-G9, cleared at row start, read after the reload): browser tool, onlyErrors → "No console errors or exceptions found for this tab." (the tool had started tracking after the row's first page load, which it notes.)
+- 5xx (header ruling): server log 0 of 46 requests in the window (start line 1389, `serve-Grid.log`; `requests: 46 5xx: 0 4xx: 0`: `/api/health` 13, `/api/wordlists` 9, `/api/grid/validate` 6, `/api/number` 6, `/` 2, assets). Browser tool: its network log was first read after the row and reported "No requests matching \"/api/\" found for this tab", so the server log is the count.
+- F-FEEDBACK notes: `Save grid` opens the name prompt at once; after `Save` the header reads "saved locally · just now" within 0.8 s (no toast); after the reload the restore message is on the page by the first read (1.2 s); no error message appeared.
+- Observations: (1) the header shows `saved locally · just now` already before `Save` is pressed in the name prompt, because autosave runs; the explicit Save only adds a named entry. (2) The restore message is the only sign that a reload restored a saved grid; `Start blank` is the way out.
+- Evidence: `serve-Grid.log`
 - Verdict: PASS · Severity: — · Known: —
