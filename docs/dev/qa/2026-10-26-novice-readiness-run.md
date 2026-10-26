@@ -93,7 +93,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-BLOCK | | |
 | New: AF-BLOCK-LEN | | |
 | New: AF-DEFAULTS | | |
-| New: AF-SUB2 | | |
+| New: AF-SUB2 | PASS on `494ddb8` (second stream via curl for 15 s on a 30.7 s Repair run on a blank 15×15) | AF-SUB2 |
 | New: AF-REFILL | PASS on `494ddb8` (partial fill via a cancelled Beam run; Start returns after Reset) | AF-REFILL |
 | New: AF-LOCKED-CROSS | | |
 | New: AF-GATE | PASS on `494ddb8` (Beam run 238.7 s on a blank 15×15; every writer disabled or inert, banner shown throughout) | AF-GATE |
@@ -974,4 +974,22 @@ status rc=0
 - F-FEEDBACK notes: `Start Autofill` -> the pause banner and `Cancel` within the 1 s read; the autosave gave no message of its own during the run, only the header turning `saved locally · just now` after 29.8 s; the reload gave the `Restored "..."` banner at once; no error message arose.
 - Observations (not judged against a criterion): (1) The first autosave came 29.8 s after Start, so a user who types and starts within that time has the Start grid saved only after the run is under way. (2) The orphaned run after a reload continued on the server until cancelled; the new page showed no sign of it (idle panel).
 - Evidence: `AF-SAVE-RUN-fills.json`, `AF-SAVE-RUN-sse.json`, `serve-AF-SAVE-RUN.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### AF-SUB2 — A second progress stream opened and closed on a running task: the panel still reaches its terminal state (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (id 1893513517, closed at the end of this row; tab 1893513492, not created by this row, untouched). Criterion (plan 8.6, AF-SUB2): "Open a second progress stream on a running task and close it" -> "The panel still reaches its terminal state". A panel stuck in `running` after the second stream would be serious.
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), `http://127.0.0.1:5000/` loaded, then console and network reads (clear) before the first action. Server log start line 413 (window = lines 414-432, `serve-AF-SUB2.log`).
+- Run used: blank 15×15, `Repair (Recommended)` (the panel default), Comprehensive Dictionary, 5 min, `CAT` typed at r1c1-c3 (real key events). The run lasted 30.7 s from first to last progress sample of the page's own stream (the page's reads put the terminal state at 37.8 s after the Start click), so there was time to open and close a second stream inside it.
+- Instrument (rule 13): patch installed before Start. Proof: `__fills[0].body` non-empty and starts `{"size":15,"grid":[["C","A","T",".",".",".",".","."`, `"algorithm":"repair"`; status 202; task `c5fd6f3c-4161-4603-b15f-4bc2d3b99f60`; 8 SSE samples by the 1.5 s read. `AF-SUB2-fills.json` 1866 bytes, `AF-SUB2-sse.json` 32432 bytes, confirmed with `ls -l`.
+- Steps and observed:
+  - Z1 Start grid (DOM): `CAT............/.../...............` (only `CAT`). `Start Autofill` clicked at t0; at 1.5 s the pause banner was up and the panel was running.
+  - Z2 Second stream, from Bash, at about 6 s into the run (wall clock 22:26:27): `curl -sN -m 15 http://127.0.0.1:5000/api/progress/c5fd6f3c-4161-4603-b15f-4bc2d3b99f60 > .../AF-SUB2-curl.txt`. It closed itself by its timeout at 22:26:42 (`curl` exit 28, 15 s). File: `wc -l` 2 lines, 1296 bytes; line 1 is the one SSE event received, starting `data: {"progress": 60, "message": "Greedy pass 1: 30 slots left", "status": "running", "timestamp": 1793049991.0482922, "data": {"grid": [["C", "A", "T", ".", ...` (1294 characters; script-parsed: `60 running Greedy pass 1: 30 slots left`); line 2 is empty (the blank line that ends an SSE event). So first and last lines are that event and the blank line; the second stream received one sample in its 15 s and then no more before it was cut off.
+  - Z3 The page's own stream, polled after the curl had closed: at 29.3 s `Autofill · 27 empty slots` / `Repairing 13 invalid words` / `80%` / `Cancel` (still running, banner up); at 37.8 s the last sample for the task was `complete | Complete` with `success` false (a partial result), the banner gone (`paused` false), and the final panel text: `Autofill · 30 empty slots | Filled 30/30 slots — 13 entries may be invalid (use Verify Words to check) | Keep fill | Reset`. Grid on screen equal to the Start grid (only `CAT`; the result sits in the panel until `Keep fill`, as in UNDO U8). `Reset` -> only `Start Autofill`, no banner, panel idle.
+  - Z4 Server log: two `GET /api/progress/c5fd6f3c-...` 200 lines in the window (the page's at 22:26:20, the curl's at 22:26:31) and one `POST /api/fill/with-progress` 202; no 5xx.
+- Judgement against the criterion: a second stream opened on the running task and closed 15 s later; the page's panel kept running and reached its terminal state (`Filled 30/30 slots — 13 entries may be invalid ...`, `Keep fill` / `Reset`) and returned to idle on `Reset`: met as written.
+- Console errors: browser tool, onlyErrors, tracking started before the first action -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 19 requests in the window (`requests: 19 5xx: 0 4xx: 0`). Browser tool: 1 of 7 `/api/` requests was 5xx, a 503 on `GET /api/progress/c5fd6f3c-...` that the server logged as 200 (the known SSE artefact, rule 3); the server's count decides.
+- F-FEEDBACK notes: `Start Autofill` -> banner, `Cancel` and progress text within the 1.5 s read; the finished run -> `Filled 30/30 slots — 13 entries may be invalid (use Verify Words to check)` with `Keep fill` / `Reset` within the polling interval (read at 37.8 s); no error message arose and the second stream gave the page no sign.
+- Observations (not judged against a criterion): (1) The run is "partial" (`success` false) yet the panel says `Filled 30/30 slots`; the wording is as UNDO U8 recorded. (2) A second stream joined at about 6 s received one sample (the latest) and none after it in 15 s; it did not replay the earlier samples.
+- Evidence: `AF-SUB2-curl.txt`, `AF-SUB2-fills.json`, `AF-SUB2-sse.json`, `serve-AF-SUB2.log`
 - Verdict: PASS · Severity: — · Known: none needed
