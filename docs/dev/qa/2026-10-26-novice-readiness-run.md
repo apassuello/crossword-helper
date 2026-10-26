@@ -103,7 +103,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-SAVE-RUN | | |
 | New: SAVE-SIZE | PASS on `494ddb8` | SAVE-SIZE (Open saved and reload) |
 | New: SAVE-TABS | PASS on `494ddb8` | SAVE-TABS |
-| New: PROV-SAME | | |
+| New: PROV-SAME | PASS on `494ddb8` | PROV-SAME |
 | New: FULL-GRID | | |
 
 ## Cases
@@ -901,4 +901,21 @@ status rc=0
 - F-FEEDBACK notes: Cancel -> `Cancelled by user` with `Keep partial fill` / `Reset` within about 2 s (read at 2 s); `Keep partial fill` -> letters on the grid and `Filled 18.8%` within the 1.2 s read, no toast; `Reset` -> panel back to the options within 0.6 s; `Start Autofill` -> finished before the 4 s read (`Successfully filled 44/44 slots!`); no error message arose.
 - Observations (not judged against a criterion): (1) After a cancelled run and `Keep partial fill` the panel shows `Cancelled by user` and `Reset` only; `Start Autofill` returns after `Reset`, which the plan's "press Start again" does not mention. (2) The partial-fill option was reached through Cancel; a run that ends partially by itself was not produced (the Repair run on this grid fills 44/44). (3) A saved entry's cells carry `isAutofilled`, as the UNDO row found.
 - Evidence: `AF-REFILL-fills.json`, `AF-REFILL-sse.json`, `AF-REFILL-autofilled.json`, `serve-AF-REFILL.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### PROV-SAME — An autofilled letter retyped with the same letter is sent as a locked letter on the next Start (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, tab 1893513515 (created by this run, closed at the end; tab 1893513492 not mine, untouched). Criterion (plan 8.6, PROV-SAME): "Autofill a letter, retype the same letter, Start again" -> "The letter is in the lock list (S5)". Spec S5: "Every other UI writer clears it on every cell it writes, a cell given the same letter included ... A cell the user retypes with the same letter is user-typed." A typed letter lost or changed by autofill would be serious.
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0; same three keys), `http://127.0.0.1:5000/` loaded, console and network reads (clear) before the first action. Server log start line 247 (window = lines 248-278, `serve-PROV-SAME.log`). `example_11x11.json` imported (`Total 121`); rule 13 patch installed after the load and before Start; `CAT` typed at r1c1-c3.
+- Steps and observed:
+  - P1 Autofill a letter. A full Repair run would leave no empty cell (Start is disabled on a full grid, P18), so the partial came from a Beam run cancelled at about 5 s (panel `Beam search: slot 17/43` / `45%` / `Cancel`) and `Keep partial fill`: grid `CAT#BIT#.../INA#RNA#.../STOREFRONTS/###ANES#.../ASSETS#..../...#STS#.../....#AT..../...#.TE.###/.....IR..../...#.OO#.../...#SNL#...`; panel `Autofill · 27 empty slots` / `Cancelled by user` / `Reset`. Autofilled cells (differ from the typed snapshot): 44, from index 4 (`B`, r1c5) to 116 (`L`); list in `PROV-SAME-result.json`.
+  - P2 Retyped the same letter: clicked r1c5 (index 4, shown `B`), typed `B` with a real key event. Grid read after: identical to P1's (script `true`), r1c5 still `B`.
+  - P3 Provenance read from a save entry (`Save grid`, name `prov-same`, entry read from `crossword_saved_grids`) before pressing Start: letters with `isAutofilled` false and not black: indexes `[0,1,2,4]` (`CAT` and the retyped `B`); 43 cells (44 - 1) with `isAutofilled` true, equal by script to P1's autofilled list without index 4 (`savedAutoEqualsExpected` `true`; index 4 `isAutofilled`: `false`).
+  - P4 `Reset` (panel back to the options), algorithm `Repair`, `Start Autofill` -> `POST /api/fill/with-progress` 202, task `ff6f8892-03cf-4f4e-ac09-f677c4c8a5b0`; at the 4 s read `Autofill · 0 empty slots` / `Successfully filled 44/44 slots!`. Request body, from `__fills[1].body`: `"locked_cells":[[0,0],[0,1],[0,2],[0,4]]`. Index 4 is in the lock list (`true`); lock list equals the typed set `[0,1,2,4]` (`true`); intersection with the other 43 autofilled cells: empty. Typed cells `C`, `A`, `T`, `B` unchanged at the end (mismatches 0). End grid `CAT#BAE#CST/INA#ELS#LAO/AERIALPHOTO/###ATNO#SIN/BRUNEI#VENI/EOS#NGO#TOE/AMBI#HURONS/TAP#ATIE###/SNOWLEOPARD/MIR#TRU#NEA/EAT#ASI#IAN`.
+- Progress samples of the second run: 1 carries `data.grid` (`complete`); the four typed cells match (mismatches 0).
+- Judgement against the criterion: the retyped letter at r1c5 is in the lock list sent (`[0,4]`) while the 43 other autofilled letters are not: met as written (S5 observed on the wire and in the saved provenance).
+- Console errors: browser tool, onlyErrors, tracking started before the first action -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 25 requests in the window (`requests: 25 5xx: 0 4xx: 0`). Browser tool: 0 of 13 `/api/` requests 5xx.
+- F-FEEDBACK notes: Cancel -> `Cancelled by user` with `Keep partial fill` / `Reset` within the 2 s read; `Keep partial fill` -> letters on the grid within 1.2 s, no toast; the retyped letter -> no visible change at all (the same letter on screen; autofill provenance is not drawn); `Save grid` -> name prompt within 0.6 s; `Start Autofill` -> finished before the 4 s read; no error message arose.
+- Observations (not judged against a criterion): (1) The retyped letter is visually indistinguishable from the autofilled one; only the saved entry and the lock list show the difference. (2) As in AF-REFILL, the panel needed `Reset` before `Start Autofill` was offered again.
+- Evidence: `PROV-SAME-fills.json`, `PROV-SAME-sse.json`, `PROV-SAME-result.json`, `serve-PROV-SAME.log`
 - Verdict: PASS · Severity: — · Known: none needed
