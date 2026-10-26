@@ -44,8 +44,10 @@ python3 run.py
 
 Open http://localhost:5000. The tool rail on the left switches between tools:
 
-- **Grid** -- click a square and type to enter letters; the `Symmetry` toggle under VIEW mirrors
-  black squares across the grid.
+- **Grid** -- click a square and type to enter letters; `Black square` (or Space or `.`) turns the
+  selected square black, and the `Symmetry` toggle under VIEW mirrors black squares across the grid.
+  Under New grid, `11×11`, `15×15` or `21×21` starts an empty grid; `Open saved` lists your saved
+  grids, each with `Open` and `Delete`.
 - **Lists** -- the word lists the app searches and fills from; upload your own with `Upload`.
 - **Search** -- type a pattern such as `C?T` (`?` is an unknown letter), tick the word lists to
   search in, and press `Search`.
@@ -55,7 +57,8 @@ Open http://localhost:5000. The tool rail on the left switches between tools:
 - **Import** and **Export** -- `Import Grid` reads a saved grid from `Upload File` or `Paste JSON`;
   `Export` saves the grid as JSON, HTML or text, and `Preview` shows it first.
 
-The top bar has `Undo`, `Redo`, `Verify words`, `Clean grid` and `Save grid`. `Undo` steps back one
+The top bar has `Undo`, `Redo`, `Verify words`, `Clean grid` and `Save grid`. `Save grid` asks
+"Name this grid" (it suggests a name), then `Save`; the grid also saves itself as you work. `Undo` steps back one
 edit at a time: a letter, a black square, a placed word, a whole `Apply All Best Placements`, a Clean or
 a finished autofill. The keys are Cmd+Z (Ctrl+Z on Windows and Linux) to undo and Cmd+Shift+Z to redo.
 Undo stops at a new grid, an import or an opened save.
