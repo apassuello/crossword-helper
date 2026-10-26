@@ -17,6 +17,9 @@ Spec: `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` §6 (0.2.20
   inside a same-origin iframe sized exactly 1440×900 and 1024×768, reading the iframe's own
   `innerWidth`/`innerHeight`, as L3 and L4 of the 2026-10-22 run did.
 - Evidence: `.handoff/artifacts/2026-10-26-novice-readiness/` in the main checkout (gitignored).
+- 5xx oracle (owner 2026-10-26, over the plan's "read with the browser tool's ... network logs"): the E1 server's
+  request log is the source for 5xx counts; the browser tool's count is pasted beside it. Reason: on F-TOUR the
+  browser tool logged a 503 for an SSE request the server log records as 200 (1 of 2 searches); see F-TOUR.
 - Before the run (Task 8.2 Step 2b): the browser storage of `http://127.0.0.1:5000` and `http://localhost:3000`
   was backed up to the evidence dir and cleared; `4678406` was cloned, set up under E1, served, and one grid
   saved; its folder was then deleted and the browser storage kept (`old-setup.log`, `clean-prev-old-storage.json`,
@@ -59,7 +62,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: CLEAN-PREV | PASS | CLEAN-PREV |
 | New: MACOS | PASS | MACOS |
 | New: F-WORKFLOW | | |
-| New: F-TOUR | | |
+| New: F-TOUR | FAIL (re-run cold after the fix) | F-TOUR |
 | New: F-IMPORT | | |
 | New: F-EDIT | | |
 | New: F-THEME-LOAD | | |
@@ -333,3 +336,25 @@ status rc=0
 - Evidence: `SETUP-MISSING.txt`, `PORT.txt`, `SERVE-1.txt`
 - Verdict: PASS · Severity: — · Known: npm's line carries "(installed with Node.js 18 or later)" in place of a bare minimum version, as `setup.sh` ships it
 
+
+### F-TOUR — README "Using the app", followed literally (stopped at the Autofill step)
+- Phase: 8.5a · Env: E1 (clone `e4e881e`, `python3 run.py` from `$SB/e1.sh`) · Browser: Chrome at `http://127.0.0.1:5000`, inner 1920×907
+- Deviation from "literally": the README says "Open http://localhost:5000"; the run uses `http://127.0.0.1:5000` because plan 8.5a Step 1 binds that origin (a separate localStorage origin from `localhost:5000`).
+- Pre-run: 127.0.0.1:5000 storage cleared with no backup (`8.5a-clean-storage.txt`); first load wrote `xw_theme`, `crossword_symmetry_enabled`, cleared again, reloaded.
+- Steps and observed:
+  - Grid, type letters: clicked the top-left square, typed `CAT` → C, A, T in row 1; Filled 1.3%.
+  - `Black square` button on row 3 col 5, Space on row 6 col 1, `.` on row 8 col 9, `Symmetry` on → each placed with its mirror: `Total225 | Black6·2.7% | Filled1.4% | Words39`.
+  - `Symmetry` off (class `on` removed), Space on row 2 col 2 → no mirror: `Total225 | Black7·3.1% | Filled1.4% | Words39`.
+  - New grid `11×11` over letters → "Replace the current grid? Unsaved changes are lost." `Replace` / `Cancel`; Replace → `Total121 | Black0·0.0% | Filled0.0% | Words22`, `Undo` disabled.
+  - `21×21` → `Total441 | Black0·0.0% | Filled0.0% | Words42`; `15×15` → `Total225 | Black0·0.0% | Filled0.0% | Words30` (empty grids, no confirm).
+  - `Open saved` → one entry `15×15 2026-10-26 09:04` with `Open` and `Delete`.
+  - Lists: panel shows the shipped lists; README's `Upload` is the submit button inside the `📤 Upload Wordlist` form (buttons: `Cancel Upload · [file] · Upload · Cancel`).
+  - Search: `C?T`, Comprehensive Dictionary ticked by default, `Search` → `Results (7)`: CAT, CIT, COT, CRT, CST, CDT, …
+  - Theme: `Choose File` with `fixture-theme-workflow.txt` (PUZZLE, CROSSWORD, ANAGRAM) → "Loaded Words (3)"; `Apply All Best Placements` → toast "Applied 3 theme words successfully!", three words on the grid with lock marks: `Total225 | Black6·2.7% | Filled10.0% | Words42`.
+  - **Autofill, as written ("The tool rail on the left switches between tools"):** with the Theme panel open, clicking `Autofill` in the rail (coordinate click, ref click and DOM `.click()`) changes nothing visible: the rail's `on` class stays on `Theme`, the Theme Words panel stays over the inspector. Only after the panel's `×` does the Autofill panel show (rail `on`: `Autofill,Symmetry`). Source: `src/App.jsx` `selectTool` — Theme is an overlay, any other rail id sets `currentTool` underneath it, and `ToolRail` is passed `tool={showThemePanel ? 'theme' : currentTool}`. The README names no `×` step.
+- Console errors so far: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- Network so far: 33 `/api/` requests in the browser tool's log, one with a 5xx: `GET /api/progress/4c27cd42-…` statusCode 503 (the `C?T` search's progress stream). The server log has the same request as 200 (`serve-8.5a.log` line 40); Resource Timing reports it as `initiatorType "other"`, `responseStatus 0`; a curl replay of the search returns `200 OK`, `text/event-stream`. `stream_progress` (`backend/api/progress_routes.py`) has no 503 path (its only error return is 404 "Task not found"). Control: a second in-browser `C?T` search → browser tool `GET /api/progress/1dd9b02f-…` statusCode 200, server log line 76 200. So 1 of 2 browser-tool 503s against 2 of 2 server 200s for the same requests. (The control cleared the browser tool's network log; the 33-entry list above was read before that.)
+- **Contamination, from 09:08 on:** the server log holds requests this run did not make while the driver was in the shell: `POST /api/fill/with-progress` 202 at 09:08:25 (plus `/api/progress/c46682d2-…`, validate, number), Lists-panel content views of `foreign_classics`, `foreign_words` and `demo_words` at 09:08:37–49, two grid writes at 09:09:21–22. The grid then showed `Total225 | Black10·4.4% | Filled10.2% | Words48` (four black squares not placed by this run). The browser viewport also changed size three times during the run (1440×813 → 1440×757 → 1568×741 screenshot frames). Another person was using the same tab (Arthur, confirmed 2026-10-26); no observation after 09:08 is attributed to this run's actions.
+- Evidence: `8.5a-clean-storage.txt`, `serve-8.5a.log`, `fixture-theme-workflow.txt`, `F-TOUR-autofill-click-under-theme.png`, `F-TOUR-after-theme-close.jpg`
+- Instrument note: the browser tool's key name `period` does not type `.`; the key text `.` does.
+- Verdict: FAIL (owner 2026-10-26: FAIL, filed and fixed in Phase 6, row re-run cold) · Severity: minor (the `×` is visible, nothing is lost) · Known: none filed (`gh issue list --state all` for "theme panel", "overlay", "rail", "Theme Words"); nearest is #50 item 3, the Theme panel covering the top bar, fixed in `b303186`, a different defect
