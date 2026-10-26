@@ -95,7 +95,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-DEFAULTS | | |
 | New: AF-SUB2 | PASS on `494ddb8` (second stream via curl for 15 s on a 30.7 s Repair run on a blank 15×15) | AF-SUB2 |
 | New: AF-REFILL | PASS on `494ddb8` (partial fill via a cancelled Beam run; Start returns after Reset) | AF-REFILL |
-| New: AF-LOCKED-CROSS | | |
+| New: AF-LOCKED-CROSS | PASS on `494ddb8` (`SEE` score 6 < floor 30 and off-list `TTE` typed; all six crossing slots filled, `stuck_cells` empty) | AF-LOCKED-CROSS |
 | New: AF-GATE | PASS on `494ddb8` (Beam run 238.7 s on a blank 15×15; every writer disabled or inert, banner shown throughout) | AF-GATE |
 | New: AF-OFFLIST | PASS on `494ddb8` (`TTE` off-list: run filled 44/44, three cells red, toast named `TTE`) | AF-OFFLIST |
 | New: AF-NOLISTS | | |
@@ -1059,4 +1059,28 @@ $ awk '{print length($1)}' core/crosswordese.txt | sort -n | uniq -c
 - F-FEEDBACK notes: `Start Autofill` -> progress and then the toast `Typed words not in the selected word lists: TTE` within about 0.4 s of the first sample (the sample is at 396 ms); the finished run -> `Successfully filled 44/44 slots!` and the grid filled within the 1 s read; plain language, no error.
 - Observations (not judged against a criterion): (1) The three `TTE` cells stay red after a successful fill, with `Successfully filled 44/44 slots!` beside them. (2) The toast is gone within about 4 s.
 - Evidence: `AF-OFFLIST-fills.json`, `AF-OFFLIST-sse.json`, `serve-AF-OFFLIST.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### AF-LOCKED-CROSS — Repair with a typed off-list word and a typed listed word below the score floor, each crossed by open slots: the crossing slots are filled, `stuck_cells` empty (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the AF-BLOCK row's tab (id 1893513519, closed at the end of this row; tab 1893513492 untouched). Criterion (plan 8.6, AF-LOCKED-CROSS): "Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start" -> "The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), `http://127.0.0.1:5000/` loaded; console and network tracking on this tab were started before the AF-BLOCK row's first action and the console cleared again at this row's start. Server log start line 523 (window = lines 524-551, `serve-AF-LOCKED-CROSS.log`). Fixture `example_11x11.json` imported; panel defaults (algorithm `repair`, 5 min, Comprehensive Dictionary, `Min Score: 30`; request `min_score` 30, `algorithm` `repair`).
+- Words and the floor. The floor is the panel's Min Score, 30. Scores are the CLI's own scorer (`cli/src/fill/word_list.py`, `WordList(...)` over `comprehensive.txt`, run read-only from Bash; the plain shipped lists carry no per-word scores, so this is the score the run uses):
+```
+SEE 6
+TTE None
+STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
+```
+  Typed listed word below the floor: `SEE` (in `comprehensive.txt`: `grep -c` 1; score 6 < 30) at r0c0-c2. Typed off-list word: `TTE` (`grep -c` 0; the AF-OFFLIST check, control `ERA` 1) at r10c4-c6; no score. The slot r0c0-c2 is crossed by down slots c0, c1, c2 (3 letters each, r0-r2); `TTE` is crossed by down slots c4 (r7-r10), c5 (r0-r10) and c6 (r5-r10).
+- Instrument (rule 13): patch installed before Start (and the `MutationObserver` of AF-OFFLIST). Proof: `__fills[0].body` non-empty, `"locked_cells":[[0,0],[0,1],[0,2],[10,4],[10,5],[10,6]]`; status 202; task `04798d75-3917-4a26-864a-455d919bce9a`; 12 progress samples. Files (`ls -l`): `AF-LOCKED-CROSS-fills.json` 1255 bytes, `AF-LOCKED-CROSS-sse.json` 4184 bytes.
+- Steps and observed:
+  - X1 Typed with real clicks and key events. Grid before Start (DOM): `SEE#...#.../...#...#.../.........../###....#.../......#..../...#...#.../....#....../...#....###/.........../...#...#.../...#TTE#...`.
+  - X2 `Start Autofill`. Panel at the 1 s to 6 s reads: `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset`. The last SSE sample: `complete`, `success` true, `blocked` false, `stuck_cells` `[]`, `off_list_cells` `[[10,4],[10,5],[10,6]]`; the run did not reject any placement.
+  - X3 End grid (DOM): `SEE#ACE#LAT/TAI#NRA#EGO/ANNIVERSARY/###DIAN#DEO/DESALT#ASET/ELA#SIA#TOA/PETA#ONIONS/OVI#INGA###/SEATFILLERS/INT#ASE#ANI/TSE#TTE#RAE`. The typed cells are unchanged. Crossing slots, final state (read from that grid): down c0 r0-r2 `STA`, down c1 r0-r2 `EAN`, down c2 r0-r2 `EIN`; down c4 r7-r10 `IFAT`, down c5 r0-r10 `CREATIONIST`, down c6 r5-r10 `ANGLEE`. All six are filled; their scores above (36, 36, 36, 43, 107, 32) are all at or above the floor of 30.
+  - X4 Red cells (`__red()`): `[[10,4],[10,5],[10,6]]`: the off-list `TTE` only; `SEE`, listed but below the floor, is not red. The toast `Typed words not in the selected word lists: TTE×` was recorded by the observer.
+- Judgement against the criterion: both words were typed and crossed by open slots; the run filled every crossing slot (stuck_cells `[]`) and rejected no placement: met as written. The floor did not stop a locked below-floor word from standing or its crossings from being filled.
+- Console errors: browser tool, onlyErrors, tracking on before the first action of the AF-BLOCK row, read at the end of this row -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 28 requests in the window (`requests: 28 5xx: 0 4xx: 0`; 1 `POST /api/fill/with-progress` 202). Browser tool: 0 of 16 `/api/` requests since the last read were 5xx.
+- F-FEEDBACK notes: `Start Autofill` -> the filled grid and `Successfully filled 44/44 slots!` within the 1 s read; the off-list toast as in AF-OFFLIST; no error message arose.
+- Observations (not judged against a criterion): (1) The `stuck_cells` path was not exercised: the run filled everything, so only the "fills the crossing slots" arm of the criterion was observed. (2) `ANGLEE` (score 32) is the only crossing word within 2 points of the floor.
+- Evidence: `AF-LOCKED-CROSS-fills.json`, `AF-LOCKED-CROSS-sse.json`, `serve-AF-LOCKED-CROSS.log`
 - Verdict: PASS · Severity: — · Known: none needed
