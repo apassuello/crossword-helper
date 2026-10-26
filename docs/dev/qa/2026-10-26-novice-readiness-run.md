@@ -81,7 +81,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-EXPORT | PASS on `494ddb8` (HTML and Text on manual export; automated clicks saved no file, instrument fault) | X1, X2, X3, X4, X5, X6, X7 |
 | New: F-RESTORE | PASS on `494ddb8` | R1, R2 |
 | New: F-FEEDBACK | | |
-| Hidden | | |
+| Hidden | PASS on `494ddb8` (#53 and #54 still open though their symptoms are gone) | CL1, A-SBS, EXPORT-HIDE |
 | New: TH2b | | |
 | New: TH3 | | |
 | New: TH4 | | |
@@ -615,4 +615,42 @@ status rc=0
 - F-FEEDBACK notes: `Save grid` opens the name prompt at once; after `Save` the header reads "saved locally · just now" within 0.8 s (no toast); after the reload the restore message is on the page by the first read (1.2 s); no error message appeared.
 - Observations: (1) the header shows `saved locally · just now` already before `Save` is pressed in the name prompt, because autosave runs; the explicit Save only adds a named entry. (2) The restore message is the only sign that a reload restored a saved grid; `Start blank` is the way out.
 - Evidence: `serve-Grid.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### CL1 — No Clues tool in the rail (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, a new tab for the Hidden row (closed at the end); the CL1, A-SBS and EXPORT-HIDE blocks share that tab, one server-log window and one console read (stated in each).
+- Pre-run: storage as left by the Grid row (one saved grid, restored on load); console log cleared. Server log start line 1435 (window = lines 1436-1437, `serve-Hidden.log`). Case definition read from `### CL1` of the 2026-10-22 log (then NOT-IMPLEMENTED, Known I2: a `Clue list` panel reading "Arrives in a later task.").
+- Steps and observed:
+  - Rail buttons read from the page by title: `Grid`, `Search`, `Autofill`, `Theme`, `Lists`, `Import`, `Export` (plus the top-bar `Undo`, `Redo`, `Verify words`, `Clean grid`, toggle theme). No `Clues`.
+  - Buttons, links and tabs whose text, title or `aria-label` matches `/clue/i`: none (empty list).
+  - Open issue #53 ("Clues tool is a placeholder ("Arrives in a later task") that no open issue tracks") describes the 2026-10-22 state, a placeholder panel; on `494ddb8` the control is absent, which is what the criterion asks, so #53's symptom is not reproducible as written.
+- Console errors / 5xx: see EXPORT-HIDE.
+- F-FEEDBACK notes: no grid or server action in this case.
+- Observations: #53 is open although the placeholder is gone from the rail; the orchestrator may want to say whether the issue should be closed or re-pointed.
+- Evidence: `serve-Hidden.log`
+- Verdict: PASS · Severity: — · Known: #53 (symptom no longer present)
+
+### A-SBS — No "Suggest Black Square" button in the Autofill panel (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: same tab as CL1 · Pre-run: continues CL1's tab; case definition read from `### A-SBS` of the 2026-10-22 log (then NOT-IMPLEMENTED: a button disabled with the tooltip "lands in Task 20").
+- Steps and observed:
+  - Opened the `Autofill` rail panel; its text read from the page: "Autofill · 38 empty slots / OPTIONS / Algorithm / Repair (Recommended) / Hybrid (Beam + Repair) / Beam Search / Classic CSP / Timeout / 1 min / 2 min / 5 min / 10 min / 30 min / Min Score: 30 / Adaptive mode / Partial fill / Cleanup invalid words / WORD LISTS / BUILT-IN / Comprehensive Dictionary / Classic Crosswordese (431) / Expressions & Slang / Foreign Classics / Foreign Words / CUSTOM / Demo Words / Start Autofill".
+  - Buttons on the page whose text matches `/black/i` while this panel is open: `[]` (the Grid panel's `Black square` is not rendered with it).
+  - Open issue #54 ("Suggest Black Square" is a permanently disabled button pointing at Task 20 of an archived plan) describes the 2026-10-22 state; on `494ddb8` there is no such button.
+- Console errors / 5xx: see EXPORT-HIDE.
+- F-FEEDBACK notes: opening the panel changed the page at once (read after 0.6 s); no server action.
+- Observations: as for #53, #54 is open though its symptom is gone from the UI; its server routes were not probed here.
+- Evidence: `serve-Hidden.log`
+- Verdict: PASS · Severity: — · Known: #54 (symptom no longer present)
+
+### EXPORT-HIDE — Export panel shows no PDF, `.puz`, "Include clues" (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: same tab as CL1 · Pre-run: continues CL1's tab. New case, defined by the plan row (no carried block).
+- Steps and observed: opened the `Export` rail panel. Panel text read from the page: "Export Grid / Export Format / JSON (for reimport) / HTML (printable) / Text (simple) / Preview / Export / Format Information / JSON / Complete grid data that can be reimported into this tool / HTML / Printable webpage with styled grid / Text / Simple text representation using ■ for black squares".
+  - `select` options read from the DOM: `[json=JSON (for reimport), html=HTML (printable), text=Text (simple)]`.
+  - `input[type=checkbox]` count in the panel: 0 (no "Include clues" checkbox).
+  - Tests on the page text: `/pdf/i` false, `/\.puz|puz\b/i` false, `/include clues/i` false, `/clue/i` false. The Format Information list has three entries (JSON, HTML, Text).
+- Console errors (one read for CL1, A-SBS, EXPORT-HIDE; cleared at the row's start): browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 2 requests in the window (start line 1435, `serve-Hidden.log`; `requests: 2 5xx: 0 4xx: 0`: `/api/health` 1, `/api/wordlists` 1). The browser tool's network log was not read for this row; the server log is the count.
+- F-FEEDBACK notes: opening the panel changed the page at once; no server action, no error message.
+- Observations: none beyond the above.
+- Evidence: `serve-Hidden.log`
 - Verdict: PASS · Severity: — · Known: —
