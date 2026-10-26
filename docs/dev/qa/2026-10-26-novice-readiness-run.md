@@ -74,7 +74,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: F-WORKFLOW | PASS on `494ddb8` | F-WORKFLOW |
 | New: F-TOUR | PASS on `494ddb8` (FAIL on `e4e881e`, #91) | F-TOUR, F-TOUR re-run |
 | New: F-IMPORT | PASS on `494ddb8` | I1, I2, I3, I4, I5, I6 |
-| New: F-EDIT | | |
+| New: F-EDIT | PASS on `494ddb8` | E1, E2, E3, E4, E5, E6, E7, E8, E9, E10, E11 |
 | New: F-THEME-LOAD | | |
 | New: F-LISTS | | |
 | New: F-SEARCH | | |
@@ -449,4 +449,27 @@ status rc=0
 - F-FEEDBACK notes: upload and paste show a Preview at once (within 2 s); `Import Grid` over a non-blank grid shows the replace confirm at 1 ms; `Replace` shows "Processing..." within 3 ms and the grid changes within 0.65 s; an import over a blank grid changes the grid with no message. Errors: "Failed to parse file: Unexpected end of JSON input" and "Invalid JSON: Unexpected token 'h', "this is not"... is not valid JSON" — a plain "Error:" heading, no stack trace, raw JSON or HTTP code, but the browser's own parser wording follows the plain prefix.
 - Observations (not judged against a criterion): the replace confirm also shows when the grid has black squares and no letters; both error texts carry the JS parser's message after the prefix. The first Upload File import (I1) was not preceded by a confirm because the grid was entirely blank.
 - Evidence: `fixture-malformed-truncated.json`, `fixture-malformed-paste.txt`, `serve-F-IMPORT.log`, `F-IMPORT-malformed-paste.jpg`
+- Verdict: PASS · Severity: — · Known: —
+
+### F-EDIT — typing, keys, black squares with Symmetry on and off, undo and redo (`494ddb8`)
+- Phase: 8.5a · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this run's own tab group
+- Pre-run: continues in the F-IMPORT tab and storage (no clean start needed; every case starts from `New grid`); console and network logs cleared; server log start line 249. The grid is read from the page's SVG (size, black squares, letters, the selected cell by its accent outline, the direction by the accent-tinted word cells), the stats line from the page text, and the numbers shown are compared with the numbers computed from the page's own black squares (a 2-or-more-letter entry start gets the next number).
+- Hint line read from the page: "Type letters · Arrows move · Space or . black square · Enter switch direction · Tab next word · Backspace clear". Spec §3.9 read: one letter, one black-square toggle together with its mirror, are each one undo step; keys Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y.
+- Steps and observed:
+  - E1 `New grid` `11×11` over a grid with letters and blacks → a replace confirm, `Replace` → `Total 121 | Black 0·0.0% | Filled 0.0% | Words 22`, `Undo` and `Redo` disabled; `Symmetry` on.
+  - E2 Clicked r1c1, typed `CAT` → row 1 `CAT........`, selection r1c4 across, `Filled 2.5%`.
+  - E3 `Backspace` on the empty r1c4 → selection r1c3, nothing cleared (`Filled 2.5%`); `Backspace` again on `T` → row 1 `CA.........`, `Filled 1.7%`, selection stays r1c3.
+  - E4 Arrows from r1c3 (across): ArrowDown → r2c3 down; ArrowRight → r2c4 across; ArrowUp → r1c4 down; ArrowLeft → r1c3 across. `Enter` → r1c3 down (direction switched, cell unchanged). `Tab` → r1c4 down (next word start; focus stays on the grid).
+  - E5 `Space` on r3c3 with Symmetry on → blacks r3c3 and r9c9 (the mirror), `Black 2·1.7%`, `Words 26`; numbering 25 shown, 25 expected, 0 mismatches. `Cmd+Z` → no blacks, `Words 22`, `Undo` and `Redo` both enabled; `Cmd+Shift+Z` → r3c3 and r9c9 back, `Redo` disabled.
+  - E6 One step at a time: from `CAT` + clear-`T` + black pair, `Cmd+Z` twice → black pair gone and `T` back (`CAT........`, `Filled 2.5%`); a third `Cmd+Z` → `CA.........` (`Filled 1.7%`); `Ctrl+Y` → `CAT`. Each press moved exactly one edit.
+  - E7 Typed after undo: clicked r5c6, `.` → blacks r5c6 and r7c6, `Black 2·1.7%`, `Words 25`, and `Redo` became disabled (the redo stack was dropped).
+  - E8 Symmetry toggled off (button loses `on`; `localStorage` `crossword_symmetry_enabled` `false`): `.` on r2c2 → blacks r2c2, r5c6, r7c6 only (no mirror), `Black 3·2.5%`, `Words 25`. `Cmd+Z` → r2c2 gone only; `Cmd+Shift+Z` → back; `Space` on r2c2 → removed alone (`Black 2·1.7%`).
+  - E9 Symmetry toggled on (`localStorage` `true`): `Space` on black r5c6 → both r5c6 and r7c6 removed (`Black 0·0.0%`, `Words 22`); `Cmd+Z` → both back (`Black 2`); `Cmd+Shift+Z` → both gone.
+  - E10 `New grid` `15×15` over letters → replace confirm "Replace the current grid? Unsaved changes are lost.", `Replace` → `Total 225 | Black 0·0.0% | Filled 0.0% | Words 30`, `Undo` and `Redo` disabled. Typed `HELLO` at r1c1 → `Filled 2.2%`, selection r1c6 across. ArrowDown → r2c6 down, `Enter` → r2c6 across. `.` on r4c4 → blacks r4c4 and r12c12, `Black 2·0.9%`, `Words 34`, numbering 33 shown, 33 expected, 0 mismatches. `Cmd+Z` → no blacks, `Words 30`, 29 numbers, 0 mismatches; `Cmd+Shift+Z` → both back, `Words 34`, 33 numbers, 0 mismatches.
+  - E11 `New grid` `21×21` over letters → the same confirm, `Replace` → `Total 441 | Black 0·0.0% | Filled 0.0% | Words 42`, `Undo` and `Redo` disabled. Typed `WORD` at r1c1 → `Filled 0.9%`, selection r1c5. `Space` on r6c6 → blacks r6c6 and r16c16, `Black 2·0.5%`, `Words 46`, numbering 45 shown, 45 expected, 0 mismatches. `Cmd+Z` → no blacks, `Words 42`, 41 numbers, 0 mismatches; `Cmd+Z` → `WOR`, `Filled 0.7%`; `Cmd+Shift+Z` twice → `WORD` and both blacks back, `Words 46`, 45 numbers, 0 mismatches. `Ctrl+Z` → no blacks (`Black 0·0.0%`); `Ctrl+Shift+Z` → both blacks back, `Redo` disabled.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 54 requests in the window (start line 249, `serve-F-EDIT.log`; the log helper: `requests: 54 5xx: 0 4xx: 0`); browser tool 0 of 54 `/api/` requests (`/api/number`, `/api/grid/validate`, `/api/health`, all 200).
+- F-FEEDBACK notes: typing, arrows, `Enter`, `Tab`, `Backspace`, black squares, undo and redo all change the grid and the stats line at once (same read after the key, well under 2 s); `New grid` over content shows the replace confirm at once, then the new grid on `Replace`. No message or toast appears for any of them and none is needed beyond the grid change. No error message arose.
+- Observations (not judged against a criterion): `Backspace` on an empty cell moves back one cell without clearing; the browser tool's `period` key name did not reach the app (the `.` key typed as text did), a tool artefact, not an app defect; the `Black square` tool button in the Grid panel was not driven here (the key path was). The first 11×11 `New grid` confirm text was not read in E1 (a script error preceded the read); the 15×15 and 21×21 ones are quoted above.
+- Evidence: `serve-F-EDIT.log`
 - Verdict: PASS · Severity: — · Known: —
