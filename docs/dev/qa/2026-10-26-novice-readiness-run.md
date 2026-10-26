@@ -101,7 +101,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-NOLISTS | | |
 | New: AF-VERIFY-STALE | | |
 | New: AF-SAVE-RUN | | |
-| New: SAVE-SIZE | | |
+| New: SAVE-SIZE | PASS on `494ddb8` | SAVE-SIZE (Open saved and reload) |
 | New: SAVE-TABS | | |
 | New: PROV-SAME | | |
 | New: FULL-GRID | | |
@@ -653,4 +653,21 @@ status rc=0
 - F-FEEDBACK notes: opening the panel changed the page at once; no server action, no error message.
 - Observations: none beyond the above.
 - Evidence: `serve-Hidden.log`
+- Verdict: PASS · Severity: — · Known: —
+
+### SAVE-SIZE — A 21×21 save restores at its own size with its letters (`494ddb8`)
+- Phase: 8.5 · Env: E1, the `494ddb8` clone · Browser: Chrome at `http://127.0.0.1:5000`, this row's own tab (closed at the end of the Save group). Criterion (plan 8.5, spec S3): "The saved grid restores at its own size, with its letters".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 → 0; keys `crossword_saved_grids`, `xw_theme`, `crossword_symmetry_enabled`), then `http://127.0.0.1:5000/` loaded. Server log start line 1447 (window = lines 1448-1485, `serve-SAVE-SIZE.log`). The browser tool's console tracking started only at the row's end (first call), so the console read covers the reload only; two other tabs on this origin (ids 1893513492, 1893513494, not created by this row) were open throughout and not touched.
+- Steps and observed:
+  - `21×21` clicked on an empty 15×15 (no confirm). Selected cell r1c1 (DOM click on the cell's `rect`; a coordinate click and a click on the cell's `g` did not select it), typed `SIZEGRID` with the computer tool's type action, selected r21c21 and typed `Q`. Read from the SVG: `n` 21, letters `r1c1 S, r1c2 I, r1c3 Z, r1c4 E, r1c5 G, r1c6 R, r1c7 I, r1c8 D, r21c21 Q` (9 letters), black squares none, `Total 441 Black 0·0.0% Filled 2.0% Words 42`. This read is the "saved grid" literal the later reads are compared with.
+  - `Save grid` → prompt input prefilled `21×21 2026-10-26 16:41`; replaced with `Size test 21`, `Save` → header "saved locally · just now". `crossword_saved_grids`: `[["Size test 21",21,"2026-10-26T15:41:24.944Z"]]` (name, size, savedAt).
+  - `11×11` → in-page modal "Replace the current grid? Unsaved changes are lost." (it appeared although the grid had just been saved) → `Replace` → `n` 11, 0 letters, `Total 121 Black 0·0.0% Filled 0.0% Words 22`; stored entry unchanged (string equal to the one read after Save).
+  - Path A, Open saved: `Open saved` listed "Size test 21 / 21×21 · 2026-10-26 16:41 / Open / Delete"; `Open` (no confirm, the grid was empty) → by script: `n` 21 equals saved 21, letters object equal to the saved literal (`true`), black squares equal (`true`), `Total 441 Black 0·0.0% Filled 2.0% Words 42`.
+  - `11×11` again → modal → `Replace` → `n` 11, 0 letters, `Total 121 …`; stored entry unchanged (`crossword_saved_grids` still `[["Size test 21",21,"2026-10-26T15:41:24.944Z"]]`).
+  - Path B, reload of `http://127.0.0.1:5000/`: the page read `Restored "Size test 21" (saved 2026-10-26 16:41)`; by script `n` 21, letters equal to the saved literal (`true`), `n === 21` (`true`), no black squares, `Total 441 Black 0·0.0% Filled 2.0% Words 42`.
+- Console errors: browser tool, onlyErrors → "No console errors or exceptions found for this tab." (tracking began at the end of the row, see Pre-run).
+- 5xx (header ruling): server log 0 of 38 requests in the window (`requests: 38 5xx: 0 4xx: 0`: `/api/health` 14, `/api/grid/validate` 6, `/api/number` 6, assets). Browser tool: "No requests matching \"/api/\" found for this tab" (its tracking began after the actions).
+- F-FEEDBACK notes: `21×21`, `11×11`+`Replace`, `Open` each changed the grid and stats by the first read (0.8-1.0 s); `Save` → header "saved locally · just now" within 0.9 s; reload shows `Restored "Size test 21" (saved 2026-10-26 16:41)` at once; `Open` shows no message that a save was opened (as in F-RESTORE). No error message appeared.
+- Observations (not judged against a criterion): (1) `New grid` asks for the replace confirm on a grid that was just saved, because it holds letters. (2) A coordinate click and a click on the cell's `g` did not select a cell in this tab; the cell `rect` DOM click worked (tool-side, not a finding).
+- Evidence: `serve-SAVE-SIZE.log`
 - Verdict: PASS · Severity: — · Known: —
