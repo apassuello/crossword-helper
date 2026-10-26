@@ -104,7 +104,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: SAVE-SIZE | PASS on `494ddb8` | SAVE-SIZE (Open saved and reload) |
 | New: SAVE-TABS | PASS on `494ddb8` | SAVE-TABS |
 | New: PROV-SAME | PASS on `494ddb8` | PROV-SAME |
-| New: FULL-GRID | | |
+| New: FULL-GRID | PASS on `494ddb8` (imported filled 15×15: `0 empty slots`, Start disabled, hint `Clear some cells to run autofill again`) | FULL-GRID |
 
 ## Cases
 ### MACOS — setup.sh under macOS bash 3.2, wheels on Python 3.14, :5000 before any server
@@ -1098,4 +1098,19 @@ STA 36   EAN 36   EIN 36   IFAT 43   CREATIONIST 107   ANGLEE 32
 - F-FEEDBACK notes: unticking the last list -> Start disabled and the hint `Select at least one word list` visible by the 600 ms read (not timed more closely); no server call, no error message.
 - Observations (not judged against a criterion): none.
 - Evidence: `serve-AF-NOLISTS.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### FULL-GRID — A grid with every white cell filled: the Autofill panel's Start is disabled and the hint says to clear cells (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the AF-NOLISTS row's tab (id 1893513521; tab 1893513492 untouched). Criterion (plan 8.6, FULL-GRID; spec P18): "Fill every cell, open the Autofill panel" -> "Start is disabled; the hint says to clear cells (P18)".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 2 -> 0), `http://127.0.0.1:5000/` loaded; the browser tool's console and network tracking had been on in this tab since before AF-NOLISTS's first action, the console cleared again at this row's start. Server log start line 569 (window = lines 570-584, `serve-FULL-GRID.log`).
+- How the grid was filled: `Import` -> Upload File with the shipped fixture `data/grids/example_15x15_filled_complete.json` of the clone (copied to the scratch dir, uploaded through the browser tool's file-upload action; copy in the evidence dir as `fixture-example_15x15_filled_complete.json`), then `Import Grid`. Not typed.
+- Steps and observed:
+  - F1 Import preview (DOM text): `Size: 15×15`, `Cells: 225`, `Filled: 195`. After `Import Grid` the sidebar stats read (DOM): `Total 225`, `Black 30·13.3%`, `Filled 100.0%`, `Words 70`. 195 + 30 = 225, so every white cell holds a letter.
+  - F2 Clicked `Autofill`. Panel header `Autofill · 0 empty slots`; `Start Autofill` button `disabled` = `true`; the hint element (`xw-insp-mini`) textContent `Clear some cells to run autofill again`. Ticked list: Comprehensive Dictionary (default).
+- Judgement against the criterion: Start is disabled and the hint tells the user to clear cells, in the wording the spec gives for P18: met as written.
+- Console errors: browser tool, onlyErrors, read at the end of the row -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 15 requests in the window (`requests: 15 5xx: 0 4xx: 0`; no `/api/fill` request). Browser tool: 0 of 8 `/api/` requests in the last read were 5xx.
+- F-FEEDBACK notes: `Import Grid` -> the grid filled and the sidebar stats updated within the 1 s read; opening Autofill -> Start disabled with the hint at once (600 ms read); plain language, no error.
+- Observations (not judged against a criterion): none.
+- Evidence: `serve-FULL-GRID.log`, `fixture-example_15x15_filled_complete.json`
 - Verdict: PASS · Severity: — · Known: none needed
