@@ -97,7 +97,7 @@ One row per §6 Area, copied from the spec by command; Verdict filled by Tasks 8
 | New: AF-REFILL | PASS on `494ddb8` (partial fill via a cancelled Beam run; Start returns after Reset) | AF-REFILL |
 | New: AF-LOCKED-CROSS | | |
 | New: AF-GATE | PASS on `494ddb8` (Beam run 238.7 s on a blank 15×15; every writer disabled or inert, banner shown throughout) | AF-GATE |
-| New: AF-OFFLIST | | |
+| New: AF-OFFLIST | PASS on `494ddb8` (`TTE` off-list: run filled 44/44, three cells red, toast named `TTE`) | AF-OFFLIST |
 | New: AF-NOLISTS | | |
 | New: AF-VERIFY-STALE | PASS on `494ddb8` (Verify and Clean responses held back by a page-side delay, an instrument) | AF-VERIFY-STALE |
 | New: AF-SAVE-RUN | PASS on `494ddb8` (reload at 36.9 s of a Beam run; saved and restored grid equal the Start grid) | AF-SAVE-RUN |
@@ -1040,4 +1040,23 @@ $ awk '{print length($1)}' core/crosswordese.txt | sort -n | uniq -c
 - F-FEEDBACK notes: `Start Autofill` (typed word) -> the message above in the panel within the 2.5 s read; `Start Autofill` (empty grid) -> the same message within the 2.5 s read; no toast, no red cell; plain language, no stack trace, raw JSON or bare HTTP code.
 - Observations (not judged against a criterion): (1) The panel header says `43 empty slots` / `44 empty slots` beside the block message. (2) A slot holding a typed letter but with no word of its length at all is reported as a length block, not `no_word_fits`, so no cell goes red; that is the check order of spec §2.1 as the run shows it.
 - Evidence: `AF-BLOCK-LEN-fills.json`, `AF-BLOCK-LEN-sse.json`, `AF-BLOCK-LEN-empty-fills.json`, `AF-BLOCK-LEN-empty-sse.json`, `serve-AF-BLOCK-LEN.log`
+- Verdict: PASS · Severity: — · Known: none needed
+
+### AF-OFFLIST — A fully typed word not in the selected list: the run proceeds, its cells are red, the toast names the word (`494ddb8`)
+- Phase: 8.6 · Env: E1, the `494ddb8` clone (restarted server, log `serve-494ddb8-b.log`) · Browser: Chrome at `http://127.0.0.1:5000`, the AF-BLOCK row's tab (id 1893513519, closed at the end of the last row of this group; tab 1893513492 untouched). Criterion (plan 8.6, AF-OFFLIST): "Type a word not in the lists (case 2), Start" -> "The run proceeds; those cells show red; the toast `Typed words not in the selected word lists: <WORD>` shows".
+- Pre-run: storage cleared from `/api/health` (`localStorage.length` 3 -> 0), `http://127.0.0.1:5000/` loaded; console and network tracking on this tab were started before the AF-BLOCK row's first action and the console cleared again at this row's start. Server log start line 502 (window = lines 503-520, `serve-AF-OFFLIST.log`). Fixture `example_11x11.json` imported; panel defaults (Repair, 5 min, Comprehensive Dictionary only ticked: DOM ticked labels `["Comprehensive Dictionary"]`, Min Score 30).
+- Absence check (Bash, `data/wordlists/comprehensive.txt` of the clone), with a positive control: `TTE in comprehensive.txt: 0`; control `ERA in comprehensive.txt: 1`; `grep -n -i '^TTE'` printed nothing.
+- Instrument (rule 13): patch installed before Start, plus a `MutationObserver` on `document.body` collecting the text of added nodes (to catch the toast). Proof: `__fills[0].body` non-empty, `"locked_cells":[[10,4],[10,5],[10,6]]`; status 202; task `4e8964ca-9d62-4b5f-93b5-91e3b40d500c`; 12 progress samples. Files (`ls -l`): `AF-OFFLIST-fills.json` 1237 bytes, `AF-OFFLIST-sse.json` 4183 bytes.
+- Typed word: `TTE` at r10c4-c6 (real clicks and key events). Grid before Start (DOM): `...#...#.../...#...#.../.........../###....#.../......#..../...#...#.../....#....../...#....###/.........../...#...#.../...#TTE#...`.
+- Steps and observed:
+  - O1 `Start Autofill`. Progress samples (server timestamps relative to the first): `Starting CLI process...` 0 ms, `Loaded 44024 words, starting autofill` 315 ms, then at 396 ms a `running` sample, progress 35, message `Typed words not in the selected word lists: TTE`, carrying `off_list_cells` `[[10,4],[10,5],[10,6]]`; then `Analyzing grid`, `43 empty slots, 0 dead ends, 0 blocking words`, `Complete! 44/44 slots filled` (576 ms) and the `complete` event (608 ms) with `success` true, `blocked` false, `stuck_cells` `[]`, `off_list_cells` the same three cells, and `warnings` `["Typed words not in the selected word lists: TTE"]`.
+  - O2 The run proceeded: no block, the solver ran and filled. Panel at the 1 s, 2 s, 3 s and 4 s reads: `Autofill · 0 empty slots | Successfully filled 44/44 slots! | Reset`. End grid (DOM): `NEA#ACE#AMI/ANE#NRA#LIN/EARPIERCING/###STAN#MAR/DEPART#NORA/OER#AIG#NET/OROS#OOCYTE/RIM#INAT###/DEPOSITSLIP/IST#ASE#ABE/ETS#TTE#INA`: the typed `TTE` at r10c4-c6 is unchanged.
+  - O3 Red cells read from the DOM at the end (`__red()`): `[[10,4],[10,5],[10,6]]`: exactly the three `TTE` cells, and they stay red on the filled grid.
+  - O4 Toast: the observer recorded an added node with the text `Typed words not in the selected word lists: TTE×` (the `×` is its close button). It had gone by the time the 4 s read ran (no element with that text left in the DOM), so it lives longer than the first poll but under about 4 s; I did not time it more closely.
+- Judgement against the criterion: the run proceeded and filled; the three cells of the off-list word are red; the toast text is the criterion's, with `TTE` for `<WORD>`: met as written.
+- Console errors: browser tool, onlyErrors, tracking on before the first action of the AF-BLOCK row, read at the end of this row -> "No console errors or exceptions found for this tab."
+- 5xx (header ruling): server log 0 of 18 requests in the window (`requests: 18 5xx: 0 4xx: 0`; 1 `POST /api/fill/with-progress` 202). Browser tool: 0 of 13 `/api/` requests since the last read were 5xx.
+- F-FEEDBACK notes: `Start Autofill` -> progress and then the toast `Typed words not in the selected word lists: TTE` within about 0.4 s of the first sample (the sample is at 396 ms); the finished run -> `Successfully filled 44/44 slots!` and the grid filled within the 1 s read; plain language, no error.
+- Observations (not judged against a criterion): (1) The three `TTE` cells stay red after a successful fill, with `Successfully filled 44/44 slots!` beside them. (2) The toast is gone within about 4 s.
+- Evidence: `AF-OFFLIST-fills.json`, `AF-OFFLIST-sse.json`, `serve-AF-OFFLIST.log`
 - Verdict: PASS · Severity: — · Known: none needed
