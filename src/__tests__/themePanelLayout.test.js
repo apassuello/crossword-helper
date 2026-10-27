@@ -37,3 +37,24 @@ describe('Theme panel sits below the top bar (§3.6 TH5)', () => {
     expect(body).toMatch(/height:\s*calc\(100vh - var\(--xw-topbar-h\)\)/);
   });
 });
+
+// Source guard for novice-readiness spec 0.2.22 §3.6, #93: Save grid's name prompt
+// opens above the Theme panel, and toasts stay above the prompt. Same limit as
+// above: it pins the z-index order in source, NOT evidence the layout is right.
+describe('Save prompt stacks above the Theme panel, below toasts (§3.6, #93)', () => {
+  const zIndex = (file, selector) => {
+    const body = ruleBody(read(file), selector);
+    expect(body).not.toBeNull();
+    const m = body.match(/z-index:\s*(\d+)/);
+    expect(m).not.toBeNull();
+    return parseInt(m[1], 10);
+  };
+
+  it('.theme-words-panel < .xw-save-prompt < .xw-toast-stack', () => {
+    const panel = zIndex('src/components/ThemeWordsPanel.scss', '.theme-words-panel');
+    const prompt = zIndex('src/styles/bench/base.css', '.xw-save-prompt');
+    const toast = zIndex('src/styles/bench/base.css', '.xw-toast-stack');
+    expect(panel).toBeLessThan(prompt);
+    expect(prompt).toBeLessThan(toast);
+  });
+});
