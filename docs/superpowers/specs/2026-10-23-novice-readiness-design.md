@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.21** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.22** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -650,6 +650,8 @@ out of scope here; recorded only.
   Export) closes the panel by the same path as its ×, and shows that tool; the rail highlights the tool
   shown. A click on Theme while it is open leaves it open; the VIEW toggles (`Symmetry`) are not tools
   and leave it open. Closing this way is a close under §3.8, so a running Apply All stops (0.2.19).
+- With the Theme panel open, Save grid's "Name this grid" prompt opens above the panel; its field, Save and
+  Cancel are clickable at 1024 px. The toasts stay above the prompt (#93).
 
 **[NOTE]** Why it is must-have: the Save button in `TopBar` is the only save control. There is no Cmd+S
 shortcut and no Escape handler, so a covered top bar makes Save unreachable until the panel is closed.
@@ -1177,3 +1179,8 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   changed the tool under the overlay, and the rail kept Theme highlighted (#91). Owner 2026-10-26: FAIL,
   fixed here, row re-run cold. Beat: a README step naming the × (it documents the dead click instead of
   removing it).
+- 0.2.22 (2026-10-27): §3.6 the Save grid name prompt opens above the Theme panel. Phase 8 TH5
+  observation: with the panel open, the prompt (`z-index: 20`) opened under it (`z-index: 1000`), and at
+  1024 px its field, Save and Cancel could not be clicked (#93). Owner 2026-10-27: raise the prompt, do not
+  close the panel. Beat: closing the panel on Save, which drops the user's place in the panel, and #91's
+  rule covers rail tools only.
