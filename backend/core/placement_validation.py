@@ -61,6 +61,8 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
     direction = placement["direction"]
     grid_size = len(grid)
 
+    # Messages are user-facing and the grid labels rows/columns from 1, so every
+    # position printed below is the zero-based index + 1 (#94). Indices stay zero-based.
     conflicts: List[str] = []
 
     for i, letter in enumerate(word):
@@ -68,13 +70,13 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
             target_row = row
             target_col = col + i
             if target_col >= len(grid[row]):
-                conflicts.append(f"Position ({target_row}, {target_col}) out of bounds")
+                conflicts.append(f"Position ({target_row + 1}, {target_col + 1}) out of bounds")
                 continue
         else:  # down
             target_row = row + i
             target_col = col
             if target_row >= len(grid):
-                conflicts.append(f"Position ({target_row}, {target_col}) out of bounds")
+                conflicts.append(f"Position ({target_row + 1}, {target_col + 1}) out of bounds")
                 continue
 
         cell = grid[target_row][target_col]
@@ -99,11 +101,11 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
                 existing_letter = cell.strip().upper()
 
         if is_black:
-            conflicts.append(f"Cannot place '{letter}' at ({target_row}, {target_col}): cell is black")
+            conflicts.append(f"Cannot place '{letter}' at ({target_row + 1}, {target_col + 1}): cell is black")
         elif existing_letter and existing_letter != letter:
             # Only report conflict if letters DON'T match
             conflicts.append(
-                f"Letter conflict at ({target_row}, {target_col}): "
+                f"Letter conflict at ({target_row + 1}, {target_col + 1}): "
                 f"trying to place '{letter}' but cell already contains '{existing_letter}'"
             )
         # If existing_letter matches letter, that's a valid intersection - allow it
@@ -144,16 +146,16 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
             continue  # Twin is itself / another boundary square
         if (tr, tc) in word_cells:
             conflicts.append(
-                f"Boundary black square at ({br}, {bc}) requires a symmetric "
-                f"black square at ({tr}, {tc}), which is occupied by this "
+                f"Boundary black square at ({br + 1}, {bc + 1}) requires a symmetric "
+                f"black square at ({tr + 1}, {tc + 1}), which is occupied by this "
                 f"word — placement would break grid symmetry"
             )
             continue
         state, twin_letter = _cell_state(grid, tr, tc)
         if state == "letter":
             conflicts.append(
-                f"Boundary black square at ({br}, {bc}) requires a symmetric "
-                f"black square at ({tr}, {tc}), but that cell contains "
+                f"Boundary black square at ({br + 1}, {bc + 1}) requires a symmetric "
+                f"black square at ({tr + 1}, {tc + 1}), but that cell contains "
                 f"'{twin_letter}'"
             )
         elif state == "empty":
