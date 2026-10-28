@@ -29,8 +29,8 @@ class TestValidatePlacement:
         conflicts = validate_placement(grid, placement)
 
         assert (
-            "Boundary black square at (7, 4) requires a symmetric "
-            "black square at (7, 10), which is occupied by this "
+            "Boundary black square at (8, 5) requires a symmetric "
+            "black square at (8, 11), which is occupied by this "
             "word — placement would break grid symmetry"
         ) in conflicts
 
@@ -94,3 +94,35 @@ class TestApplyCheckedPlacement:
         before = copy.deepcopy(grid)
         apply_checked_placement(trial, {"word": "HELLO", "row": 2, "col": 3, "direction": "across"})
         assert grid == before
+
+
+class TestMessagePositionsAreOneBased:
+    """#94: the grid labels rows and columns from 1, so every position in a
+    conflict message is the zero-based index plus one. Display only."""
+
+    def test_letter_conflict_reports_one_based_position(self):
+        grid = _empty_grid(15)
+        grid[5][6] = {"letter": "A", "isBlack": False}
+        conflicts = validate_placement(grid, {"word": "BC", "row": 5, "col": 6, "direction": "across"})
+        assert "Letter conflict at (6, 7): trying to place 'B' but cell already contains 'A'" in conflicts
+
+    def test_black_cell_reports_one_based_position(self):
+        grid = _empty_grid(15)
+        grid[3][4] = {"letter": "", "isBlack": True}
+        conflicts = validate_placement(grid, {"word": "AB", "row": 3, "col": 4, "direction": "across"})
+        assert "Cannot place 'A' at (4, 5): cell is black" in conflicts
+
+    def test_out_of_bounds_reports_one_based_position(self):
+        grid = _empty_grid(15)
+        across = validate_placement(grid, {"word": "ABC", "row": 2, "col": 13, "direction": "across"})
+        assert "Position (3, 16) out of bounds" in across
+        down = validate_placement(grid, {"word": "ABC", "row": 13, "col": 2, "direction": "down"})
+        assert "Position (16, 3) out of bounds" in down
+
+    def test_boundary_twin_letter_reports_one_based_positions(self):
+        grid = _empty_grid(15)
+        grid[12][12] = {"letter": "Q", "isBlack": False}
+        conflicts = validate_placement(grid, {"word": "HELLO", "row": 2, "col": 3, "direction": "across"})
+        assert (
+            "Boundary black square at (3, 3) requires a symmetric black square at (13, 13), but that cell contains 'Q'"
+        ) in conflicts

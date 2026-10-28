@@ -123,6 +123,36 @@ describe('ThemeWordsPanel Component', () => {
     });
   });
 
+  it('labels a placement with 1-based row and column, matching the grid (#94)', async () => {
+    const user = userEvent.setup();
+
+    mockApiEndpoint('post', '/theme/upload', {
+      words: ['BIRTHDAY'],
+      count: 1,
+      validation: { valid: true, errors: [], warnings: [] },
+    });
+    mockApiEndpoint('post', '/theme/suggest-placements', {
+      suggestions: [
+        {
+          word: 'BIRTHDAY',
+          length: 8,
+          suggestions: [
+            { word: 'BIRTHDAY', row: 6, col: 7, direction: 'across', score: 90, reasoning: 'Good placement' },
+          ],
+        },
+      ],
+    });
+
+    render(<ThemeWordsPanel {...defaultProps} />);
+
+    const file = new File(['BIRTHDAY'], 'theme.txt', { type: 'text/plain' });
+    await user.upload(document.querySelector('input[type="file"]'), file);
+
+    await waitFor(() => {
+      expect(screen.getByText('Row 7, Col 8 (across)')).toBeInTheDocument();
+    });
+  });
+
   it('shows apply button for each placement suggestion', async () => {
     const user = userEvent.setup();
 

@@ -482,7 +482,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
                   >
                     <div className="suggestion-header">
                       <span className="placement-info">
-                        Row {suggestion.row}, Col {suggestion.col} ({suggestion.direction})
+                        Row {suggestion.row + 1}, Col {suggestion.col + 1} ({suggestion.direction})
                       </span>
                       <span className={`score score-${Math.floor(suggestion.score / 20)}`}>
                         {suggestion.score}/100
