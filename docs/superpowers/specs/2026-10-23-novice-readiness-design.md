@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.22** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.23** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -691,6 +691,10 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   skipped word with its reason: for a 400 with a `conflicts` array, the server's conflict text (as
   `handleApplyPlacement` already shows it, fixed under #15); for any other failure, `Could not reach
   the server` or the error's message. `skipped due to conflicts` is used only for real conflicts.
+- **Positions are 1-based (#94).** Every position the Theme panel shows (the placement label, and the skip and
+  conflict reasons from Apply and Apply All) counts rows and columns from 1, matching the grid's labels:
+  the cell the grid shows as row 8, col 9 is reported as `Row 8, Col 9` and `(8, 9)`. The payload fields
+  (`row`, `col` on a suggestion or placement) stay zero-based; the +1 is added only where text is formatted.
 - **Applying against the grid that was sent (0.2.8, review F1, F4).** A theme apply response is merged
   against the grid its request was built from: a cell the user changed after the request was sent keeps
   the user's value. A response landing after the document was replaced is dropped (PD-6-G12). Apply All
@@ -1184,3 +1188,9 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   1024 px its field, Save and Cancel could not be clicked (#93). Owner 2026-10-27: raise the prompt, do not
   close the panel. Beat: closing the panel on Save, which drops the user's place in the panel, and #91's
   rule covers rail tools only.
+- 0.2.23 (2026-10-28): §3.8 positions the Theme panel shows are 1-based. Phase 8 SR-PLACE, TH3 and TH4
+  observations: the panel's "Row 7, Col 8" is the zero-based position of what the grid labels row 8, col 9,
+  and Apply All skip reasons (`Letter conflict at (5, 6)`) are likewise one row up and one column left (#94).
+  Owner 2026-10-28: serious, fixed in this session. Beat: changing the payload fields to 1-based (breaks
+  every consumer of the zero-based contract), and fixing the CLI and import messages listed in #94 here
+  (not measured).
