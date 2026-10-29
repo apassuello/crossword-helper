@@ -4,7 +4,7 @@
 
 ---
 
-**Status: DRAFT -- awaiting owner approval. No user-guide page has been written.**
+**Status: APPROVED by the owner on 2026-10-29 with every default in "Decisions needed" (D1-D6) and one addition (D7: a macOS install how-to). Page writing may begin.**
 
 Scope (ruled by the requester): documentation for people who **use** Crossword Helper to build
 crosswords. Developer, contributor and architecture documentation is out of scope and is not touched.
@@ -224,18 +224,26 @@ Not in scope: Architecture, Contributing, API (all exist; linked, not rewritten)
 
 ### Learning architecture
 
-- First page a new user reads: `README.md` (install; unchanged except a "User guide" link), then
-  `docs/user-guide/README.md`.
+- First page a new user reads: `docs/user-guide/README.md`, which sends a first-time reader to
+  `how-to/install-on-macos.md` (D7). `README.md` keeps its short prerequisites and Quick Start and gains one
+  "User guide" link.
 - First successful outcome: a small (11x11) grid with a few hand-placed words, autofilled or partially filled,
   saved and exported to HTML.
-- Core tutorial: `tutorials/first-crossword.md` only. Install is **not** repeated; the tutorial links to the
-  README prerequisites and Quick Start (one home per fact).
+- Core tutorial: `tutorials/first-crossword.md` only. Install is **not** repeated in it: the tutorial links to
+  the install how-to, which is the single detailed home for installation (the README keeps only its short
+  summary; the how-to is checked against `setup.sh`, so the two cannot silently diverge).
 - Redirects out of the tutorial: each step that offers a choice links to the matching how-to or reference row
   rather than explaining alternatives inline.
 
 ### Task architecture
 
 ```text
+Task group: Get it running
+User goal: Install the app and all its dependencies from the GitHub repo and open it
+Likely documents: install-on-macos
+Related reference: cli (invocation), web-app
+Related explanation: none
+
 Task group: Build the grid
 User goal: Get a valid empty grid, shape it, keep my work
 Likely documents: set-up-the-grid, save-open-and-recover
@@ -301,6 +309,7 @@ Out of scope by instruction. Existing pages stay untouched.
 Home
   - docs/user-guide/README.md                       (new landing page)
 Getting Started
+  - Install Crossword Helper on macOS (how-to)                  -- new (D7)
   - (existing) README.md  "Before you start" + "Quick Start"   -- unchanged, linked
 Tutorials
   - Your first crossword (web app, 11x11)
@@ -340,10 +349,10 @@ Diátaxis classification: navigation hub (not one of the four types; contains li
 Purpose: Tell a reader which page to open for their situation.
 Contents:
   - Who this guide is for; web app vs command line in two sentences
-  - "Start here": link to README install, then the tutorial
+  - "Start here": the macOS install how-to, then the tutorial
   - Tables of how-tos by goal, reference pages, and the existing API / CLI-spec links
 Depends on:
-  - README.md (install)
+  - how-to/install-on-macos.md
 Related documents:
   - tutorials/first-crossword.md
 Priority: Required
@@ -357,20 +366,47 @@ File: docs/user-guide/tutorials/first-crossword.md
 Diátaxis classification: tutorial (written via the tutorial-engineer agent, then routed through diataxis-write-doc)
 Purpose: Take a newcomer from a running app to a saved, exported 11x11 puzzle with one guaranteed result.
 Contents:
-  - Start the app (link to README; check "online" status dot)
+  - Start the app (link to the install how-to; check "online" status dot)
   - New 11x11 grid; place black squares with Symmetry on; read the Total/Black/Filled/Words stats
   - Type a few letters; use Search for a pattern; check with Verify words
   - Run Autofill with the recommended algorithm; keep the result
   - Save grid; export HTML and open it
   - Where to go next (links into how-tos and reference)
 Depends on:
-  - README.md "Before you start" and "Quick Start"
+  - how-to/install-on-macos.md
 Related documents:
   - how-to/set-up-the-grid.md, how-to/autofill-a-grid.md, reference/web-app.md
 Priority: Required
 Status: New
 Verification plan: every step is run in the real web UI (Playwright) and the observed outcome pasted; if the
   frontend cannot be built here, the tutorial is cut down to what is verified and the gap is reported.
+```
+
+```text
+Title: Install Crossword Helper on macOS
+Path: Getting Started
+File: docs/user-guide/how-to/install-on-macos.md
+Diátaxis classification: how-to
+Purpose: Take a Mac with nothing installed to the app open in the browser, from the GitHub repository.
+Contents:
+  - Prerequisites: Python 3.9+ and Node.js 18+ (versions and the check commands as `setup.sh` enforces them);
+    macOS and Linux only, Windows unsupported
+  - Get the code: `git clone` or "Download ZIP" (and the `chmod +x setup.sh` that a ZIP extract needs)
+  - Run `./setup.sh`: what it creates (`venv/`, `node_modules/`, `frontend/dist/`) and its "Missing:" messages
+  - Start the app: activate the venv, `python3 run.py`, open http://localhost:5000; `PORT=<other>` when 5000 is taken
+  - Check it works: status dot reads online; `python -m cli.src.cli --version`
+  - Update later (pull, re-run `./setup.sh`) only if the script is shown to support it
+Depends on: none
+Related documents: tutorials/first-crossword.md, how-to/troubleshoot.md, README.md (short summary of the same steps)
+Priority: Required
+Status: New
+Verification plan: `setup.sh` and `run.py` are run in this sandbox (Linux) in a fresh checkout, with real
+  output pasted; every step and message is tied to `setup.sh`/`run.py`. This sandbox is **not** macOS, so
+  the macOS-specific statements (the Xcode command-line-tools stub behind the system `python3`, AirPlay
+  Receiver holding port 5000, the `python.org` installer path) cannot be run here. They are cited to their
+  code comment or README line and to the recorded macOS acceptance run in
+  `docs/dev/qa/2026-10-26-novice-readiness-run.md`, and are marked `unverified` in `claims.md` and `[?]` in
+  the page unless a code line proves them.
 ```
 
 ```text
@@ -689,3 +725,4 @@ Transformation:
 | D4 | The ARCHITECTURE command-count drift and any CLI_SPEC/code disagreements found while writing: record in `claims.md` only, or also fix those docs in this branch? | Record only; fix in a separate commit on request. |
 | D5 | OK to install Flask etc. into a venv and `node_modules` outside version control, to drive the real UI? PyPI is reachable here (Flask wheels downloaded); npm is untested. | Yes (nothing installed is committed). |
 | D6 | Branch: this session is bound to `chore/vendor-doc-skills` and may not push elsewhere without your say-so. Commit the guide there, or do you want a new `docs/user-guide` branch (cut from this one)? | Commit on `chore/vendor-doc-skills`. | Note: the draft-plan commit already went to that branch while D6 was open, and the branch's CI is already red because `docs-check.sh` fails on `.claude/licenses/README.md` (the licenses table names an identifier the guard cannot find). I can fix that as a separate first commit, whichever branch you pick.
+| D7 | Add a macOS install how-to (requested 2026-10-29; the first draft sent readers to the README). | Added above, Required. |
