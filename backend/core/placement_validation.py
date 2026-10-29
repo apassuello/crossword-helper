@@ -2,7 +2,9 @@
 Grid placement conflict validation.
 
 Single implementation of the applier's conflict check — cell/intersection
-conflicts and 180-degree rotational-symmetry boundary-black conflicts — shared
+conflicts, a letter abutting either end of the word (the entry would run on),
+180-degree rotational-symmetry boundary-black conflicts, and new blacks that
+strand an existing letter in a 1-2 cell entry — shared
 by the apply-placement route (backend/api/theme_routes.py) and ThemePlacer's
 candidate filtering (backend/core/theme_placer.py). Neither of those modules
 duplicates this logic; both call in here instead (issue #15).
@@ -169,6 +171,31 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
         elif state == "empty":
             twin_blacks.append((tr, tc))
         # 'black' twin already exists — nothing to add
+
+    # A new black square splits every white run it lands in. A piece left
+    # beside it shorter than 3 cells (the minimum cli/src/core/validator.py
+    # enforces) is refused only when it holds an existing letter: that cuts a
+    # partly filled entry down to a stub the user cannot fix without losing
+    # letters. An empty stub is allowed — the user can still black it out
+    # (owner ruling, 2026-10-29).
+    new_blacks = set(boundary_blacks) | set(twin_blacks)
+
+    def _is_black_after(r: int, c: int) -> bool:
+        return (r, c) in new_blacks or _cell_state(grid, r, c)[0] == "black"
+
+    for br, bc in sorted(new_blacks):
+        for dr, dc in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            run = []
+            r, c = br + dr, bc + dc
+            while 0 <= r < grid_size and 0 <= c < len(grid[r]) and not _is_black_after(r, c):
+                run.append((r, c))
+                r, c = r + dr, c + dc
+            if 0 < len(run) < 3 and any(_cell_state(grid, r, c)[0] == "letter" for r, c in run):
+                first, last = min(run), max(run)
+                conflicts.append(
+                    f"Black square at ({br + 1}, {bc + 1}) would leave a {len(run)}-letter "
+                    f"entry at ({first[0] + 1}, {first[1] + 1})-({last[0] + 1}, {last[1] + 1})"
+                )
 
     return conflicts, boundary_blacks, twin_blacks
 

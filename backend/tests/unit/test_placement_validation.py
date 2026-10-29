@@ -164,3 +164,35 @@ class TestBoundaryLetterRunsOn:
     def test_word_crossing_the_letter_is_still_valid(self):
         grid = self._grid_with_s()
         assert validate_placement(grid, {"word": "ASK", "row": 3, "col": 2, "direction": "across"}) == []
+
+
+class TestBlackSquareStubs:
+    """Blacks a placement adds split the runs they land in. A resulting 1-2 cell
+    stub is a conflict only when it holds an existing letter (owner ruling,
+    2026-10-29); an empty stub is left for the user to black out.
+    """
+
+    PLACEMENT = {"word": "EASTERN", "row": 6, "col": 4, "direction": "across"}
+
+    def test_rejects_stub_cutting_a_filled_crossing_entry(self):
+        # EASTERN needs blacks at (6,3) and its twin (8,3), stranding the N at
+        # (7,3) as a 1-letter down entry.
+        grid = [["." for _ in range(15)] for _ in range(15)]
+        grid[7][3] = "N"
+        conflicts = validate_placement(grid, self.PLACEMENT)
+        assert "Black square at (7, 4) would leave a 1-letter entry at (8, 4)-(8, 4)" in conflicts
+
+    def test_empty_stub_is_allowed(self):
+        # Same blacks on an empty grid strand an empty (7,3): allowed.
+        grid = [["." for _ in range(15)] for _ in range(15)]
+        assert validate_placement(grid, self.PLACEMENT) == []
+
+    def test_suggester_never_strands_an_existing_letter(self):
+        from backend.core.theme_placer import ThemePlacer
+
+        grid = [["." for _ in range(15)] for _ in range(15)]
+        grid[7][3] = "N"
+        results = ThemePlacer(15).suggest_placements(["EASTERN"], existing_grid=grid, max_suggestions_per_word=500)
+        placed = {(s["row"], s["col"], s["direction"]) for s in results[0]["suggestions"]}
+        assert results[0]["suggestions"]
+        assert (6, 4, "across") not in placed
