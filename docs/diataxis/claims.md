@@ -157,7 +157,7 @@ typed.
 | H-04 | add-theme-words | File must be under 1 MB (`File too large (max 1MB)`) | ThemeWordsPanel.jsx:`handleFileSelect` size check | verified (code) | not run |
 | H-05 | add-theme-words | Theme tool: `Upload Theme Words`, `Choose File`, `Loaded Words`, `Placement Suggestions`, `Apply All Best Placements` | ThemeWordsPanel.jsx:388,400,422,447,454 | verified (code) | Theme tool not opened in a run |
 | H-06 | add-theme-words | Invalid list shows toast `Invalid theme words: <first error>`; valid shows `Loaded N theme words` and auto-analyzes | ThemeWordsPanel.jsx `handleFileContent` | verified (code) | not run |
-| H-07 | add-theme-words | Hovering a suggestion previews it; `Apply` places and locks that word | panel help text "Hover over suggestions to preview on grid. Click "Apply" to lock the word." | verified (code) | not run |
+| H-07 | add-theme-words | Hovering a suggestion previews it; `Apply` places and locks that word | panel help text "Hover over suggestions to preview on grid. Click "Apply" to lock the word." | false | Hover does not change the grid; see V-02. |
 | H-08 | add-theme-words | `Apply All Best Placements` applies each best suggestion; skips no-placement or conflicting words; lists skipped with reason | `handleApplyAllPlacements` ThemeWordsPanel.jsx:285-330 | verified (code) | not run |
 | H-09 | add-theme-words | Panel positions are 1-based | `Row {suggestion.row + 1}, Col {suggestion.col + 1}` ThemeWordsPanel.jsx:485 | verified (code) | not run |
 | H-10 | add-theme-words | Locked cells: corner marker; cannot type over, Backspace or blacken; Clean keeps; autofill fixed | CrosswordGrid.jsx Backspace/Space/letter guards on `isThemeLocked`; `mergeGridPreserveThemeLocked` useAutofillMachine.js:381; `getThemeEntries` AutofillPanel.jsx | verified (code) | not run |
@@ -268,7 +268,7 @@ typed.
 | W-19 | web-app | `×` closes the Theme panel | ThemeWordsPanel.jsx:382 | verified (code) | |
 | Z-01 | file-formats | JSON export has `size`, `grid` (`#`, letter, `.`), `numbering` | `gridData` ExportPanel.jsx:16-22 | verified (code) | JSON export not run (HTML export run) |
 | Z-02 | file-formats | `numbering` keyed `"row,col"`, 0-based | `gridData.numbering[\`${row},${col}\`]` ExportPanel.jsx:`generateHTML` | verified (code) | |
-| Z-03 | file-formats | Importer accepts size 3-25 and the listed rules | ImportPanel.jsx:60-110; gridSizes.js:7-8 | verified (code) | |
+| Z-03 | file-formats | Importer accepts size 3-25 and the listed rules; a cell may also be `""`, read as empty (PR #108 review) | ImportPanel.jsx:46,102; gridSizes.js:7-8 | verified (code) | |
 | Z-04 | file-formats | `numbering` optional on import | `numbering: data.numbering \|\| {}` ImportPanel.jsx | verified (code) | |
 | Z-05 | file-formats | HTML export structure: heading `Crossword Puzzle`, one table, number span, black cells, no clues, fixed title | ExportPanel.jsx:56-100; exported file read | verified | crossword.html |
 | Z-06 | file-formats | Text export uses `■` for black | ExportPanel.jsx:109 | verified (code) | |
