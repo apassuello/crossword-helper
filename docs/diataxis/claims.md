@@ -341,5 +341,4 @@ failure below) were run by the reviewer and again afterwards.
 - `crossword list-states --json-output` recorded a paused `repair` run with `"algorithm": "csp"`.
 - `.claude/skills/review-docs/scripts/check-doc-links.py` run on the repository root stops with a
   `UnicodeDecodeError` on a non-UTF-8 file; run on `docs/user-guide` it works.
-- `scripts/docs-check.sh` fails on `.claude/licenses/README.md` (an identifier it cannot find); the failure
-  predates this work (commit `df4f5b2`).
+- `scripts/docs-check.sh` failed on `.claude/licenses/README.md`: it cites the upstream plugin name (diataxis), which the guard cannot find in the tracked tree. The failure came with the vendoring commit `df4f5b2`. Fixed by an allow annotation on that table row, using the guard's documented route for external vocabulary.
