@@ -52,8 +52,9 @@ check the terminal for errors.
 ### Autofill finished but the grid did not change
 
 For some endings the grid shows its pre-run state until you click a `Keep` button. See the outcome table in
-[Autofill a grid](autofill-a-grid.md). If the run ended with a message about highlighted letters, the red
-squares are letters already in the grid that no word fits; change them and run again.
+[Autofill a grid](autofill-a-grid.md). After any result, `Start Autofill` stays hidden until you click `Reset`.
+If the run ended with a message about highlighted letters, the red squares are letters already in the grid that
+no word fits; change them and run again.
 
 ### Autofill's result has entries that are not words
 
@@ -75,8 +76,13 @@ overwritten or deleted; the app tells you to create a custom list instead.
 ### A theme word file is rejected
 
 The toast starts `Invalid theme words:` and the panel lists each problem: a word that is too short (under 3
-letters), longer than the grid, or contains non-letters. A file over 1 MB is refused with
-`File too large (max 1MB)`. See [Add theme words](add-theme-words.md).
+letters) or longer than the grid, or a list of more than 50 words. Any one problem rejects the whole list, so
+fix the file and load it again. A file over 1 MB is refused with `File too large (max 1MB)`. See
+[Add theme words](add-theme-words.md).
+
+### A theme word is missing from `Loaded Words`
+
+A line that contains a space, hyphen or digit is dropped without a message. Write `ICECREAM`, not `ICE CREAM`.
 
 ### An import is rejected
 

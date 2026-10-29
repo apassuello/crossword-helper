@@ -19,15 +19,16 @@ shorter one shows `Pattern must be at least 3 characters`. Lowercase is accepted
 
 ### 2. Choose which word lists to search
 
-Under `Search in wordlists:`, tick the lists to use. `comprehensive` is ticked by default. With nothing
+Under `Search in wordlists:`, tick the lists to use. `Comprehensive Dictionary` is ticked by default. With nothing
 ticked, the app shows `Select at least one word list` and the `Search` button is disabled. To add your own
 list, see [Use your own word lists](use-your-own-word-lists.md).
 
 ### 3. Search and read the results
 
 Click `Search`. Results appear under `Results (N)`, each with its score, the list it came from, and its
-length. A search returns at most 50 words. Change `Sort by` (`Score`, `Alphabetical`, `Length`) or raise
-`Min Score` to narrow the list. If nothing fits you will see `No matching words found`.
+length. A search returns at most 50 words. `Sort by` (`Score`, `Alphabetical`, `Length`) and `Min Score` take
+effect when you click `Search`, so change them first, or change them and click `Search` again. If nothing fits
+you will see `No matching words found`.
 
 Scores come from the word list. The shipped list is large and includes obscure entries and abbreviations, so
 a high result count does not mean every result is a word you would put in a puzzle.

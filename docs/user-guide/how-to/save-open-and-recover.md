@@ -23,13 +23,15 @@ If another saved grid already has that name, the app asks `Replace the saved gri
 After a save, the label beside the button reads `saved locally · just now`, then ages (for example
 `saved locally · 1m ago`).
 
-The app also saves your grid by itself shortly after you edit it (the delay is `AUTOSAVE_MS` in
-`src/hooks/useSaveMachine.js`), so a named save is how you keep a version you want to find again, not the only
-protection against losing work.
+The app also saves your grid by itself, about 30 seconds after you start editing (the delay is `AUTOSAVE_MS`
+in `src/hooks/useSaveMachine.js`). While changes are waiting the label reads `unsaved changes`, then `saving…`,
+then `saved locally · just now`; if a save fails it reads `offline — will retry`. A named save is how you keep
+a version you want to find again.
 
-Saved grids are stored in your browser's local storage. They are not files in the project folder, they do not
-travel to another browser or computer, and clearing the browser's site data removes them. To keep a copy
-outside the browser, [export the grid](import-and-export-grids.md).
+Saved grids are stored in your browser's local storage. They are not files in the project folder. [?] *Browser
+storage is per browser, so they should not appear in another browser or on another computer, and clearing the
+site's data removes them; this is general browser behaviour and was not tested here.* To keep a copy outside
+the browser, [export the grid](import-and-export-grids.md).
 
 ### 2. Reopen a saved grid
 
@@ -44,15 +46,18 @@ In the same list, click `Delete`. The app asks `Delete "<name>"?`; click `Delete
 ### 4. Recover after a reload
 
 When you reload the page, the app reopens your most recent save and shows a banner: `Restored "<name>" (saved
-<time>)`, with `Start blank` and a dismiss `×`. Click `Start blank` if you want an empty grid instead.
+<time>)`, with `Start blank` and a dismiss `×`. `Start blank` only dismisses the banner and opens the Grid tool;
+it does not clear the grid. To get an empty grid, click `11×11`, `15×15` or `21×21` under `New grid` and confirm
+with `Replace`.
 
 Only the newest save is restored automatically. Older saves are still in `Open saved`.
 
 ### 5. Step back from a mistake
 
-Click `Undo` in the top bar, or press `Cmd+Z` (`Ctrl+Z` on Linux); `Redo` is `Cmd+Shift+Z`. One letter is one
-step, and a placed word, `Apply All Best Placements`, a clean, or a finished autofill each undo as one step.
-Undo does not reach back across starting a new grid, importing, or opening a saved grid.
+Click `Undo` in the top bar, or press `Cmd+Z` (`Ctrl+Z` on Linux); `Redo` is `Cmd+Shift+Z`. [?] *The README
+describes undo as one step per letter, with a placed word, `Apply All Best Placements`, a clean or a finished
+autofill each undoing as one step, and as not reaching back across starting a new grid, importing or opening a
+saved grid; this was not re-tested for this page.*
 
 ## Final Result
 

@@ -276,3 +276,70 @@ typed.
 | Z-08 | file-formats | Word list line forms and rules | see L-01..L-06 | verified | parse-wordlist run |
 | Z-09 | file-formats | Uploaded lists stored under `data/wordlists/custom/` | see L-12 | verified (code) | |
 | Z-10 | file-formats | Saved grids live in browser local storage, no file | see S-06 | verified | |
+
+| V-01 | save-open-and-recover | `Start blank` only dismisses the banner and opens the Grid tool; the grid is not cleared | `onStartBlank` App.jsx:796-800 ("it creates nothing itself") | verified | independent reviewer's browser run (`Filled 4.1%` before and after) |
+| V-02 | add-theme-words, web-app | Hovering a placement suggestion does not change the grid | `handleMouseEnterSuggestion` sets state only, ThemeWordsPanel.jsx:56; panel help text at :449 makes the opposite claim | verified | reviewer compared grid SVG before/during hover: unchanged |
+| V-03 | troubleshoot, add-theme-words | A theme line with a space, hyphen or digit is dropped silently; a too-short word is the only reported error; any error rejects the list | `word.isalpha()` theme_routes.py:60; `validation.valid` | verified | my POST to /api/theme/upload: words `AB, HELLO, JAZZ`, errors `AB: Too short`, `valid: false` |
+| V-04 | add-theme-words, web-app | Placing a word can add black squares | `added_black_squares` theme_routes.py:262 | verified (code); runtime by reviewer only | reviewer: Apply All of 3 words took Black 0→6; not reproduced by me |
+| V-05 | add-theme-words, file-formats | More than 50 theme words is refused | `MAX_THEME_WORDS = 50` theme_placer.py:27 | verified | read |
+| V-06 | add-theme-words, web-app | Each suggestion shows `Row r, Col c (direction)` (from 1), a score out of 100, a reason, and the button `✓ Apply This Placement` | ThemeWordsPanel.jsx:485,501 | verified (code) | |
+| V-07 | autofill-a-grid | Extra endings: `Cancelled by user`, `No solution found`, `Autofill failed`, `Lost contact with the autofill run.`, `Autofill was paused outside the app.`, and the `some entries may need review` variant | useAutofillMachine.js:67,406,427,437,449,457,551 | verified (code); not reproduced | rows marked `[?]` in the page |
+| V-08 | autofill-a-grid, web-app | `Start Autofill` renders only when the machine is idle; `Reset` is needed after any result | `state === 'idle' &&` AutofillPanel.jsx:387 | verified | reviewer runtime: after Keep fill no Start button; after Reset it returned |
+| V-09 | autofill-a-grid, web-app, tutorial | The empty-slot count includes partly filled slots | `countEmptySlots` AutofillPanel.jsx:62-66 (`slot.pattern.includes('?')`) | verified (code) | `41` observed with JAZZ typed |
+| V-10 | autofill-a-grid, tutorial | `Successfully filled N/M slots!` leaves the grid already filled with only `Reset` | useAutofillMachine.js:377-392 | verified | reviewer runtime: `0 empty slots Successfully filled 42/42 slots! Reset` |
+| V-11 | save-open-and-recover, web-app | Save labels `unsaved changes`, `saving…`, `offline — will retry`; autosave about 30 s | useSaveMachine.js:362-375; `AUTOSAVE_MS = 30000` useSaveMachine.js:50 | verified | reviewer runtime: `unsaved changes` then `saved locally · just now` after 34 s |
+| V-12 | web-app, add-theme-words | `Cmd/Ctrl+L` toggles theme lock; Shift/Alt-click toggles black; clicking the selected square rotates direction | CrosswordGrid.jsx:91-96 and handleCellClick (:266-272) | verified (code); Ctrl+L also reviewer runtime | Shift/Alt-click and click-rotate code-read only |
+| V-13 | set-up-the-grid, web-app | Turning a square black erases its letter, and its mirror's with Symmetry on | `writeToggleBlack` gridEdits.js:62-66 | verified | reviewer runtime: `Filled 0.0%`; one Ctrl+Z restored both |
+| V-14 | file-formats, use-your-own-word-lists | A word must be 3-21 letters; else skipped as `length outside 3-21` | `_is_valid_word` word_list.py:195-197; reason string cli.py:2423 | verified | reviewer dry-run import skipped `OK` and a 23-letter line |
+| V-15 | find-words-by-pattern, web-app | `Sort by` and `Min Score` apply when `Search` is clicked | `searchPattern` PatternMatcher.jsx:93-125 | verified | reviewer runtime (order changed only after re-search) |
+| V-16 | set-up-the-grid | VIOLATIONS carries warnings about the grid (isolated regions, a word under three letters, 0-based positions) as well as advice | `useNumbering` puts warnings and suggestions in the list (useNumbering.js:132); strings from `/api/grid/validate` | verified | reviewer ran the route |
+| V-17 | import-and-export-grids | Import errors: `Invalid cell value at (r, c): "x". Must be '#', '.', or A-Z.` and `Invalid cell at (r, c): must be a string, got …`; 0-based | ImportPanel.jsx:99,103 | verified (code) | |
+| V-18 | install-on-macos | Uploads change tracked `data/wordlists/metadata.json`; may make `git pull` refuse | reviewer saw the tracked file modified by an upload | unverified | pull conflict inferred, not reproduced; page marks `[?]` |
+| V-19 | install-on-macos | Uploaded lists live in `data/wordlists/custom/` inside the project folder | WordListManager default dir wordlist_manager.py:28; `category: 'custom'` | verified (code) | |
+
+## Status counts
+
+`verified` means a code line proves the claim; where the claim is about behaviour it was also run, except
+rows marked `verified (code)`, which are read from the code and not run. Counts come from this command, not
+from hand:
+
+```bash
+python3 - <<'PY'
+import re, collections
+c = collections.Counter()
+for row in open("docs/diataxis/claims.md"):
+    if not re.match(r"\| [A-Z]-\d+", row):
+        continue
+    status = row.strip().strip("|").replace("\\|", "@@").split("|")[4].strip().lower()
+    c[status.split(" ")[0].split("(")[0]] += 1
+print(dict(c))
+PY
+```
+
+Rows marked `cut (D8: GUI only)` belong to command-line content removed from the guide when the owner ruled
+the command line would not be used. They are kept for the record and are not claims the guide makes.
+
+## Independent review
+
+An independent `review-docs` pass (not the author) over `docs/user-guide/` returned Rejected: three
+must-fix findings and sixteen should-fix findings, now fixed in the pages; rows `V-01` to `V-19` record the
+claims it touched. Its three must-fix findings were: `Start blank` does not clear the grid; hovering a theme
+suggestion does not preview it (the panel's own help text says it does); the troubleshooting page named a
+theme-file error that cannot occur. The link checker (all links resolve) and `scripts/docs-check.sh` (only the
+failure below) were run by the reviewer and again afterwards.
+
+## Discrepancies found, not fixed (D4: recorded only)
+
+- `docs/ARCHITECTURE.md` changelog states a CLI command count that no longer matches
+  `python -m cli.src.cli --help`.
+- `README.md` says templates for 11x11, 15x15 and 21x21 are included; `validate` reports errors for
+  `data/grids/example_11x11.json` and `data/grids/example_21x21.json` (only the 15x15 passes).
+- The Theme panel's own help text says hovering a suggestion previews it on the grid
+  (`ThemeWordsPanel.jsx`, "Hover over suggestions to preview on grid"); hovering changes nothing.
+- The `Start blank` button on the restore banner does not start a blank grid; it opens the Grid tool.
+- `crossword fill` exits 0 and saves its output even when the fill is partial or has invalid entries.
+- `crossword list-states --json-output` recorded a paused `repair` run with `"algorithm": "csp"`.
+- `.claude/skills/review-docs/scripts/check-doc-links.py` run on the repository root stops with a
+  `UnicodeDecodeError` on a non-UTF-8 file; run on `docs/user-guide` it works.
+- `scripts/docs-check.sh` fails on `.claude/licenses/README.md` (an identifier it cannot find); the failure
+  predates this work (commit `df4f5b2`).

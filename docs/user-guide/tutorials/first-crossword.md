@@ -20,7 +20,7 @@ how-to guide linked at the end for when you want to go further.
 
 - The app is installed and running. If it is not, follow
   [Install Crossword Helper on macOS](../how-to/install-on-macos.md) first, then come back.
-- The app is open in your browser at <http://localhost:5000>.
+- The app is open in your browser at <http://localhost:5000> (or the port you started it on).
 - A grid you have not edited. [?] *If the current grid already has letters in it, the app may ask you to
   confirm before step 2 replaces it; this was not tried on this page.*
 
@@ -130,7 +130,8 @@ Searching does not change the grid, and you have used `Search` only to look. (Cl
 Autofill picks words for the empty squares. Your JAZZ stays.
 
 1. Click **Autofill** in the tool rail. The heading `Autofill` is followed by a count of empty slots.
-   With only JAZZ typed, it reads 41 empty slots.
+   With only JAZZ typed, it reads 41 empty slots (a slot is one across or down entry that is not yet
+   completely filled).
 2. Leave `Algorithm` on `Repair (Recommended)`.
 3. Set `Timeout` to `1 min`. The options run from 1 min to 30 min, and the default is 5 min. A shorter
    timeout keeps the tutorial short.
@@ -156,8 +157,10 @@ reads 100.0% in the run this page was written from.
 > message above says so: "entries may be invalid". That is why the next step exists. For open autofill
 > issues, see [Known Limitations](../../../README.md#known-limitations) in the README.
 
-[?] *If your run ends with a different message and no `Keep fill` button, the grid keeps the letters it had
-before the run, and steps 10 and 11 still work on it. This outcome was not run for this page.*
+If your run ends with `Successfully filled N/M slots!`, the fill is already in the grid and there is no `Keep fill`
+button: click `Reset` and carry on. [?] *If it ends with another message and no `Keep fill` button, the grid keeps
+the letters it had before the run and steps 10 and 11 still work on it; that outcome was not reached when this
+page was written.*
 
 ### 9. See which words are invalid
 

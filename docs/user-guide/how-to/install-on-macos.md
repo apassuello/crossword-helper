@@ -34,7 +34,8 @@ git clone https://github.com/apassuello/crossword-helper.git
 cd crossword-helper
 ```
 
-or use **Download ZIP** on the GitHub page, extract it, open Terminal in the extracted folder, and run:
+or use **Download ZIP** on the GitHub page, extract it, then in Terminal change into the extracted folder (`cd`
+followed by the folder's path) and run:
 
 ```bash
 chmod +x setup.sh
@@ -53,7 +54,8 @@ the Python packages from `requirements.txt` into it, installs the JavaScript pac
 builds the web interface into `frontend/dist/`. The packages go into `venv/` and `node_modules/` inside the
 project folder, not into your system Python or global Node packages.
 
-When it works, the output ends like this (from a Linux run; version numbers on your Mac will differ):
+When it works, the output looks like this (from a Linux run; version numbers on your Mac will differ). After
+`=== Setup complete ===` the script prints a few more lines repeating how to start the app:
 
 ```text
 === Crossword Helper Setup ===
@@ -100,12 +102,14 @@ holds the port. Start on a different one and open that address instead:
 PORT=5001 python3 run.py
 ```
 
-Then open <http://localhost:5001>. [?] *On macOS the AirPlay Receiver service can hold port 5000; this is
-stated in a code comment in `run.py` and was not reproduced on the Linux machine used to check this page.*
+Then open <http://localhost:5001>. Use that port wherever this guide says `localhost:5000`, and start the app the
+same way every time. [?] *On macOS the AirPlay Receiver service can hold port 5000; this is stated in a code
+comment in `run.py` and was not reproduced on the Linux machine used to check this page.*
 
 ### 5. Stop and restart later
 
-Press `Ctrl+C` in the terminal to stop the app. To start it again, from the project folder:
+Press `Ctrl+C` in the terminal to stop the app. To start it again, from the project folder (put `PORT=5001`
+before `python3` if you used another port):
 
 ```bash
 source venv/bin/activate
@@ -115,7 +119,7 @@ python3 run.py
 ## Final Result
 
 With the app running, the status label in the top bar reads **online**. You can also check from a second
-Terminal window:
+Terminal window (replace `5000` with your port if you started on another):
 
 ```bash
 curl http://localhost:5000/api/health
@@ -130,6 +134,11 @@ curl http://localhost:5000/api/health
 Fetch the new code (`git pull` in a clone, or download a fresh ZIP) and run `./setup.sh` again. The script
 can be repeated: on a second run it reports `Virtual environment already exists` and reinstalls the
 packages.
+
+Word lists you uploaded are stored in `data/wordlists/custom/` inside the project folder (saved grids are in
+your browser and are not affected). A fresh ZIP in a new folder starts without your uploaded lists, so copy
+that folder across. [?] *Uploads also change the tracked file `data/wordlists/metadata.json`, which may make
+`git pull` refuse to update; this was not reproduced.*
 
 ## Next Steps
 

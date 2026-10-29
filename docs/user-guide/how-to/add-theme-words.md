@@ -15,10 +15,11 @@ has set entries (a theme, names, a date) that must survive the fill.
 
 ### 1. Prepare the theme file
 
-One word per line, letters only. The app converts words to capitals and drops duplicates. A line that
-contains a space, hyphen or digit is dropped without a message, so write `ICECREAM`, not `ICE CREAM`. A word
-shorter than 3 letters, or longer than the grid is wide, is reported as an error, and a very long list is
-refused (the limit is `MAX_THEME_WORDS` in `backend/core/theme_placer.py`). The file must be under 1 MB.
+One word per line, letters only (the full rules are in [File formats](../reference/file-formats.md#theme-word-file)).
+A line that contains a space, hyphen or digit is dropped without a message, so write `ICECREAM`, not
+`ICE CREAM`. A list of more than 50 words (the limit `MAX_THEME_WORDS` in `backend/core/theme_placer.py`), a
+word shorter than 3 letters or a word longer than the grid is wide is an error, and any one error rejects the
+whole list: fix the file and load it again.
 
 ### 2. Load the words
 
@@ -30,19 +31,24 @@ each word could go. The words appear under `Loaded Words`.
 
 ### 3. Place the words
 
-The `Placement Suggestions` section lists each word with its candidate positions. Hovering over a suggestion
-previews it on the grid. Click `Apply` on a suggestion to place and lock that word.
+The `Placement Suggestions` section lists each word with its candidate positions. Each suggestion shows
+`Row r, Col c (direction)` (counted from 1, like the labels on the grid), a score out of 100 and a short reason.
+Hovering over a suggestion does not change the grid. Click `✓ Apply This Placement` to place and lock that word.
 
 To place everything at once, click `Apply All Best Placements`. It applies each word's best suggestion in
 turn and skips a word that has no valid placement or whose best placement conflicts with something already in
-the grid; the skipped words are listed with the reason. Positions shown in the panel are counted from 1, like
-the labels on the grid.
+the grid; the skipped words are listed with the reason.
+
+Placing a word can add black squares to the grid, so the `Black` count may rise. `Undo` reverses a placement.
 
 ### 4. Know what a lock does
 
 A placed theme word is theme-locked: its squares show a small coloured corner, you cannot overwrite them by
 typing or clear them with `Backspace`, you cannot make one of them black, `Clean grid` leaves them alone, and
 autofill treats them as fixed.
+
+You can also lock a letter you typed yourself: right-click the square, or select it and press `Cmd+L` (`Ctrl+L`
+on Linux). The same action unlocks it.
 
 If you change the grid so a suggestion no longer fits, the suggestions are refreshed for the changed grid.
 

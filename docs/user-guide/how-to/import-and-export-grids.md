@@ -31,9 +31,9 @@ Open the **Import** tool in the left rail and pick a method:
   `Invalid file type. Please select a .json file.`
 - `Paste JSON`: paste the text into `Paste JSON Data` and click `Validate JSON`.
 
-The app checks the shape, shows a `Preview` with the grid's statistics, and reports any problem, such as
-`Grid row 2 has 14 cells, expected 15` or `Invalid cell at (0, 1): ... Must be '#', '.', or A-Z.` (row and
-column numbers there count from 0).
+The app checks the shape, shows a `Preview` with the grid's statistics, and reports the first problem after
+`Error:`, for example `Grid row 2 has 14 cells, expected 15` or `Invalid cell value at (0, 1): "x". Must be '#',
+'.', or A-Z.` (row and column numbers in these messages count from 0).
 
 ### 3. Import it
 
@@ -46,7 +46,8 @@ working on first ([Save, reopen and recover your work](save-open-and-recover.md)
 
 1. Open the **Export** tool.
 2. Choose `Export Format`:
-   - `JSON (for reimport)` downloads `crossword.json`, the whole grid, which the Import tool reads back.
+   - `JSON (for reimport)` downloads `crossword.json`, the whole grid, which the Import tool is meant to read back
+     [?] (the panel says so; a round trip was not run for this page).
    - `HTML (printable)` downloads `crossword.html`, a web page with the grid, its numbers and your letters.
    - `Text (simple)` downloads `crossword.txt`, a plain-text grid with `■` for black squares.
 3. Click `Preview` to look at the result in the panel (the HTML preview is not available; use `Export`), then

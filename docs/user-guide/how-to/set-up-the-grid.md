@@ -2,8 +2,8 @@
 
 ## Goal
 
-Start a new grid of the size you want, shape its black squares, and confirm the pattern is a valid crossword
-grid.
+Start a new grid of the size you want, shape its black squares, and check the pattern against the app's
+warnings.
 
 ## Prerequisites
 
@@ -22,7 +22,8 @@ Click `Replace` to continue or `Cancel` to keep your work. The app opens with an
 
 Click a square, then press `Space` or `.`. Press the same key again to turn it white. The `Black square`
 button in the Grid tool does the same for the selected square, and is greyed out when no square is selected
-or the square cannot be changed (a theme-locked square cannot be made black).
+or the square cannot be changed (a theme-locked square cannot be made black). Turning a square black erases any
+letter in it and, with Symmetry on, in its mirror square too; `Undo` brings the letters back.
 
 ### 3. Keep the pattern symmetric
 
@@ -34,8 +35,9 @@ one square of each pair. Click `Symmetry` to turn mirroring off.
 
 Clue numbers appear in the squares where words start and update as you edit. The **GRID** block in the left
 rail shows `Total`, `Black` (count and percentage of the grid), `Filled` and `Words`. Below it, a
-**VIOLATIONS** block lists advisory messages about the pattern, for example a high black-square count or a
-low word count. They are advice, not errors: they do not stop you from editing, filling or exporting.
+**VIOLATIONS** block lists messages about the pattern. Some are advice, such as a high black-square count or a
+low word count; others are warnings about the grid itself, such as isolated white regions or a word under three
+letters (positions in these messages count from 0). None of them stops you from editing, filling or exporting.
 
 ### 5. Move around with the keyboard
 
