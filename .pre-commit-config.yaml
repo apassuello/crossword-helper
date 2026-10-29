@@ -91,6 +91,16 @@ repos:
       # describe the intent. -q is deliberate (addopts carries -v; -v -q net
       # to normal, and without -q collection alone prints 5032 lines). No -x:
       # across the full suite a first failure would mask everything after it.
+      # First in the stage: the two suites below are only about the pushed
+      # commit when it is the checked-out HEAD (scripts/pre-push-head-guard.sh).
+      - id: push-head-guard
+        name: pushed commit is the checked-out HEAD (pre-push)
+        entry: scripts/pre-push-head-guard.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: pytest-push
         name: full pytest suite (pre-push)
         entry: pytest -q
