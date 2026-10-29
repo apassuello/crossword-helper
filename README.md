@@ -42,6 +42,9 @@ python3 run.py
 
 ## Using the app
 
+New to the app? Start with the [user guide](docs/user-guide/README.md): a macOS install walkthrough, a first-crossword
+tutorial, how-to guides and a reference.
+
 Open http://localhost:5000. The tool rail on the left switches between tools:
 
 - **Grid** -- click a square and type to enter letters; `Black square` (or Space or `.`) turns the

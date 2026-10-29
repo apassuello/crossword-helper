@@ -7,6 +7,7 @@ docs/
 ├── README.md                # This file
 ├── ARCHITECTURE.md          # System architecture and design
 ├── ALGORITHM_DEEP_DIVE.md   # Algorithm details (CSP, beam search, scoring)
+├── user-guide/              # Guide for people using the web app (tutorial, how-tos, reference)
 ├── api/
 │   ├── API_REFERENCE.md     # HTTP API reference
 │   └── openapi.yaml         # OpenAPI 3.1.0 spec
@@ -29,6 +30,7 @@ docs/
 
 ## Where to Start
 
+- **Use the app to build crosswords**: [user-guide/README.md](./user-guide/README.md)
 - **Understand the system**: [ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Set up for development**: [dev/DEVELOPMENT.md](./dev/DEVELOPMENT.md)
 - **Use the API**: [api/API_REFERENCE.md](./api/API_REFERENCE.md)
