@@ -495,3 +495,21 @@ class TestMaxThemeWords:
         body = resp.get_json()
         assert body["validation"]["valid"] is False
         assert any("Too many theme words" in e for e in body["validation"]["errors"])
+
+
+def test_suggestions_never_abut_an_existing_letter():
+    """Regression: a letter next to a word was treated like a black square, so
+    CAT was suggested at row 3 cols 0-2 against an S at col 3 (reads CATS...)."""
+    from backend.core.theme_placer import ThemePlacer
+
+    grid = [["." for _ in range(7)] for _ in range(7)]
+    grid[3][3] = "S"
+    results = ThemePlacer(7).suggest_placements(["CAT"], existing_grid=grid, max_suggestions_per_word=500)
+    cells = {
+        (s["row"], s["col"] + 3) if s["direction"] == "across" else (s["row"] + 3, s["col"]) for s in results[0]["suggestions"]
+    }
+    before = {
+        (s["row"], s["col"] - 1) if s["direction"] == "across" else (s["row"] - 1, s["col"]) for s in results[0]["suggestions"]
+    }
+    assert results[0]["suggestions"]
+    assert (3, 3) not in cells | before

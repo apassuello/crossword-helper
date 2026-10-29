@@ -126,3 +126,41 @@ class TestMessagePositionsAreOneBased:
         assert (
             "Boundary black square at (3, 3) requires a symmetric black square at (13, 13), but that cell contains 'Q'"
         ) in conflicts
+
+
+class TestBoundaryLetterRunsOn:
+    """A letter directly before or after a word does not terminate it, unlike a
+    black square or the grid edge: the run continues and the real entry is
+    longer than the word. Such a placement used to be accepted (and suggested)
+    as if the letter were a black square.
+    """
+
+    def _grid_with_s(self):
+        grid = [["." for _ in range(7)] for _ in range(7)]
+        grid[3][3] = "S"
+        return grid
+
+    def test_rejects_letter_after_word(self):
+        grid = self._grid_with_s()
+        conflicts = validate_placement(grid, {"word": "CAT", "row": 3, "col": 0, "direction": "across"})
+        assert "Cell (4, 4) next to the word contains 'S': the entry would run on past the word" in conflicts
+
+    def test_rejects_letter_before_word_down(self):
+        grid = self._grid_with_s()
+        conflicts = validate_placement(grid, {"word": "CAT", "row": 4, "col": 3, "direction": "down"})
+        assert "Cell (4, 4) next to the word contains 'S': the entry would run on past the word" in conflicts
+
+    def test_dict_format_letter_is_rejected_too(self):
+        grid = _empty_grid(7)
+        grid[3][3] = {"letter": "S", "isBlack": False}
+        assert validate_placement(grid, {"word": "CAT", "row": 3, "col": 4, "direction": "across"}) != []
+
+    def test_black_square_and_edge_still_terminate(self):
+        grid = self._grid_with_s()
+        grid[3][3] = "#"
+        assert validate_placement(grid, {"word": "CAT", "row": 3, "col": 0, "direction": "across"}) == []
+        assert validate_placement(grid, {"word": "CAT", "row": 3, "col": 4, "direction": "across"}) == []
+
+    def test_word_crossing_the_letter_is_still_valid(self):
+        grid = self._grid_with_s()
+        assert validate_placement(grid, {"word": "ASK", "row": 3, "col": 2, "direction": "across"}) == []
