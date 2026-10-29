@@ -4,7 +4,7 @@ Grid placement conflict validation.
 Single implementation of the applier's conflict check — cell/intersection
 conflicts, a letter abutting either end of the word (the entry would run on),
 180-degree rotational-symmetry boundary-black conflicts, and new blacks that
-strand an existing letter in a 1-2 cell entry — shared
+strand a letter (existing or the word's own) in a 1-2 cell entry — shared
 by the apply-placement route (backend/api/theme_routes.py) and ThemePlacer's
 candidate filtering (backend/core/theme_placer.py). Neither of those modules
 duplicates this logic; both call in here instead (issue #15).
@@ -174,7 +174,8 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
 
     # A new black square splits every white run it lands in. A piece left
     # beside it shorter than 3 cells (the minimum cli/src/core/validator.py
-    # enforces) is refused only when it holds an existing letter: that cuts a
+    # enforces) is refused only when it holds a letter — existing, or one of
+    # the word's own: that cuts a
     # partly filled entry down to a stub the user cannot fix without losing
     # letters. An empty stub is allowed — the user can still black it out
     # (owner ruling, 2026-10-29).
@@ -190,7 +191,9 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
             while 0 <= r < grid_size and 0 <= c < len(grid[r]) and not _is_black_after(r, c):
                 run.append((r, c))
                 r, c = r + dr, c + dc
-            if 0 < len(run) < 3 and any(_cell_state(grid, r, c)[0] == "letter" for r, c in run):
+            # The word's own cells count as letters: they are filled once the
+            # placement is applied.
+            if 0 < len(run) < 3 and any((r, c) in word_cells or _cell_state(grid, r, c)[0] == "letter" for r, c in run):
                 first, last = min(run), max(run)
                 conflicts.append(
                     f"Black square at ({br + 1}, {bc + 1}) would leave a {len(run)}-letter "
