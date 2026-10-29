@@ -18,7 +18,8 @@ docs/
 │   └── TESTING.md           # Testing guide
 ├── dev/
 │   ├── DEVELOPMENT.md       # Developer setup and workflow
-│   └── FABRICATION-LOG.md   # Claims found false against code; unaudited backlog
+│   ├── FABRICATION-LOG.md   # Claims found false against code; unaudited backlog
+│   └── qa/                  # QA method and run logs (see qa/README.md)
 ├── superpowers/
 │   ├── specs/               # Design specs for in-flight capability families
 │   └── plans/               # Per-task implementation plans behind those specs
@@ -38,6 +39,7 @@ docs/
 - **Use the CLI**: [specs/CLI_SPEC.md](./specs/CLI_SPEC.md)
 - **Understand algorithms**: [ALGORITHM_DEEP_DIVE.md](./ALGORITHM_DEEP_DIVE.md)
 - **Write tests**: [ops/TESTING.md](./ops/TESTING.md)
+- **Run a QA pass or drive the app in a browser**: [dev/qa/METHOD.md](./dev/qa/METHOD.md)
 - **Contribute**: [../CONTRIBUTING.md](../CONTRIBUTING.md)
 - **Check what documentation to trust**: [dev/FABRICATION-LOG.md](./dev/FABRICATION-LOG.md)
 - **Follow in-flight design work**: [superpowers/specs/](./superpowers/specs/) for the specs;

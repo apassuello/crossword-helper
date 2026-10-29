@@ -313,7 +313,8 @@ outcome.
 - Before pushing: `pytest`, `npm run build`, let pre-commit run (never `--no-verify`).
 - `docs/README.md` is the navigation index; `CONTRIBUTING.md` holds setup and full conventions.
 - Living docs under `docs/` use HADS blocks; unverified claims go in `[?]`, never asserted as fact.
-- An owner-decision row carries a default-if-unruled outcome and a review date. "Awaiting owner"
+- An owner-decision row carries a default-if-unruled outcome and a review date; the default is the
+  option that cannot violate an existing ruling, even when the recommendation differs. "Awaiting owner"
   with no expiry is a no-op: nine post-M1 rows sat that way from 2026-08-19 until the register's
   defaults were ratified on 2026-09-20 (review date 2026-10-20). That register is gitignored, so
   this line is the rule's tracked home.

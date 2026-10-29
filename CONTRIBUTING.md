@@ -287,6 +287,35 @@ Prefer not needing this at all: write the test first and watch it fail, which ob
 property for free at the moment it is cheapest. This recipe is the remedy for a skipped RED, not a
 substitute for one.
 
+**[SPEC] Four shapes of a test that cannot fail, all found by mutation runs, none by reading.**
+Each was met during the novice-readiness phases (2026-10-23 to 10-25); the remedy for every one is a
+mutation proof at the target assertion, per the block above.
+- *The fixture exits early.* A RED-first test that passes before the fix usually means the fixture
+  never reaches the code under test. Five cases in Phase 2. Use a fixture that discriminates.
+- *An unrelated fallback produces the asserted observable.* Assert on something only the intended
+  path can produce.
+- *The test double lacks the property under test.* An npm shim printed output under `--silent`; real
+  npm prints nothing, so the test checked a behaviour that does not exist.
+- *The gate exits 0 before scanning.* `check-guards.sh` in staged mode with nothing staged (see §2).
+  A silent gate pass needs a planted-violation control.
+
+A related trap: under a strict boolean-return contract, every bare `vi.fn()` host returns
+`undefined`, which the code reads as "dropped", so tests unrelated to the return value pass
+vacuously. Three in Task 6.16.
+
+**[BUG] A green vitest suite does not see a StrictMode-only lost update.** In Phase 6 a reload wiped
+a restored save; only the browser drive caught it. jsdom App tests do not reproduce StrictMode's
+effect ordering around an async `storage.load`, so:
+- grid writes derived from state are functional updaters, never values built from a ref snapshot;
+- pin such races at the hook level, and drive the browser before calling the work done;
+- check an effect-based "park, then compare after render" change detector under StrictMode and with
+  two writes in one tick. A unit suite with neither proves neither.
+
+**[BUG] A test that reads tracked data must pass on a clean `git archive` export.** Gitignored
+local files made `TestWordlistMetadataTruth` pass in a working tree and fail in CI; two tests
+depended on them. Prove such a test on an export, not in the checkout:
+`git archive HEAD | tar -x -C "$(mktemp -d)"`, then run it there.
+
 **[SPEC] Sweep the channel a change *widens*, not only the one it narrows.** A fix that empties
 `ApiError.message` was swept thoroughly for `.message` consumers — but it also broadened `.details`,
 where a pre-existing consumer could silently start receiving a value it used to get `undefined` for.
