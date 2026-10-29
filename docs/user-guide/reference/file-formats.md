@@ -46,7 +46,7 @@ A plain text file read by the Theme tool.
 | Duplicates | Dropped, keeping the first |
 | Lines with a space, hyphen or digit | Dropped without a message |
 | Length | At least 3 letters and no more than the grid size, else reported as an error |
-| List size | A list over the limit `MAX_THEME_WORDS` is refused |
+| List size | More than 50 words (`MAX_THEME_WORDS`) is refused. Any one error rejects the whole list |
 | File size | Under 1 MB |
 
 ## Word list file
@@ -63,6 +63,7 @@ A plain text file read by the Lists tool. One entry per line, in any of these fo
 |---|---|
 | Blank lines, lines starting with `#` | Ignored |
 | Letters | Only A-Z are kept. Accented letters are folded to plain letters (`CAFÉ` is stored as `CAFE`); a line with a space, hyphen or digit is skipped as `not letters only` |
+| Length | A word must be 3 to 21 letters, else it is skipped as `length outside 3-21` |
 | Case | Words are stored in capitals |
 | Scores | Must be numbers; a line whose score is not a number (such as a `word,score` header) is skipped as `malformed score` |
 | Duplicates | The first occurrence is kept |

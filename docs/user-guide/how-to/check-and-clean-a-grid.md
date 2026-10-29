@@ -14,7 +14,7 @@ losing the good words around them. Use this after an autofill, or any time you h
 
 ### 1. Verify the words
 
-Click `Verify words` in the top bar. The app checks every slot against the `comprehensive` word list:
+Click `Verify words` in the top bar. The app checks every slot against the shipped `Comprehensive Dictionary` word list:
 
 - A completely filled slot is **invalid** if that exact word is not in the list.
 - A partly filled slot is **unfillable** if no word in the list fits the letters you have.
@@ -24,7 +24,7 @@ If everything passes, a message reads `All N words valid!`. Otherwise it reads, 
 `7 of 42 words flagged — 7 invalid: STEFAR, ITKINS, …`, and unfillable slots are listed too, with `_` for
 each blank. The letters of flagged words turn red on the grid.
 
-Verify checks against the shipped `comprehensive` list only, not against word lists you uploaded. A word that
+Verify checks against the shipped `Comprehensive Dictionary` only, not against word lists you uploaded. A word that
 exists only in your own list is flagged as invalid.
 
 ### 2. Clean the grid
