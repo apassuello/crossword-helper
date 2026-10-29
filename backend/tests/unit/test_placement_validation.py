@@ -196,3 +196,13 @@ class TestBlackSquareStubs:
         placed = {(s["row"], s["col"], s["direction"]) for s in results[0]["suggestions"]}
         assert results[0]["suggestions"]
         assert (6, 4, "across") not in placed
+
+    def test_rejects_stub_holding_a_letter_of_the_word_itself(self):
+        # Greptile repro (PR #109): RESTLESS at (6,4) adds a twin black at
+        # (8,11); with (5,11) already black, the word's final S at (6,11) is
+        # stranded in a 2-cell down entry (6,11)-(7,11).
+        grid = [["." for _ in range(15)] for _ in range(15)]
+        grid[5][11] = "#"
+        grid[9][3] = "#"
+        conflicts = validate_placement(grid, {"word": "RESTLESS", "row": 6, "col": 4, "direction": "across"})
+        assert "Black square at (9, 12) would leave a 2-letter entry at (7, 12)-(8, 12)" in conflicts
