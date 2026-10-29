@@ -129,11 +129,19 @@ def check_placement(grid: List[List], placement: Dict) -> Tuple[List[str], List[
     for br, bc in boundary_candidates:
         if not (0 <= br < grid_size and 0 <= bc < len(grid[br])):
             continue
-        state, _ = _cell_state(grid, br, bc)
+        state, boundary_letter = _cell_state(grid, br, bc)
         if state == "empty":
             boundary_blacks.append((br, bc))
-        # 'black' needs nothing; 'letter' means the word abuts existing fill
-        # and no boundary square is added (existing behavior)
+        elif state == "letter":
+            # A letter does not terminate an entry: the run would continue
+            # through it, so the grid's actual entry is longer than the word
+            # (e.g. CAT before an existing S reads CATS...). Only a black
+            # square or the grid edge ends a word.
+            conflicts.append(
+                f"Cell ({br + 1}, {bc + 1}) next to the word contains "
+                f"'{boundary_letter}': the entry would run on past the word"
+            )
+        # 'black' needs nothing
 
     # Every added black square must get its 180-degree rotational twin, or
     # the resulting grid fails the symmetry check. Refuse placements whose
