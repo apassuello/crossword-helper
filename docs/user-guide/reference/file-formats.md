@@ -14,8 +14,8 @@ Written by `Export` with `JSON (for reimport)` as `crossword.json`; read by the 
 | `numbering` | object | Written by `Export`: clue numbers keyed by `"row,col"` (counted from 0). Optional on import |
 
 The importer rejects a missing `size` or `grid`, a size outside the range, a grid that is not `size` rows of
-`size` cells, and any cell that is not `#`, `.` or one letter A-Z. The Import tool accepts a `.json` file or
-pasted text.
+`size` cells, and any cell that is not a string equal to `#`, `.`, an empty string or one letter A-Z. An empty
+string is read as an empty square, the same as `.`. The Import tool accepts a `.json` file or pasted text.
 
 ```json
 {
