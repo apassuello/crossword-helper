@@ -21,8 +21,9 @@ Spec: `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` §6 (0.2.20
   `node`/`npm`/`npx`, reached through `$SB/bin` (symlinks to those four binaries only) under `env -i` by
   `$SB/e1.sh`. Under E1, `pip3` resolves to `/usr/bin/pip3`, since `$SB/bin` links no `pip3`; ENV-1 probe in
   the evidence dir (`env1-probe.txt`).
-- README under test for F-TOUR and F-WORKFLOW: this branch's `README.md` (Task 8.1, docs-only on top of
-  `e4e881e`); the code under test is `e4e881e`.
+- README under test: for F-TOUR's first run, this branch's `README.md` (Task 8.1, docs-only on top of
+  `e4e881e`) over code at `e4e881e`; for F-TOUR's re-run, F-WORKFLOW and every row after, README and code
+  are both `494ddb8` (`README.md` is identical between `494ddb8` and this branch; see "Sha moved").
 - Viewport method (ENV-3): functional cases run top-level on `http://127.0.0.1:5000`; layout cases are measured
   inside a same-origin iframe sized exactly 1440×900 and 1024×768, reading the iframe's own
   `innerWidth`/`innerHeight`, as L3 and L4 of the 2026-10-22 run did.
