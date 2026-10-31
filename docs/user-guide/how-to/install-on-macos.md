@@ -95,6 +95,10 @@ The terminal prints a line ending in `Running on http://localhost:5000` and keep
 
 Go to <http://localhost:5000>.
 
+![The web app on first start](../images/app-overview.png)
+
+*What you should see: the app with an empty 15×15 grid and online in the top bar. The numbered boxes are explained in the user guide's overview.*
+
 If `run.py` instead prints `Port 5000 is in use. Start with PORT=<other> python3 run.py`, another program
 holds the port. Start on a different one and open that address instead:
 

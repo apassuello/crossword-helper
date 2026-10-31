@@ -17,6 +17,8 @@ Click **Search** in the left rail. Type a pattern in the field (`Enter pattern (
 for the squares you know and `?` for each unknown letter. The pattern must be at least 3 characters; a
 shorter one shows `Pattern must be at least 3 characters`. Lowercase is accepted and treated as uppercase.
 
+![Diagram: the pattern C?T and the seven words it matches](../images/diagram-pattern.svg)
+
 ### 2. Choose which word lists to search
 
 Under `Search in wordlists:`, tick the lists to use. `Comprehensive Dictionary` is ticked by default. With nothing
@@ -29,6 +31,10 @@ Click `Search`. Results appear under `Results (N)`, each with its score, the lis
 length. A search returns at most 50 words. `Sort by` (`Score`, `Alphabetical`, `Length`) and `Min Score` take
 effect when you click `Search`, so change them first, or change them and click `Search` again. If nothing fits
 you will see `No matching words found`.
+
+![The Search panel with the pattern C?T and its results](../images/search-results.png)
+
+*The Search panel after searching for C?T. The lists under Custom are the ones on the computer this was captured on; yours show your own.*
 
 Scores come from the word list. The shipped list is large and includes obscure entries and abbreviations, so
 a high result count does not mean every result is a word you would put in a puzzle.

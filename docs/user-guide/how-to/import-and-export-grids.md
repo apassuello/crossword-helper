@@ -35,6 +35,10 @@ The app checks the shape, shows a `Preview` with the grid's statistics, and repo
 `Error:`, for example `Grid row 2 has 14 cells, expected 15` or `Invalid cell value at (0, 1): "x". Must be '#',
 '.', or A-Z.` (row and column numbers in these messages count from 0).
 
+![The Import panel with pasted JSON and its Preview](../images/import-preview.png)
+
+*Paste JSON after Validate JSON: the Preview gives the grid's size, cell count and filled count before you import.*
+
 ### 3. Import it
 
 Click `Import Grid`. If the current grid has letters or black squares, the app first asks
@@ -52,6 +56,12 @@ working on first ([Save, reopen and recover your work](save-open-and-recover.md)
    - `Text (simple)` downloads `crossword.txt`, a plain-text grid with `■` for black squares.
 3. Click `Preview` to look at the result in the panel (the HTML preview is not available; use `Export`), then
    `Export` to download the file.
+
+![The Export panel with HTML (printable) chosen](../images/export-panel.png)
+
+![The exported crossword.html opened in Chrome](../images/export-html-page.png)
+
+*crossword.html opened in a browser: the grid with its numbers and letters, and no clues.*
 
 The files go wherever your browser saves downloads. The exports hold the grid only; they have no clues.
 

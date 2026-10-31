@@ -31,6 +31,8 @@ Written by `Export` with `HTML (printable)` as `crossword.html`: a single web pa
 holding one table. Each white square is a cell showing its clue number (small, top left) and its letter;
 each black square is a dark cell. It contains the grid only, with no clues. The page title is fixed.
 
+![An exported crossword.html opened in Chrome](../images/export-html-page.png)
+
 ## Text export
 
 Written by `Export` with `Text (simple)` as `crossword.txt`: a plain-text grid with `■` for black squares.

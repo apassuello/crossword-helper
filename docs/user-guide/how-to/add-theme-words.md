@@ -35,6 +35,12 @@ The `Placement Suggestions` section lists each word with its candidate positions
 `Row r, Col c (direction)` (counted from 1, like the labels on the grid), a score out of 100 and a short reason.
 Hovering over a suggestion does not change the grid. Click `✓ Apply This Placement` to place and lock that word.
 
+![The Theme panel with four loaded words and their placement suggestions](../images/theme-suggestions.png)
+
+*The Theme panel after loading four words into an empty 15×15 grid.*
+
+![Diagram: placing COMET writes and locks its letters and adds a black square at its open end](../images/diagram-theme-placement.svg)
+
 To place everything at once, click `Apply All Best Placements`. It applies each word's best suggestion in
 turn and skips a word that has no valid placement, whose best placement conflicts with something already in
 the grid, or that is already locked in its best placement (`already on grid`); the skipped words are listed with
@@ -42,6 +48,10 @@ the reason.
 
 Placing a word can add black squares to the grid, so the `Black` count may rise; the message after a placement
 says how many it added. `Undo` reverses a placement.
+
+![The grid after Apply All Best Placements, with the result messages](../images/theme-applied.png)
+
+*After Apply All Best Placements: three words placed and locked (red corners), eight black squares added, and STARLIGHT skipped because its R would land on MOONBEAM's N.*
 
 ### 4. Know what a lock does
 

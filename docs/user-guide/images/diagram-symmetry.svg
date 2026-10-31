@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="300" viewBox="0 0 680 300" role="img" aria-labelledby="t d">
+  <title id="t">Symmetry: every black square has a partner turned 180 degrees about the centre</title>
+  <desc id="d">A 7 by 7 grid. The square at row 2, column 2 is black because you clicked it; the square at row 6, column 6 turned black on its own. A dashed line joins them through the centre of the grid.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .cell { fill: #f5f1e8; stroke: #1a1713; stroke-width: 0.6; }
+    .frame { fill: none; stroke: #1a1713; stroke-width: 2; }
+    .black { fill: #1a1713; }
+    .auto { fill: #1a1713; }
+    .ring { fill: none; stroke: #b83018; stroke-width: 2.5; }
+    .ring2 { fill: none; stroke: #1d5fa8; stroke-width: 2.5; stroke-dasharray: 5 3; }
+    .axis { stroke: #b83018; stroke-width: 1.6; stroke-dasharray: 6 5; fill: none; }
+    .ctr { fill: #b83018; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .t { font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .s { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #66604f; }
+    .m { font: 13px ui-monospace, Menlo, monospace; fill: #1a1713; }
+    .lab-r { font: 600 13px system-ui, sans-serif; fill: #b83018; }
+    .lab-b { font: 600 13px system-ui, sans-serif; fill: #1d5fa8; }
+  </style>
+  <rect class="bg" x="0.5" y="0.5" width="679" height="299" rx="10"/>
+  <!-- 7x7 grid, 30px cells, origin (40,40) -->
+  <g transform="translate(40 40)">
+    <g id="cells">
+      <rect class="cell" x="0" y="0" width="210" height="210"/>
+      <path d="M30 0V210M60 0V210M90 0V210M120 0V210M150 0V210M180 0V210M0 30H210M0 60H210M0 90H210M0 120H210M0 150H210M0 180H210" stroke="#1a1713" stroke-width="0.6"/>
+    </g>
+    <rect class="black" x="30" y="30" width="30" height="30"/>
+    <rect class="auto" x="150" y="150" width="30" height="30"/>
+    <rect class="frame" x="0" y="0" width="210" height="210"/>
+    <line class="axis" x1="45" y1="45" x2="165" y2="165"/>
+    <circle class="ctr" cx="105" cy="105" r="4.5"/>
+    <rect class="ring" x="27" y="27" width="36" height="36" rx="3"/>
+    <rect class="ring2" x="147" y="147" width="36" height="36" rx="3"/>
+  </g>
+  <text class="lab-r" x="76" y="30">you click</text>
+  <text class="lab-b" x="160" y="270">turns black on its own</text>
+  <text class="s" x="152" y="150" text-anchor="start">centre</text>
+
+  <text class="h" x="300" y="56">Symmetry on: black squares come in pairs</text>
+  <text class="t" x="300" y="86">Each black square you place has a partner on the</text>
+  <text class="t" x="300" y="106">opposite side of the grid, turned 180° about the centre.</text>
+  <text class="t" x="300" y="126">The app blackens the partner for you, so you click</text>
+  <text class="t" x="300" y="146">only one square of each pair.</text>
+  <text class="s" x="300" y="184">Partner of (row, column) on an N×N grid:</text>
+  <text class="m" x="300" y="206">(N + 1 − row,  N + 1 − column)</text>
+  <text class="s" x="300" y="240">Tutorial example, 11×11: you click row 1, column 5,</text>
+  <text class="s" x="300" y="260">and row 11, column 7 turns black.</text>
+</svg>

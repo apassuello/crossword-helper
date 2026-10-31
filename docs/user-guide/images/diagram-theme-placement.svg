@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300" role="img" aria-labelledby="t d">
+  <title id="t">What placing a theme word does</title>
+  <desc id="d">Before: an empty row. After: COMET placed from the left edge, each letter marked with a small red corner because it is locked, and a black square added right after the T so the entry ends there.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .cell { fill: #f5f1e8; stroke: #1a1713; stroke-width: 0.7; }
+    .frame { fill: none; stroke: #1a1713; stroke-width: 2; }
+    .black { fill: #1a1713; }
+    .new { fill: none; stroke: #1d5fa8; stroke-width: 2.5; stroke-dasharray: 5 3; }
+    .lock { fill: #b83018; }
+    .let { font: 600 21px Georgia, serif; fill: #1a1713; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .k { font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: 1.5px; fill: #66604f; }
+    .t { font: 13.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .lab-b { font: 600 13px system-ui, sans-serif; fill: #1d5fa8; }
+    .lab-r { font: 600 13px system-ui, sans-serif; fill: #b83018; }
+  </style>
+  <rect class="bg" x="0.5" y="0.5" width="719" height="299" rx="10"/>
+  <text class="h" x="30" y="36">Apply This Placement: place, lock, close off</text>
+
+  <text class="k" x="30" y="72">BEFORE</text>
+  <g transform="translate(30 82)">
+    <rect class="cell" x="0" width="36" height="36"/><rect class="cell" x="36" width="36" height="36"/><rect class="cell" x="72" width="36" height="36"/>
+    <rect class="cell" x="108" width="36" height="36"/><rect class="cell" x="144" width="36" height="36"/><rect class="cell" x="180" width="36" height="36"/>
+    <rect class="cell" x="216" width="36" height="36"/><rect class="cell" x="252" width="36" height="36"/>
+    <path d="M0 0V36" stroke="#1a1713" stroke-width="2"/>
+  </g>
+
+  <text class="k" x="30" y="160">AFTER</text>
+  <g transform="translate(30 170)">
+    <rect class="cell" x="0" width="36" height="36"/><rect class="cell" x="36" width="36" height="36"/><rect class="cell" x="72" width="36" height="36"/>
+    <rect class="cell" x="108" width="36" height="36"/><rect class="cell" x="144" width="36" height="36"/><rect class="black" x="180" width="36" height="36"/>
+    <rect class="cell" x="216" width="36" height="36"/><rect class="cell" x="252" width="36" height="36"/>
+    <path d="M0 0V36" stroke="#1a1713" stroke-width="2"/>
+    <text class="let" x="10" y="26">C</text><text class="let" x="45" y="26">O</text><text class="let" x="80" y="26">M</text><text class="let" x="118" y="26">E</text><text class="let" x="154" y="26">T</text>
+    <path class="lock" d="M26 0H36V10Z"/><path class="lock" d="M62 0H72V10Z"/><path class="lock" d="M98 0H108V10Z"/><path class="lock" d="M134 0H144V10Z"/><path class="lock" d="M170 0H180V10Z"/>
+    <rect class="new" x="177" y="-3" width="42" height="42" rx="3"/>
+  </g>
+  <text class="lab-r" x="30" y="236">red corner = locked</text>
+  <text class="lab-b" x="168" y="236">added black square</text>
+
+  <text class="t" x="360" y="76">The word is written into the grid and locked:</text>
+  <text class="t" x="360" y="96">typing, Backspace, Clean grid and autofill leave it.</text>
+  <text class="t" x="360" y="124">A black square is added at each open end, so the</text>
+  <text class="t" x="360" y="142">entry is exactly the theme word, plus its symmetric</text>
+  <text class="t" x="360" y="160">partner. The message says how many were added</text>
+  <text class="t" x="360" y="178">(2 for COMET here). Undo reverses the placement.</text>
+  <text class="t" x="360" y="204">Apply All Best Placements skips a word with no valid</text>
+  <text class="t" x="360" y="224">placement, one whose best placement conflicts with</text>
+  <text class="t" x="360" y="244">letters already in the grid, or one already locked</text>
+  <text class="t" x="360" y="264">in its best placement ("already on grid").</text>
+</svg>

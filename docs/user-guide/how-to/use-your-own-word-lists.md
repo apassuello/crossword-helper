@@ -37,14 +37,16 @@ skipped and why, so you can fix the file before you confirm.
    number skipped with the reason for each kind, and the first words with their scores.
 5. Click `Confirm` to store the list, or `Cancel` to throw the preview away.
 
+![The upload preview: 3 valid words, 1 skipped as not letters only, with Confirm and Cancel](../images/lists-upload-preview.png)
+
+*The preview for the example file above: ICE CREAM is skipped as not letters only, and CAFÉ is stored as CAFE.*
+
 If the preview finds no valid words, the app refuses the upload and reports why.
 
 The list is stored as a text file under `data/wordlists/custom/` in the project folder. [?] *Uploading under the
 name of an existing custom list appears from the code to add the new words to that list rather than replace
 it, and the list's displayed name may be the name you typed with underscores shown as spaces; neither was run
 for this page.*
-
-The list is stored as a text file under `data/wordlists/custom/` in the project folder.
 
 ### 3. Use it
 

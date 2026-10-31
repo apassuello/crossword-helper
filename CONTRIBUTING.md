@@ -333,6 +333,13 @@ thing under test.
 - Timing or size figures in **code comments** need the command that reproduces them, or state
   complexity instead. See `docs/dev/FABRICATION-LOG.md` for why this rule exists.
 - Dated historical records are archival. Do not "correct" them — archive them.
+- **The user guide's Markdown is the source; `docs/user-guide/site/` is built from it.** After editing a
+  page under `docs/user-guide/`, run `python scripts/build_user_guide.py` and commit the rebuilt site with
+  it — the `user-guide-site` pre-commit hook and the CI docs job fail on a site that no longer matches. A
+  new page must also be added to `NAV` in that script. Screenshots in `docs/user-guide/images/` come from
+  `scripts/capture_guide_screenshots.py` (needs `pip install playwright` and Google Chrome; its docstring
+  lists the steps); re-run it after a UI change and commit the images that changed. The `diagram-*.svg`
+  files there are hand-drawn: edit them directly.
 - **A commit sha cited in a doc is a pointer, and history rewrites break it.** Stripping trailers
   from this branch rewrote every sha on it, orphaning citations in three plan docs and in this file.
   Distinguish this from the rule above: a *dated claim* is archival and must not be corrected, but a

@@ -5,6 +5,8 @@
 Keep a grid so you can come back to it, get it back after closing or reloading the tab, and step back from a
 mistake. These steps apply to the web app.
 
+![Diagram: saved grids live in the browser, exports in the downloads folder, word lists in the project folder](../images/diagram-where-things-live.svg)
+
 ## Prerequisites
 
 - The app is running and you have a grid open ([Set up the grid](set-up-the-grid.md)).
@@ -16,6 +18,8 @@ mistake. These steps apply to the web app.
 Click `Save grid` in the top bar. A prompt titled `Name this grid` appears with a suggested name (for example
 `11×11 2026-10-29 13:53`). Edit the name if you like and click `Save` (or press `Cancel`, or `Escape`, to
 close the prompt without saving).
+
+![The Name this grid prompt under the Save grid button](../images/save-prompt.png)
 
 If another saved grid already has that name, the app asks `Replace the saved grid named "<name>"?`. Click
 `Replace` to overwrite it, or `Cancel` and choose a different name.
@@ -39,6 +43,8 @@ In the **Grid** tool, under **Saved grids**, click `Open saved`. Each saved grid
 save time, and `Open` and `Delete` buttons. Click `Open` on the one you want. If the current grid has
 content, the app asks `Replace the current grid? Unsaved changes are lost.` first.
 
+![The Grid panel with the saved grids listed under Open saved](../images/saved-grids.png)
+
 ### 3. Delete a saved grid
 
 In the same list, click `Delete`. The app asks `Delete "<name>"?`; click `Delete` to confirm.
@@ -49,6 +55,10 @@ When you reload the page, the app reopens your most recent save and shows a bann
 <time>)`, with `Start blank` and a dismiss `×`. `Start blank` only dismisses the banner and opens the Grid tool;
 it does not clear the grid. To get an empty grid, click `11×11`, `15×15` or `21×21` under `New grid` and confirm
 with `Replace`.
+
+![The Restored banner above the grid after a reload](../images/restore-banner.png)
+
+*After a reload: the banner above the grid names the save it restored.*
 
 Only the newest save is restored automatically. Older saves are still in `Open saved`.
 

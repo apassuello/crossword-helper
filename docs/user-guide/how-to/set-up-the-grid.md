@@ -31,9 +31,15 @@ Under **VIEW** in the left rail, the `Symmetry` toggle is on by default. While i
 black also turns black the square directly opposite it through the centre of the grid, so you only click
 one square of each pair. Click `Symmetry` to turn mirroring off.
 
+![Diagram: a black square and its partner on the opposite side of the grid](../images/diagram-symmetry.svg)
+
 ### 4. Read the numbers, stats and advice
 
-Clue numbers appear in the squares where words start and update as you edit. The **GRID** block in the left
+Clue numbers appear in the squares where words start and update as you edit.
+
+![Diagram: an across slot and a down slot, with clue numbers in their first squares](../images/diagram-slots.svg)
+
+The **GRID** block in the left
 rail shows `Total`, `Black` (count and percentage of the grid), `Filled` and `Words`. Below it, a
 **VIOLATIONS** block lists messages about the pattern. Some are advice, such as a high black-square count or a
 low word count; others are warnings about the grid itself, such as isolated white regions or a word under three

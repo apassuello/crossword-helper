@@ -24,6 +24,8 @@ If everything passes, a message reads `All N words valid!`. Otherwise it reads, 
 `7 of 42 words flagged — 7 invalid: STEFAR, ITKINS, …`, and unfillable slots are listed too, with `_` for
 each blank. The letters of flagged words turn red on the grid.
 
+![A filled grid after Verify words: flagged letters in red and the list of invalid words](../images/verify-flagged.png)
+
 Verify checks against the shipped `Comprehensive Dictionary` only, not against word lists you uploaded. A word that
 exists only in your own list is flagged as invalid.
 
@@ -33,10 +35,16 @@ Click `Clean grid`. It clears exactly the squares Verify marks red, except theme
 never blanks. Before it removes any letters, the app asks `Clean will remove N letters`. Click `Clean` to
 go ahead or `Cancel` to leave the grid as it is. `Undo` reverses a clean in one step.
 
+![The confirmation Clean will remove N letters, with Clean and Cancel](../images/clean-confirm.png)
+
+*The confirm appears in the tool panel and names how many letters will go.*
+
 If there is nothing to remove, you get a message instead: `Grid is clean — all words are valid!`, or
 `Nothing removed: theme-locked letters are kept.` when the only flagged letters are locked.
 
 A word that crosses a cleared square is left partly filled, not removed. Autofill is what puts letters back.
+
+![Diagram: start autofill, keep or reset the result, verify, clean the flagged letters and run again](../images/diagram-autofill-loop.svg)
 
 ### 3. Verify again
 

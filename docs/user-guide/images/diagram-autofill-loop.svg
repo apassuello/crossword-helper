@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="330" viewBox="0 0 720 330" role="img" aria-labelledby="t d">
+  <title id="t">The fill, check and clean loop</title>
+  <desc id="d">Start Autofill, then accept the result with Keep fill or discard it with Reset. Verify words lists entries that are not in the word list. If any are flagged, Clean grid blanks their letters, and you click Reset and run autofill again on the cleared squares. When nothing is flagged, save or export the grid.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .step { fill: #f5f1e8; stroke: #1a1713; stroke-width: 1.3; }
+    .key { fill: rgba(184,48,24,0.10); stroke: #b83018; stroke-width: 1.5; }
+    .done { fill: rgba(58,95,42,0.12); stroke: #3a5f2a; stroke-width: 1.5; }
+    .dec { fill: #fff8e6; stroke: #b88a0a; stroke-width: 1.5; }
+    .b { font: 600 14px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1a1713; }
+    .t { font: 12.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .e { font: 600 12px system-ui, sans-serif; fill: #66604f; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .arrow { stroke: #3a342b; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .back { stroke: #b83018; stroke-width: 1.5; fill: none; stroke-dasharray: 6 4; marker-end: url(#ar); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3a342b"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b83018"/></marker>
+  </defs>
+  <rect class="bg" x="0.5" y="0.5" width="719" height="329" rx="10"/>
+  <text class="h" x="30" y="36">Autofill is a loop, not a single click</text>
+
+  <rect class="key" x="30" y="70" width="140" height="70" rx="8"/>
+  <text class="b" x="44" y="96">Start Autofill</text>
+  <text class="t" x="44" y="116">Repair, 1–30 min</text>
+  <text class="t" x="44" y="132">your letters stay</text>
+
+  <path class="arrow" d="M170 105H206"/>
+  <rect class="step" x="208" y="70" width="150" height="70" rx="8"/>
+  <text class="b" x="222" y="96">Read the result</text>
+  <text class="t" x="222" y="116">Keep fill to accept,</text>
+  <text class="t" x="222" y="132">Reset to discard</text>
+
+  <path class="arrow" d="M358 105H394"/>
+  <rect class="step" x="396" y="70" width="140" height="70" rx="8"/>
+  <text class="b" x="410" y="96">Verify words</text>
+  <text class="t" x="410" y="116">flags entries not in</text>
+  <text class="t" x="410" y="132">the word list (red)</text>
+
+  <path class="arrow" d="M536 105H572"/>
+  <path class="dec" d="M628 62L684 105L628 148L572 105Z"/>
+  <text class="b" x="628" y="102" text-anchor="middle">flagged?</text>
+
+  <text class="e" x="640" y="170">no</text>
+  <path class="arrow" d="M628 148V230"/>
+  <rect class="done" x="548" y="232" width="160" height="62" rx="8"/>
+  <text class="b" x="562" y="258">Save or export</text>
+  <text class="t" x="562" y="278">the grid is done</text>
+
+  <text class="e" x="500" y="185">yes</text>
+  <path class="arrow" d="M590 134L470 230"/>
+  <rect class="step" x="330" y="232" width="170" height="62" rx="8"/>
+  <text class="b" x="344" y="258">Clean grid</text>
+  <text class="t" x="344" y="278">blanks the red letters</text>
+
+  <path class="back" d="M330 263H100V146"/>
+  <text class="t" x="118" y="238" fill="#b83018">Reset, then run again</text>
+  <text class="t" x="118" y="254" fill="#b83018">on the cleared squares</text>
+</svg>
