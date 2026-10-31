@@ -155,10 +155,10 @@ class Paused:
         self.state_file = self.state_dir / f"{TASK_ID}.json.gz"
 
 
-def pause_real_fill(root, algorithm, human_mode=False):
-    """Run a real `fill --algorithm <algorithm>` carrying CLUES and pause it."""
+def pause_real_fill(root, algorithm, human_mode=False, clues=CLUES):
+    """Run a real `fill --algorithm <algorithm>` carrying `clues` and pause it."""
     paused = Paused(root, algorithm)
-    write_grid(paused.grid_file, algorithm, clues=CLUES)
+    write_grid(paused.grid_file, algorithm, clues=clues)
     cmd = [
         sys.executable,
         "-m",
@@ -596,3 +596,57 @@ def test_beam_type_state_without_clues_gives_resumed_output_without_a_clues_key(
     data = json.loads(small.out_file.read_text())
     assert_resumed_grid(data)
     assert "clues" not in data
+
+
+# --- "clues": null is a present value and is carried unchanged ---------------
+#
+# Controller ruling 2026-10-31: spec 3.5 has fill carry the input's `clues`
+# "unchanged", and `fill` is not a validator, so null is carried like any value.
+# The sentinel makes a dropped key fail on the assertion's own line.
+
+
+def assert_null_carried(container, what):
+    assert container.get("clues", "ABSENT") is None, f"{what}: clues was not carried as null"
+
+
+@pytest.mark.slow
+def test_null_clues_survive_the_csp_engines_pause_state_and_resume(tmp_path):
+    paused = pause_real_fill(tmp_path, "trie", clues=None)
+    assert json.loads(paused.grid_file.read_text())["clues"] is None  # the input does hold null
+    out_file = tmp_path / "resumed.json"
+
+    assert_null_carried(read_envelope(paused.state_file)["metadata"], "pause state metadata")
+
+    proc = run_cli(resume_cmd(paused, out_file, extra=["-t", RESUME_TIMEOUT]))
+
+    assert proc.returncode == 0, diag(proc)
+    assert_null_carried(json.loads(out_file.read_text()), "resumed output")
+
+
+@pytest.mark.slow
+def test_a_resumed_null_state_that_pauses_again_keeps_the_null(paused_fill, tmp_path):
+    # The first state is the real CSP pause with its metadata["clues"] rewritten to
+    # null, so this row does not depend on the first pause carrying null.
+    paused = paused_fill("trie")
+    state_dir = copy_state_dir(paused, tmp_path)
+    state_file = state_dir / f"{TASK_ID}.json.gz"
+    envelope = read_envelope(state_file)
+    envelope["metadata"]["clues"] = None
+    with gzip.open(state_file, "wt", encoding="utf-8") as f:
+        json.dump(envelope, f)
+    assert_null_carried(read_envelope(state_file)["metadata"], "rewritten state")
+    flags_dir = tmp_path / "flags"
+    out_file = tmp_path / "resumed.json"
+    # resume_cmd names paused.state_file, the original; point it at the rewritten copy.
+    args = resume_cmd(paused, out_file, state_dir=state_dir, flags_dir=flags_dir, extra=["-t", "120"])
+    args[1] = str(state_file)
+    cmd = [sys.executable, "-m", "cli.src.cli", *args]
+    before = state_file.stat().st_mtime_ns
+
+    proc, stdout, stderr = run_until_paused(cmd, flags_dir, TASK_ID, "sleep")
+
+    assert proc.returncode == 0, f"stderr tail:\n{stderr[-800:]}\nstdout tail:\n{stdout[-400:]}"
+    assert json.loads(stdout.strip().splitlines()[-1])["paused"] is True, stdout[-400:]
+    assert state_file.stat().st_mtime_ns != before, "the resumed run did not save a new pause state"
+    assert_null_carried(json.loads(out_file.read_text()), "paused-again output")
+    assert_null_carried(read_envelope(state_file)["metadata"], "paused-again state metadata")
