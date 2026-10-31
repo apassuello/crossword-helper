@@ -490,3 +490,21 @@ class TestThemePlacementEdgeCases:
         assert response.status_code == 200, "Should allow case-insensitive intersection with whitespace trimmed"
         data = response.get_json()
         assert data["applied"] is True
+
+    def test_apply_placement_returns_added_black_squares(self, app_client):
+        """
+        The 200 reply lists the black squares the apply added (#104): JAZZ across at (0, 0)
+        on an empty 11x11 ends at (0, 3), so (0, 4) closes it, and (10, 6) is that square's
+        180-degree twin. The frontend counts these against what it actually writes.
+        """
+        grid = [[{"letter": "", "isBlack": False} for _ in range(11)] for _ in range(11)]
+        response = app_client.post(
+            "/api/theme/apply-placement",
+            json={"grid": grid, "placement": {"word": "JAZZ", "row": 0, "col": 0, "direction": "across"}},
+        )
+
+        assert response.status_code == 200, resp_diag(response)
+        data = response.get_json()
+        assert data["added_black_squares"] == [[0, 4], [10, 6]]
+        assert data["grid"][0][4]["isBlack"] is True
+        assert data["grid"][10][6]["isBlack"] is True

@@ -65,9 +65,58 @@ describe('App handleThemeWordApplied (Task 6.16)', () => {
     await act(async () => {
       result = onApplyPlacement(replyWith(grid, 'CAT'), { word: 'CAT' }, { sentGrid: grid, docId });
     });
-    expect(result).toBe(true);
+    expect(result).toEqual({ applied: true, addedBlackSquares: 0 });
     expect(letters(container)).toEqual(['C', 'A', 'T']);
     expect(await screen.findByText('Applied "CAT" to grid!')).toBeInTheDocument();
+  });
+
+  // spec 0.2.24 §3.8 (#104): the toast and the return count the black squares App wrote.
+  const ADDED = [[0, 4], [10, 6]];
+  const withBlacks = (grid, cellsList) =>
+    grid.map((r, ri) =>
+      r.map((cell, ci) =>
+        cellsList.some(([br, bc]) => br === ri && bc === ci) ? { ...cell, isBlack: true } : cell
+      )
+    );
+
+  it('a reply that adds black squares says how many in the toast and returns the count', async () => {
+    const user = userEvent.setup();
+    const { container } = await openThemePanel(user);
+    const { grid, docId, onApplyPlacement } = probe.props;
+    let result;
+    await act(async () => {
+      result = onApplyPlacement(withBlacks(replyWith(grid, 'CAT'), ADDED), { word: 'CAT' }, {
+        sentGrid: grid,
+        docId,
+        addedBlackSquares: ADDED,
+      });
+    });
+    expect(result).toEqual({ applied: true, addedBlackSquares: 2 });
+    expect(blacks(container)).toBe(2);
+    expect(
+      await screen.findByText('Applied "CAT" to grid! (added 2 black squares)')
+    ).toBeInTheDocument();
+  });
+
+  it('a listed black square on a cell the user changed in flight is not written, so not counted', async () => {
+    const user = userEvent.setup();
+    const { container } = await openThemePanel(user);
+    const { grid, docId, onApplyPlacement } = probe.props; // sent grid: blank
+    await user.click(cells(container)[10 * 15 + 6]);
+    fireEvent.keyDown(container.querySelector('.xw-grid-focus'), { key: 'Q' });
+    let result;
+    await act(async () => {
+      result = onApplyPlacement(withBlacks(replyWith(grid, 'CAT'), ADDED), { word: 'CAT' }, {
+        sentGrid: grid,
+        docId,
+        addedBlackSquares: ADDED,
+      });
+    });
+    expect(result).toEqual({ applied: true, addedBlackSquares: 1 });
+    expect(blacks(container)).toBe(1);
+    expect(
+      await screen.findByText('Applied "CAT" to grid! (added 1 black square)')
+    ).toBeInTheDocument();
   });
 
   it('keeps a letter typed after the request was sent (F4)', async () => {

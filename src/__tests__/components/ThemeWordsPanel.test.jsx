@@ -24,6 +24,9 @@ vi.mock('react-hot-toast', () => ({
   }),
 }));
 
+// What App returns for a reply it wrote (spec 0.2.24 §3.8, #104); anything else is a drop.
+const APPLIED = { applied: true, addedBlackSquares: 0 };
+
 const BOUNDARY_CONFLICT =
   'Boundary black square at (7, 4) requires a symmetric black square at (7, 10), ' +
   'which is occupied by this word — placement would break grid symmetry';
@@ -390,7 +393,7 @@ describe('ThemeWordsPanel refetch on grid change (Task 6.13, TH2b)', () => {
       .spyOn(api, 'themeSuggestPlacements')
       .mockResolvedValue({ suggestions: listFor(WORDS, 'First list') });
     applySpy = vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith() });
-    onApply = vi.fn().mockReturnValue(true);
+    onApply = vi.fn().mockReturnValue(APPLIED);
   });
 
   afterEach(() => {
@@ -631,7 +634,7 @@ describe('ThemeWordsPanel refetch on grid change (Task 6.13, TH2b)', () => {
         onApplyPlacement: (next) => {
           onApply(next);
           setG(next);
-          return true;
+          return APPLIED;
         },
       });
     };
@@ -701,17 +704,22 @@ describe('ThemeWordsPanel Apply All reports each word\'s real failure (Task 6.14
     );
   };
 
-  const Host = ({ initial }) => {
+  // `blacks`: the black squares App reports writing for each reply.
+  const Host = ({ initial, blacks = 0 }) => {
     const [g, setG] = useState(initial);
-    return <ThemeWordsPanel grid={g} gridSize={15} onApplyPlacement={(next) => { setG(next); return true; }} onClose={vi.fn()} />;
+    const onApply = (next) => {
+      setG(next);
+      return { applied: true, addedBlackSquares: blacks };
+    };
+    return <ThemeWordsPanel grid={g} gridSize={15} onApplyPlacement={onApply} onClose={vi.fn()} />;
   };
 
-  const showList = async (words, overrides) => {
+  const showList = async (words, overrides, { initial = createEmptyGrid(15), blacks } = {}) => {
     vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
     vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({
       suggestions: listFor(words, overrides),
     });
-    const utils = render(<Host initial={createEmptyGrid(15)} />);
+    const utils = render(<Host initial={initial} blacks={blacks} />);
     fireEvent.change(document.querySelector('input[type="file"]'), {
       target: { files: [new File([words.join('\n')], 'theme.txt', { type: 'text/plain' })] },
     });
@@ -849,6 +857,64 @@ describe('ThemeWordsPanel Apply All reports each word\'s real failure (Task 6.14
     // Fake timers are on here, so read the toast calls directly instead of polling.
     expect(summariesNow(toast.success)).toEqual(['Applied 1 theme words successfully!']);
   });
+
+  // spec 0.2.24 §3.8 (#80): the server re-suggests a placed word at its own cells; listFor puts
+  // word i at row i*2, so BETA (first) is offered at (0, 0) across.
+  const withWord = (word, { locked }) => {
+    const g = createEmptyGrid(15);
+    [...word].forEach((letter, c) => {
+      g[0][c] = { ...g[0][c], letter, isThemeLocked: locked };
+    });
+    return g;
+  };
+
+  it('a word already locked at its best suggestion is skipped as already on grid, with no request', async () => {
+    answerApply({});
+    await showList(['BETA', 'ALPHA'], undefined, { initial: withWord('BETA', { locked: true }) });
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual([
+      'Applied 1 theme words successfully! Skipped: BETA (already on grid)',
+    ]);
+    expect(requested).toEqual(['ALPHA']);
+  });
+
+  it('the same letters typed but not locked are applied, since the apply is what locks them', async () => {
+    answerApply({});
+    await showList(['BETA', 'ALPHA'], undefined, { initial: withWord('BETA', { locked: false }) });
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual(['Applied 2 theme words successfully!']);
+    expect(requested).toEqual(['BETA', 'ALPHA']);
+  });
+
+  it('only every word already on the grid: the summary lists each, and nothing is sent', async () => {
+    answerApply({});
+    await showList(['BETA'], undefined, { initial: withWord('BETA', { locked: true }) });
+    await clickApplyAll();
+    expect(await summaries(toast.error)).toEqual([
+      'Could not apply any theme words Skipped: BETA (already on grid)',
+    ]);
+    expect(requested).toEqual([]);
+  });
+
+  // spec 0.2.24 §3.8 (#104): the summary totals the black squares App reports writing.
+  it('the summary carries the total of black squares added across the words', async () => {
+    answerApply({});
+    await showList(['ALPHA', 'BETA'], undefined, { blacks: 2 });
+    await clickApplyAll();
+    expect(await summaries(toast.success)).toEqual([
+      'Applied 2 theme words successfully (added 4 black squares)!',
+    ]);
+  });
+
+  // spec 0.2.24 §3.8 (#106): hovering a suggestion previews nothing, so the help text says so by
+  // not promising it.
+  it('the suggestions help text names the Apply button and promises no hover preview', async () => {
+    await showList(['ALPHA']);
+    expect(
+      screen.getByText('Click "Apply This Placement" to place a word and lock it.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/hover/i)).toBeNull();
+  });
 });
 
 /**
@@ -905,7 +971,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
     vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
     vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: gridWith(1) });
-    const onApply = vi.fn().mockReturnValue(true);
+    const onApply = vi.fn().mockReturnValue(APPLIED);
     const sent = createEmptyGrid(15);
     render(
       <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
@@ -929,7 +995,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     vi.spyOn(api, 'themeApplyPlacement')
       .mockResolvedValueOnce({ grid: r1 })
       .mockResolvedValueOnce({ grid: r2 });
-    const onApply = vi.fn().mockReturnValue(true);
+    const onApply = vi.fn().mockReturnValue(APPLIED);
     const sent = createEmptyGrid(15);
     render(
       <ThemeWordsPanel grid={sent} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
@@ -947,6 +1013,34 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     expect(onApply.mock.calls[1][2].docId).toBe('doc-1');
   });
 
+  // spec 0.2.24 §3.8 (#104): App counts what it wrote, so the panel passes the server's list on.
+  it('both apply paths hand App the reply\'s added_black_squares; a reply without it hands []', async () => {
+    const words = ['ALPHA', 'BETA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    vi.spyOn(api, 'themeApplyPlacement')
+      .mockResolvedValueOnce({ grid: gridWith(1), added_black_squares: [[0, 4], [10, 6]] })
+      .mockResolvedValueOnce({ grid: gridWith(1), added_black_squares: [[2, 5]] })
+      .mockResolvedValueOnce({ grid: gridWith(2) });
+    const onApply = vi.fn().mockReturnValue(APPLIED);
+    render(
+      <ThemeWordsPanel grid={createEmptyGrid(15)} gridSize={15} docId="doc-1" onApplyPlacement={onApply} onClose={vi.fn()} />
+    );
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+    await act(async () => {
+      screen.getAllByRole('button', { name: /apply this placement/i })[0].click();
+    });
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
+    expect(onApply.mock.calls[0][2].addedBlackSquares).toEqual([[0, 4], [10, 6]]);
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(3));
+    expect(onApply.mock.calls[1][2].addedBlackSquares).toEqual([[2, 5]]);
+    expect(onApply.mock.calls[2][2].addedBlackSquares).toEqual([]);
+  });
+
   it('Apply All over 3 words: closing the panel after the first reply sends no further request', async () => {
     const words = ['ALPHA', 'BETA', 'GAMMA'];
     vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
@@ -961,7 +1055,7 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
         grid={createEmptyGrid(15)}
         gridSize={15}
         docId="doc-1"
-        onApplyPlacement={vi.fn().mockReturnValue(true)}
+        onApplyPlacement={vi.fn().mockReturnValue(APPLIED)}
         onClose={vi.fn()}
       />
     );
@@ -1057,8 +1151,8 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
       expect(toast.success).not.toHaveBeenCalledWith('Applied ALPHA to grid');
     });
 
-    it('single Apply: control, a true return toasts it', async () => {
-      const onApply = vi.fn().mockReturnValue(true);
+    it('single Apply: control, an applied return toasts it', async () => {
+      const onApply = vi.fn().mockReturnValue(APPLIED);
       await setup(['ALPHA'], onApply);
       await act(async () => {
         screen.getByRole('button', { name: /apply this placement/i }).click();
@@ -1067,12 +1161,12 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     });
 
     it('Apply All: the dropped word is not counted, the loop stops, and no summary toast shows', async () => {
-      const onApply = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+      const onApply = vi.fn().mockReturnValueOnce(APPLIED).mockReturnValue(false);
       const applySpy = await setup(['ALPHA', 'BETA', 'GAMMA'], onApply);
       await applyAll();
       await flush();
       await flush();
-      // word 1 applied (true), word 2 dropped (false) -> no request for word 3
+      // word 1 applied, word 2 dropped (false) -> no request for word 3
       expect(applySpy).toHaveBeenCalledTimes(2);
       expect(onApply).toHaveBeenCalledTimes(2);
       const summary = (fn) => fn.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all');
@@ -1181,7 +1275,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
   afterEach(() => vi.restoreAllMocks());
 
   it('Apply All opens the batch before its first request and closes it once after the last word', async () => {
-    const { events, onBatchBegin, onBatchEnd } = await setup(() => true);
+    const { events, onBatchBegin, onBatchEnd } = await setup(() => APPLIED);
     await click(/apply all best placements/i);
     await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
     expect(onBatchBegin).toHaveBeenCalledTimes(1);
@@ -1191,7 +1285,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
 
   it('Apply All that stops early on a dropped reply still closes the batch', async () => {
     const { events, onBatchBegin, onBatchEnd } = await setup(
-      vi.fn().mockReturnValueOnce(true).mockReturnValue(false)
+      vi.fn().mockReturnValueOnce(APPLIED).mockReturnValue(false)
     );
     await click(/apply all best placements/i);
     await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
@@ -1202,7 +1296,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
 
   it('PR #90 Greptile P1: onBatchEnd receives exactly the token onBatchBegin returned', async () => {
     const token = { id: 'batch-token-7' };
-    const { onBatchBegin, onBatchEnd } = await setup(() => true);
+    const { onBatchBegin, onBatchEnd } = await setup(() => APPLIED);
     onBatchBegin.mockImplementation(() => token);
     await click(/apply all best placements/i);
     await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
@@ -1213,7 +1307,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
 
   it('PR #90 Greptile P1 (second review): a reply that lands after the panel closed is dropped, and the batch still ends with its token', async () => {
     const token = { id: 'batch-token-9' };
-    const { events, onBatchBegin, onBatchEnd, unmount } = await setup(() => true);
+    const { events, onBatchBegin, onBatchEnd, unmount } = await setup(() => APPLIED);
     onBatchBegin.mockImplementation(() => {
       events.push('begin');
       return token;
@@ -1255,7 +1349,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
   });
 
   it('a run that finished normally leaves its summary up when the panel closes after it', async () => {
-    const { onBatchEnd, unmount } = await setup(() => true);
+    const { onBatchEnd, unmount } = await setup(() => APPLIED);
     await click(/apply all best placements/i);
     await waitFor(() => expect(onBatchEnd).toHaveBeenCalled());
     expect(toast.success.mock.calls.filter((c) => c[1] && c[1].id === 'apply-all')).toHaveLength(1);
@@ -1264,7 +1358,7 @@ describe('ThemeWordsPanel Apply All is one history batch (U.2, spec 0.2.11 secti
   });
 
   it('Apply This Placement opens no batch', async () => {
-    const { onBatchBegin, onBatchEnd } = await setup(() => true);
+    const { onBatchBegin, onBatchEnd } = await setup(() => APPLIED);
     await act(async () => {
       screen.getAllByRole('button', { name: /apply this placement/i })[0].click();
     });

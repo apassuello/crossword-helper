@@ -27,6 +27,33 @@ function describeApplyFailure(error) {
   return error.message || 'Failed to apply placement';
 }
 
+// novice-readiness spec 0.2.8 §3.8 (PD-6-G12), 0.2.24 (#104): what onApplyPlacement returned,
+// read once for both apply paths. Only `{ applied: true }` means App wrote the grid; it then
+// carries the black squares it wrote. Anything else is a dropped reply: null.
+function appliedBlackSquares(result) {
+  if (!result || result.applied !== true) return null;
+  return result.addedBlackSquares || 0;
+}
+
+// novice-readiness spec 0.2.24 §3.8 (#80; TH3 ruled by owner 2026-10-31): true when every cell of
+// `placement` already holds `word`'s letter and is theme-locked. Re-applying it changes nothing, so
+// it is not "its own apply" for Apply All's count; the summary lists it as `WORD (already on grid)`.
+// A matching word that is not locked (typed by hand) still needs the apply that locks it.
+// String cells ('#', '.', a letter) are never locked.
+function isPlacedAndLocked(grid, word, { row, col, direction }) {
+  return [...word].every((letter, i) => {
+    const r = direction === 'across' ? row : row + i;
+    const c = direction === 'across' ? col + i : col;
+    const cell = Array.isArray(grid) && Array.isArray(grid[r]) ? grid[r][c] : null;
+    return (
+      !!cell &&
+      typeof cell === 'object' &&
+      cell.isThemeLocked === true &&
+      (cell.letter || '').toUpperCase() === letter.toUpperCase()
+    );
+  });
+}
+
 // novice-readiness spec 0.2.7 §3.8 (TH2b): the per-cell [letter, isBlack] plus
 // gridSize. Deliberately local: isError, number, isHighlighted, isThemeLocked and
 // isAutofilled must not trigger a refetch, so lib/contentSig's contentSigOf is not reused.
@@ -53,7 +80,6 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
   const [suggestions, setSuggestions] = useState(null);
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
-  const [selectedWord, setSelectedWord] = useState(null);
   const [applyingAll, setApplyingAll] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -250,14 +276,14 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
         }
       });
 
-      // Update parent grid
-      // Only an explicit `true` means App wrote the grid; anything else is a dropped reply
-      // (novice-readiness spec 0.2.8 §3.8, PD-6-G12).
+      // Update parent grid. App counts and toasts the black squares it wrote (#104); this
+      // panel's own toast stays as it is.
       const applied = onApplyPlacement?.(data.grid, suggestion, {
         sentGrid,
         docId: requestDocId,
+        addedBlackSquares: data.added_black_squares || [],
       });
-      if (applied !== true) return;
+      if (appliedBlackSquares(applied) === null) return;
 
       toast.success(`Applied ${suggestion.word} to grid`);
 
@@ -285,6 +311,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
     try {
       setApplyingAll(true);
       let successCount = 0;
+      let addedBlackSquares = 0; // written by App across the words (spec 0.2.24 §3.8, #104)
       const skipped = []; // `WORD (reason)`, in suggestion order
       let currentGrid = grid; // Track grid state through applications
       const requestDocId = docId;
@@ -302,6 +329,12 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
 
         // Get the best (first) suggestion
         const bestSuggestion = wordData.suggestions[0];
+
+        // Already locked in place: no request, not counted (spec 0.2.24 §3.8, #80)
+        if (isPlacedAndLocked(currentGrid, wordData.word, bestSuggestion)) {
+          skipped.push(`${wordData.word} (already on grid)`);
+          continue;
+        }
 
         // Skip if it has conflicts (WARNING in reasoning)
         if (bestSuggestion.reasoning && bestSuggestion.reasoning.includes('WARNING')) {
@@ -328,20 +361,23 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
             const sentGrid = currentGrid; // the grid this word's request was built from
             currentGrid = response.grid; // Update grid for next placement
 
-            // Update parent grid. Only an explicit `true` counts; anything else is a dropped
-            // reply: the document the summary would describe is gone, so stop and say nothing
-            // (spec 0.2.8 §3.8, PD-6-G12).
-            const applied = onApplyPlacement?.(currentGrid, bestSuggestion, {
-              sentGrid,
-              docId: requestDocId,
-            });
-            if (applied !== true) {
+            // Update parent grid. A dropped reply means the document the summary would
+            // describe is gone, so stop and say nothing (spec 0.2.8 §3.8, PD-6-G12).
+            const added = appliedBlackSquares(
+              onApplyPlacement?.(currentGrid, bestSuggestion, {
+                sentGrid,
+                docId: requestDocId,
+                addedBlackSquares: response.added_black_squares || [],
+              })
+            );
+            if (added === null) {
               toast.dismiss('apply-all');
               runningRef.current = false;
               setApplyingAll(false);
               return;
             }
             successCount++;
+            addedBlackSquares += added;
           }
         } catch (error) {
           skipped.push(`${wordData.word} (${describeApplyFailure(error)})`);
@@ -354,9 +390,14 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
 
       // Show results: novice-readiness spec 0.2.7 §3.8 (TH3, PD-6-G19). N counts only
       // the words this action applied; every skipped word is listed with its reason.
+      // 0.2.24 (#104): the black squares App wrote for them, when there are any.
       const skippedText = skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}` : '';
+      const addedText =
+        addedBlackSquares > 0
+          ? ` (added ${addedBlackSquares} black square${addedBlackSquares === 1 ? '' : 's'})`
+          : '';
       if (successCount > 0) {
-        toast.success(`Applied ${successCount} theme words successfully!${skippedText}`, {
+        toast.success(`Applied ${successCount} theme words successfully${addedText}!${skippedText}`, {
           id: 'apply-all',
         });
       } else {
@@ -365,14 +406,6 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
     } finally {
       onBatchEnd?.(batchToken);
     }
-  };
-
-  const handleMouseEnterSuggestion = (word, suggestionIndex) => {
-    setSelectedWord({ word, suggestionIndex });
-  };
-
-  const handleMouseLeaveSuggestion = () => {
-    setSelectedWord(null);
   };
 
   return (
@@ -446,7 +479,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
           <div className="suggestions-section">
             <h3>Placement Suggestions</h3>
             <p className="help-text">
-              Hover over suggestions to preview on grid. Click "Apply" to lock the word.
+              Click "Apply This Placement" to place a word and lock it.
             </p>
 
             {/* Apply All Button */}
@@ -474,12 +507,7 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
                 )}
 
                 {wordData.suggestions.map((suggestion, sugIdx) => (
-                  <div
-                    key={sugIdx}
-                    className="suggestion-card"
-                    onMouseEnter={() => handleMouseEnterSuggestion(wordData.word, sugIdx)}
-                    onMouseLeave={() => handleMouseLeaveSuggestion()}
-                  >
+                  <div key={sugIdx} className="suggestion-card">
                     <div className="suggestion-header">
                       <span className="placement-info">
                         Row {suggestion.row + 1}, Col {suggestion.col + 1} ({suggestion.direction})
