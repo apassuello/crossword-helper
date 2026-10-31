@@ -675,26 +675,30 @@ def test_a_clueless_csp_pause_state_and_resumed_file_have_no_clues_key(tmp_path)
 
 
 @pytest.mark.slow
-def test_empty_clues_map_survives_the_degenerate_pause_save(tmp_path):
-    # Kills `if "clues" in clues_carry` -> `if clues_carry.get("clues")` in the CLI's
-    # degenerate save: {} is what the browser exports when there are no clues.
-    paused = pause_real_fill(tmp_path, "repair", clues={})
-    assert json.loads(paused.grid_file.read_text()).get("clues", "ABSENT") == {}
+@pytest.mark.parametrize("value", [{}, None], ids=["empty-map", "null"])
+def test_falsy_clues_survive_the_degenerate_pause_save(tmp_path, value):
+    # {} kills `if "clues" in clues_carry` -> `if clues_carry.get("clues")` in the CLI's
+    # degenerate save ({} is what the browser exports when there are no clues).
+    # null kills `= clues_carry["clues"]` -> `= clues_carry["clues"] or {}` there.
+    paused = pause_real_fill(tmp_path, "repair", clues=value)
+    assert json.loads(paused.grid_file.read_text()).get("clues", "ABSENT") == value
 
-    assert read_envelope(paused.state_file)["metadata"].get("clues", "ABSENT") == {}
-    assert json.loads(paused.paused_grid_file.read_text()).get("clues", "ABSENT") == {}
+    assert read_envelope(paused.state_file)["metadata"].get("clues", "ABSENT") == value
+    assert json.loads(paused.paused_grid_file.read_text()).get("clues", "ABSENT") == value
 
 
 @pytest.mark.slow
-def test_beam_state_resumed_with_trie_and_paused_again_keeps_the_clues(tmp_path):
-    # Kills deleting `autofill.carried_clues = engine_clues(clues_carry)` in the
+@pytest.mark.parametrize("value", [CLUES, None], ids=["map", "null"])
+def test_beam_state_resumed_with_trie_and_paused_again_keeps_the_clues(tmp_path, value):
+    # The map kills deleting `autofill.carried_clues = engine_clues(clues_carry)` in the
     # algorithm-mismatch fallback of _execute_resume. A beam-type state resumed with
     # --algorithm trie takes that branch and runs the CSP engine with a task_id.
     # (Not --algorithm repair: issue #28 builds IterativeRepair there with no pause
-    # controller, so it cannot pause.)
+    # controller, so it cannot pause.) The null kills `engine_clues(clues_carry)` ->
+    # `clues_carry.get("clues")` on that line.
     small = SmallState(tmp_path)
     blank = Grid(11)
-    state_file = save_small_beam_state(small.state_dir, grid=blank, clues=CLUES)
+    state_file = save_small_beam_state(small.state_dir, grid=blank, clues=value)
     assert read_envelope(state_file)["algorithm"] == "beam"
     before = state_file.stat().st_mtime_ns
     args = small.resume_args(state_file)
@@ -710,5 +714,5 @@ def test_beam_state_resumed_with_trie_and_paused_again_keeps_the_clues(tmp_path)
     assert new_state.stat().st_mtime_ns != before, "the resumed run did not save a new pause state"
     envelope = read_envelope(new_state)
     assert envelope["algorithm"] == "csp"  # the CSP engine's save replaced the beam state
-    assert envelope["metadata"].get("clues") == CLUES
-    assert json.loads(small.out_file.read_text()).get("clues") == CLUES
+    assert envelope["metadata"].get("clues", "ABSENT") == value
+    assert json.loads(small.out_file.read_text()).get("clues", "ABSENT") == value
