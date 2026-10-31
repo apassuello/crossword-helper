@@ -11,7 +11,7 @@ from typing import Optional
 
 import click
 
-from .core.clues import CluesError, carry_clues, clue_statuses, validate_clues
+from .core.clues import CluesError, carry_clues, clue_statuses, engine_clues, validate_clues
 from .core.grid import Grid
 from .core.numbering import GridNumbering
 from .core.validator import GridValidator
@@ -298,7 +298,7 @@ def _execute_resume(
                 state_manager=state_manager,
             )
             autofill.wordlist_paths = wordlist_files
-            autofill.carried_clues = clues_carry.get("clues")
+            autofill.carried_clues = engine_clues(clues_carry)
             result = autofill.fill(timeout=timeout, resume_state=state_obj, task_id=task_id)
         elif exact_resume and state_type == "beam":
             autofill = BeamSearchAutofill(
@@ -312,7 +312,7 @@ def _execute_resume(
                 task_id=task_id,
             )
             autofill.wordlist_paths = wordlist_files
-            autofill.carried_clues = clues_carry.get("clues")
+            autofill.carried_clues = engine_clues(clues_carry)
             result = autofill.fill(timeout=timeout, resume_state=state_obj)
         else:
             # Algorithm mismatch: run the requested algorithm fresh on the
@@ -358,7 +358,7 @@ def _execute_resume(
                     state_manager=state_manager,
                 )
             autofill.wordlist_paths = wordlist_files
-            autofill.carried_clues = clues_carry.get("clues")
+            autofill.carried_clues = engine_clues(clues_carry)
             if chosen_algorithm in ("trie", "regex"):
                 result = autofill.fill(timeout=timeout, task_id=task_id)
             else:
@@ -1068,7 +1068,7 @@ def fill(
         # Record the wordlist paths on the solver so a paused state stores them
         # (resume reloads the same wordlists without needing -w)
         autofill.wordlist_paths = [str(w) for w in wordlists]
-        autofill.carried_clues = clues_carry.get("clues")
+        autofill.carried_clues = engine_clues(clues_carry)
 
         # Emit any warnings collected so far (human mode; JSON gets them in the result)
         if warnings and not json_output:

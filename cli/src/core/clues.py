@@ -104,3 +104,24 @@ def carry_clues(source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any
     if "clues" in source:
         target["clues"] = source["clues"]
     return target
+
+
+# Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: `fill` carries the input's
+# `clues` unchanged, so "key absent" and "key present with value null" stay distinct. The
+# engines hold the carried value in `carried_clues`, where None means "no key"; this sentinel
+# stands for a key that is present and holds null.
+NULL_CLUES: Any = object()
+
+
+def engine_clues(carry: Dict[str, Any]) -> Any:
+    """The value to put in an engine's `carried_clues` for a carry dict from `carry_clues`."""
+    if "clues" not in carry:
+        return None
+    return NULL_CLUES if carry["clues"] is None else carry["clues"]
+
+
+def store_carried_clues(metadata: Dict[str, Any], carried: Any) -> None:
+    """Write an engine's `carried_clues` into pause-state metadata; None writes no key."""
+    if carried is None:
+        return
+    metadata["clues"] = None if carried is NULL_CLUES else carried
