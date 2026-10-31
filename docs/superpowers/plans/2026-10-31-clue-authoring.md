@@ -24,7 +24,8 @@ report it.
 - Layering (spec §2): crossword logic only in `cli/`. The order is CLI → `cli_adapter.py` → Flask route →
   React, and no layer is skipped. The browser status is for display only (R4).
 - Python 3.9 floor. Module-level type aliases use `typing.Union`, not `|` (`.claude/CLAUDE.md`).
-- Implementers run on **Sonnet**. RED evidence before any `src` edit is mandatory in every task report: the
+- Every code task runs RED → GREEN → REVIEW with three different agents (Execution protocol below). All run on
+  **Sonnet**. RED evidence before any `src` edit is mandatory in every task report: the
   failing output, with a per-row failed/passed-before table. A row that passes before the fix needs a
   discriminating fixture and a mutation proof that fails at the target assertion's own line (CONTRIBUTING §3).
 - Every mutation row in spec §6.3 is assigned to exactly one task below. That task's report shows the
@@ -58,6 +59,50 @@ report it.
   U+FEFF (not in the set) and keeps U+0085 (in the set). Python `str.strip()` strips U+001C–U+001F (not in the
   set). Both sides use the explicit set from §3.1.
 - `cli/src/cli.py` has no nested click group yet. `clues` is the first (`@cli.group()` + `@clues.command("check")`).
+
+## Execution protocol: RED → GREEN → REVIEW, three agents per task
+
+Owner ruling, 2026-10-31: every code task runs as three phases, each done by a **different** fresh agent. The
+controller prepares the three briefs **one task at a time**, each immediately before its phase. Briefs are
+never pre-generated, because a brief written before the previous phase's result goes stale. The files are
+`task-N-red.md`, `task-N-green.md` and `task-N-review.md` in the SDD workspace. Each brief carries the task's
+text from this plan and this plan's Global Constraints and Verified facts. The GREEN brief adds the RED commit
+and its test files, and the REVIEW brief adds both reports and the review package.
+
+1. **RED** (Sonnet, a test writer). It writes tests and test fixtures only, designed from the task's contract
+   (signatures, criteria, normative cases), and reads `superpowers:test-driven-development` and its
+   `writing-good-tests.md` first. It edits no production file. It runs the tests and records the failure of
+   each one. Expected failures:
+   - A symbol or module that does not exist yet fails on import or attribute lookup.
+   - Behaviour on existing code fails on an assertion.
+   - A broken test (syntax, a wrong fixture path) is not a RED.
+
+   The report carries a table: normative case → test → failing line and message. A test that **passes** at
+   RED is listed as such with the reason, and REVIEW must mutation-prove it. RED commits
+   `test(<scope>): failing tests for Task N`. Failing tests committed on this branch are intended, and nothing
+   is pushed between phases.
+2. **GREEN** (Sonnet, an implementer, not the RED agent). It reads the brief and RED's tests and writes the
+   production code (and the task's docstring, comment and doc edits) until RED's tests pass. It **must not
+   change any file RED committed**; `git diff <RED>..HEAD -- <RED's files>` must be empty. If a RED test looks
+   wrong, it reports BLOCKED, quoting the test and the contract text. The controller then routes it to a RED
+   fix or to Spec Drift; GREEN never edits the test. It runs the task's tests, plus `npm run build` for a
+   frontend task, and commits with the task's commit subject.
+3. **REVIEW** (Sonnet, a reviewer, not RED or GREEN). It reads the review package (RED's base to GREEN's head)
+   and gives two verdicts.
+   - **Spec compliance:** every criterion and normative case is covered by a test and met by the code.
+   - **Quality:** test honesty and code quality.
+
+   It also checks that RED's failures were real failures for the right reason (from the RED report and the
+   RED commit), and that GREEN changed no RED file. It runs this task's spec §6.3 mutations and the mutation
+   proofs for RED-passing tests. For each: edit the production file, run, show the failure at the target
+   assertion's own line, `git restore <file>`, then `git status --short` clean. It never runs `git checkout`
+   or `git stash`.
+4. **Findings.** A test gap goes to a fresh RED fix agent: new tests fail first, or carry a mutation proof. A
+   code defect goes to a fresh GREEN fix agent. Then a fresh REVIEW agent re-reviews. A behaviour change goes
+   through Spec Drift (amend the spec and plan, and get the owner's ruling), never inside a fix.
+
+Task 11 (documentation) has no tests. It runs as WRITE then REVIEW (two agents), with
+`scripts/docs-check.sh` as its gate. Task 12 is the browser acceptance gate.
 
 ## File map
 
@@ -128,11 +173,9 @@ accepted (the trim trap above). Status: all 14 fixture rows.
 
 **Mutation (§6.3):** "The CLI status uses `get_word_slots()` at its default" → the 2-letter `RO` row is `ok`.
 
-- [ ] Step 1: write the failing tests from the criteria and the fixture.
-- [ ] Step 2: run `pytest cli/tests/unit/test_clues.py -v`. Expect a failure because the module is missing.
-- [ ] Step 3: implement.
-- [ ] Step 4: run the same command and expect PASS. Run the mutation, show it fail at the target line, then revert.
-- [ ] Step 5: commit `feat(cli): clue map validation and status`.
+- [ ] RED: tests and fixtures only; run `pytest cli/tests/unit/test_clues.py -v`; commit `test(cli): failing tests for Task 1`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(cli): clue map validation and status`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -163,12 +206,9 @@ or without the flag, so there is one format and nothing new for CLI_SPEC. Under 
 unloadable-grid error is JSON too (with `False` it prints human text, `cli/src/cli.py`, the helper's `else`
 branch). Task 11 documents whichever applies.
 
-- [ ] Step 1: write failing tests through `click.testing.CliRunner` on files in `tmp_path`, covering every
-  row and a 4×4 fixture grid with `--allow-nonstandard`.
-- [ ] Step 2: run `pytest cli/tests/unit/test_clues_command.py -v` and confirm it fails because the command is
-  missing.
-- [ ] Step 3: implement. Step 4: re-run and expect PASS.
-- [ ] Step 5: commit `feat(cli): clues check command`.
+- [ ] RED: tests and fixtures only; run `pytest cli/tests/unit/test_clues_command.py -v`; tests go through `click.testing.CliRunner` on files in `tmp_path` and cover every row and a 4×4 grid with `--allow-nonstandard`; commit `test(cli): failing tests for Task 2`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(cli): clues check command`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -223,7 +263,9 @@ file.
 
 **Mutation (§6.3):** "`fill`'s result write drops `clues`" → `fill grid.json` keeps `clues` in place.
 
-- [ ] Steps 1–5. Commit `feat(cli): carry clues through fill, pause and resume`.
+- [ ] RED: tests and fixtures only; run `pytest cli/tests/unit/test_clues_carry.py cli/tests/integration/test_clues_pause_resume.py -v`; the beam-state first step above belongs to RED; commit `test(cli): failing tests for Task 3`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(cli): carry clues through fill, pause and resume`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -265,7 +307,9 @@ the Flask test client through the adapter to the CLI, covering 200, 400 `INVALID
 `INVALID_GRID`. Non-JSON and timeout with the adapter mocked. `backend/tests/test_openapi_contract.py` must
 pass with the new path.
 
-- [ ] Steps 1–5. Commit `feat(api): POST /api/clues/check`.
+- [ ] RED: tests and fixtures only; run `pytest backend/tests/unit/test_clue_routes.py backend/tests/unit/test_cli_adapter.py backend/tests/integration/test_clues_check_e2e.py -v`; commit `test(api): failing tests for Task 4`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(api): POST /api/clues/check`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -302,7 +346,9 @@ schema). Also spec §6.2 "Commit"; key order
 `"2,0,down"` < `"10,0,across"`; trim of a leading U+0085 and of U+FEFF (the first is stripped, the second
 kept).
 
-- [ ] Steps 1–5 (`npx vitest run src/lib/__tests__/clues.test.js`). Commit `feat(web): clue library`.
+- [ ] RED: tests and fixtures only; run `npx vitest run src/lib/__tests__/clues.test.js`; commit `test(web): failing tests for Task 5`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): clue library`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -335,7 +381,9 @@ export function documentHasContent(grid, clues) {}  // gridEdits.js — gridHasC
 
 **Mutation (§6.3):** "The document signature does not sort entries" → identical for another insertion order.
 
-- [ ] Steps 1–5. Commit `feat(web): document signature and clue snapshots`.
+- [ ] RED: tests and fixtures only; run `npx vitest run src/lib/__tests__/ src/__tests__/isAdoptableEntry.test.js`; commit `test(web): failing tests for Task 6`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): document signature and clue snapshots`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -370,7 +418,9 @@ Delete where it is `orphaned` (§3.3). Styles use the existing `.xw-clue*` / `.x
 **Normative cases:** spec §6.2 "Panel", except "a tool switch commits a draft" (Task 8 tests that through
 App; here, unmounting with a draft calls `onCommit` once).
 
-- [ ] Steps 1–5. Commit `feat(web): clues panel`.
+- [ ] RED: tests and fixtures only; run `npx vitest run src/__tests__/components/CluesPanel.test.jsx`; commit `test(web): failing tests for Task 7`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): clues panel`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -421,7 +471,9 @@ in Task 9), "Gating", "Rail", and the Panel row "a tool switch commits a draft".
 - "The replacement predicate ignores clues" → New grid asks on a white grid with a clue.
 - "`isDirty` reads the grid signature" → a commit makes the document dirty.
 
-- [ ] Steps 1–5. Commit `feat(web): clue state, undo and save`.
+- [ ] RED: tests and fixtures only; run `npx vitest run` on the test files listed under Files; commit `test(web): failing tests for Task 8`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): clue state, undo and save`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -450,7 +502,9 @@ hidden and its test is unchanged (spec §7).
 
 **Normative cases:** spec §6.2 "Import", and "Confirm" for Import.
 
-- [ ] Steps 1–5. Commit `feat(web): grid-file clues on import and export`.
+- [ ] RED: tests and fixtures only; run `npx vitest run` on the test files listed under Files; commit `test(web): failing tests for Task 9`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): grid-file clues on import and export`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -476,7 +530,9 @@ live run, every status is the browser's, and a failure shows nothing.
 **Mutation (§6.3):** "The reconcile applies a reply without comparing signatures" → a reply for an older status
 signature is not applied.
 
-- [ ] Steps 1–5. Commit `feat(web): reconcile clue status from the CLI`.
+- [ ] RED: tests and fixtures only; run `npx vitest run src/hooks/__tests__/useClueReconcile.test.jsx`; commit `test(web): failing tests for Task 10`.
+- [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): reconcile clue status from the CLI`.
+- [ ] REVIEW: spec and quality verdicts, RED/GREEN checks, and this task's mutations.
 
 ---
 
@@ -502,7 +558,8 @@ found by review and not listed in §7:
 - **Owner step, not an implementer step:** file the spec §8 tech-debt issue (browser grid-file parsing and
   serialization), labelled `tech-debt`, only with Arthur's go-ahead (CA-4's default: when this feature is built).
 
-- [ ] Commit `docs: clue authoring`.
+- [ ] WRITE: apply the edits; `git add`, `scripts/docs-check.sh`; commit `docs: clue authoring`.
+- [ ] REVIEW: every §7 target and the review-found additions, checked against the files at HEAD.
 
 ---
 
