@@ -1,7 +1,8 @@
 # Clue Authoring — Design
-**Version 0.1.2** · Claude with Arthur Passuello · 2026-10-31 · status: approved. Every section was approved by the
-owner in chat on 2026-10-31, the layering after the CLI-first ruling; 0.1.1 applies the first review (§10).
-The owner approved the written spec on 2026-10-31. §9's defaults apply if unruled by 2026-11-14.
+**Version 0.1.3** · Claude with Arthur Passuello · 2026-10-31 · status: approved at 0.1.2; 0.1.3's §3.5
+amendment awaits owner review. Every section was approved by the owner in chat on 2026-10-31, the layering after
+the CLI-first ruling; 0.1.1 applies the first review (§10). The owner approved the written spec on 2026-10-31.
+§9's defaults apply if unruled by 2026-11-14.
 
 ---
 
@@ -11,7 +12,7 @@ Read `[SPEC]` blocks for authoritative behaviour. Read `[NOTE]` only for context
 Issue numbers are GitHub issues on `apassuello/crossword-helper`. "Novice spec" means
 `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` at version 0.2.23. Names marked as forward
 references do not exist yet: this spec introduces them. Code that implements a decision of §1 cites it as
-"Decision N (clue-authoring spec 0.1.2, section 1)".
+"Decision N (clue-authoring spec 0.1.3, section 1)".
 
 ---
 
@@ -184,7 +185,8 @@ orphaned.
   - Edits made to the grid while the check runs are replaced when the import applies, on the terms an Open
     that waits already has (novice spec §3.4).
 - **Grid JSON file, CLI:** the commands that write a grid file are `fill` (its pause write and its result
-  write), `resume` and `fill --resume` (both through `_execute_resume`), `new` and `import-nyt`.
+  write), `resume` (through `_execute_resume`), `fill --resume` (which resolves the state in `fill` itself and
+  writes through `fill`'s two writes), `new` and `import-nyt`.
   - `fill` carries the input file's `clues` unchanged into both of its writes. In human mode with no `-o`,
     `fill` writes back to its input file, so the clues are kept in place. With `--json-output`, the file is
     written only when `-o` is given.
@@ -192,8 +194,11 @@ orphaned.
     sites are the CSP engine (`autofill.py`), the beam orchestrator (`beam_search/orchestrator.py`) and the
     CLI's state for other algorithms (`cli.py`); the CLI passes the value to the engines. The solver never
     reads it.
-  - `_execute_resume` reads `metadata["clues"]` and writes it into its output. The backend's resume route
-    re-saves `**metadata` and so keeps it with no change.
+  - `resume` and `fill --resume` read `metadata["clues"]` and write it into their output and into any pause
+    state they save. With `--resume`, the `clues` of a grid file also given are not read: the saved state is
+    authoritative, as it already is for the grid (`fill`: "--resume wins when both are given"). A state with no
+    `clues` in its metadata gives output with none. The backend's resume route re-saves `**metadata` and so
+    keeps it with no change.
   - `new` and `import-nyt` write no `clues`. Input with no `clues` key gives output with none.
 - **`docs/user-guide/reference/file-formats.md`** gains the `clues` row (§7).
 
@@ -540,3 +545,8 @@ form in a test, because it is the first code to read that `pattern`.
   solver never reads it" is a requirement); B B12's ß case (cells hold only A–Z).
 - 0.1.2 (2026-10-31): owner approval. §8 records the `get_word_slots` docstring/body mismatch on the
   empty-square encoding, found while verifying the handoff's constraints.
+- 0.1.3 (2026-10-31, found while writing the plan): §3.5 said `resume` and `fill --resume` both go through
+  `_execute_resume`. `fill --resume` resolves the state in `fill` itself (`cli.py`, the `resume_state_file`
+  branch of `fill`). §3.5 now names both paths and says, for `fill --resume` given a grid file as well, that
+  `clues` come from the state, following `fill`'s existing "--resume wins" rule for the grid. What it beat:
+  reading the grid file's `clues` (they could describe a different grid from the one being resumed).
