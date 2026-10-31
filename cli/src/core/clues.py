@@ -40,6 +40,15 @@ def _invalid(key: str, reason: str) -> CluesError:
     return CluesError('Invalid clue "{}": {}.'.format(key, reason))
 
 
+def _below(digits: str, size: int) -> bool:
+    """True if the canonical decimal string `digits` is < size.
+
+    Compares lengths first so int() never sees an over-long string: Python 3.11+
+    (and 3.9.14+/3.10.7+) raise ValueError past 4300 digits, older 3.9 does not.
+    """
+    return size > 0 and len(digits) <= len(str(size)) and int(digits) < size
+
+
 def clue_key_sort(key: str) -> Tuple[int, int, int]:
     """Sort key for a valid clue key: row, column, then across before down."""
     row, col, direction = key.split(",")
@@ -54,7 +63,7 @@ def validate_clues(clues: object, size: int) -> None:
     key_reason = 'key must be "row,col,across" or "row,col,down" inside the grid'
     for key in sorted(clues):
         match = _KEY_RE.fullmatch(key) if isinstance(key, str) else None
-        if match is None or int(match.group(1)) >= size or int(match.group(2)) >= size:
+        if match is None or not (_below(match.group(1), size) and _below(match.group(2), size)):
             raise _invalid(str(key), key_reason)
 
     for key in sorted(clues, key=clue_key_sort):
