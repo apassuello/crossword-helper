@@ -14,13 +14,13 @@ and reconciles that status from the route.
 
 **Tech Stack:** Python 3.9+ · Click · Flask 3.0 · React 18 · Vite 5 · pytest · vitest
 
-**Spec:** `docs/superpowers/specs/2026-10-31-clue-authoring-design.md`, version 0.1.3. The spec governs, and
+**Spec:** `docs/superpowers/specs/2026-10-31-clue-authoring-design.md`, version 0.1.4. The spec governs, and
 every task reads the sections it names. Where this plan and the spec disagree, one of them is wrong: stop and
 report it.
 
 ## Global Constraints
 
-- Code that implements a §1 decision cites it as `Decision N (clue-authoring spec 0.1.3, section 1)`.
+- Code that implements a §1 decision cites it as `Decision N (clue-authoring spec 0.1.4, section 1)`.
 - Layering (spec §2): crossword logic only in `cli/`. The order is CLI → `cli_adapter.py` → Flask route →
   React, and no layer is skipped. The browser status is for display only (R4).
 - Python 3.9 floor. Module-level type aliases use `typing.Union`, not `|` (`.claude/CLAUDE.md`).
@@ -39,7 +39,7 @@ report it.
   attribution trailers. Never chain a test run and a commit in one shell command.
 - Spec §7's document amendments are applied in Task 11, not before.
 
-## Verified facts this plan relies on (checked 2026-10-31 at `7d1b83b`)
+## Verified facts this plan relies on (checked 2026-10-31 at `17f058f`)
 
 - `_load_grid_or_exit(grid_file, allow_nonstandard, json_output)` returns `(data, grid)`. `data` is the raw
   JSON dict, so `clues` is read from `data`. `Grid.to_dict()` knows nothing of `clues`, so every write that
@@ -102,17 +102,24 @@ input data dict or the state metadata as `source`.
 **Fixture schema** (spec §3.2; pytest and vitest both read it):
 
 ```json
-{"cases": [{"grid": ["ROSE", "....", "....", "...."], "key": "0,0,across", "answer": "ROSE", "status": "ok"}]}
+{"cases": [{"grid": [["R","O","S","E"], [".",".",".","."], [".",".",".","."], [".",".",".","."]],
+            "key": "0,0,across", "answer": "ROSE", "status": "ok"}]}
 ```
 
 It holds the seven §3.2 rows for `across` and the same seven transposed with key `"0,0,down"`: 14 cases,
-written out literally. `#` is black and `.` is empty.
+written out literally. `#` is black and `.` is empty. Rows are lists of one-character strings, the grid
+file's own row shape (`Grid.to_dict` builds each row cell by cell, and `Grid.from_dict` rejects a non-list row,
+`cli/src/core/grid.py:372-373`). Neither consumer converts: pytest loads a case with
+`Grid.from_dict({"size": 4, "grid": rows}, strict_size=False)` (4×4 is non-standard), and vitest passes the rows
+straight to `fromCliStrings` (`src/api/gridCodec.js`, which maps `#`, `.` and letters per cell).
 
 **Behavioural criteria:** spec §3.4 rules 1–6 in their stated order. Rule 2 is checked over all keys in
 code-point string order before any value is checked. Rules 3–6 run key by key in key order (§3.1). Messages
 are exact (§3.4). Rule 4 uses §3.1's whitespace set and rule 5 counts code points. Status follows §3.2, with
 entries from `grid.get_word_slots(min_length=2)` and each `.` of `pattern` read as `?`. Orphan keys are valid.
-The `get_word_slots` docstring example is corrected to show `.` for an empty square (spec §8).
+The `get_word_slots` docstring example is corrected to show `.` for an empty square, and a direct test pins
+that form: `get_word_slots(min_length=2)` on a grid with an empty square returns `.` at that position of
+`pattern` (spec §8; the `RO.E` fixture row covers it only indirectly).
 
 **Normative cases:** spec §3.4's messages; spec §6.1 "Validation" (every listed case: `null`, an array,
 `"00,0,across"`, code-point order of key errors, key order of value errors, leading U+00A0, 200 vs 201 code
@@ -153,7 +160,9 @@ helper's existing JSON error and exit 1, with no `code`). A file with no `clues`
 Human mode (no `--json-output`) keeps the same exit codes. Spec §3.6 gives `--json-output` unbracketed and
 does not define human-mode text. **Owner ruling pending.** If it is unruled when this task starts, the default
 applies: the same JSON object is printed with or without the flag, so there is one format and nothing new
-for CLI_SPEC. Task 11 documents whichever applies.
+for CLI_SPEC. Under that default, `_load_grid_or_exit` is called with `json_output=True` in both modes, so the
+unloadable-grid error is JSON too (with `False` it prints human text, `cli/src/cli.py`, the helper's `else`
+branch). Task 11 documents whichever applies.
 
 - [ ] Step 1: write failing tests through `click.testing.CliRunner` on files in `tmp_path`, covering every
   row and a 4×4 fixture grid with `--allow-nonstandard`.
@@ -174,7 +183,7 @@ intentionally unused on load", which spec §7 rewrites), `cli/src/fill/autofill.
 
 **Interfaces — Consumes:** `carry_clues` (Task 1).
 
-**Behavioural criteria** (spec 0.1.3 §3.5):
+**Behavioural criteria** (spec 0.1.4 §3.5):
 - `fill` carries the input file's `clues` unchanged into its pause write and its result write. In human mode
   with no `-o` it writes back to the input, so the clues stay in place. With `--json-output` it writes a file
   only when `-o` is given.
@@ -192,6 +201,15 @@ command in `cli/tests/unit/test_pause_resume_regressions.py`. **Grid choice is l
 iteration on a blank 15×15 can outlast the whole run (`.claude/CLAUDE.md`, the liveness anti-pattern). Use a
 small grid that pauses within seconds, and mark a test `@pytest.mark.slow` if it takes longer than about 10 s.
 
+**First step, before writing the beam row (spec 0.1.4 §6.1):** for any algorithm other than `regex` and `trie`,
+`fill` makes its own degenerate CSP-type save after the run. That save and `save_beam_search_state` both name
+`{task_id}.json.gz` (`cli/src/fill/state_manager.py`). Run a real `fill --algorithm beam` pause and report
+which state type survives and in which directory. If no beam-type state survives the CLI path, the beam row
+builds one with `save_beam_search_state` (carrying `metadata["clues"]`), on the pattern of the `stored_state`
+fixture in `cli/tests/unit/test_pause_resume_regressions.py`. In that case the orchestrator's save site is
+tested at unit level. Every e2e asserts on the state file's `metadata["clues"]` as well as on the resumed grid
+file.
+
 **Normative cases** (spec §6.1 "Round trip" and the third "Seam" bullet):
 
 | Case | Expect |
@@ -200,8 +218,8 @@ small grid that pauses within seconds, and mark a test `@pytest.mark.slow` if it
 | `fill grid.json -o out.json` | `out.json` has the input's `clues` |
 | input without `clues` | output without a `clues` key |
 | `new`, `import-nyt` | no `clues` key |
-| real fill → pause → `resume`, for each of CSP, beam, other-algorithm state | resumed file has the input's `clues` |
-| the same through `fill --resume` | the same |
+| real fill → pause → `resume`, for CSP, other-algorithm and beam-type states | resumed file has the input's `clues` |
+| the same through `fill --resume`, for CSP and other-algorithm states only (it loads with `load_csp_state`, which refuses a beam state) | the same |
 | `fill --resume` given a grid file whose `clues` differ from the state's | output has the state's `clues` |
 
 **Mutation (§6.3):** "`fill`'s result write drops `clues`" → `fill grid.json` keeps `clues` in place.
@@ -239,7 +257,7 @@ clue_api = Blueprint("clue", __name__)   # route: POST /clues/check
 | CLI `code: "INVALID_CLUES"` | 400, `INVALID_CLUES`, the CLI's `error` |
 | any other CLI `success: false` | 400, `INVALID_GRID`, the CLI's `error` |
 | `validate_grid_request` raises | 400, `INVALID_GRID` |
-| non-JSON CLI output | 500, `INTERNAL_ERROR` |
+| non-JSON CLI output | 500, `INTERNAL_ERROR`, fixed message `Clue check returned unreadable output` (no CLI stdout in the reply; `backend/tests/unit/test_error_hygiene.py` polices leaks) |
 | timeout | 504, `TIMEOUT`, `Clue check timed out` |
 
 Tests (spec §6.1 "Seam" and "Route shapes"): an argv contract test that the real CLI parser accepts the
@@ -280,8 +298,8 @@ currentPattern}`. All three functions are immutable: they return a new map when 
 mutate the input.
 
 **Normative cases:** the 14 fixture rows, read from `tests/fixtures/clue_status_cases.json` with `fs` (as
-`src/lib/__tests__/contentSig.test.js` reads files) and converted with `fromCliStrings`
-(`src/api/gridCodec.js`; confirm it maps `#` and `.`). Also spec §6.2 "Commit"; key order
+`src/lib/__tests__/contentSig.test.js` reads files), with rows passed straight to `fromCliStrings` (Task 1's
+schema). Also spec §6.2 "Commit"; key order
 `"2,0,down"` < `"10,0,across"`; trim of a leading U+0085 and of U+FEFF (the first is stripped, the second
 kept).
 
@@ -292,8 +310,8 @@ kept).
 ### Task 6: Signatures, snapshots, predicate, adoptable entry
 
 **Files:** Modify `src/lib/contentSig.js`, `src/lib/history.js`, `src/lib/gridEdits.js`, and
-`isAdoptableEntry` in `src/App.jsx`. Test the matching files in `src/lib/__tests__/`, plus a test for
-`isAdoptableEntry` wherever it is already tested.
+`isAdoptableEntry` in `src/App.jsx`. Test the matching files in `src/lib/__tests__/`, plus a new
+`src/__tests__/isAdoptableEntry.test.js` (no test file covers it today).
 
 **Interfaces — Consumes:** `compareClueKeys` (Task 5). **Produces:**
 
@@ -370,6 +388,7 @@ predicate). Tests: `src/__tests__/components/App.test.jsx` and
 
 ```js
 useUndoHistory({ grid, gridSize, clues, setGrid, setClues, editingPausedRef })  // snapshots hold clues
+record(beforeGrid, beforeClues)   // returned as `record`, App's `recordStep`; snapshotContent(beforeGrid, size, beforeClues)
 // App handlers passed to CluesPanel:
 commitClue(key, draft) -> { error }   // returns { error: null } and writes nothing when editingPausedRef.current
 keepClue(key)
@@ -377,8 +396,15 @@ deleteClue(key)
 ```
 
 **Behavioural criteria:**
-- `clues` state lives in App beside `grid`, in the saved `doc` (spec §3.5), and is read through a ref that
-  advances the way `editGrid`'s grid ref does (spec §4.3).
+- `clues` state lives in App beside `grid`, in the saved `doc` (spec §3.5), and is read through App's
+  `cluesRef`, which advances the way `editGrid`'s grid ref does (spec §4.3). Every `recordStep` call site
+  (`App.jsx`, today at the `editGrid` body and the two clean paths) passes `cluesRef.current` as `beforeClues`.
+  A clue commit, Keep or Delete records `(gridRef.current, cluesRef.current)` and then advances `cluesRef`.
+- Hook internals: the step-decision effect's rendered signature becomes `docSigOf(gridSize, grid, clues)`, not
+  `contentSigOf`. `beginBatch`'s "before" takes its clues from the hook's own rendered-clues ref, as it takes
+  the grid. Restore calls `setClues(snapshot.clues)`.
+- `GridPanel` gains a `clues` prop (default `{}`, so existing GridPanel tests still pass) and calls
+  `documentHasContent(grid, clues)` at its two `gridHasContent` sites.
 - The consumer table in spec §4.1 is the checklist. Each listed site reads the document signature, except
   `pendingClean`, which keeps the grid signature. Theme staleness and numbering are unchanged.
 - Lifecycle per spec §4.2, undo per §4.3, gating per §4.4 (each handler re-checks `editingPausedRef` at write
@@ -409,6 +435,13 @@ plus `src/api/__tests__/`.
 
 **Interfaces — Produces:** `api.checkClues({ size, grid, clues })`, which posts to `/api/clues/check` through
 `post()`/`clean()` the way `numberGrid` does. Grid cells are in the shape `numberGrid` sends.
+
+- `validateImportedData(data)` returns `{size, grid, numbering}` plus `clues` **only when the file had the key**,
+  with the raw value, `null` included. `'clues' in validated` is the discriminator.
+- `performImport` (`ImportPanel.jsx`, after `handleImportClick`'s confirm) awaits `api.checkClues` when the
+  key is present, before `onImport`.
+- `onImport` / App's `handleGridImport` receive `clues`: the file's map when it was checked, or `{}` when the
+  key was absent.
 
 **Behavioural criteria:** spec §3.5, "Grid JSON file, browser export" and "browser import", in order: confirm,
 then the check (only when the file has a `clues` key, including `{}` and `null`), then apply. A 400 shows
@@ -451,12 +484,19 @@ signature is not applied.
 ### Task 11: Documentation amendments
 
 **Files:** every target in spec §7, "Novice spec", "CLI and API documentation" (OpenAPI and API_REFERENCE are
-already done in Task 4) and "User documentation", including the new how-to under `docs/user-guide/how-to/`.
+already done in Task 4) and "User documentation". The new how-to is `docs/user-guide/how-to/write-clues.md`.
+§7's "Code comments" and "Tests" items are applied in Tasks 3, 6 and 8, beside the code they describe. Also,
+found by review and not listed in §7:
+- `docs/user-guide/README.md`: a how-to index row for `write-clues.md`.
+- `docs/diataxis/claims.md`: row E-11 ("Exports have no clues") becomes false for the JSON export, so restate it
+  for HTML only, or add a row. Re-verify row E-09 (JSON export is "complete grid data").
+- `cli/README.md` has no command list matching the others. Put `clues check` where its commands are
+  documented.
 
 **Criteria:**
-- Apply §7's edits verbatim. The novice spec is amended **at its current version on this branch's base**. The
-  clue spec names 0.2.23, and 0.2.24 is on PR #112, so check which is current, bump it, and add an amendment
-  record line.
+- Apply §7's edits verbatim. Review found every quoted target present at `17f058f`, some wrapped across lines.
+  The novice spec is amended **at its current version on this branch's base**: 0.2.23 here, and 0.2.24 if PR
+  #112 has merged first. Bump it and add an amendment record line.
 - If `docs/user-guide-html` has landed on main, its regen check covers `docs/user-guide/*.md`, so rebuild the
   site in the same commit.
 - `git add`, then `scripts/docs-check.sh`, before the commit.
