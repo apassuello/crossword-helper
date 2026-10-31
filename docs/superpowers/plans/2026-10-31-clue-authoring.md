@@ -158,9 +158,8 @@ helper's existing JSON error and exit 1, with no `code`). A file with no `clues`
 | no `clues` key | 0 | `{"success": true, "statuses": {}}` |
 
 Human mode (no `--json-output`) keeps the same exit codes. Spec §3.6 gives `--json-output` unbracketed and
-does not define human-mode text. **Owner ruling pending.** If it is unruled when this task starts, the default
-applies: the same JSON object is printed with or without the flag, so there is one format and nothing new
-for CLI_SPEC. Under that default, `_load_grid_or_exit` is called with `json_output=True` in both modes, so the
+does not define human-mode text. **Owner ruling (2026-10-31, spec §10):** the same JSON object is printed with
+or without the flag, so there is one format and nothing new for CLI_SPEC. Under this ruling, `_load_grid_or_exit` is called with `json_output=True` in both modes, so the
 unloadable-grid error is JSON too (with `False` it prints human text, `cli/src/cli.py`, the helper's `else`
 branch). Task 11 documents whichever applies.
 
