@@ -158,14 +158,14 @@ typed.
 | H-05 | add-theme-words | Theme tool: `Upload Theme Words`, `Choose File`, `Loaded Words`, `Placement Suggestions`, `Apply All Best Placements` | ThemeWordsPanel.jsx:388,400,422,447,454 | verified (code) | Theme tool not opened in a run |
 | H-06 | add-theme-words | Invalid list shows toast `Invalid theme words: <first error>`; valid shows `Loaded N theme words` and auto-analyzes | ThemeWordsPanel.jsx `handleFileContent` | verified (code) | not run |
 | H-07 | add-theme-words | Hovering a suggestion previews it; `Apply` places and locks that word | panel help text "Hover over suggestions to preview on grid. Click "Apply" to lock the word." | false | Hover does not change the grid; see V-02. |
-| H-08 | add-theme-words | `Apply All Best Placements` applies each best suggestion; skips no-placement or conflicting words; lists skipped with reason | `handleApplyAllPlacements` ThemeWordsPanel.jsx:285-330 | verified (code) | not run |
+| H-08 | add-theme-words | `Apply All Best Placements` applies each best suggestion; skips no-placement, conflicting or already-locked (`already on grid`) words; lists skipped with reason | `handleApplyAllPlacements`, `isPlacedAndLocked` ThemeWordsPanel.jsx | verified (code) | not run |
 | H-09 | add-theme-words | Panel positions are 1-based | `Row {suggestion.row + 1}, Col {suggestion.col + 1}` ThemeWordsPanel.jsx:485 | verified (code) | not run |
 | H-10 | add-theme-words | Locked cells: corner marker; cannot type over, Backspace or blacken; Clean keeps; autofill fixed | CrosswordGrid.jsx Backspace/Space/letter guards on `isThemeLocked`; `mergeGridPreserveThemeLocked` useAutofillMachine.js:381; `getThemeEntries` AutofillPanel.jsx | verified (code) | not run |
 | H-11 | add-theme-words | Suggestions refresh when the grid changes | ThemeWordsPanel.jsx `SUPERSEDED_MSG` 'Suggestions updated for the changed grid.' | verified (code) | not run |
 | H-12 | add-theme-words | CLI theme file keys are `"(row,col,direction)"`, 0-based | cli.py `--theme-entries` help; run with `(0,0,across)`/`(0,4,across)` | cut (D8: GUI only; was verified) | run: `Z I P # B O W` placed |
 | H-13 | add-theme-words | `fill` lists loaded entries (`Across at (0,0): ZIP`) and errors with `Invalid theme entries:` on a misfit | run output | cut (D8: GUI only; was verified) | run |
 | H-14 | add-theme-words | `--theme-wordlist` prefers words from a list without locking | `--theme-wordlist` help cli.py | cut (D8: GUI only; was verified (help text only; effect not measured)) | not run |
-| H-15 | add-theme-words | Known problems: Apply All counts hand-placed words; JSON export loses locks, `Save grid` keeps them | README.md:169-172 | unverified | README wording; issues #80 not re-read |
+| H-15 | add-theme-words | Known problems: JSON export loses locks, `Save grid` keeps them (the Apply All count, #80, is fixed) | README.md "Known Limitations", Theme bullet | unverified | README wording |
 | A-01 | autofill-a-grid | Autofill panel option defaults: algorithm `repair`, timeout 300, min score 30, adaptive off, max adaptations 3, partial fill off, cleanup off, list `comprehensive` | `DEFAULT_OPTIONS` AutofillPanel.jsx:49-52 area (own state, not CLI) | verified | browser pass shows defaults |
 | A-02 | autofill-a-grid | Algorithm options: Repair (Recommended), Hybrid (Beam + Repair), Beam Search, Classic CSP | AutofillPanel.jsx `<option>` list | verified | screenshot |
 | A-03 | autofill-a-grid | Timeout options 1/2/5/10/30 min | AutofillPanel.jsx options | verified | tut2.js text |
@@ -278,9 +278,9 @@ typed.
 | Z-10 | file-formats | Saved grids live in browser local storage, no file | see S-06 | verified | |
 
 | V-01 | save-open-and-recover | `Start blank` only dismisses the banner and opens the Grid tool; the grid is not cleared | `onStartBlank` App.jsx:796-800 ("it creates nothing itself") | verified | independent reviewer's browser run (`Filled 4.1%` before and after) |
-| V-02 | add-theme-words, web-app | Hovering a placement suggestion does not change the grid | `handleMouseEnterSuggestion` sets state only, ThemeWordsPanel.jsx:56; panel help text at :449 makes the opposite claim | verified | reviewer compared grid SVG before/during hover: unchanged |
+| V-02 | add-theme-words, web-app | Hovering a placement suggestion does not change the grid | `.suggestion-card` in ThemeWordsPanel.jsx has no hover handler (the unused ones were removed for #106), and the help text no longer promises a preview | verified | reviewer compared grid SVG before/during hover: unchanged (before #106) |
 | V-03 | troubleshoot, add-theme-words | A theme line with a space, hyphen or digit is dropped silently; a too-short word is the only reported error; any error rejects the list | `word.isalpha()` theme_routes.py:60; `validation.valid` | verified | my POST to /api/theme/upload: words `AB, HELLO, JAZZ`, errors `AB: Too short`, `valid: false` |
-| V-04 | add-theme-words, web-app | Placing a word can add black squares | `added_black_squares` theme_routes.py:262 | verified (code); runtime by reviewer only | reviewer: Apply All of 3 words took Black 0→6; not reproduced by me |
+| V-04 | add-theme-words, web-app | Placing a word can add black squares, and the message after a placement says how many | `added_black_squares` theme_routes.py `apply_placement`; `countAppliedThemeCells` gridEdits.js; `handleThemeWordApplied` App.jsx | verified (code); runtime by reviewer only | reviewer: Apply All of 3 words took Black 0→6; not reproduced by me |
 | V-05 | add-theme-words, file-formats | More than 50 theme words is refused | `MAX_THEME_WORDS = 50` theme_placer.py:27 | verified | read |
 | V-06 | add-theme-words, web-app | Each suggestion shows `Row r, Col c (direction)` (from 1), a score out of 100, a reason, and the button `✓ Apply This Placement` | ThemeWordsPanel.jsx:485,501 | verified (code) | |
 | V-07 | autofill-a-grid | Extra endings: `Cancelled by user`, `No solution found`, `Autofill failed`, `Lost contact with the autofill run.`, `Autofill was paused outside the app.`, and the `some entries may need review` variant | useAutofillMachine.js:67,406,427,437,449,457,551 | verified (code); not reproduced | rows marked `[?]` in the page |
@@ -334,8 +334,9 @@ failure below) were run by the reviewer and again afterwards.
   `python -m cli.src.cli --help`.
 - `README.md` says templates for 11x11, 15x15 and 21x21 are included; `validate` reports errors for
   `data/grids/example_11x11.json` and `data/grids/example_21x21.json` (only the 15x15 passes).
-- The Theme panel's own help text says hovering a suggestion previews it on the grid
-  (`ThemeWordsPanel.jsx`, "Hover over suggestions to preview on grid"); hovering changes nothing.
+- The Theme panel's own help text said hovering a suggestion previews it on the grid
+  (`ThemeWordsPanel.jsx`, "Hover over suggestions to preview on grid"); hovering changes nothing. Fixed for
+  #106: the help text no longer promises a preview.
 - The `Start blank` button on the restore banner does not start a blank grid; it opens the Grid tool.
 - `crossword fill` exits 0 and saves its output even when the fill is partial or has invalid entries.
 - `crossword list-states --json-output` recorded a paused `repair` run with `"algorithm": "csp"`.

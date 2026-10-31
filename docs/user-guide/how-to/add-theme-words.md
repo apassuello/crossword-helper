@@ -36,10 +36,12 @@ The `Placement Suggestions` section lists each word with its candidate positions
 Hovering over a suggestion does not change the grid. Click `✓ Apply This Placement` to place and lock that word.
 
 To place everything at once, click `Apply All Best Placements`. It applies each word's best suggestion in
-turn and skips a word that has no valid placement or whose best placement conflicts with something already in
-the grid; the skipped words are listed with the reason.
+turn and skips a word that has no valid placement, whose best placement conflicts with something already in
+the grid, or that is already locked in its best placement (`already on grid`); the skipped words are listed with
+the reason.
 
-Placing a word can add black squares to the grid, so the `Black` count may rise. `Undo` reverses a placement.
+Placing a word can add black squares to the grid, so the `Black` count may rise; the message after a placement
+says how many it added. `Undo` reverses a placement.
 
 ### 4. Know what a lock does
 
@@ -58,11 +60,10 @@ The theme words are in the grid, marked as locked, and they are still there afte
 
 ## Known problems
 
-- `Apply All Best Placements` can count a word you already placed by hand in its summary.
 - A JSON export keeps letters and black squares but not which words are theme-locked, so after importing it the
   theme words can be overwritten. `Save grid` keeps the locks.
 
-Both are tracked under "Known Limitations" in the [README](../../../README.md).
+It is tracked under "Known Limitations" in the [README](../../../README.md).
 
 ## Next Steps
 
