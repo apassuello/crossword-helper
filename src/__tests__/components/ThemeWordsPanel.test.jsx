@@ -1075,6 +1075,69 @@ describe('ThemeWordsPanel applies against the grid it sent (Task 6.16)', () => {
     expect(applySpy).toHaveBeenCalledTimes(1);
   });
 
+  // spec 0.2.24 §3.8 (#80; PR #112 review): a word the user locks while an earlier word's request is
+  // out is on the live grid but not in the chained reply; it is skipped all the same.
+  it('Apply All skips a later word the user locked in place while an earlier request was pending', async () => {
+    const words = ['ALPHA', 'BETA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    const first = deferred();
+    const applySpy = vi
+      .spyOn(api, 'themeApplyPlacement')
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValue({ grid: gridWith(2) });
+    const props = { gridSize: 15, docId: 'doc-1', onApplyPlacement: vi.fn().mockReturnValue(APPLIED), onClose: vi.fn() };
+    const { rerender } = render(<ThemeWordsPanel grid={createEmptyGrid(15)} {...props} />);
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+
+    const live = createEmptyGrid(15); // BETA typed and locked at its suggestion, (2, 0) across
+    [...'BETA'].forEach((letter, c) => {
+      live[2][c] = { ...live[2][c], letter, isThemeLocked: true };
+    });
+    rerender(<ThemeWordsPanel grid={live} {...props} />);
+    await act(async () => {
+      first.resolve({ grid: gridWith(1) });
+    });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        'Applied 1 theme words successfully! Skipped: BETA (already on grid)',
+        { id: 'apply-all' }
+      )
+    );
+    expect(applySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('Apply All skips a word the chained reply holds locked in place even if the live grid does not', async () => {
+    const words = ['ALPHA', 'BETA'];
+    vi.spyOn(api, 'themeUpload').mockResolvedValue(UPLOAD_OK(words));
+    vi.spyOn(api, 'themeSuggestPlacements').mockResolvedValue({ suggestions: listFor(words) });
+    const reply = gridWith(1); // ALPHA's reply also holds BETA locked at (2, 0) across
+    [...'BETA'].forEach((letter, c) => {
+      reply[2][c] = { ...reply[2][c], letter, isThemeLocked: true };
+    });
+    const applySpy = vi.spyOn(api, 'themeApplyPlacement').mockResolvedValue({ grid: reply });
+    render(
+      <ThemeWordsPanel grid={createEmptyGrid(15)} gridSize={15} docId="doc-1" onApplyPlacement={vi.fn().mockReturnValue(APPLIED)} onClose={vi.fn()} />
+    );
+    upload(words);
+    await waitFor(() => expect(document.querySelectorAll('.apply-btn').length).toBe(2));
+    await act(async () => {
+      screen.getByRole('button', { name: /apply all best placements/i }).click();
+    });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        'Applied 1 theme words successfully! Skipped: BETA (already on grid)',
+        { id: 'apply-all' }
+      )
+    );
+    expect(applySpy).toHaveBeenCalledTimes(1);
+  });
+
   it('a grid edit while themeUpload is pending: the list lands superseded and one refetch runs', async () => {
     const words = ['ALPHA'];
     const up = deferred();
