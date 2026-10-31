@@ -104,6 +104,10 @@ class BeamSearchOrchestrator:
         self.deadline = None  # Absolute epoch deadline, set by fill()
         self.paused_state_path = None  # Set when a pause saves state
         self.wordlist_paths = []  # Original wordlist file paths (for resume)
+        # Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: the grid file's
+        # `clues`, stored verbatim in a pause state's metadata and never read by the
+        # solver. None (the default) means no clues and writes no key.
+        self.carried_clues = None
 
         # Failure tracking (prevents thrashing on impossible slots)
         self.slot_attempt_history = {}  # (beam_signature, slot_id) -> attempt_count
@@ -1134,6 +1138,8 @@ class BeamSearchOrchestrator:
                 "iterations": self.iterations,
                 "wordlists": list(getattr(self, "wordlist_paths", []) or []),
             }
+            if getattr(self, "carried_clues", None) is not None:
+                metadata["clues"] = self.carried_clues
 
             # Save to disk
             state_manager = StateManager()

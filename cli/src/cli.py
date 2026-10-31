@@ -11,7 +11,7 @@ from typing import Optional
 
 import click
 
-from .core.clues import CluesError, clue_statuses, validate_clues
+from .core.clues import CluesError, carry_clues, clue_statuses, validate_clues
 from .core.grid import Grid
 from .core.numbering import GridNumbering
 from .core.validator import GridValidator
@@ -202,6 +202,11 @@ def _execute_resume(
 
     task_id = task_id_override or saved_task_id
 
+    # Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: the state's
+    # metadata["clues"] is authoritative and is written into the resumed output and
+    # into any pause state saved below. The solver never reads it.
+    clues_carry = carry_clues(metadata, {})
+
     if not json_output:
         click.echo(f"Loaded {state_type} state for task '{task_id}'")
         click.echo(f"  Saved: {metadata.get('slots_filled', '?')}/{metadata.get('total_slots', '?')} slots filled")
@@ -293,6 +298,7 @@ def _execute_resume(
                 state_manager=state_manager,
             )
             autofill.wordlist_paths = wordlist_files
+            autofill.carried_clues = clues_carry.get("clues")
             result = autofill.fill(timeout=timeout, resume_state=state_obj, task_id=task_id)
         elif exact_resume and state_type == "beam":
             autofill = BeamSearchAutofill(
@@ -306,6 +312,7 @@ def _execute_resume(
                 task_id=task_id,
             )
             autofill.wordlist_paths = wordlist_files
+            autofill.carried_clues = clues_carry.get("clues")
             result = autofill.fill(timeout=timeout, resume_state=state_obj)
         else:
             # Algorithm mismatch: run the requested algorithm fresh on the
@@ -351,6 +358,7 @@ def _execute_resume(
                     state_manager=state_manager,
                 )
             autofill.wordlist_paths = wordlist_files
+            autofill.carried_clues = clues_carry.get("clues")
             if chosen_algorithm in ("trie", "regex"):
                 result = autofill.fill(timeout=timeout, task_id=task_id)
             else:
@@ -382,7 +390,7 @@ def _execute_resume(
     # sibling file named after the task id.
     output_file = output or f"resumed_{task_id}.json"
     with open(output_file, "w") as f:
-        json.dump(result.grid.to_dict(), f, indent=2)
+        json.dump(carry_clues(clues_carry, result.grid.to_dict()), f, indent=2)
 
     all_slots_filled = result.total_slots > 0 and result.slots_filled == result.total_slots
 
@@ -679,8 +687,11 @@ def fill(
     # channel (reconciliation note 1), so M1 preserves grid structure + black squares
     # only; repair may legitimately strip non-locked pre-filled cells. (Follow-up: if
     # lock leakage matters, fix it in Task 13's save contract, not here.) metadata is
-    # therefore intentionally unused on load.
+    # read on load only for metadata["clues"] (Decision 6, clue-authoring spec 0.1.4,
+    # section 1; section 3.5): the state is authoritative for clues, and a grid
+    # file given alongside --resume is not read for them.
     resume_csp_state = None
+    clues_carry: dict = {}
     if resume_state_file:
         from .fill.state_manager import StateManager
 
@@ -738,6 +749,7 @@ def fill(
                 )
             wordlists = tuple(recorded)
 
+        clues_carry = carry_clues(resume_metadata, {})
         grid = Grid.from_dict(resume_csp_state.grid_dict, strict_size=False)
         input_letters = {}  # §2.1 last bullet: no input lock set on --resume
     else:
@@ -747,6 +759,9 @@ def fill(
 
         with open(grid_file, "r") as f:
             data = json.load(f)
+        # Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: the input
+        # file's clues ride through every write below unchanged.
+        clues_carry = carry_clues(data, {})
 
         # novice-readiness spec 0.2.4 §2.1 (C12): from_dict validates the "locked"
         # key (before --no-lock-filled empties the set); apply_lock_mode resolves
@@ -1053,6 +1068,7 @@ def fill(
         # Record the wordlist paths on the solver so a paused state stores them
         # (resume reloads the same wordlists without needing -w)
         autofill.wordlist_paths = [str(w) for w in wordlists]
+        autofill.carried_clues = clues_carry.get("clues")
 
         # Emit any warnings collected so far (human mode; JSON gets them in the result)
         if warnings and not json_output:
@@ -1278,22 +1294,27 @@ def fill(
                 locked_slots=[],
                 timestamp=datetime.now().isoformat(),
             )
+            degenerate_metadata = {
+                "algorithm": algorithm,
+                "slots_filled": slots_filled,
+                "total_slots": total_slots,
+                "grid_size": [grid.size, grid.size],
+                # Parity with the CSP path's own _handle_pause (autofill.py) so a
+                # `fill --resume` with no -w on a repair/beam/hybrid pause finds
+                # its wordlists the same way a CSP pause does (cli.py:674 falls
+                # back to metadata["wordlists"]); min_score/timeout for full parity.
+                "wordlists": [str(w) for w in wordlists],
+                "min_score": min_score,
+                "timeout": timeout,
+            }
+            # Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: the
+            # carried clues ride in the state's metadata; absent stays absent.
+            if "clues" in clues_carry:
+                degenerate_metadata["clues"] = clues_carry["clues"]
             state_path = state_manager.save_csp_state(
                 task_id=task_id,
                 csp_state=degenerate,
-                metadata={
-                    "algorithm": algorithm,
-                    "slots_filled": slots_filled,
-                    "total_slots": total_slots,
-                    "grid_size": [grid.size, grid.size],
-                    # Parity with the CSP path's own _handle_pause (autofill.py) so a
-                    # `fill --resume` with no -w on a repair/beam/hybrid pause finds
-                    # its wordlists the same way a CSP pause does (cli.py:674 falls
-                    # back to metadata["wordlists"]); min_score/timeout for full parity.
-                    "wordlists": [str(w) for w in wordlists],
-                    "min_score": min_score,
-                    "timeout": timeout,
-                },
+                metadata=degenerate_metadata,
                 compress=True,
             )
             paused_state_path = str(state_path)
@@ -1324,7 +1345,7 @@ def fill(
         paused_output_file = output if json_output else (output or grid_file)
         if paused_output_file:
             with open(paused_output_file, "w") as f:
-                json.dump(paused_grid.to_dict(), f, indent=2)
+                json.dump(carry_clues(clues_carry, paused_grid.to_dict()), f, indent=2)
 
         if json_output:
             paused_payload = {
@@ -1424,7 +1445,7 @@ def fill(
     output_file = output if json_output else (output or grid_file)
     if output_file:
         with open(output_file, "w") as f:
-            json.dump(result.grid.to_dict(), f, indent=2)
+            json.dump(carry_clues(clues_carry, result.grid.to_dict()), f, indent=2)
 
     # Output results based on format
     if json_output:

@@ -74,6 +74,7 @@ class HybridAutofill:
         self.pause_controller = pause_controller
         self.task_id = task_id
         self.wordlist_paths = []  # Original wordlist file paths (for resume)
+        self.carried_clues = None  # Decision 6 (clue-authoring spec 0.1.4, section 1); see Autofill
 
     @staticmethod
     def _compute_beam_cap(size: int) -> int:
@@ -138,6 +139,7 @@ class HybridAutofill:
             task_id=self.task_id,
         )
         beam_search.wordlist_paths = list(self.wordlist_paths)
+        beam_search.carried_clues = self.carried_clues
 
         beam_result = beam_search.fill(timeout=beam_timeout)
 
