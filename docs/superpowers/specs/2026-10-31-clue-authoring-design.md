@@ -1,6 +1,6 @@
 # Clue Authoring — Design
-**Version 0.1.3** · Claude with Arthur Passuello · 2026-10-31 · status: approved at 0.1.2; 0.1.3's §3.5
-amendment awaits owner review. Every section was approved by the owner in chat on 2026-10-31, the layering after
+**Version 0.1.4** · Claude with Arthur Passuello · 2026-10-31 · status: approved at 0.1.2; the 0.1.3 and 0.1.4
+amendments (§3.5, §6.1) await owner review. Every section was approved by the owner in chat on 2026-10-31, the layering after
 the CLI-first ruling; 0.1.1 applies the first review (§10). The owner approved the written spec on 2026-10-31.
 §9's defaults apply if unruled by 2026-11-14.
 
@@ -12,7 +12,7 @@ Read `[SPEC]` blocks for authoritative behaviour. Read `[NOTE]` only for context
 Issue numbers are GitHub issues on `apassuello/crossword-helper`. "Novice spec" means
 `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` at version 0.2.23. Names marked as forward
 references do not exist yet: this spec introduces them. Code that implements a decision of §1 cites it as
-"Decision N (clue-authoring spec 0.1.3, section 1)".
+"Decision N (clue-authoring spec 0.1.4, section 1)".
 
 ---
 
@@ -184,8 +184,8 @@ orphaned.
     `Could not check the clues: <error>.` and applies nothing.
   - Edits made to the grid while the check runs are replaced when the import applies, on the terms an Open
     that waits already has (novice spec §3.4).
-- **Grid JSON file, CLI:** the commands that write a grid file are `fill` (its pause write and its result
-  write), `resume` (through `_execute_resume`), `fill --resume` (which resolves the state in `fill` itself and
+- **Grid JSON file, CLI:** the commands that write a grid file are `fill` (two grid-file writes: the paused grid
+  and the result; its pause *state* is the next bullet's), `resume` (through `_execute_resume`), `fill --resume` (which resolves the state in `fill` itself and
   writes through `fill`'s two writes), `new` and `import-nyt`.
   - `fill` carries the input file's `clues` unchanged into both of its writes. In human mode with no `-o`,
     `fill` writes back to its input file, so the clues are kept in place. With `--json-output`, the file is
@@ -197,8 +197,9 @@ orphaned.
   - `resume` and `fill --resume` read `metadata["clues"]` and write it into their output and into any pause
     state they save. With `--resume`, the `clues` of a grid file also given are not read: the saved state is
     authoritative, as it already is for the grid (`fill`: "--resume wins when both are given"). A state with no
-    `clues` in its metadata gives output with none. The backend's resume route re-saves `**metadata` and so
-    keeps it with no change.
+    `clues` in its metadata gives output with none. `fill --resume` with no grid file and no `-o` writes no grid
+    file in human mode, so "kept in place" has nothing to apply to there. The backend's resume route re-saves
+    `**metadata` and so keeps it with no change.
   - `new` and `import-nyt` write no `clues`. Input with no `clues` key gives output with none.
 - **`docs/user-guide/reference/file-formats.md`** gains the `clues` row (§7).
 
@@ -376,8 +377,11 @@ panel pattern (an `editingPaused` prop). Number buttons still select: selecting 
   - an argv contract test: the adapter's `clues check` arguments are accepted by the real CLI parser;
   - one real-subprocess end-to-end test from the route through the adapter to the CLI, covering 200, a clue
     rejection (exit 1 → 400 `INVALID_CLUES`) and a grid the CLI cannot load (400 `INVALID_GRID`);
-  - a real fill, pause and resume end-to-end test for each state type (CSP, beam, and the CLI's state for
-    other algorithms) in which the resumed file keeps `clues`, through `resume` and through `fill --resume`.
+  - a real fill, pause and resume end-to-end test in which the resumed file keeps `clues`, for each reachable
+    pair: the CSP state and the CLI's state for other algorithms, through `resume` and through `fill --resume`;
+    a beam-type state through `resume` only (`fill --resume` loads with `load_csp_state`, which refuses a beam
+    state). If no beam-type state file survives a CLI `fill --algorithm beam` pause, the beam row builds one with
+    `save_beam_search_state`, and the orchestrator's save site is tested at unit level.
 - **Route shapes:** non-JSON output → 500 `INTERNAL_ERROR`; timeout → 504 `TIMEOUT` (adapter mocked).
 
 ### 6.2 Frontend (vitest)
@@ -550,3 +554,8 @@ form in a test, because it is the first code to read that `pattern`.
   branch of `fill`). §3.5 now names both paths and says, for `fill --resume` given a grid file as well, that
   `clues` come from the state, following `fill`'s existing "--resume wins" rule for the grid. What it beat:
   reading the grid file's `clues` (they could describe a different grid from the one being resumed).
+- 0.1.4 (2026-10-31, plan review): §6.1's pause/resume bullet asked for beam through `fill --resume`, which
+  cannot load a beam state, and is rewritten to the reachable pairs. The CLI's degenerate save and the beam save
+  both name `{task_id}.json.gz`, so which file survives a CLI beam pause is left for the implementation to establish, not
+  asserted here. §3.5 now says "grid-file writes", and says that `fill --resume` with neither a grid file nor
+  `-o` writes no grid file.
