@@ -103,6 +103,13 @@ facts (the RED and GREEN commits, the review package path) go in the dispatch me
    assertion's own line, `git restore <file>`, then `git status --short` clean. Its report records each
    mutation's exact diff, so the controller can confirm it hit the named defect and not a neighbouring guard
    (CONTRIBUTING §3). It never runs `git checkout` or `git stash`.
+
+   It also runs **at least three free mutants**: defects of its own choosing on lines the task's diff changed,
+   which the named mutations do not cover, each run against the task's whole test set. A killed mutant names
+   the test and line that failed. A survivor is either a missing test (a quality finding) or an equivalent
+   mutant, with the reason it makes no observable difference. Owner proposal, adopted 2026-10-31. The
+   controller's comparison, not weighed by the owner: it replaces an optional extra mutant, which Task 2's
+   REVIEW did not run. A `mutmut` run per task was not tried.
 4. **Findings.** A test gap goes to a fresh RED fix agent: new tests fail first, or carry a mutation proof. A
    code defect goes to a fresh GREEN fix agent. Then a fresh REVIEW agent re-reviews. A behaviour change goes
    through Spec Drift (amend the spec and plan, and get the owner's ruling), never inside a fix.
