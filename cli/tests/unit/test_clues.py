@@ -116,6 +116,16 @@ class TestValidateRule2Keys:
         clues = {"2,0,down": clue(), "10,0,across": clue()}
         assert rejected(clues, 2) == msg("10,0,across", KEY_REASON)
 
+    def test_over_long_row_fails_rule_2(self):
+        # Matches the key regex, but int() on >4300 digits raises a plain
+        # ValueError (Python 3.11+); the spec answer is the rule-2 CluesError.
+        key = "1" * 5000 + ",0,across"
+        assert rejected({key: clue()}, 15) == msg(key, KEY_REASON)
+
+    def test_over_long_column_fails_rule_2(self):
+        key = "0," + "1" * 5000 + ",down"
+        assert rejected({key: clue()}, 15) == msg(key, KEY_REASON)
+
     def test_every_key_checked_before_any_value(self):
         # "0,0,across" has a bad value but sorts first; the bad key still wins.
         clues = {"0,0,across": {"text": "", "answer": "x"}, "99,0,down": clue()}
