@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.23** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.24** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -691,6 +691,20 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   skipped word with its reason: for a 400 with a `conflicts` array, the server's conflict text (as
   `handleApplyPlacement` already shows it, fixed under #15); for any other failure, `Could not reach
   the server` or the error's message. `skipped due to conflicts` is used only for real conflicts.
+- **A word already in place is not applied again (#80, TH3; owner 2026-10-31).** When a word's best
+  suggestion is the cells it already occupies, each holding its letter and theme-locked, Apply All sends no
+  request for it, does not count it in N, and lists it as `WORD (already on grid)`. Re-applying it changes
+  nothing, so it is not one of the words this action applied. A word whose letters are typed but not locked is
+  applied, since the apply is what locks it. `ThemePlacer` still offers the word's own position: dropping it
+  there would make Apply All place the word a second time elsewhere.
+- **Added black squares are reported (#104).** The apply route's `added_black_squares` reaches App, which
+  counts the listed cells its merge actually writes (a cell the user changed in flight keeps the user's value
+  and is not counted). App's apply toast appends ` (added N black squares)` when N > 0, and Apply All's summary
+  carries the total the same way. `onApplyPlacement` returns `{ applied: true, addedBlackSquares: N }` when App
+  wrote the grid; any other return is a dropped reply (PD-6-G12). Out of scope: showing the black squares
+  before the apply.
+- **No hover promise (#106).** The suggestions help text reads `Click "Apply This Placement" to place a word
+  and lock it.` Hovering a suggestion changes nothing, and the unused hover handlers are removed.
 - **Positions are 1-based (#94).** Every position the Theme panel shows (the placement label, and the skip and
   conflict reasons from Apply and Apply All) counts rows and columns from 1, matching the grid's labels:
   the cell the grid shows as row 8, col 9 is reported as `Row 8, Col 9` and `(8, 9)`. The payload fields
@@ -701,7 +715,9 @@ shortcut and no Escape handler, so a covered top bar makes Save unreachable unti
   stops when the Theme panel closes: it sends no further request and drops a reply that lands after the close, and shows no summary.
 - Tests: a grid change while suggestions show triggers one refetch and drops the old list; Apply on a
   superseded entry is a no-op; Apply All with a 400 conflict, a 500 and a network failure reports three
-  different reasons and counts only its own applies.
+  different reasons and counts only its own applies; Apply All skips a word locked in place without a request,
+  and applies one typed but unlocked; a reply listing two added black squares toasts `(added 2 black squares)`
+  and one the user edited in flight counts 1; the summary carries the total.
 
 **[NOTE]** #19's backend half stays open: `ThemePlacer.apply_placement` writes only a word's letters,
 not the black squares the real applier writes, so the second and later suggestions in one batch can
@@ -992,7 +1008,7 @@ invent them silently. Ids are the plan's (`PD-<phase>-…`).
 | PD-6-G16 | §3.8 | Does a refetch announce itself? | No; only an Apply on a superseded entry shows the message. |
 | PD-6-G17 | §3.8 | `Could not reach the server` versus the error's message | The former when no HTTP response arrived (status 0); otherwise the message. |
 | PD-6-G18 | §3.8 | Reasons for words Apply All skips without a request | No suggestion → `no valid placement`; a best suggestion whose `reasoning` contains `WARNING` → `skipped due to conflicts: ` followed by that reasoning. |
-| PD-6-G19 | §3.8 | Format of Apply All's summary | `Applied N theme words successfully!` when N > 0, else `Could not apply any theme words`; when any word was skipped, ` Skipped: WORD (reason); WORD (reason)` is appended in suggestion order. The old `(K skipped due to conflicts)` suffix goes. |
+| PD-6-G19 | §3.8 | Format of Apply All's summary | `Applied N theme words successfully!` when N > 0, else `Could not apply any theme words`; when any word was skipped, ` Skipped: WORD (reason); WORD (reason)` is appended in suggestion order. The old `(K skipped due to conflicts)` suffix goes. 0.2.24: ` (added M black squares)` goes before the `!` when App wrote M > 0 black squares (#104), and a word already locked in place is skipped as `WORD (already on grid)` (#80). |
 | ★ PD-6-G20 | §3.4 | Fork notice; Delete without a confirm | A fork is silent (the tab continues on the `(copy)` entry). Delete asks the §3.2 confirm, `Delete "<name>"?` with "Delete" and "Cancel", because a deleted save cannot be recovered. |
 | PD-6-G21 | §3.4 | What counts as saved after a save during a run (S2) | The signature of the grid that was written (the Start snapshot), not the live grid's; merges during the run do not mark the grid unsaved. |
 | PD-L1 | §5 | npm's `<minimum version>` in the `Missing:` line | `npm (installed with Node.js 18 or later)`. |
@@ -1194,3 +1210,11 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   Owner 2026-10-28: serious, fixed in this session. Beat: changing the payload fields to 1-based (breaks
   every consumer of the zero-based contract), and fixing the CLI and import messages listed in #94 here
   (not measured).
+- 0.2.24 (2026-10-31): §3.8 three Theme panel fixes, and PD-6-G19's summary format. #80 (TH3, accepted as a nit
+  in the 2026-10-26 run): Apply All counted a word re-placed on the cells it already locks, with an empty undo
+  step and a toast. Owner 2026-10-31: that is not its own apply, so it is skipped as `already on grid`. Beat:
+  counting it, and dropping no-op candidates in `ThemePlacer` (the word would be suggested elsewhere). #104: the
+  black squares an apply adds were never shown; App now counts the ones it writes and the toasts say so, and
+  `onApplyPlacement`'s return becomes an object carrying that count. #106: the help text promised a hover
+  preview that does not exist. Owner 2026-10-31: remove the promise and the dead handlers. Beat: building the
+  preview (about a day, touching App, the grid and a new helper).
