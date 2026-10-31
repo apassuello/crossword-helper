@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+from ...core.clues import store_carried_clues
 from ...core.grid import Grid
 from ..pattern_matcher import PatternMatcher
 from ..word_list import WordList
@@ -1138,8 +1139,7 @@ class BeamSearchOrchestrator:
                 "iterations": self.iterations,
                 "wordlists": list(getattr(self, "wordlist_paths", []) or []),
             }
-            if getattr(self, "carried_clues", None) is not None:
-                metadata["clues"] = self.carried_clues
+            store_carried_clues(metadata, getattr(self, "carried_clues", None))
 
             # Save to disk
             state_manager = StateManager()
