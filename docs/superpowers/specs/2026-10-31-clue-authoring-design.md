@@ -1,7 +1,7 @@
 # Clue Authoring — Design
-**Version 0.1.1** · Claude with Arthur Passuello · 2026-10-31 · status: draft. Every section was approved by the
+**Version 0.1.2** · Claude with Arthur Passuello · 2026-10-31 · status: approved. Every section was approved by the
 owner in chat on 2026-10-31, the layering after the CLI-first ruling; 0.1.1 applies the first review (§10).
-Owner review of the written spec is pending. §9's defaults apply if unruled by 2026-11-14.
+The owner approved the written spec on 2026-10-31. §9's defaults apply if unruled by 2026-11-14.
 
 ---
 
@@ -11,7 +11,7 @@ Read `[SPEC]` blocks for authoritative behaviour. Read `[NOTE]` only for context
 Issue numbers are GitHub issues on `apassuello/crossword-helper`. "Novice spec" means
 `docs/superpowers/specs/2026-10-23-novice-readiness-design.md` at version 0.2.23. Names marked as forward
 references do not exist yet: this spec introduces them. Code that implements a decision of §1 cites it as
-"Decision N (clue-authoring spec 0.1.1, section 1)".
+"Decision N (clue-authoring spec 0.1.2, section 1)".
 
 ---
 
@@ -506,6 +506,11 @@ serializes the exported file (`ExportPanel.jsx`). No rule permits this, `Grid.fr
 same format, and there is no import or export route. It is retained by Decision 7. One tech-debt issue
 records it when this feature is built.
 
+**[SPEC]** `Grid.get_word_slots`' docstring gives its `pattern` as `'C?T'`, but the body joins raw `get_cell`
+values, so an empty square is `.` (`cli/src/core/grid.py`). The pattern builder used for matching is a separate
+path and does emit `?`. §3.2 relies on the `.` form. The clue-status task corrects the docstring and pins the `.`
+form in a test, because it is the first code to read that `pattern`.
+
 ---
 
 ## 9. Open points (default applies if unruled by 2026-11-14)
@@ -533,3 +538,5 @@ records it when this feature is built.
   and §3.9 (C S5); decisions numbered (C M3); CA-5 given an outcome (C M4); smaller points (B B12, A F5).
   Rejected: C M5 (this repo's specs keep "What it beat" in `[SPEC]`; #53's closing comment was read, and "the
   solver never reads it" is a requirement); B B12's ß case (cells hold only A–Z).
+- 0.1.2 (2026-10-31): owner approval. §8 records the `get_word_slots` docstring/body mismatch on the
+  empty-square encoding, found while verifying the handoff's constraints.
