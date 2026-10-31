@@ -169,10 +169,8 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
 - **Autofill:** use `Repair (Recommended)`. With `Beam Search` or `Classic CSP`, a fill can stop with the
   grid unchanged and no red cell, because a letter already in the grid fits no word; Repair reworks that
   letter instead ([#75](https://github.com/apassuello/crossword-helper/issues/75)).
-- **Theme:** `Apply All Best Placements` can count a word you already placed by hand in its summary
-  ([#80](https://github.com/apassuello/crossword-helper/issues/80)). A JSON export keeps the letters and
-  black squares but not which words are theme-locked, so after importing it the theme words can be
-  overwritten; `Save grid` keeps the locks.
+- **Theme:** a JSON export keeps the letters and black squares but not which words are theme-locked, so
+  after importing it the theme words can be overwritten; `Save grid` keeps the locks.
 - **Saves with the app open in two tabs:** if the other tab changes the same save while `Verify words`,
   `Clean grid` or a theme apply is running, the result is dropped without a message; run it again
   ([#81](https://github.com/apassuello/crossword-helper/issues/81)).
