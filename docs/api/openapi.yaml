@@ -650,6 +650,17 @@ paths:
                     $ref: '#/components/schemas/Grid'
                   applied:
                     type: boolean
+                  added_black_squares:
+                    type: array
+                    description: >-
+                      [row, col] of each black square the apply added: the word's boundary
+                      squares and their 180-degree twins. Empty when none were needed.
+                    items:
+                      type: array
+                      items:
+                        type: integer
+                      minItems: 2
+                      maxItems: 2
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':

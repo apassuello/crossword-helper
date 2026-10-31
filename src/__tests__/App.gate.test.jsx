@@ -407,7 +407,7 @@ describe('App D1 gate: handlers called directly while a run is live', () => {
     await act(async () => {
       returned = captured.theme.onApplyPlacement(filled(), { word: 'QUX' }, ctx());
     });
-    expect(returned).toBe(true);
+    expect(returned).toEqual({ applied: true, addedBlackSquares: 0 });
     expect(letters(container)).toEqual(['Q']);
     expect(screen.getByText('Applied "QUX" to grid!')).toBeInTheDocument();
 

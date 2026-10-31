@@ -221,7 +221,10 @@ def apply_placement():
     Response:
     {
         "grid": [[...], ...],  // Updated grid
-        "applied": true
+        "applied": true,
+        "added_black_squares": [[0, 4], [10, 6]]  // [row, col] of each black square
+                                                  // the apply added: the word's boundary
+                                                  // squares and their symmetric twins
     }
     """
     try:

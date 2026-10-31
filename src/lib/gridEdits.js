@@ -106,6 +106,15 @@ export function writePatternWord(grid, selectedCell, word) {
   return updates.length ? withCells(grid, updates) : grid;
 }
 
+/** The fields a theme apply writes: `letter`, `isBlack`, `isThemeLocked`. */
+function themeCellDiffers(a, b) {
+  return (
+    (a.letter || '') !== (b.letter || '') ||
+    !!a.isBlack !== !!b.isBlack ||
+    !!a.isThemeLocked !== !!b.isThemeLocked
+  );
+}
+
 /**
  * novice-readiness spec 0.2.8 §3.8 (F4, F1b): merge the apply-theme route's reply
  * against the grid the request was built from. A cell is written only where the
@@ -119,20 +128,34 @@ export function writePatternWord(grid, selectedCell, word) {
 export function writeAppliedTheme(prevGrid, replyGrid, sentGrid) {
   const size = prevGrid.length;
   if (replyGrid.length !== size || sentGrid.length !== size) return prevGrid;
-  const differs = (a, b) =>
-    (a.letter || '') !== (b.letter || '') ||
-    !!a.isBlack !== !!b.isBlack ||
-    !!a.isThemeLocked !== !!b.isThemeLocked;
   return prevGrid.map((row, r) =>
     row.map((live, c) => {
       const reply = replyGrid[r] && replyGrid[r][c];
       const sent = sentGrid[r] && sentGrid[r][c];
       if (!reply || !sent) return live;
-      return differs(reply, sent) && !differs(live, sent)
+      return themeCellDiffers(reply, sent) && !themeCellDiffers(live, sent)
         ? written(normalizeCell(reply), {})
         : live;
     })
   );
+}
+
+/**
+ * novice-readiness spec 0.2.24 §3.8 (#104): how many of `cells` ([row, col] pairs, the
+ * apply-theme route's `added_black_squares`) `writeAppliedTheme(prevGrid, replyGrid,
+ * sentGrid)` writes, by the writer's own rule. A listed cell the user changed since the
+ * send is not written, so the server's list can overstate what reached the grid. Counts 0
+ * where the writer writes nothing: mismatched sizes, or a cell out of range.
+ */
+export function countAppliedThemeCells(prevGrid, replyGrid, sentGrid, cells) {
+  const size = prevGrid.length;
+  if (replyGrid.length !== size || sentGrid.length !== size) return 0;
+  return cells.filter(([r, c]) => {
+    const live = prevGrid[r] && prevGrid[r][c];
+    const reply = replyGrid[r] && replyGrid[r][c];
+    const sent = sentGrid[r] && sentGrid[r][c];
+    return !!(live && reply && sent) && themeCellDiffers(reply, sent) && !themeCellDiffers(live, sent);
+  }).length;
 }
 
 /** Imported cells are canonical and every imported letter counts as typed. */

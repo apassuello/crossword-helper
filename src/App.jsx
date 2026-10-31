@@ -21,6 +21,7 @@ import {
   writeToggleThemeLock,
   writePatternWord,
   writeAppliedTheme,
+  countAppliedThemeCells,
   writeImportedGrid,
   writeCleanedGrid,
   applyVerifyErrors,
@@ -640,10 +641,13 @@ function App() {
 
   // novice-readiness spec 0.2.8 §3.8 (F1, F4, PD-6-G12): a reply for a replaced document is
   // dropped, as Verify and Clean do; the rest is merged against the grid it was sent from.
-  // Returns true when it wrote the grid, false when a gate dropped the reply.
-  const handleThemeWordApplied = useCallback((updatedGrid, placement, { sentGrid, docId: requestDocId }) => {
+  // Returns { applied: true, addedBlackSquares } when it wrote the grid, false when a gate
+  // dropped the reply. addedBlackSquares (spec 0.2.24 §3.8, #104) counts the server's added
+  // black squares this merge writes, so a listed cell the user changed in flight is left out.
+  const handleThemeWordApplied = useCallback((updatedGrid, placement, { sentGrid, docId: requestDocId, addedBlackSquares = [] }) => {
     if (editingPausedRef.current) return false;
     if (requestDocId !== docIdRef.current) return false;
+    const added = countAppliedThemeCells(gridRef.current, updatedGrid, sentGrid, addedBlackSquares);
     // Update grid with the applied theme word. Renumbering (if the placement
     // changed the structural layout) is handled by useNumbering.
     // One step for Apply This Placement; inside an Apply All batch the history folds the call
@@ -651,8 +655,9 @@ function App() {
     recordStep(gridRef.current);
     setGrid((prev) => writeAppliedTheme(prev, updatedGrid, sentGrid));
 
-    pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!` });
-    return true;
+    const addedText = added > 0 ? ` (added ${added} black square${added === 1 ? '' : 's'})` : '';
+    pushToast({ kind: 'info', message: `Applied "${placement.word}" to grid!${addedText}` });
+    return { applied: true, addedBlackSquares: added };
   }, [pushToast, recordStep]);
 
   const handleGridImport = useCallback((importedData) => {

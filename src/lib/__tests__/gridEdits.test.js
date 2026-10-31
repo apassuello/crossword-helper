@@ -12,6 +12,7 @@ import {
   writeToggleThemeLock,
   writePatternWord,
   writeAppliedTheme,
+  countAppliedThemeCells,
   writeImportedGrid,
   writeCleanedGrid,
   canToggleBlack,
@@ -376,6 +377,34 @@ describe('writeAppliedTheme against the sent grid', () => {
     expect(out).toBe(live);
     const bigLive = freeze(mk(7));
     expect(writeAppliedTheme(bigLive, mk(5), mk(5))).toBe(bigLive);
+  });
+});
+
+// novice-readiness spec 0.2.24 §3.8 (#104): the listed cells writeAppliedTheme would write.
+describe('countAppliedThemeCells', () => {
+  const blacks = { '0,4': { isBlack: true }, '4,0': { isBlack: true } };
+  const listed = [[0, 4], [4, 0]];
+
+  it('counts each listed cell the merge writes', () => {
+    expect(countAppliedThemeCells(mk(5), mk(5, blacks), mk(5), listed)).toBe(2);
+  });
+
+  it('leaves out a listed cell the user changed after the send, as the merge does', () => {
+    const live = freeze(mk(5, { '4,0': { letter: 'Q' } }));
+    const reply = freeze(mk(5, blacks));
+    const sent = freeze(mk(5));
+    expect(countAppliedThemeCells(live, reply, sent, listed)).toBe(1);
+    expect(writeAppliedTheme(live, reply, sent)[4][0].letter).toBe('Q');
+  });
+
+  it('leaves out a listed cell where the reply equals the sent grid', () => {
+    const already = mk(5, { '0,4': { isBlack: true } });
+    expect(countAppliedThemeCells(already, mk(5, blacks), already, listed)).toBe(1);
+  });
+
+  it('counts 0 when sizes differ or a listed cell is out of range, and never throws', () => {
+    expect(countAppliedThemeCells(mk(7), mk(5, blacks), mk(5), listed)).toBe(0);
+    expect(countAppliedThemeCells(mk(5), mk(5), mk(5), [[9, 9]])).toBe(0);
   });
 });
 
