@@ -63,11 +63,13 @@ report it.
 ## Execution protocol: RED → GREEN → REVIEW, three agents per task
 
 Owner ruling, 2026-10-31: every code task runs as three phases, each done by a **different** fresh agent. The
-controller prepares the three briefs **one task at a time**, each immediately before its phase. Briefs are
-never pre-generated, because a brief written before the previous phase's result goes stale. The files are
-`task-N-red.md`, `task-N-green.md` and `task-N-review.md` in the SDD workspace. Each brief carries the task's
-text from this plan and this plan's Global Constraints and Verified facts. The GREEN brief adds the RED commit
-and its test files, and the REVIEW brief adds both reports and the review package.
+controller writes a task's three briefs **together, before RED starts**, and **from the spec and the task's
+contract**. GREEN is never briefed from RED's tests, so the tests are its acceptance check, not its
+specification. Briefs are written one task at a time and never for a later task. The files are
+`task-N-red.md`, `task-N-green.md` and `task-N-review.md` in the SDD workspace. Each brief points at
+`task-N-contract.md` (the task's text from this plan), at `global-constraints.md` (this plan's Global
+Constraints, Verified facts and this protocol), and at the spec sections the task implements. Run-specific
+facts (the RED and GREEN commits, the review package path) go in the dispatch message, not in a brief.
 
 1. **RED** (Sonnet, a test writer). It writes tests and test fixtures only, designed from the task's contract
    (signatures, criteria, normative cases), and reads `superpowers:test-driven-development` and its
@@ -78,13 +80,16 @@ and its test files, and the REVIEW brief adds both reports and the review packag
    - A broken test (syntax, a wrong fixture path) is not a RED.
 
    The report carries a table: normative case → test → failing line and message. A test that **passes** at
-   RED is listed as such with the reason, and REVIEW must mutation-prove it. RED commits
+   RED is listed as such with the reason and a **proposed mutation** (the production line and the defect
+   that would make it fail), and REVIEW runs that mutation. RED commits
    `test(<scope>): failing tests for Task N`. Failing tests committed on this branch are intended, and nothing
    is pushed between phases.
-2. **GREEN** (Sonnet, an implementer, not the RED agent). It reads the brief and RED's tests and writes the
-   production code (and the task's docstring, comment and doc edits) until RED's tests pass. It **must not
-   change any file RED committed**; `git diff <RED>..HEAD -- <RED's files>` must be empty. If a RED test looks
-   wrong, it reports BLOCKED, quoting the test and the contract text. The controller then routes it to a RED
+2. **GREEN** (Sonnet, an implementer, not the RED agent). It works from the spec and the contract, with RED's
+   tests as the acceptance check. It writes the production code (and the task's docstring, comment and doc
+   edits) until RED's tests pass. It **must not change any file RED committed**;
+   `git diff <RED>..HEAD -- <RED's files>` must be empty. If a RED test is defective (a path, an import, or a
+   test that contradicts the contract), it stops at once with BLOCKED. It quotes the test and the contract
+   text and proposes the one-line fix. The controller then routes it to a RED
    fix or to Spec Drift; GREEN never edits the test. It runs the task's tests, plus `npm run build` for a
    frontend task, and commits with the task's commit subject.
 3. **REVIEW** (Sonnet, a reviewer, not RED or GREEN). It reads the review package (RED's base to GREEN's head)
@@ -95,8 +100,9 @@ and its test files, and the REVIEW brief adds both reports and the review packag
    It also checks that RED's failures were real failures for the right reason (from the RED report and the
    RED commit), and that GREEN changed no RED file. It runs this task's spec §6.3 mutations and the mutation
    proofs for RED-passing tests. For each: edit the production file, run, show the failure at the target
-   assertion's own line, `git restore <file>`, then `git status --short` clean. It never runs `git checkout`
-   or `git stash`.
+   assertion's own line, `git restore <file>`, then `git status --short` clean. Its report records each
+   mutation's exact diff, so the controller can confirm it hit the named defect and not a neighbouring guard
+   (CONTRIBUTING §3). It never runs `git checkout` or `git stash`.
 4. **Findings.** A test gap goes to a fresh RED fix agent: new tests fail first, or carry a mutation proof. A
    code defect goes to a fresh GREEN fix agent. Then a fresh REVIEW agent re-reviews. A behaviour change goes
    through Spec Drift (amend the spec and plan, and get the owner's ruling), never inside a fix.
