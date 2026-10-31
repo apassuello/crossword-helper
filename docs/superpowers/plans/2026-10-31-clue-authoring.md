@@ -135,7 +135,7 @@ accepted (the trim trap above). Status: all 14 fixture rows.
 `cli/tests/unit/test_clues_command.py`.
 
 **Interfaces — Consumes:** Task 1's `validate_clues`, `clue_statuses`, `CluesError`. **Produces:** the
-two-token command `clues check <grid.json> [--allow-nonstandard] [--json-output]`, which Task 4's adapter
+two-token command `clues check <grid.json> [--allow-nonstandard] --json-output` (spec §3.6), which Task 4's adapter
 invokes.
 
 **Behavioural criteria** (spec §3.6): load through `_load_grid_or_exit` (an unloadable grid gives that
@@ -150,8 +150,10 @@ helper's existing JSON error and exit 1, with no `code`). A file with no `clues`
 | unloadable grid | 1 | `{"success": false, "error": …}` (no `code`) |
 | no `clues` key | 0 | `{"success": true, "statuses": {}}` |
 
-Human mode (no `--json-output`) keeps the same exit codes. Its text is the implementer's call and is
-documented in Task 11.
+Human mode (no `--json-output`) keeps the same exit codes. Spec §3.6 gives `--json-output` unbracketed and
+does not define human-mode text. **Owner ruling pending.** If it is unruled when this task starts, the default
+applies: the same JSON object is printed with or without the flag, so there is one format and nothing new
+for CLI_SPEC. Task 11 documents whichever applies.
 
 - [ ] Step 1: write failing tests through `click.testing.CliRunner` on files in `tmp_path`, covering every
   row and a 4×4 fixture grid with `--allow-nonstandard`.
@@ -322,8 +324,7 @@ export function documentHasContent(grid, clues) {}  // gridEdits.js — gridHasC
 
 ### Task 7: Clues panel component
 
-**Files:** Create `src/components/CluesPanel.jsx`. Test `src/components/__tests__/CluesPanel.test.jsx`, or
-the directory the existing component tests use.
+**Files:** Create `src/components/CluesPanel.jsx`. Test `src/__tests__/components/CluesPanel.test.jsx`.
 
 **Interfaces — Consumes:** Task 5. **Produces** a presentational component with its own draft state:
 
