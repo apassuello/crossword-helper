@@ -1,6 +1,6 @@
 # Clue Authoring — Design
-**Version 0.1.4** · Claude with Arthur Passuello · 2026-10-31 · status: approved at 0.1.2; the 0.1.3 and 0.1.4
-amendments (§3.5, §6.1) await owner review. Every section was approved by the owner in chat on 2026-10-31, the layering after
+**Version 0.1.4** · Claude with Arthur Passuello · 2026-10-31 · status: approved. The owner accepted the 0.1.3 and
+0.1.4 amendments (§3.5, §6.1) on 2026-10-31. Every section was approved by the owner in chat on 2026-10-31, the layering after
 the CLI-first ruling; 0.1.1 applies the first review (§10). The owner approved the written spec on 2026-10-31.
 §9's defaults apply if unruled by 2026-11-14.
 
@@ -559,3 +559,6 @@ form in a test, because it is the first code to read that `pattern`.
   both name `{task_id}.json.gz`, so which file survives a CLI beam pause is left for the implementation to establish, not
   asserted here. §3.5 now says "grid-file writes", and says that `fill --resume` with neither a grid file nor
   `-o` writes no grid file.
+- 0.1.4 ruled (2026-10-31): the owner accepted 0.1.3 and 0.1.4 as written. §3.6: without `--json-output`,
+  `clues check` prints the same JSON object as with it (one format). What it beat: separate human-readable
+  output, which would have been a second format to document and test.
