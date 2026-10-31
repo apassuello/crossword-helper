@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="290" viewBox="0 0 680 290" role="img" aria-labelledby="t d">
+  <title id="t">Slots, clue numbers and empty slots</title>
+  <desc id="d">A 5 by 5 grid. The across slot in row 1 holds C, A and two blanks and is highlighted in red; the down slot in column 1 is highlighted in blue. Clue numbers sit in the first square of each slot.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .cell { fill: #f5f1e8; }
+    .grid { stroke: #1a1713; stroke-width: 0.6; fill: none; }
+    .frame { fill: none; stroke: #1a1713; stroke-width: 2; }
+    .black { fill: #1a1713; }
+    .across { fill: rgba(184,48,24,0.16); }
+    .down { fill: rgba(29,95,168,0.14); }
+    .num { font: 10px ui-monospace, Menlo, monospace; fill: #3a342b; }
+    .let { font: 600 22px Georgia, serif; fill: #1a1713; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .t { font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .s { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #66604f; }
+    .lab-r { font: 600 13px system-ui, sans-serif; fill: #b83018; }
+    .lab-b { font: 600 13px system-ui, sans-serif; fill: #1d5fa8; }
+  </style>
+  <rect class="bg" x="0.5" y="0.5" width="679" height="289" rx="10"/>
+  <g transform="translate(40 50)">
+    <rect class="cell" width="200" height="200"/>
+    <rect class="down" x="0" y="0" width="40" height="160"/>
+    <rect class="across" x="0" y="0" width="160" height="40"/>
+    <rect class="black" x="160" y="0" width="40" height="40"/>
+    <rect class="black" x="0" y="160" width="40" height="40"/>
+    <path class="grid" d="M40 0V200M80 0V200M120 0V200M160 0V200M0 40H200M0 80H200M0 120H200M0 160H200"/>
+    <rect class="frame" width="200" height="200"/>
+    <text class="num" x="3" y="11">1</text><text class="num" x="43" y="11">2</text><text class="num" x="83" y="11">3</text><text class="num" x="123" y="11">4</text>
+    <text class="num" x="3" y="51">5</text><text class="num" x="163" y="51">6</text>
+    <text class="num" x="3" y="91">7</text><text class="num" x="3" y="131">8</text><text class="num" x="43" y="171">9</text>
+    <text class="let" x="13" y="29">C</text><text class="let" x="53" y="29">A</text>
+  </g>
+  <text class="lab-r" x="40" y="38">1-Across: C A _ _</text>
+  <text class="lab-b" x="40" y="272">1-Down</text>
+
+  <text class="h" x="290" y="62">A slot is one across or down entry</text>
+  <text class="t" x="290" y="90">It runs from the grid edge or a black square to the</text>
+  <text class="t" x="290" y="110">next one. The clue number sits in its first square.</text>
+  <text class="t" x="290" y="146">A slot with some letters but not all of them still</text>
+  <text class="t" x="290" y="166">counts as empty: 1-Across above is empty until all</text>
+  <text class="t" x="290" y="186">four squares are filled.</text>
+  <text class="s" x="290" y="224">Autofill's heading counts the empty slots, and Verify</text>
+  <text class="s" x="290" y="244">words checks each filled one against the word list.</text>
+</svg>

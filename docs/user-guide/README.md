@@ -8,6 +8,13 @@ Autofill is known to be imperfect: it can return entries that are not valid word
 without changing the grid. The guide says so where it matters, and the open issues are listed under
 "Known Limitations" in the [project README](../../README.md#known-limitations).
 
+Once the project is on your computer, this guide also opens as a web page with a page list and the same
+pictures: open `docs/user-guide/site/index.html` in your browser.
+
+![The Crossword Helper web app with its five areas numbered](images/app-overview.png)
+
+*The app at a glance: (1) the top bar, with the status, Undo, Redo, Verify words, Clean grid and Save grid; (2) the tool rail; (3) the Symmetry switch, the grid's statistics and its violations; (4) the grid; (5) the panel of the tool you picked.*
+
 ## Start here
 
 1. [Install Crossword Helper on macOS](how-to/install-on-macos.md): from the GitHub repository to the app open

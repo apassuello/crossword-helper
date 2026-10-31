@@ -1,0 +1,5 @@
+# my list (blank lines and lines starting with # are ignored)
+ZEBRA;80
+quiz,60
+CAFÉ
+ICE CREAM

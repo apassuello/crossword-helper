@@ -36,6 +36,10 @@ Grid, Search, Autofill and Export.
 
 The app starts with an empty 15×15 grid.
 
+![The app on first start, with its five areas numbered](../images/app-overview.png)
+
+*(1) top bar, (2) tool rail, (3) Symmetry, the GRID block and VIOLATIONS, (4) the grid, (5) the panel of the tool you picked.*
+
 **You should see:** `online` in the top bar and an empty grid in the middle of the page.
 
 If the label does not read `online`, see [Troubleshoot common problems](../how-to/troubleshoot.md).
@@ -54,6 +58,8 @@ In the tool rail, under VIEW, find the `Symmetry` toggle. It is on by default an
 
 With Symmetry on, every black square you place also turns the square on the opposite side of the grid
 (turned 180 degrees) black.
+
+![Diagram: a black square and its partner on the opposite side of the grid](../images/diagram-symmetry.svg)
 
 **You should see:** `Symmetry` highlighted. Leave it on.
 
@@ -86,6 +92,10 @@ back one edit at a time.
 **You should see:** in the GRID block, `Black` reads `20 · 16.5%` and `Words` reads 42. The grid has black
 squares in the pattern shown by the table and its mirror image.
 
+![The 11×11 grid after step 4, with JAZZ typed in step 5](../images/tutorial-grid.png)
+
+*The grid after steps 4 and 5: twenty black squares, JAZZ in the top row, and the GRID block reading Black 20 · 16.5% and Words 42.*
+
 Below the grid, a hint line lists the keys that work in the grid: "Type letters · Arrows move · Space or .
 black square · Enter switch direction · Tab next word · Backspace clear".
 
@@ -107,6 +117,8 @@ Click `Verify words` in the top bar.
 
 **You should see:** a message reading "All 5 words valid!".
 
+![The message All 5 words valid! below the top bar](../images/verify-all-valid.png)
+
 This is the check you will use again in step 9, when the grid is full.
 
 ### 7. Look up words by pattern
@@ -119,6 +131,8 @@ This is the check you will use again in step 9, when the grid is full.
 **You should see:** a list headed `Results (7)`. Each entry shows a word, a score and "3 letters", with
 the word list named "comprehensive". The words are CAT, CIT, COT, CRT, CST (score 31), then CDT and CUT
 (score 26).
+
+![Diagram: the pattern C?T and the seven words it matches](../images/diagram-pattern.svg)
 
 The word list is large, and not every entry in it is an everyday word: CRT and CST are in the list too.
 Keep that in mind when you check the filled grid in step 9.
@@ -143,8 +157,14 @@ Autofill picks words for the empty squares. Your JAZZ stays.
 progress bar with a percentage, a `Cancel` button, and changing messages such as "Repairing 6 invalid
 words". Do not click in the grid until the run ends.
 
+![Autofill running: the grid paused, a progress bar and a Cancel button](../images/autofill-running.png)
+
+*A run in progress. The letters appearing in the grid change as the run goes; yours will differ.*
+
 **You should see, when it ends:** a message like "Filled 42/42 slots — 7 entries may be invalid (use
 Verify Words to check)", with two buttons, `Keep fill` and `Reset`. Your numbers will differ.
+
+![The Autofill panel after a run, with Keep fill and Reset](../images/autofill-result.png)
 
 The grid still shows only JAZZ at this point. The fill is held back until you accept it.
 
@@ -172,6 +192,10 @@ instead, with N the number of words checked.
 
 The flagged words are marked on the grid: their letters turn red and get a short red underline.
 
+![A filled grid after Verify words: flagged letters in red and the list of invalid words](../images/verify-flagged.png)
+
+*One filled grid after Verify words. Your fill, and so your flagged words, will differ.*
+
 You do not need to fix them to finish this tutorial. The how-to guide
 [Check and clean a grid](../how-to/check-and-clean-a-grid.md) covers what to do with them, and the
 `Clean grid` button in the top bar belongs to that guide.
@@ -182,6 +206,8 @@ You do not need to fix them to finish this tutorial. The how-to guide
 2. A prompt titled "Name this grid" opens. The name field is filled in with a suggestion of the form
    `11×11 2026-10-29 13:53` (your date and time). Keep it.
 3. Click `Save`.
+
+![The Name this grid prompt under the Save grid button](../images/save-prompt.png)
 
 **You should see:** a label next to the button reading `saved locally · just now`.
 
@@ -198,9 +224,13 @@ then click `Open saved` under `Saved grids`. Your grid is in the list. Do not cl
 **You should see:** your browser downloads a file named `crossword.html`. Find it where your browser
 saves downloads, and open it in a browser.
 
-Read from the file's source, it is a page headed "Crossword Puzzle" with a table: one cell per square, the
-square numbers, black squares, and your letters. It holds the grid only, with no clues. [?] *How the page
-looks in a browser, and how it prints, was not checked for this page.*
+Opened in a browser, it is a page headed "Crossword Puzzle" with the grid as a table: the square numbers,
+black squares, and your letters. It holds the grid only, with no clues. [?] *How it prints was not checked for
+this page.*
+
+![The exported crossword.html opened in Chrome](../images/export-html-page.png)
+
+*crossword.html in Chrome, exported from the grid shown in step 9.*
 
 ## Final result review
 

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="250" viewBox="0 0 680 250" role="img" aria-labelledby="t d">
+  <title id="t">How a pattern matches words</title>
+  <desc id="d">The pattern C, question mark, T. The question mark stands for exactly one letter, so the pattern matches three-letter words starting with C and ending with T: CAT, CIT, COT, CRT, CST, CDT and CUT.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .box { fill: #f5f1e8; stroke: #1a1713; stroke-width: 1.5; }
+    .q { fill: rgba(184,48,24,0.12); stroke: #b83018; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .big { font: 600 30px Georgia, serif; fill: #1a1713; }
+    .bigq { font: 600 30px Georgia, serif; fill: #b83018; }
+    .w { font: 600 19px ui-monospace, Menlo, monospace; fill: #1a1713; letter-spacing: 3px; }
+    .wq { fill: #b83018; }
+    .sc { font: 12px ui-monospace, Menlo, monospace; fill: #66604f; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .t { font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .s { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #66604f; }
+    .arrow { stroke: #66604f; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#66604f"/></marker></defs>
+  <rect class="bg" x="0.5" y="0.5" width="679" height="249" rx="10"/>
+  <text class="h" x="40" y="44">Pattern</text>
+  <rect class="box" x="40" y="62" width="52" height="52" rx="3"/><text class="big" x="55" y="99">C</text>
+  <rect class="q" x="98" y="62" width="52" height="52" rx="3"/><text class="bigq" x="113" y="99">?</text>
+  <rect class="box" x="156" y="62" width="52" height="52" rx="3"/><text class="big" x="171" y="99">T</text>
+  <text class="t" x="40" y="146">? = exactly one unknown letter.</text>
+  <text class="t" x="40" y="166">The pattern's length is the word's length.</text>
+  <text class="s" x="40" y="200">Lowercase works too; at least 3 characters.</text>
+  <path class="arrow" d="M240 88H300"/>
+  <text class="h" x="330" y="44">Results (7), best score first</text>
+  <g transform="translate(330 66)">
+    <text class="w" x="0" y="20">C<tspan class="wq">A</tspan>T</text><text class="sc" x="66" y="20">31</text>
+    <text class="w" x="0" y="50">C<tspan class="wq">I</tspan>T</text><text class="sc" x="66" y="50">31</text>
+    <text class="w" x="0" y="80">C<tspan class="wq">O</tspan>T</text><text class="sc" x="66" y="80">31</text>
+    <text class="w" x="0" y="110">C<tspan class="wq">R</tspan>T</text><text class="sc" x="66" y="110">31</text>
+    <text class="w" x="140" y="20">C<tspan class="wq">S</tspan>T</text><text class="sc" x="206" y="20">31</text>
+    <text class="w" x="140" y="50">C<tspan class="wq">D</tspan>T</text><text class="sc" x="206" y="50">26</text>
+    <text class="w" x="140" y="80">C<tspan class="wq">U</tspan>T</text><text class="sc" x="206" y="80">26</text>
+  </g>
+  <text class="s" x="330" y="196">The number is the word's score. Not every match</text>
+  <text class="s" x="330" y="214">is an everyday word: CRT and CST are in the</text>
+  <text class="s" x="330" y="232">shipped list too.</text>
+</svg>

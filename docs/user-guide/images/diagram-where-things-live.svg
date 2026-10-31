@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300" role="img" aria-labelledby="t d">
+  <title id="t">Where your work is kept</title>
+  <desc id="d">Three places. Your browser keeps saved grids and the autosave, used by Open saved and by the restore after a reload. Your downloads folder receives exports: crossword.json, crossword.html and crossword.txt; Import reads a JSON file back. The project folder keeps the word lists you upload, under data/wordlists/custom.</desc>
+  <style>
+    .bg { fill: #fbf7ec; stroke: #ded3b9; }
+    .col { fill: #f5f1e8; stroke: #1a1713; stroke-width: 1.2; }
+    .head { font: 600 16px Georgia, serif; fill: #1a1713; }
+    .sub { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #66604f; }
+    .t { font: 13.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #3a342b; }
+    .m { font: 12.5px ui-monospace, Menlo, monospace; fill: #1a1713; }
+    .act { font: 600 12.5px system-ui, sans-serif; fill: #b83018; }
+    .h { font: 600 17px Georgia, serif; fill: #1a1713; }
+    .pill { fill: rgba(184,48,24,0.10); stroke: #b83018; stroke-width: 1; }
+  </style>
+  <rect class="bg" x="0.5" y="0.5" width="719" height="299" rx="10"/>
+  <text class="h" x="30" y="36">Where your work is kept</text>
+
+  <rect class="col" x="30" y="56" width="210" height="220" rx="8"/>
+  <text class="head" x="46" y="84">Your browser</text>
+  <text class="sub" x="46" y="102">this site's local storage</text>
+  <rect class="pill" x="46" y="116" width="78" height="22" rx="11"/><text class="act" x="56" y="132">Save grid</text>
+  <text class="t" x="46" y="160">named saves, and the</text>
+  <text class="t" x="46" y="178">autosave about 30 s after</text>
+  <text class="t" x="46" y="196">you start editing</text>
+  <text class="t" x="46" y="228">Read back by Open saved,</text>
+  <text class="t" x="46" y="246">and on reload (newest save)</text>
+
+  <rect class="col" x="255" y="56" width="210" height="220" rx="8"/>
+  <text class="head" x="271" y="84">Your downloads folder</text>
+  <text class="sub" x="271" y="102">files you can keep or share</text>
+  <rect class="pill" x="271" y="116" width="58" height="22" rx="11"/><text class="act" x="281" y="132">Export</text>
+  <text class="m" x="271" y="162">crossword.json</text>
+  <text class="m" x="271" y="182">crossword.html</text>
+  <text class="m" x="271" y="202">crossword.txt</text>
+  <text class="t" x="271" y="234">Import reads a .json back.</text>
+  <text class="t" x="271" y="252">No clues, no theme locks.</text>
+
+  <rect class="col" x="480" y="56" width="210" height="220" rx="8"/>
+  <text class="head" x="496" y="84">The project folder</text>
+  <text class="sub" x="496" y="102">where you installed the app</text>
+  <rect class="pill" x="496" y="116" width="126" height="22" rx="11"/><text class="act" x="506" y="132">Lists › Upload</text>
+  <text class="m" x="496" y="164">data/wordlists/</text>
+  <text class="m" x="496" y="182">  custom/</text>
+  <text class="t" x="496" y="214">your word lists, as text</text>
+  <text class="t" x="496" y="232">files; copy this folder</text>
+  <text class="t" x="496" y="250">when you move or reinstall</text>
+</svg>

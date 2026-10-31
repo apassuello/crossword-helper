@@ -10,6 +10,9 @@ rich==13.7.0
 # Core Dependencies
 numpy>=1.24.0
 
+# Docs: builds the HTML user guide (scripts/build_user_guide.py)
+Markdown>=3.5
+
 # Testing
 pytest==7.4.3
 pytest-cov==4.1.0

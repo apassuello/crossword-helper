@@ -6,6 +6,8 @@ Let the app fill the empty squares of your grid with words from your word lists,
 result. Autofill is known to be imperfect: it can finish with entries that are not valid words, and some
 settings can stop without changing the grid. This page shows how to run it and read what comes back.
 
+![Diagram: start autofill, keep or reset the result, verify, clean the flagged letters and run again](../images/diagram-autofill-loop.svg)
+
 ## Prerequisites
 
 - A grid with black squares set and any words you want to keep already typed or placed
@@ -19,6 +21,10 @@ settings can stop without changing the grid. This page shows how to run it and r
 Click **Autofill** in the left rail. The heading shows how many slots are still empty (a slot is one across or
 down entry; a slot with some letters but not all of them still counts as empty). Leave the options on their
 defaults unless you have a reason to change them:
+
+![The Autofill panel with its options](../images/autofill-options.png)
+
+*The Autofill panel, here with Timeout set to 1 min. The lists under Custom are the ones on the computer this was captured on.*
 
 | Option | What it does | Default |
 |---|---|---|
@@ -49,6 +55,8 @@ run.
 While it runs, the grid shows `Editing is paused while autofill runs.`, and the panel shows a progress bar
 and `Cancel`. Wait for it to end, or click `Cancel`.
 
+![Autofill running: the grid paused, a progress bar and a Cancel button](../images/autofill-running.png)
+
 ### 3. Read the result
 
 The panel ends with one of these outcomes:
@@ -71,6 +79,10 @@ for this page.*
 
 For the outcomes with a `Keep` button, the grid keeps showing the state from before the run until you click
 `Keep fill` (or `Keep partial fill`). `Reset` closes the result without taking the fill.
+
+![The Autofill panel after a run, with Keep fill and Reset](../images/autofill-result.png)
+
+*A filled-but-unverified outcome. The grid behind it still shows the pre-run state until you click Keep fill.*
 
 Autofill does not change letters you typed or theme words you locked.
 

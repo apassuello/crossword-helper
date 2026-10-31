@@ -3,6 +3,10 @@
 What each control in the web app is called, what it does, and its default. For instructions, see the
 [how-to guides](../README.md#how-to-guides). Labels are written as they appear on screen.
 
+![The web app with its five areas numbered](../images/app-overview.png)
+
+*(1) Top bar, (2) and (3) Left rail: the tools, then VIEW, GRID and VIOLATIONS, (4) the grid (Keyboard and mouse), (5) the panel of each tool, described in the sections below.*
+
 ## Top bar
 
 | Control | What it does |

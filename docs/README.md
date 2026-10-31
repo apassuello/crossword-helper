@@ -8,6 +8,7 @@ docs/
 ├── ARCHITECTURE.md          # System architecture and design
 ├── ALGORITHM_DEEP_DIVE.md   # Algorithm details (CSP, beam search, scoring)
 ├── user-guide/              # Guide for people using the web app (tutorial, how-tos, reference)
+│   └── site/                # The same guide as HTML, built by scripts/build_user_guide.py
 ├── api/
 │   ├── API_REFERENCE.md     # HTTP API reference
 │   └── openapi.yaml         # OpenAPI 3.1.0 spec

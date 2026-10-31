@@ -46,6 +46,16 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # The HTML user guide (docs/user-guide/site/) is built from the Markdown
+      # pages; a commit that changes one without rebuilding the other fails here.
+      # Fix: python scripts/build_user_guide.py, then stage docs/user-guide/site/.
+      - id: user-guide-site
+        name: HTML user guide matches the Markdown
+        entry: python scripts/build_user_guide.py --check
+        language: system
+        pass_filenames: false
+        files: ^(docs/user-guide/|scripts/build_user_guide\.py|scripts/user_guide_site/)
+
       # --- commit-msg stage -----------------------------------------------
       # D12: a trailer naming one item of a multi-item issue still closes the
       # whole issue, because the closing keyword binds to the issue number and
