@@ -11,6 +11,7 @@ from typing import Optional
 
 import click
 
+from .core.clues import CluesError, clue_statuses, validate_clues
 from .core.grid import Grid
 from .core.numbering import GridNumbering
 from .core.validator import GridValidator
@@ -1942,6 +1943,53 @@ def number(grid_file: str, json_output: bool, allow_nonstandard: bool):
             click.echo(f"  {num:3d}: row {row}, col {col}")
 
         click.echo(f"\n{'='*60}\n")
+
+
+@cli.group()
+def clues():
+    """Clue authoring commands."""
+
+
+@clues.command("check")
+@click.argument("grid_file", type=click.Path(exists=True))
+@click.option(
+    "--allow-nonstandard",
+    is_flag=True,
+    default=False,
+    help="Allow non-standard grid sizes (not 11/15/21)",
+)
+@click.option(
+    "--json-output",
+    is_flag=True,
+    default=False,
+    help="Output JSON format (accepted for API compatibility; output is always JSON)",
+)
+def clues_check(grid_file: str, allow_nonstandard: bool, json_output: bool):
+    """
+    Validate a grid file's clues and report each clue's status.
+
+    Implements Decision 6 (clue-authoring spec 0.1.4, section 1), spec section 3.6
+    and the section 10 ruling for 0.1.4: with or without --json-output the same single
+    JSON object is printed (one format), so the flag is accepted and unused.
+
+    Examples:
+        crossword clues check grid.json
+        crossword clues check grid.json --allow-nonstandard --json-output
+    """
+    # json_output=True in both modes: one format (spec section 10, 0.1.4 ruling).
+    data, grid = _load_grid_or_exit(grid_file, allow_nonstandard=allow_nonstandard, json_output=True)
+
+    if "clues" not in data:
+        click.echo(json.dumps({"success": True, "statuses": {}}))
+        return
+
+    try:
+        validate_clues(data["clues"], grid.size)
+    except CluesError as e:
+        click.echo(json.dumps({"success": False, "code": "INVALID_CLUES", "error": str(e)}))
+        sys.exit(1)
+
+    click.echo(json.dumps({"success": True, "statuses": clue_statuses(grid, data["clues"])}))
 
 
 @cli.command()
