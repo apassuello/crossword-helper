@@ -88,6 +88,10 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
   const gridSig = gridSigOf(grid, gridSize);
   const gridSigRef = useRef(gridSig);
   gridSigRef.current = gridSig;
+  // The live grid, for Apply All's already-in-place check (#80): the loop's `grid` is the one
+  // it started from, and gridSig leaves out isThemeLocked.
+  const liveGridRef = useRef(grid);
+  liveGridRef.current = grid;
   const listSigRef = useRef(null);
   const requestTokenRef = useRef(0);
 
@@ -330,8 +334,14 @@ function ThemeWordsPanel({ grid, gridSize, docId, onApplyPlacement, onBatchBegin
         // Get the best (first) suggestion
         const bestSuggestion = wordData.suggestions[0];
 
-        // Already locked in place: no request, not counted (spec 0.2.24 §3.8, #80)
-        if (isPlacedAndLocked(currentGrid, wordData.word, bestSuggestion)) {
+        // Already locked in place: no request, not counted (spec 0.2.24 §3.8, #80). Either grid
+        // decides: in the chain, the reply would equal what was sent there, so App writes none
+        // of it; on the live grid only, the user locked it while an earlier request was out, and
+        // App keeps the user's cells (PR #112 review).
+        if (
+          isPlacedAndLocked(currentGrid, wordData.word, bestSuggestion) ||
+          isPlacedAndLocked(liveGridRef.current, wordData.word, bestSuggestion)
+        ) {
           skipped.push(`${wordData.word} (already on grid)`);
           continue;
         }
