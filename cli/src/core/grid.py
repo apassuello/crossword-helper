@@ -268,7 +268,8 @@ class Grid:
             - row: Starting row
             - col: Starting column
             - length: Word length
-            - pattern: Current pattern (e.g., 'C?T')
+            - pattern: Current cell values joined (e.g., 'C.T'); an empty
+              square is '.', not '?'
         """
         slots = []
 
