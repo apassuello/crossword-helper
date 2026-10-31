@@ -12,7 +12,7 @@ import random
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..core.grid import Grid
 from .pattern_matcher import PatternMatcher
@@ -81,6 +81,10 @@ class Autofill:
         self.state_manager = state_manager or StateManager()
         self.paused_state_path = None  # Set by _handle_pause when a state is saved
         self.wordlist_paths: List[str] = []  # Original wordlist file paths (for resume)
+        # Decision 6 (clue-authoring spec 0.1.4, section 1), section 3.5: the grid file's
+        # `clues`, set by the CLI and stored verbatim in a pause state's metadata. The
+        # solver never reads it; None means no clues and writes no key.
+        self.carried_clues: Optional[Dict[str, Any]] = None
 
         # Create pattern matcher if not provided
         if pattern_matcher is None:
@@ -1537,6 +1541,8 @@ class Autofill:
             "time_elapsed": time.time() - self.start_time,
             "wordlists": list(getattr(self, "wordlist_paths", []) or []),
         }
+        if getattr(self, "carried_clues", None) is not None:
+            metadata["clues"] = self.carried_clues
 
         state_path = self.state_manager.save_csp_state(task_id=task_id, csp_state=csp_state, metadata=metadata, compress=True)
         self.paused_state_path = state_path
