@@ -11,6 +11,7 @@ Nothing is written outside ``tmp_path``.
 import gzip
 import json
 
+from cli.src.core.clues import NULL_CLUES, engine_clues, store_carried_clues
 from cli.src.core.grid import Grid
 from cli.src.fill import hybrid_autofill
 from cli.src.fill import state_manager as state_manager_module
@@ -108,3 +109,40 @@ def test_hybrid_forwards_no_clues_as_none(monkeypatch):
     beam = run_hybrid(monkeypatch, None)
 
     assert beam.carried_clues is None
+
+
+# --- engine_clues / store_carried_clues: absent, null, map -------------------
+
+
+def stored(carry):
+    metadata = {}
+    store_carried_clues(metadata, engine_clues(carry))
+    return metadata
+
+
+def test_engine_clues_is_none_for_an_absent_key():
+    assert engine_clues({}) is None
+
+
+def test_engine_clues_is_the_null_sentinel_for_a_null_value():
+    assert engine_clues({"clues": None}) is NULL_CLUES
+
+
+def test_engine_clues_passes_a_map_through():
+    assert engine_clues({"clues": CLUES}) == CLUES
+
+
+def test_absent_clues_reach_the_metadata_as_no_key():
+    assert "clues" not in stored({})
+
+
+def test_null_clues_reach_the_metadata_as_a_null_value():
+    assert stored({"clues": None}).get("clues", "ABSENT") is None
+
+
+def test_a_clues_map_reaches_the_metadata_unchanged():
+    assert stored({"clues": CLUES}).get("clues", "ABSENT") == CLUES
+
+
+def test_an_empty_clues_map_reaches_the_metadata_as_an_empty_map():
+    assert stored({"clues": {}}).get("clues", "ABSENT") == {}

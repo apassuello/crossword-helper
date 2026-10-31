@@ -155,10 +155,13 @@ class Paused:
         self.state_file = self.state_dir / f"{TASK_ID}.json.gz"
 
 
+NO_CLUES = object()  # pause_real_fill(clues=NO_CLUES) writes a grid file with no `clues` key
+
+
 def pause_real_fill(root, algorithm, human_mode=False, clues=CLUES):
     """Run a real `fill --algorithm <algorithm>` carrying `clues` and pause it."""
     paused = Paused(root, algorithm)
-    write_grid(paused.grid_file, algorithm, clues=clues)
+    write_grid(paused.grid_file, algorithm, **({} if clues is NO_CLUES else {"clues": clues}))
     cmd = [
         sys.executable,
         "-m",
@@ -433,9 +436,9 @@ def save_small_csp_state(state_dir, **extra_metadata):
     )
 
 
-def save_small_beam_state(state_dir, **extra_metadata):
-    """A beam-type state holding a completed grid, so the resume returns at once."""
-    beam = BeamState(grid=full_grid(), slots_filled=0, total_slots=0, score=50.0)
+def save_small_beam_state(state_dir, grid=None, **extra_metadata):
+    """A beam-type state holding a completed grid (or `grid`), so the resume returns at once."""
+    beam = BeamState(grid=grid or full_grid(), slots_filled=0, total_slots=0, score=50.0)
     state = BeamSearchState(
         beam=[StateManager.serialize_beam_state(beam)],
         filled_slots=[],
@@ -650,3 +653,62 @@ def test_a_resumed_null_state_that_pauses_again_keeps_the_null(paused_fill, tmp_
     assert state_file.stat().st_mtime_ns != before, "the resumed run did not save a new pause state"
     assert_null_carried(json.loads(out_file.read_text()), "paused-again output")
     assert_null_carried(read_envelope(state_file)["metadata"], "paused-again state metadata")
+
+
+# --- fix 2: pins for mutants that survived the first 38 tests ----------------
+
+
+@pytest.mark.slow
+def test_a_clueless_csp_pause_state_and_resumed_file_have_no_clues_key(tmp_path):
+    # Kills engine_clues returning {} for an absent key: the engine would store
+    # `clues: {}` and the resumed file would gain it.
+    paused = pause_real_fill(tmp_path, "trie", clues=NO_CLUES)
+    out_file = tmp_path / "resumed.json"
+
+    assert "clues" not in read_envelope(paused.state_file)["metadata"]
+    assert "clues" not in json.loads(paused.paused_grid_file.read_text())
+
+    proc = run_cli(resume_cmd(paused, out_file, extra=["-t", RESUME_TIMEOUT]))
+
+    assert proc.returncode == 0, diag(proc)
+    assert "clues" not in json.loads(out_file.read_text())
+
+
+@pytest.mark.slow
+def test_empty_clues_map_survives_the_degenerate_pause_save(tmp_path):
+    # Kills `if "clues" in clues_carry` -> `if clues_carry.get("clues")` in the CLI's
+    # degenerate save: {} is what the browser exports when there are no clues.
+    paused = pause_real_fill(tmp_path, "repair", clues={})
+    assert json.loads(paused.grid_file.read_text()).get("clues", "ABSENT") == {}
+
+    assert read_envelope(paused.state_file)["metadata"].get("clues", "ABSENT") == {}
+    assert json.loads(paused.paused_grid_file.read_text()).get("clues", "ABSENT") == {}
+
+
+@pytest.mark.slow
+def test_beam_state_resumed_with_trie_and_paused_again_keeps_the_clues(tmp_path):
+    # Kills deleting `autofill.carried_clues = engine_clues(clues_carry)` in the
+    # algorithm-mismatch fallback of _execute_resume. A beam-type state resumed with
+    # --algorithm trie takes that branch and runs the CSP engine with a task_id.
+    # (Not --algorithm repair: issue #28 builds IterativeRepair there with no pause
+    # controller, so it cannot pause.)
+    small = SmallState(tmp_path)
+    blank = Grid(11)
+    state_file = save_small_beam_state(small.state_dir, grid=blank, clues=CLUES)
+    assert read_envelope(state_file)["algorithm"] == "beam"
+    before = state_file.stat().st_mtime_ns
+    args = small.resume_args(state_file)
+    args[args.index("-t") + 1] = "120"
+    args += ["--algorithm", "trie"]
+    cmd = [sys.executable, "-m", "cli.src.cli", *args]
+
+    proc, stdout, stderr = run_until_paused(cmd, small.flags_dir, SMALL_TASK, "sleep")
+
+    assert proc.returncode == 0, f"stderr tail:\n{stderr[-800:]}\nstdout tail:\n{stdout[-400:]}"
+    assert json.loads(stdout.strip().splitlines()[-1])["paused"] is True, stdout[-400:]
+    new_state = small.state_dir / f"{SMALL_TASK}.json.gz"
+    assert new_state.stat().st_mtime_ns != before, "the resumed run did not save a new pause state"
+    envelope = read_envelope(new_state)
+    assert envelope["algorithm"] == "csp"  # the CSP engine's save replaced the beam state
+    assert envelope["metadata"].get("clues") == CLUES
+    assert json.loads(small.out_file.read_text()).get("clues") == CLUES
