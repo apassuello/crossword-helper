@@ -183,7 +183,10 @@ orphaned.
   - No reply, or any status other than 200 or 400, refuses the import with
     `Could not check the clues: <error>.` and applies nothing.
   - Edits made to the grid while the check runs are replaced when the import applies, on the terms an Open
-    that waits already has (novice spec §3.4).
+    that waits already has (novice spec §3.4). Those terms include the drop (ruled 2026-11-01): if New grid or
+    an import replaced the document after the user confirmed this import, the import is dropped with no
+    message, by the same replacement count a waiting Open reads. Closing the panel and a save fork do not
+    cancel it.
 - **Grid JSON file, CLI:** the commands that write a grid file are `fill` (two grid-file writes: the paused grid
   and the result; its pause *state* is the next bullet's), `resume` (through `_execute_resume`), `fill --resume` (which resolves the state in `fill` itself and
   writes through `fill`'s two writes), `new` and `import-nyt`.
@@ -568,3 +571,8 @@ form in a test, because it is the first code to read that `pattern`.
   beat: counting written clues (authoring progress, but the line would mix clue counts with no total), and
   `written/total` (a format change). §5.4: a refused Enter commit keeps focus on its row. What it beat: always
   moving on (the error and the draft would be left behind on a row the user has already left).
+- 0.1.4 ruled (2026-11-01, found while writing Task 9's briefs): §3.5's import that waits for the clue check is
+  dropped, with no message, when New grid or an import replaced the document after its confirm, by the
+  replacement count a waiting Open reads. What it beat: always applying (the import would land on top of a New
+  grid made during the check). A confirmed Open does not move that count, so an Open that lands during the
+  check does not drop the import; that follows the count as novice §3.4 defines it.
