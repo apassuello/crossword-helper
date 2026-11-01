@@ -133,6 +133,12 @@ export const api = {
     return post('/api/number', clean({ size, grid }));
   },
 
+  // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.6: clue validation goes through the
+  // CLI. `clean()` drops only `undefined`, so `clues: {}` and `clues: null` are sent.
+  checkClues({ size, grid, clues }) {
+    return post('/api/clues/check', clean({ size, grid, clues }));
+  },
+
   validateGrid({ grid, gridSize }) {
     return post('/api/grid/validate', clean({ grid, grid_size: gridSize }));
   },

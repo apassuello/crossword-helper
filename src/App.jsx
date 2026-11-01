@@ -752,12 +752,18 @@ function App() {
   }, [pushToast, recordStep]);
 
   const handleGridImport = useCallback((importedData) => {
+    // Clue-authoring spec section 3.5 (ruled 2026-11-01) and novice-readiness spec 0.2.10 section
+    // 3.4: `token` is `beginOpen()` as of the user's confirm. The clue check may have outlasted a
+    // New grid or another import, which then wins; this import is dropped with no message.
+    if (importedData.token !== undefined && importedData.token !== replacementsRef.current) return;
     if (editingPausedRef.current) return;
     replacementsRef.current += 1; // spec 0.2.10 §3.4: cancels a waiting Open
     clearHistory(); // history ends with the document (§3.9)
-    // Interim until Task 9: an import applies no clues (spec section 3.5, a file with no `clues` key).
-    cluesRef.current = {};
-    setClues({});
+    // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.5: the file's checked clues, or
+    // `{}` when it had no `clues` key.
+    const importedClues = importedData.clues || {};
+    cluesRef.current = importedClues;
+    setClues(importedClues);
     replaceDocument();
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
@@ -784,7 +790,7 @@ function App() {
 
     // A freshly imported grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
-    setSavedSig(docSigOf(size, normalisedGrid, {}));
+    setSavedSig(docSigOf(size, normalisedGrid, importedClues));
     // The new docId commits a render later (this runs from ImportPanel's timer); marking the
     // replacement now keeps a save of the old document, granted in between, off the new one
     // (Phase 6R re-review N2). A fresh id has no stored entry, so no savedAt to expect.
@@ -999,6 +1005,7 @@ function App() {
                 currentGridSize={gridSize}
                 editingPaused={editingPaused}
                 gridHasContent={documentHasContent(grid, clues)}
+                beginImport={beginOpen}
               />
             </div>
           )}
@@ -1009,6 +1016,7 @@ function App() {
                 grid={grid}
                 gridSize={gridSize}
                 numbering={numbering}
+                clues={clues}
               />
             </div>
           )}

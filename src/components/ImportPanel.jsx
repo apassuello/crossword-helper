@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import './ImportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 import InlineConfirm from './bench/InlineConfirm';
+import { api } from '../api/client';
 import { IMPORT_MIN_SIZE, IMPORT_MAX_SIZE } from '../lib/gridSizes';
 
 // novice-readiness spec 0.2.8 §3.2 Import (Q2): same text as New grid and Open saved.
@@ -12,6 +13,7 @@ function ImportPanel({
   currentGridSize,
   editingPaused = false,
   gridHasContent = false,
+  beginImport,
 }) {
   const [importMethod, setImportMethod] = useState('file'); // 'file' or 'paste'
   const [jsonInput, setJsonInput] = useState('');
@@ -105,7 +107,12 @@ function ImportPanel({
       }
     }
 
-    return { size, grid: data.grid, numbering: data.numbering || {} };
+    const validated = { size, grid: data.grid, numbering: data.numbering || {} };
+    // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.5 "browser import": `clues` is
+    // carried only when the file had the key, with the raw value (`null` included), so
+    // `'clues' in validated` tells a checked import from one with no clues. The CLI validates it.
+    if ('clues' in data) validated.clues = data.clues;
+    return validated;
   };
 
   /**
@@ -219,20 +226,46 @@ function ImportPanel({
     performImport();
   };
 
-  const performImport = () => {
+  const performImport = async () => {
     if (!preview || !preview.data) {
       setError('No valid data to import. Please validate first.');
       return;
     }
     setConfirmingReplace(false);
 
+    // Spec section 3.5 (ruled 2026-11-01) and novice-readiness spec 0.2.10 section 3.4: the
+    // replacement count is captured here, at the confirm's Replace (or at the click when no
+    // confirm shows), because the clue check below may outlast a New grid.
+    const token = beginImport ? beginImport() : undefined;
+
     setIsProcessing(true);
+    setError(null);
+
+    const { size, grid, numbering } = preview.data;
+    let clues = {};
+    // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.5 "browser import": after the
+    // confirm and before apply, a file with a `clues` key (`{}` and `null` included) is checked by
+    // the CLI. A 400 shows its message; any other failure refuses. Nothing is applied on either.
+    if ('clues' in preview.data) {
+      try {
+        const sentGrid = grid.map((row) => row.map((cell) => (cell === '' ? '.' : cell)));
+        await api.checkClues({ size, grid: sentGrid, clues: preview.data.clues });
+        clues = preview.data.clues;
+      } catch (err) {
+        const message = err && err.message;
+        setError(
+          err && err.status === 400
+            ? message
+            : `Could not check the clues: ${message}.`
+        );
+        setIsProcessing(false);
+        return;
+      }
+    }
 
     // Small delay to show processing state
     setTimeout(() => {
       try {
-        const { size, grid, numbering } = preview.data;
-
         // Convert to frontend format
         const frontendGrid = convertGridFormat(grid, size);
 
@@ -240,7 +273,9 @@ function ImportPanel({
         onImport({
           grid: frontendGrid,
           size: size,
-          numbering: numbering
+          numbering: numbering,
+          clues,
+          ...(token !== undefined ? { token } : {})
         });
 
         // Reset state
