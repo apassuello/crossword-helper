@@ -522,7 +522,11 @@ plus `src/api/__tests__/`.
 - `performImport` (`ImportPanel.jsx`, after `handleImportClick`'s confirm) awaits `api.checkClues` when the
   key is present, before `onImport`.
 - `onImport` / App's `handleGridImport` receive `clues`: the file's map when it was checked, or `{}` when the
-  key was absent.
+  key was absent. This replaces Task 8's interim `{}` on every import.
+- Drop on replacement (spec §3.5, ruled 2026-11-01): App passes `ImportPanel` a `beginImport` prop returning the
+  current replacement count (`beginOpen`'s value). `performImport` captures it at the confirm (or at the click
+  when no confirm shows) and passes it to `onImport` as `token`; `handleGridImport` returns without change when
+  `token` is given and differs from the count. An `onImport` call with no `token` applies as today.
 
 **Behavioural criteria:** spec §3.5, "Grid JSON file, browser export" and "browser import", in order: confirm,
 then the check (only when the file has a `clues` key, including `{}` and `null`), then apply. A 400 shows
@@ -530,7 +534,8 @@ then the check (only when the file has a `clues` key, including `{}` and `null`)
 Edits made during the check are replaced on the §3.4 Open-that-waits terms. The `Include clues` checkbox stays
 hidden and its test is unchanged (spec §7).
 
-**Normative cases:** spec §6.2 "Import", and "Confirm" for Import.
+**Normative cases:** spec §6.2 "Import", and "Confirm" for Import. Also (§3.5 ruling): a New grid made while
+the check runs drops the import, and grid edits made while it runs are replaced when it applies.
 
 - [ ] RED: tests and fixtures only; run `npx vitest run` on the test files listed under Files; commit `test(web): failing tests for Task 9`.
 - [ ] GREEN: production code until RED's tests pass, with RED's files untouched; commit `feat(web): grid-file clues on import and export`.
