@@ -217,3 +217,76 @@ describe('api client', () => {
     expect(caught.details).toEqual({ skipped: 3, reasons: { 'too short': 3 } });
   });
 });
+
+// Task 9 (clue-authoring spec 0.1.4, sections 3.5 and 3.6): the grid-file import checks `clues` through
+// POST /api/clues/check. Appended as its own block; no existing line above is touched.
+describe('api.checkClues (spec 3.6)', () => {
+  let fetchMock;
+  const grid = [
+    ['C', 'A', 'T'],
+    ['.', '#', '.'],
+    ['.', '.', '.'],
+  ];
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs {size, grid, clues} as JSON to /api/clues/check and returns the body', async () => {
+    const clues = { '0,0,across': { text: 'Feline', answer: 'CAT' } };
+    const reply = { success: true, statuses: { '0,0,across': 'ok' } };
+    fetchMock.mockResolvedValue(res(reply));
+
+    const out = await api.checkClues({ size: 3, grid, clues });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/clues/check');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(opts.body)).toEqual({ size: 3, grid, clues });
+    expect(Object.keys(JSON.parse(opts.body)).sort()).toEqual(['clues', 'grid', 'size']);
+    expect(out).toEqual(reply);
+  });
+
+  it('sends clues of {} as {}', async () => {
+    fetchMock.mockResolvedValue(res({ success: true, statuses: {} }));
+    await api.checkClues({ size: 3, grid, clues: {} });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).clues).toEqual({});
+  });
+
+  it('sends clues of null as null, not dropped', async () => {
+    fetchMock.mockResolvedValue(res({ error: { code: 'INVALID_CLUES', message: 'x' } }, 400));
+    await api.checkClues({ size: 3, grid, clues: null }).catch(() => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect('clues' in body).toBe(true);
+    expect(body.clues).toBeNull();
+  });
+
+  it('a 400 envelope rejects with an ApiError carrying the envelope message', async () => {
+    fetchMock.mockResolvedValue(
+      res(
+        { error: { code: 'INVALID_CLUES', message: 'Invalid clues: must be an object.' } },
+        400
+      )
+    );
+
+    let caught;
+    try {
+      await api.checkClues({ size: 3, grid, clues: null });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught.status).toBe(400);
+    expect(caught.code).toBe('INVALID_CLUES');
+    expect(caught.message).toBe('Invalid clues: must be an object.');
+  });
+});

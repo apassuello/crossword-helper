@@ -8,6 +8,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ExportPanel from '../../components/ExportPanel';
 import { completedGrid } from '../fixtures/gridFixtures';
+import { captureDownloads, readBlob } from '../importExportHelpers';
 
 // Mock ProgressIndicator
 vi.mock('../../components/ProgressIndicator', () => ({
@@ -127,5 +128,62 @@ describe('ExportPanel Component', () => {
     createElementSpy.mockRestore();
     delete global.URL.createObjectURL;
     delete global.URL.revokeObjectURL;
+  });
+});
+
+// Task 9 (clue-authoring spec 0.1.4, section 3.5 "Grid JSON file, browser export"): the JSON file always
+// writes `clues` (`{}` when there are none), and the JSON preview shows what the file holds.
+describe('ExportPanel clues (spec 3.5 browser export)', () => {
+  const MAP = {
+    '0,0,across': { text: 'Feline', answer: 'CAT??????' },
+    '2,3,down': { text: 'Sea bird', answer: '?GULL' },
+  };
+  const props = { grid: completedGrid, gridSize: 11, numbering: {} };
+  let downloads;
+
+  beforeEach(() => {
+    downloads = captureDownloads();
+  });
+  afterEach(() => downloads.restore());
+
+  const exportedFile = async (user) => {
+    await user.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(downloads.blobs).toHaveLength(1), { timeout: 2000 });
+    return JSON.parse(await readBlob(downloads.blobs[0]));
+  };
+  const previewText = async (user) => {
+    await user.click(screen.getByRole('button', { name: /preview/i }));
+    return document.querySelector('.preview-content').textContent;
+  };
+
+  it('the JSON download carries `clues` equal to the clues prop', async () => {
+    const user = userEvent.setup();
+    render(<ExportPanel {...props} clues={MAP} />);
+    const file = await exportedFile(user);
+    expect(file.clues).toStrictEqual(MAP);
+  });
+
+  it('the JSON download carries `clues` of {} when the prop is {}', async () => {
+    const user = userEvent.setup();
+    render(<ExportPanel {...props} clues={{}} />);
+    const file = await exportedFile(user);
+    expect('clues' in file).toBe(true);
+    expect(file.clues).toStrictEqual({});
+  });
+
+  it('the JSON preview shows the same object as the file, clues included', async () => {
+    const user = userEvent.setup();
+    render(<ExportPanel {...props} clues={MAP} />);
+    const shown = JSON.parse(await previewText(user));
+    expect(shown.clues).toStrictEqual(MAP);
+    expect(shown).toStrictEqual(await exportedFile(user));
+  });
+
+  it('the JSON preview shows `clues` of {} when the prop is {}', async () => {
+    const user = userEvent.setup();
+    render(<ExportPanel {...props} clues={{}} />);
+    const shown = JSON.parse(await previewText(user));
+    expect('clues' in shown).toBe(true);
+    expect(shown.clues).toStrictEqual({});
   });
 });
