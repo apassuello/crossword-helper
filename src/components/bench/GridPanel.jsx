@@ -2,7 +2,7 @@
 // It holds the "Black square" toggle (§3.3 (G7)), "New grid" (§3.2 (#55)) and "Open saved"
 // (§3.4), whose Delete asks first (PD-6-G20).
 import { useState } from 'react';
-import { canToggleBlack, gridHasContent } from '../../lib/gridEdits';
+import { canToggleBlack, documentHasContent } from '../../lib/gridEdits';
 import storage from '../../lib/storage';
 import InlineConfirm from './InlineConfirm';
 import SavedGridsList from './SavedGridsList';
@@ -13,6 +13,7 @@ export const NEW_GRID_SIZES = [11, 15, 21];
 
 export default function GridPanel({
   grid,
+  clues = {},
   selectedCell,
   symmetryEnabled,
   editingPaused,
@@ -76,7 +77,7 @@ export default function GridPanel({
             className="xw-ghost-btn"
             disabled={editingPaused}
             onClick={() => {
-              if (gridHasContent(grid)) setPending({ kind: 'new', size });
+              if (documentHasContent(grid, clues)) setPending({ kind: 'new', size });
               else onNewGrid(size);
             }}
           >
@@ -126,7 +127,7 @@ export default function GridPanel({
           entries={saved}
           disabled={editingPaused}
           onOpen={(entry) => {
-            if (gridHasContent(grid)) setPending({ kind: 'open', entry });
+            if (documentHasContent(grid, clues)) setPending({ kind: 'open', entry });
             else openEntry(entry);
           }}
           onDelete={(id) => setPending({ kind: 'delete', entry: saved.find((e) => e.id === id) })}

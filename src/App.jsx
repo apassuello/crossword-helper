@@ -10,7 +10,7 @@ import { useSaveMachine } from './hooks/useSaveMachine';
 import { useAutofillMachine, LIVE_STATES } from './hooks/useAutofillMachine';
 import { useUndoHistory } from './hooks/useUndoHistory';
 import { useToasts } from './components/bench/Toast';
-import { allSlots } from './hooks/useGridGeometry';
+import { allSlots, slotAt } from './hooks/useGridGeometry';
 import { useNumbering, localNumber } from './hooks/useNumbering';
 import { mintDocId } from './lib/docId';
 import storage from './lib/storage';
@@ -28,7 +28,7 @@ import {
   planClean,
   clearAllErrors,
   canToggleBlack,
-  gridHasContent,
+  documentHasContent,
 } from './lib/gridEdits';
 import { TopBar } from './components/bench/TopBar';
 import SaveNamePrompt from './components/bench/SaveNamePrompt';
@@ -45,7 +45,9 @@ import ExportPanel from './components/ExportPanel';
 import ImportPanel from './components/ImportPanel';
 import WordListPanel from './components/WordListPanel';
 import ThemeWordsPanel from './components/ThemeWordsPanel';
-import { contentSigOf } from './lib/contentSig';
+import CluesPanel from './components/CluesPanel';
+import { contentSigOf, docSigOf } from './lib/contentSig';
+import { applyCommit, applyKeep, applyDelete, clueStatuses, parseClueKey } from './lib/clues';
 import './styles/App.scss';
 
 // Which lists decide whether an entry is "valid". Verify paints cells red from
@@ -98,8 +100,17 @@ export function isAdoptableEntry(entry) {
 function App() {
   const [gridSize, setGridSize] = useState(15);
   const [grid, setGrid] = useState(null);
+  // Decision 5 (clue-authoring spec 0.1.4, section 1): clue state lives in the document, beside the
+  // grid: saved in `doc`, undone through `useUndoHistory` and dirty-tracked by the document
+  // signature. `{ [key]: { text, answer } }`, see lib/clues.
+  const [clues, setClues] = useState({});
+  // Counts document replacements (New grid, size change, Open, import). It keys the Clues panel and
+  // is bound into the handlers the panel is given, so a draft typed in a replaced document is
+  // dropped, never committed into its successor (spec section 5.4).
+  const [docEpoch, setDocEpoch] = useState(0);
+  const docEpochRef = useRef(0);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, lists, import, export
+  const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [showThemePanel, setShowThemePanel] = useState(false);
   // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
   // lazy-inits from storage, so a stored `false` survives reload (previously a
@@ -166,7 +177,7 @@ function App() {
     canUndo,
     canRedo,
     batchOpen,
-  } = useUndoHistory({ grid, gridSize, setGrid, editingPausedRef });
+  } = useUndoHistory({ grid, gridSize, clues, setGrid, setClues, editingPausedRef });
   recordRunRef.current = recordStep;
 
   // Undo and redo keys (novice-readiness spec 0.2.18 §3.9 "Controls"). One document listener, so
@@ -229,11 +240,19 @@ function App() {
   // own signature, kept for the live-grid consumers (Tasks 6.8 and 6.11).
   const savedGrid = editingPaused && autofill.startSnapshot ? autofill.startSnapshot : grid;
   const liveSig = useMemo(() => contentSigOf(gridSize, grid), [gridSize, grid]);
+  // Decision 5, section 4.1: the two live signatures. `liveSig` (grid) serves `pendingClean` only;
+  // `liveDocSig` (grid plus clues) serves dirty state, the save machine, the restored banner and
+  // the clean point. A clue-only change is not a grid change, so it leaves a Clean confirm open.
+  const liveDocSig = useMemo(() => docSigOf(gridSize, grid, clues), [gridSize, grid, clues]);
   // novice-readiness spec 0.2.7 §2.3 (S1): Verify and Clean responses land after an await, so
   // they read the grid, document id and live signature as they are NOW, through refs
   // refreshed every render (like `editingPausedRef`), never through the handler's closure.
   const gridRef = useRef(grid);
   gridRef.current = grid;
+  // Advanced by every clue write as `editGrid` advances `gridRef` (spec section 4.3), so a clue
+  // commit and a grid edit in one tick are two steps, each with the right "before".
+  const cluesRef = useRef(clues);
+  cluesRef.current = clues;
   const docIdRef = useRef(docId);
   docIdRef.current = docId;
   const liveSigRef = useRef(liveSig);
@@ -246,13 +265,20 @@ function App() {
     if (pendingClean && (editingPaused || liveSig !== pendingClean.sig)) setPendingClean(null);
   }, [pendingClean, liveSig, editingPaused]);
   const contentSig = useMemo(
-    () => (savedGrid === grid ? liveSig : contentSigOf(gridSize, savedGrid)),
-    [gridSize, savedGrid, grid, liveSig]
+    () => (savedGrid === grid ? liveDocSig : docSigOf(gridSize, savedGrid, clues)),
+    [gridSize, savedGrid, grid, clues, liveDocSig]
   );
   const isDirty = grid != null && contentSig !== savedSig;
   const doc = useMemo(
-    () => ({ id: docId, size: gridSize, grid: toSavedGrid(savedGrid), numbering, symmetryEnabled }),
-    [docId, gridSize, savedGrid, numbering, symmetryEnabled]
+    () => ({
+      id: docId,
+      size: gridSize,
+      grid: toSavedGrid(savedGrid),
+      clues,
+      numbering,
+      symmetryEnabled,
+    }),
+    [docId, gridSize, savedGrid, clues, numbering, symmetryEnabled]
   );
   // A fork replaces the document id (S4). Must never throw: the machine calls it inside
   // its success handler, where a throw would make saveNamed reject.
@@ -271,7 +297,7 @@ function App() {
   // the clean signature is that document's, whatever the live grid did between the write
   // and the `saved` status. If the grid moved on, isDirty stays true and the machine
   // returns to `dirty` (see useSaveMachine).
-  const onSaved = useCallback((written) => setSavedSig(contentSigOf(written.size, written.grid)), []);
+  const onSaved = useCallback((written) => setSavedSig(docSigOf(written.size, written.grid, written.clues)), []);
   const { savedLabel, saveNamed, adoptSavedAt, forget } = useSaveMachine({
     doc,
     isDirty,
@@ -337,6 +363,12 @@ function App() {
   const gridSizeRef = useRef(gridSize);
   gridSizeRef.current = gridSize;
   const [restoredBanner, setRestoredBanner] = useState(null); // { name, savedAt, sig } | null
+  // A new document replaces the old one (spec section 5.4): bumping the epoch synchronously makes
+  // the old Clues panel's handlers inert, so the draft it commits as it unmounts is discarded.
+  const replaceDocument = useCallback(() => {
+    docEpochRef.current += 1;
+    setDocEpoch(docEpochRef.current);
+  }, []);
   // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): the one place a saved entry becomes
   // the live document, shared by restore-on-load and Open saved. It reads the current size
   // through `gridSizeRef` and applies the S3 skip-flag rule exactly once. An entry that
@@ -356,16 +388,20 @@ function App() {
         setGridSize(entry.size);
       }
       setGrid(restored);
+      const restoredClues = entry.clues ?? {};
+      cluesRef.current = restoredClues;
+      setClues(restoredClues);
+      replaceDocument();
       setDocId(entry.id);
       if (typeof entry.symmetryEnabled === 'boolean') setSymmetryEnabled(entry.symmetryEnabled);
-      const sig = contentSigOf(entry.size, restored);
+      const sig = docSigOf(entry.size, restored, restoredClues);
       setSavedSig(sig);
       adoptSavedAt(entry.savedAt);
       setSelectedCell(null);
       setRestoredBanner(banner ? { name: entry.name, savedAt: entry.savedAt, sig } : null);
       return true;
     },
-    [adoptSavedAt, clearHistory]
+    [adoptSavedAt, clearHistory, replaceDocument]
   );
   useEffect(() => {
     let cancelled = false;
@@ -378,11 +414,11 @@ function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // The banner closes on any grid edit: the live signature leaves the one recorded at
-  // restore. `contentSigOf` excludes `number`, so a numbering reconcile does not close it.
+  // The banner closes on any edit, to the grid or to a clue: the live document signature leaves the one
+  // recorded at restore. `docSigOf` excludes `number`, so a numbering reconcile does not close it.
   useEffect(() => {
-    if (restoredBanner && liveSig !== restoredBanner.sig) setRestoredBanner(null);
-  }, [liveSig, restoredBanner]);
+    if (restoredBanner && liveDocSig !== restoredBanner.sig) setRestoredBanner(null);
+  }, [liveDocSig, restoredBanner]);
 
   // Apply the UI theme to the document whenever it changes (Task 6). Persistence
   // is owned by usePersistentState above; TopBar is a controlled toggle and
@@ -401,6 +437,9 @@ function App() {
   const initializeGrid = (size) => {
     replacementsRef.current += 1;
     clearHistory(); // history ends with the document (§3.9)
+    cluesRef.current = {};
+    setClues({}); // Decision 5, section 4.2: a new grid starts with no clues
+    replaceDocument();
     const newGrid = Array(size).fill(null).map(() =>
       Array(size).fill(null).map(() => ({
         letter: '',
@@ -423,7 +462,7 @@ function App() {
     // structural signature, which fires the optimistic renumber + server reconcile.
     // A fresh grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
-    setSavedSig(contentSigOf(size, numbered));
+    setSavedSig(docSigOf(size, numbered, {}));
   };
 
   // novice-readiness spec 0.2.7 §3.2 (#55): New grid. Built through `initializeGrid` (which
@@ -477,10 +516,46 @@ function App() {
   // (novice-readiness spec 0.2.18 §3.9, "What one step is"). The next render resets the ref.
   const editGrid = useCallback((write) => {
     const base = gridRef.current;
-    recordStep(base);
+    recordStep(base, cluesRef.current);
     gridRef.current = write(base);
     setGrid(write);
   }, [recordStep]);
+
+  // Decision 5 (clue-authoring spec 0.1.4, section 1), sections 3.3 and 4.4: a clue write records
+  // `(gridRef.current, cluesRef.current)` as its "before", then advances `cluesRef`. Each re-checks
+  // `editingPausedRef` at write time (D1). The pattern is the live grid's. `epoch` is the document
+  // the panel was rendered for: a handler of a replaced document writes nothing (section 5.4).
+  const patternOf = (key) => {
+    const p = parseClueKey(key);
+    const g = gridRef.current;
+    if (!p || !g || !g[p.row] || !g[p.row][p.col] || g[p.row][p.col].isBlack) return null;
+    return slotAt(g, p.row, p.col, p.dir).pattern;
+  };
+  const writeClues = (next) => {
+    recordStep(gridRef.current, cluesRef.current);
+    cluesRef.current = next;
+    setClues(next);
+  };
+  const commitClue = (key, draft, epoch) => {
+    if (editingPausedRef.current || epoch !== docEpochRef.current) return { error: null };
+    const pattern = patternOf(key);
+    if (pattern === null) return { error: null };
+    const res = applyCommit(cluesRef.current, key, draft, pattern);
+    if (res.changed) writeClues(res.clues);
+    return { error: res.error };
+  };
+  const keepClue = (key) => {
+    if (editingPausedRef.current) return;
+    const pattern = patternOf(key);
+    if (pattern === null) return;
+    const next = applyKeep(cluesRef.current, key, pattern);
+    if (next !== cluesRef.current) writeClues(next);
+  };
+  const deleteClue = (key) => {
+    if (editingPausedRef.current) return;
+    const next = applyDelete(cluesRef.current, key);
+    if (next !== cluesRef.current) writeClues(next);
+  };
 
   const toggleBlackSquare = useCallback((row, col) => {
     if (editingPausedRef.current) return;
@@ -650,7 +725,7 @@ function App() {
     if (editingPausedRef.current || !pendingClean) return;
     const { blanks, cleaned, message } = pendingClean;
     setPendingClean(null);
-    recordStep(gridRef.current);
+    recordStep(gridRef.current, cluesRef.current);
     setGrid(prev => writeCleanedGrid(prev, cleaned, blanks));
     pushToast({ kind: 'info', message });
   }, [pendingClean, pushToast, recordStep]);
@@ -668,7 +743,7 @@ function App() {
     // changed the structural layout) is handled by useNumbering.
     // One step for Apply This Placement; inside an Apply All batch the history folds the call
     // into the batch's single step, so the call is the same either way (§3.9).
-    recordStep(gridRef.current);
+    recordStep(gridRef.current, cluesRef.current);
     setGrid((prev) => writeAppliedTheme(prev, updatedGrid, sentGrid));
 
     const addedText = added > 0 ? ` (added ${added} black square${added === 1 ? '' : 's'})` : '';
@@ -680,6 +755,10 @@ function App() {
     if (editingPausedRef.current) return;
     replacementsRef.current += 1; // spec 0.2.10 §3.4: cancels a waiting Open
     clearHistory(); // history ends with the document (§3.9)
+    // Interim until Task 9: an import applies no clues (spec section 3.5, a file with no `clues` key).
+    cluesRef.current = {};
+    setClues({});
+    replaceDocument();
     const { grid: importedGrid, size, symmetryEnabled: importedSymmetry } = importedData;
 
     // Update grid size if different (skip the re-init effect so the
@@ -705,7 +784,7 @@ function App() {
 
     // A freshly imported grid is a new document (F10) and is born clean.
     setDocId(mintDocId());
-    setSavedSig(contentSigOf(size, normalisedGrid));
+    setSavedSig(docSigOf(size, normalisedGrid, {}));
     // The new docId commits a render later (this runs from ImportPanel's timer); marking the
     // replacement now keeps a save of the old document, granted in between, off the new one
     // (Phase 6R re-review N2). A fresh id has no stored entry, so no savedAt to expect.
@@ -718,7 +797,7 @@ function App() {
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, autofill.discardRun, adoptSavedAt, clearHistory]);
+  }, [gridSize, autofill.discardRun, adoptSavedAt, clearHistory, replaceDocument]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
@@ -858,6 +937,7 @@ function App() {
             <div className="xw-inspector">
               <GridPanel
                 grid={grid}
+                clues={clues}
                 gridSize={gridSize}
                 selectedCell={selectedCell}
                 symmetryEnabled={symmetryEnabled}
@@ -887,6 +967,25 @@ function App() {
             </div>
           )}
 
+          {currentTool === 'clues' && grid && (
+            <div className="xw-inspector">
+              {/* Decision 3 (clue-authoring spec 0.1.4, section 1): clues are written here only.
+                  Task 10 replaces the browser-computed statuses with reconciled ones. */}
+              <CluesPanel
+                key={docEpoch}
+                grid={grid}
+                clues={clues}
+                displayStatuses={clueStatuses(grid, clues)}
+                selectedCell={selectedCell}
+                editingPaused={editingPaused}
+                onCommit={(key, draft) => commitClue(key, draft, docEpoch)}
+                onKeep={keepClue}
+                onDelete={deleteClue}
+                onSelect={(row, col, direction) => setSelectedCell({ row, col, direction })}
+              />
+            </div>
+          )}
+
           {currentTool === 'lists' && (
             <div className="xw-inspector">
               <WordListPanel />
@@ -899,7 +998,7 @@ function App() {
                 onImport={handleGridImport}
                 currentGridSize={gridSize}
                 editingPaused={editingPaused}
-                gridHasContent={gridHasContent(grid)}
+                gridHasContent={documentHasContent(grid, clues)}
               />
             </div>
           )}
