@@ -504,6 +504,33 @@ describe('CluesPanel', () => {
       expect(input).toHaveFocus();
     });
 
+    it('Escape discards the draft: a later blur does not commit it', async () => {
+      const Panel = await loadPanel();
+      const user = userEvent.setup();
+      const props = plainProps(white3(), { '0,0,across': { text: 'Orig', answer: '???' } });
+      render(<Panel {...props} />);
+      const input = inputs()[0];
+      await user.type(input, 'abandoned');
+      expect(input).toHaveValue('Origabandoned');
+      await user.keyboard('{Escape}');
+      expect(input).toHaveValue('Orig');
+      await user.click(document.body);
+      expect(props.onCommit).not.toHaveBeenCalledWith('0,0,across', 'Origabandoned');
+    });
+
+    it('Escape discards the draft: a later unmount does not commit it', async () => {
+      const Panel = await loadPanel();
+      const user = userEvent.setup();
+      const props = plainProps(white3(), { '0,0,across': { text: 'Orig', answer: '???' } });
+      const { unmount } = render(<Panel {...props} />);
+      const input = inputs()[0];
+      await user.type(input, 'abandoned');
+      await user.keyboard('{Escape}');
+      expect(input).toHaveValue('Orig');
+      unmount();
+      expect(props.onCommit).not.toHaveBeenCalledWith('0,0,across', 'Origabandoned');
+    });
+
     it('after Enter, Escape restores the text just committed', async () => {
       const Panel = await loadPanel();
       const user = userEvent.setup();
