@@ -487,6 +487,11 @@ deleteClue(key)
 - The commit's `currentPattern` and Keep's pattern are `slotAt(<live grid>, row, col, dir).pattern`.
 - The Clues panel mounts for `currentTool === 'clues'`. For now its `displayStatuses` is
   `clueStatuses(grid, clues)`; Task 10 replaces this with reconciled statuses.
+- Interim until Task 9 (controller ruling, 2026-11-01): `handleGridImport` applies `clues = {}` and sets the
+  clean signature to the document signature with `{}`. That is spec §3.5's rule for a file with no `clues` key;
+  Task 9 passes the file's checked map. Without it, an import would keep the previous document's clues.
+- App keeps two live signatures. The grid one stays for `pendingClean` (spec §4.1 table), and the document one
+  serves dirty state, the save machine, the restored banner and the clean point.
 
 **Normative cases:** spec §6.2 "Undo", "Save", "Lifecycle", "Confirm" (New grid and Open saved here; Import
 in Task 9), "Gating", "Rail", and the Panel row "a tool switch commits a draft".
