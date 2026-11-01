@@ -305,7 +305,8 @@ closes the Theme panel by the existing path (novice spec §3.6).
 
 **[SPEC]** Styles are the existing `.xw-clue*` and `.xw-clues*` classes in `src/styles/bench/base.css`.
 - **Header:** title `Clues`. Sub-line `<A> across · <D> down`, followed by ` · <S> stale` and ` · <O> orphaned`
-  when those counts are not zero.
+  when those counts are not zero. `<A>` and `<D>` count the entries, the same counts as the group headings; `<S>`
+  and `<O>` count clues by displayed status (owner, 2026-11-01).
 - **Groups:** `Across`, then `Down`, each headed `<Across|Down> · <count>`. The rows are the entries of
   `allSlots`, in reading order of their start cell (row, then column), which is number order. An empty group
   shows `No across words yet.` or `No down words yet.`
@@ -335,7 +336,8 @@ closes the Theme panel by the existing path (novice spec §3.6).
   switch). It is replaced by the committed text when the committed text changes beneath it (undo, redo), and
   discarded when the document is replaced (New grid, size change, Open, import).
 - Enter commits and focuses the next row's input; after the last Across row comes the first Down row. When
-  there is no next row, focus stays.
+  there is no next row, focus stays. When the commit is refused (§3.3), focus stays on the row (owner,
+  2026-11-01).
 - Escape restores the committed text and keeps focus. After Enter, the committed text is the text just
   committed.
 - Grid keys never reach the grid from a clue input: `CrosswordGrid` listens on its own container.
@@ -562,3 +564,7 @@ form in a test, because it is the first code to read that `pattern`.
 - 0.1.4 ruled (2026-10-31): the owner accepted 0.1.3 and 0.1.4 as written. §3.6: without `--json-output`,
   `clues check` prints the same JSON object as with it (one format). What it beat: separate human-readable
   output, which would have been a second format to document and test.
+- 0.1.4 ruled (2026-11-01, found while writing Task 7's briefs): §5.2's header `<A>`/`<D>` count entries. What it
+  beat: counting written clues (authoring progress, but the line would mix clue counts with no total), and
+  `written/total` (a format change). §5.4: a refused Enter commit keeps focus on its row. What it beat: always
+  moving on (the error and the draft would be left behind on a row the user has already left).
