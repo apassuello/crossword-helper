@@ -37,12 +37,22 @@ const begin0 = (r) => {
   return t;
 };
 
-function setup(initial = blank()) {
+// The harness holds `clues` in state beside the grid and passes both setters, as App does
+// (clue-authoring spec 0.1.4 section 4.3, Task 8). The rows above never write clues.
+function setup(initial = blank(), initialClues = {}) {
   const paused = { current: false };
   const hook = renderHook(() => {
     const [grid, setGrid] = useState(initial);
-    const h = useUndoHistory({ grid, gridSize: initial.length, setGrid, editingPausedRef: paused });
-    return { ...h, grid, setGrid };
+    const [clues, setClues] = useState(initialClues);
+    const h = useUndoHistory({
+      grid,
+      gridSize: initial.length,
+      clues,
+      setGrid,
+      setClues,
+      editingPausedRef: paused,
+    });
+    return { ...h, grid, setGrid, clues, setClues };
   });
   // One user edit: record the grid before, write the new one, in one batch as a handler does.
   const edit = (fn) =>
@@ -279,5 +289,179 @@ describe('useUndoHistory batch tokens (PR #90 Greptile P1, P2)', () => {
     begin(r);
     act(() => r().clear());
     expect(r().batchOpen).toBe(false);
+  });
+});
+
+/**
+ * Task 8 (clue-authoring spec 0.1.4, sections 4.1 and 4.3, Decision 5): a snapshot holds the
+ * clues, the step decision compares the document signature, and undo and redo write the clues
+ * back through `setClues`.
+ */
+describe('useUndoHistory with clues (clue-authoring spec 0.1.4, section 4.3)', () => {
+  const C0 = { '0,0,across': { text: 'Zero', answer: '???' } };
+  const C1 = { '0,0,across': { text: 'One', answer: '???' } };
+  const C2 = {
+    '0,0,across': { text: 'One', answer: '???' },
+    '1,0,across': { text: 'Two', answer: '???' },
+  };
+
+  // One handler call as App makes it: record the state before, then write.
+  const editClues = (r, next) =>
+    act(() => {
+      r().record(r().grid, r().clues);
+      r().setClues(next);
+    });
+
+  it('a clue-only change recorded with its before-state is one step: undo writes the before-clues, redo reapplies', () => {
+    const { r } = setup();
+    editClues(r, C1);
+    expect(r().canUndo).toBe(true);
+    expect(r().canRedo).toBe(false);
+    act(() => r().undo());
+    expect(r().clues).toEqual({});
+    expect(letters(r().grid)).toBe('.../.../...');
+    expect(r().canUndo).toBe(false);
+    expect(r().canRedo).toBe(true);
+    act(() => r().redo());
+    expect(r().clues).toEqual(C1);
+    expect(r().canUndo).toBe(true);
+    expect(r().canRedo).toBe(false);
+  });
+
+  it('undo of a step that changed the grid and the clues restores both, redo reapplies both', () => {
+    const { r } = setup(blank(), C0);
+    act(() => {
+      r().record(r().grid, r().clues);
+      r().setGrid((g) => put(g, 0, 0, { letter: 'A' }));
+      r().setClues(C1);
+    });
+    act(() => r().undo());
+    expect(letters(r().grid)).toBe('.../.../...');
+    expect(r().clues).toEqual(C0);
+    act(() => r().redo());
+    expect(letters(r().grid)).toBe('A../.../...');
+    expect(r().clues).toEqual(C1);
+  });
+
+  it('a record whose grid and clues are unchanged once rendered is no step, even for a new map object with the same entries in another order', () => {
+    const { r } = setup(blank(), C2);
+    const reordered = {
+      '1,0,across': { ...C2['1,0,across'] },
+      '0,0,across': { ...C2['0,0,across'] },
+    };
+    editClues(r, reordered);
+    expect(r().clues).not.toBe(C2);
+    expect(r().canUndo).toBe(false);
+    editClues(r, { ...C2 });
+    expect(r().canUndo).toBe(false);
+  });
+
+  it('two records before one render, each handed the state the previous edit produced, are two steps', () => {
+    const { r } = setup();
+    const g0 = r().grid;
+    const g1 = put(g0, 0, 0, { letter: 'A' });
+    act(() => {
+      r().record(g0, {}); // the clue commit
+      r().setClues(C1);
+      r().record(g0, C1); // then a grid edit, handed the clues the commit produced
+      r().setGrid(g1);
+    });
+    expect(r().canUndo).toBe(true);
+    act(() => r().undo()); // undoes the grid edit only
+    expect(letters(r().grid)).toBe('.../.../...');
+    expect(r().clues).toEqual(C1);
+    expect(r().canUndo).toBe(true);
+    act(() => r().undo()); // undoes the clue commit
+    expect(r().clues).toEqual({});
+    expect(r().canUndo).toBe(false);
+    act(() => r().redo());
+    expect(r().clues).toEqual(C1);
+    expect(letters(r().grid)).toBe('.../.../...');
+    act(() => r().redo());
+    expect(letters(r().grid)).toBe('A../.../...');
+    expect(r().clues).toEqual(C1);
+  });
+
+  it('two clue commits before one render, each handed the clues the previous one produced, are two steps', () => {
+    const { r } = setup();
+    act(() => {
+      r().record(r().grid, {});
+      r().setClues(C1);
+      r().record(r().grid, C1);
+      r().setClues(C2);
+    });
+    act(() => r().undo());
+    expect(r().clues).toEqual(C1);
+    act(() => r().undo());
+    expect(r().clues).toEqual({});
+    expect(r().canUndo).toBe(false);
+  });
+
+  it('a clue change recorded while a batch is open folds into the batch: one step, whose undo restores the grid and the clues', () => {
+    const { r } = setup(blank(), C0);
+    const t = begin0(r);
+    editClues(r, C1); // folded
+    act(() => {
+      r().record(r().grid, r().clues);
+      r().setGrid((g) => put(g, 1, 1, { letter: 'B' }));
+    });
+    act(() => r().commitBatch(t));
+    expect(r().canUndo).toBe(true);
+    act(() => r().undo());
+    expect(letters(r().grid)).toBe('.../.../...');
+    expect(r().clues).toEqual(C0);
+    expect(r().canUndo).toBe(false);
+    act(() => r().redo());
+    expect(letters(r().grid)).toBe('.../.B./...');
+    expect(r().clues).toEqual(C1);
+  });
+
+  it('a batch in which only the clues changed is a step', () => {
+    const { r } = setup(blank(), C0);
+    const t = begin0(r);
+    editClues(r, C1);
+    act(() => r().commitBatch(t));
+    expect(r().canUndo).toBe(true);
+    act(() => r().undo());
+    expect(r().clues).toEqual(C0);
+    expect(r().canUndo).toBe(false);
+  });
+
+  it("beginBatch's before-state carries the rendered clues, not an empty map", () => {
+    const { r } = setup(blank(), C0);
+    const t = begin0(r);
+    act(() => r().setClues(C2)); // a write inside the batch that no handler recorded
+    act(() => r().commitBatch(t));
+    act(() => r().undo());
+    expect(r().clues).toEqual(C0);
+  });
+
+  it('undo and redo leave the clues alone while a run is live (D1) and while a batch is open', () => {
+    const { paused, r } = setup();
+    editClues(r, C1);
+    paused.current = true;
+    act(() => r().undo());
+    expect(r().clues).toEqual(C1);
+    expect(r().canUndo).toBe(true);
+    paused.current = false;
+    act(() => r().undo());
+    expect(r().clues).toEqual({});
+    paused.current = true;
+    act(() => r().redo());
+    expect(r().clues).toEqual({});
+    expect(r().canRedo).toBe(true);
+    paused.current = false;
+    begin0(r);
+    act(() => r().redo());
+    expect(r().clues).toEqual({});
+  });
+
+  it('clear() drops a clue step too and leaves the clues as they are', () => {
+    const { r } = setup();
+    editClues(r, C1);
+    act(() => r().clear());
+    expect(r().canUndo).toBe(false);
+    expect(r().canRedo).toBe(false);
+    expect(r().clues).toEqual(C1);
   });
 });
