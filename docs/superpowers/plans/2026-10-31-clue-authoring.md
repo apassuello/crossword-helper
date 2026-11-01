@@ -113,6 +113,10 @@ facts (the RED and GREEN commits, the review package path) go in the dispatch me
 4. **Findings.** A test gap goes to a fresh RED fix agent: new tests fail first, or carry a mutation proof. A
    code defect goes to a fresh GREEN fix agent. Then a fresh REVIEW agent re-reviews. A behaviour change goes
    through Spec Drift (amend the spec and plan, and get the owner's ruling), never inside a fix.
+   Exception (owner ruling, 2026-11-01): a tests-only fix, with `git diff <last reviewed head>..HEAD -- <the
+   task's production paths>` empty, after at least two full REVIEWs with free mutants, closes on a controller
+   check that reproduces each of its kills at the target line. It beat a third full REVIEW (Task 3 fix 3,
+   `5bf3346`); the whole-branch review before merge remains the second gate.
 
 Task 11 (documentation) has no tests. It runs as WRITE then REVIEW (two agents), with
 `scripts/docs-check.sh` as its gate. Task 12 is the browser acceptance gate.
