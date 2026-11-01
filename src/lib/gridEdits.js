@@ -51,11 +51,21 @@ export function canToggleBlack(grid, row, col, symmetryEnabled) {
 
 /**
  * novice-readiness spec 0.2.7 §3.2 (#55): true if any cell has a letter or is
- * black, i.e. replacing the grid would lose work. A null grid -> false.
+ * black. A null grid -> false. (Whether replacing the document would lose work is
+ * `documentHasContent`.)
  */
 export function gridHasContent(grid) {
   if (!grid) return false;
   return grid.some((row) => row.some((cell) => cell.letter || cell.isBlack));
+}
+
+/**
+ * Implements Decision 5 (clue-authoring spec 0.1.4, section 1), section 4.5 "Replacement
+ * confirm": true if the grid has content or there is at least one clue, i.e. replacing the
+ * document would lose work. An absent clue map counts as `{}`.
+ */
+export function documentHasContent(grid, clues) {
+  return gridHasContent(grid) || Object.keys(clues || {}).length > 0;
 }
 
 /** Flip black on (row, col) and, with symmetry, on its 180-degree partner. */

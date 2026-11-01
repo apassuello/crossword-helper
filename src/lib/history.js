@@ -3,15 +3,21 @@
  * "What a step holds" and "Restoring"). No React; every function returns new values.
  *
  * Coupling: a snapshot holds exactly the fields `cellContentOf` (lib/contentSig) reads (size and
- * each cell's letter, isBlack, isThemeLocked, isAutofilled) and carries `sig`, the `contentSigOf`
- * of the grid it was taken from, so restoring a snapshot reproduces the content signature and an
- * undo back to the saved content makes the document clean (§3.9).
+ * each cell's letter, isBlack, isThemeLocked, isAutofilled), a copy of the clue map as `clues`,
+ * and carries `sig`, the `docSigOf` of the grid and clues it was taken from, so restoring a
+ * snapshot reproduces the document signature and an undo back to the saved content makes the
+ * document clean (§3.9). `restoreContent` restores cells only; callers read `snapshot.clues`.
+ *
+ * Implements Decision 5 (clue-authoring spec 0.1.4, section 1), section 4.3 "Undo". A call with
+ * no clue map snapshots `{}`.
  */
-import { cellContentOf, contentSigOf } from './contentSig';
+import { cellContentOf, docSigOf } from './contentSig';
 
 export const HISTORY_LIMIT = 100;
 
-export function snapshotContent(grid, gridSize) {
+export function snapshotContent(grid, gridSize, clues) {
+  const copy = {};
+  for (const [key, clue] of Object.entries(clues || {})) copy[key] = { ...clue };
   return {
     size: gridSize,
     cells: grid.map((row) =>
@@ -20,7 +26,8 @@ export function snapshotContent(grid, gridSize) {
         return { letter, isBlack, isThemeLocked, isAutofilled };
       })
     ),
-    sig: contentSigOf(gridSize, grid),
+    clues: copy,
+    sig: docSigOf(gridSize, grid, copy),
   };
 }
 
