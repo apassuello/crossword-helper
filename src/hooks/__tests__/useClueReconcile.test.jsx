@@ -39,7 +39,7 @@ const COT = fromCliStrings([
 
 const clue = (text, answer) => ({ text, answer });
 const ONE = { [KEY]: clue('Feline', 'CAT') };
-const TWO = { [KEY]: clue('Feline', 'CAT'), [KEY2]: clue('Blank row', '???') };
+const TWO = { [KEY]: clue('Feline', 'CAT'), [KEY2]: clue('Blank row', 'ABC') };
 
 let stub;
 let pending; // one deferred per api.checkClues call, in call order
