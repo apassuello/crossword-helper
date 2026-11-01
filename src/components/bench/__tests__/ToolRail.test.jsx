@@ -10,8 +10,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { ToolRail } from '../ToolRail';
 
-const TOOL_IDS = ['edit', 'search', 'autofill', 'theme', 'lists', 'import', 'export'];
-const TOOL_LABELS = ['Grid', 'Search', 'Autofill', 'Theme', 'Lists', 'Import', 'Export'];
+// clue-authoring spec 0.1.4 §5.1: the Clues tool sits between Autofill and Theme.
+const TOOL_IDS = ['edit', 'search', 'autofill', 'clues', 'theme', 'lists', 'import', 'export'];
+const TOOL_LABELS = ['Grid', 'Search', 'Autofill', 'Clues', 'Theme', 'Lists', 'Import', 'Export'];
 
 function baseProps(overrides = {}) {
   return {
@@ -34,12 +35,41 @@ describe('ToolRail (mounted, controlled)', () => {
     expect(getByText('Symmetry')).toBeInTheDocument();
   });
 
-  // novice-readiness spec 0.2.7 §3.1 (#53, #50): unfinished controls are not rendered.
-  it('does not render the Clues tool or the Heatmap toggle', () => {
+  // novice-readiness spec 0.2.7 §3.1 (#50): the Heatmap toggle is still not rendered. The Clues
+  // tool (#53) is, since clue-authoring spec 0.1.4 §5.1 and §6.2 "Rail".
+  it('does not render the Heatmap toggle', () => {
     const props = baseProps();
     const { queryByText } = render(<ToolRail {...props} />);
-    expect(queryByText('Clues')).toBeNull();
     expect(queryByText('Heatmap')).toBeNull();
+  });
+
+  it('renders the Clues tool', () => {
+    const props = baseProps();
+    const { getByText } = render(<ToolRail {...props} />);
+    expect(getByText('Clues')).toBeInTheDocument();
+    expect(getByText('Clues').closest('button')).toHaveAttribute('title', 'Clues');
+  });
+
+  // §5.1: "between Autofill and Theme". The tool ids are not rendered, so the order is read by
+  // clicking the tool buttons top to bottom and collecting the ids they select.
+  it('lists the tools in order, with clues between autofill and theme', () => {
+    const props = baseProps();
+    const { container } = render(<ToolRail {...props} />);
+    const buttons = Array.from(container.querySelectorAll('.xw-toolrail-top button'));
+    buttons.forEach((b) => fireEvent.click(b));
+    expect(props.onSelectTool.mock.calls.map((c) => c[0])).toEqual(TOOL_IDS);
+    expect(props.onSelectTool.mock.calls.map((c) => c[0]).slice(2, 5)).toEqual([
+      'autofill',
+      'clues',
+      'theme',
+    ]);
+  });
+
+  it('the Clues tool draws an icon', () => {
+    const props = baseProps();
+    const { getByText } = render(<ToolRail {...props} />);
+    const svg = getByText('Clues').closest('button').querySelector('svg');
+    expect(svg.children.length).toBeGreaterThan(0);
   });
 
   it('ignores a heatmap key in viewToggles (still renders no Heatmap)', () => {

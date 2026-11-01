@@ -186,13 +186,22 @@ describe('App tool rail', () => {
     global.localStorage.getItem.mockReturnValue(null);
   });
 
-  it('renders no Clues tool and no Heatmap toggle', async () => {
+  // clue-authoring spec 0.1.4 §6.2 "Rail": the Clues tool is in the rail, the Heatmap toggle is not.
+  it('renders the Clues tool', async () => {
     const { container } = renderApp();
     await waitFor(() => {
       expect(cells(container)).toHaveLength(225);
     });
     expect(screen.getByText('Symmetry')).toBeInTheDocument();
-    expect(screen.queryByText('Clues')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Clues' })).toBeInTheDocument();
+  });
+
+  it('renders no Heatmap toggle', async () => {
+    const { container } = renderApp();
+    await waitFor(() => {
+      expect(cells(container)).toHaveLength(225);
+    });
+    expect(screen.getByText('Symmetry')).toBeInTheDocument();
     expect(screen.queryByText('Heatmap')).toBeNull();
   });
 });
