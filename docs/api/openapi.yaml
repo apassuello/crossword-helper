@@ -149,6 +149,50 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /clues/check:
+    post:
+      tags:
+        - Core Operations
+      summary: Clue check
+      description: |
+        Check a grid's clues against its current fill. The CLI is the only clue
+        validator; `clues` is passed through uninspected by the backend.
+      operationId: checkClues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClueCheckRequest'
+      responses:
+        '200':
+          description: Clues checked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueCheckResponse'
+        '400':
+          description: |
+            Bad request. Code `INVALID_CLUES` when the CLI rejects the clues,
+            `INVALID_GRID` when it rejects the grid or request validation fails,
+            plus the usual content-type and JSON codes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '504':
+          description: Clue check timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error, including unreadable CLI output
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /normalize:
     post:
       tags:
@@ -1750,6 +1794,32 @@ components:
           type: integer
           enum: [11, 13, 15, 17, 21]
           default: 15
+
+    ClueCheckRequest:
+      type: object
+      required:
+        - grid
+      properties:
+        grid:
+          $ref: '#/components/schemas/Grid'
+        size:
+          type: integer
+        clues:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Clue records keyed by "row,col,direction"; validated by the CLI
+
+    ClueCheckResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        statuses:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of "row,col,direction" to clue status
 
     NumberingResponse:
       type: object

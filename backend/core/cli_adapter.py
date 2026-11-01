@@ -35,6 +35,10 @@ from backend.core.state_paths import PAUSE_FLAG_DIR, STATE_DIR
 CLI_STARTUP_BUDGET_SECONDS = 180
 
 
+class ClueCheckOutputError(RuntimeError):
+    """`clues check` produced non-JSON output. Not a ValueError, by design."""
+
+
 class CLIAdapter:
     """
     Adapter for calling crossword CLI commands from web API.
@@ -265,6 +269,47 @@ class CLIAdapter:
                 raise ValueError(f"Failed to parse CLI output as JSON: {e}\nOutput: {stdout}")
         finally:
             # Clean up temp file
+            Path(temp_path).unlink(missing_ok=True)
+
+    def clues_check(self, grid_data: Dict[str, Any], allow_nonstandard: bool = False) -> Dict[str, Any]:
+        """
+        Check a grid's clues via ``crossword clues check``.
+
+        Decision 6 (clue-authoring spec 0.1.4, section 1): the CLI is the only
+        clue validator. Spec section 3.6: exit 0 and exit 1 both carry a JSON
+        document, so both are returned parsed rather than raised.
+
+        Args:
+            grid_data: Grid data dictionary (written to a temp file)
+            allow_nonstandard: Allow non-standard grid sizes (not 11/15/21)
+
+        Returns:
+            The CLI's parsed JSON ({"success": ...}), for exit 0 and exit 1 alike
+
+        Raises:
+            ClueCheckOutputError: If stdout is not JSON. Deliberately not a
+                ValueError (JSONDecodeError is one), and its message carries
+                none of the CLI's output.
+            subprocess.TimeoutExpired: If command times out
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(grid_data, f)
+            temp_path = f.name
+
+        try:
+            args = ["clues", "check", temp_path, "--json-output"]
+            if allow_nonstandard:
+                args.append("--allow-nonstandard")
+
+            stdout, _, _ = self._run_command(args, timeout=60, check_success=False)
+
+            try:
+                return json.loads(stdout)
+            except json.JSONDecodeError:
+                raise ClueCheckOutputError("Clue check returned unreadable output") from None
+        finally:
             Path(temp_path).unlink(missing_ok=True)
 
     def analyze_constraints(

@@ -10,6 +10,7 @@ import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 
+from backend.api.clue_routes import clue_api
 from backend.api.constraint_routes import constraint_bp
 from backend.api.grid_routes import grid_api
 from backend.api.pause_resume_routes import pause_resume_api
@@ -63,6 +64,7 @@ def create_app(testing=False):
     app.register_blueprint(theme_api, url_prefix="/api")
     app.register_blueprint(grid_api, url_prefix="/api")
     app.register_blueprint(constraint_bp, url_prefix="/api")
+    app.register_blueprint(clue_api, url_prefix="/api")
 
     # Error handlers (same envelope shape as handle_error: {"error": {"code", "message"}})
     @app.errorhandler(404)
