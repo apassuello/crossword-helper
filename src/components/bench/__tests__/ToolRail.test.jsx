@@ -72,6 +72,23 @@ describe('ToolRail (mounted, controlled)', () => {
     expect(svg.children.length).toBeGreaterThan(0);
   });
 
+  it('the Clues icon is three horizontal strokes, the last one shorter (spec 5.1)', () => {
+    const props = baseProps();
+    const { getByText } = render(<ToolRail {...props} />);
+    const svg = getByText('Clues').closest('button').querySelector('svg');
+    const lines = Array.from(svg.querySelectorAll('line'));
+    expect(lines.map((l) => [l.getAttribute('y1'), l.getAttribute('y2')])).toEqual([
+      ['4', '4'],
+      ['8', '8'],
+      ['12', '12'],
+    ]);
+    expect(lines.map((l) => [l.getAttribute('x1'), l.getAttribute('x2')])).toEqual([
+      ['2', '14'],
+      ['2', '14'],
+      ['2', '9'],
+    ]);
+  });
+
   it('ignores a heatmap key in viewToggles (still renders no Heatmap)', () => {
     const props = baseProps({ viewToggles: { symmetry: false, heatmap: true } });
     const { queryByText } = render(<ToolRail {...props} />);

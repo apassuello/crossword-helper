@@ -31,6 +31,7 @@ vi.mock('../components/bench/AutofillPanel', () => ({ default: () => <div data-t
 vi.mock('../components/WordListPanel', () => ({ default: () => <div data-testid="inspector-lists" /> }));
 vi.mock('../components/ImportPanel', () => ({ default: () => <div data-testid="inspector-import" /> }));
 vi.mock('../components/ExportPanel', () => ({ default: () => <div data-testid="inspector-export" /> }));
+vi.mock('../components/CluesPanel', () => ({ default: () => <div data-testid="inspector-clues" /> }));
 
 const cells = (c) => c.querySelectorAll('rect[fill="transparent"]');
 const letters = (c) => Array.from(c.querySelectorAll('.xw-cell-letter')).map((el) => el.textContent);
@@ -57,6 +58,7 @@ describe('rail click while the Theme panel is open (#91, spec 0.2.21 section 3.6
     ['Grid', 'edit'],
     ['Search', 'search'],
     ['Autofill', 'autofill'],
+    ['Clues', 'clues'],
     ['Lists', 'lists'],
     ['Import', 'import'],
     ['Export', 'export'],
