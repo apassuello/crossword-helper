@@ -5,8 +5,11 @@
 // Presentational / fully controlled — parent (App, U3) owns tool selection,
 // view-toggle state, and stats derivation. No useState/useEffect.
 //
-// Not rendered (novice-readiness spec 0.2.7 §3.1): the Clues tool (#53) and
-// the Heatmap VIEW toggle (#50). The issues stay open.
+// Not rendered (novice-readiness spec 0.2.7 §3.1): the Heatmap VIEW toggle (#50). The issue
+// stays open.
+//
+// Implements Decision 3 (clue-authoring spec 0.1.4, section 1): the `clues` tool sits between
+// Autofill and Theme and opens the Clues panel (section 5.1).
 //
 // Prop reconciliation vs. the bundle's { tool, onTool, stats, symmetry,
 // onToggleSym, heatmap, onToggleHeatmap } (see plan Task 6 brief):
@@ -25,6 +28,7 @@ const TOOLS = [
   { id: 'edit', label: 'Grid' },
   { id: 'search', label: 'Search' },
   { id: 'autofill', label: 'Autofill' },
+  { id: 'clues', label: 'Clues' },
   { id: 'theme', label: 'Theme' },
   { id: 'lists', label: 'Lists' },
   { id: 'import', label: 'Import' },
@@ -49,6 +53,13 @@ const ICONS = {
     <g>
       <path d="M3 8 L7 12 L13 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="3" cy="3" r="1" fill="currentColor" />
+    </g>
+  ),
+  clues: (
+    <g>
+      <line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="2" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </g>
   ),
   theme: (
