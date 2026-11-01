@@ -373,7 +373,8 @@ kept).
 
 **Files:** Modify `src/lib/contentSig.js`, `src/lib/history.js`, `src/lib/gridEdits.js`, and
 `isAdoptableEntry` in `src/App.jsx`. Test the matching files in `src/lib/__tests__/`, plus a new
-`src/__tests__/isAdoptableEntry.test.js` (no test file covers it today).
+`src/__tests__/isAdoptableEntry.test.js` (no test file covers it today). Also `src/hooks/useUndoHistory.js`,
+one interim line only (controller ruling, 2026-11-01; see the last criterion).
 
 **Interfaces — Consumes:** `compareClueKeys` (Task 5). **Produces:**
 
@@ -392,6 +393,13 @@ export function documentHasContent(grid, clues) {}  // gridEdits.js — gridHasC
 `[key, text, answer]` triples in key order. `snapshotContent` stores a copy of the clue map. The
 `gridHasContent` docstring's purpose ("replacing the grid would lose work") moves to `documentHasContent`
 (spec §7). `isAdoptableEntry` follows spec §3.5, "Saved document".
+
+Interim until Task 8 (controller ruling, 2026-11-01): the hook calls `snapshotContent` with two arguments and
+compares `snapshot.sig` with its rendered signature (`useUndoHistory.js`'s step-decision effect). So a call with
+no clue map gives the same signature and stores the same copy as `{}`, and the effect's rendered signature
+becomes `docSigOf(gridSize, grid, {})`. No other hook line changes. Task 8 replaces `{}` with `clues`. The hook
+tests (`src/hooks/__tests__/`, `src/__tests__/undo*.test.jsx`) stay green, among them `useUndoHistory.test.jsx`'s
+"a batch that changed nothing records no step".
 
 **Normative cases:** spec §6.2 "Pure functions". The §4.1 example string is byte-exact for a 2×2 with clue
 `"0,0,across" → {text: "Flower", answer: "RO"}`.
