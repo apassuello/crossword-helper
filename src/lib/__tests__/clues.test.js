@@ -55,6 +55,11 @@ describe('clueStatus: entry lookup', () => {
     expect(clueStatus(grid, '0,2,down', { text: 'x', answer: 'AC' })).toBe('stale');
     expect(clueStatus(grid, '0,2,across', { text: 'x', answer: 'AB' })).toBe('orphaned');
   });
+
+  it('an entry that grew from its answer is stale (RO vs ROSE)', async () => {
+    const { clueStatus } = await load();
+    expect(clueStatus(fromCliStrings(ROSE), '0,0,across', { text: 'x', answer: 'RO' })).toBe('stale');
+  });
 });
 
 describe('clueStatuses', () => {
@@ -117,6 +122,27 @@ describe('compareClueKeys', () => {
 });
 
 describe('trimClueText', () => {
+  // Spec 3.1 White_Space set, transcribed as escapes. Never read from clues.js.
+  const SPEC_WS = [
+    '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u0020', '\u0085', '\u00A0', '\u1680',
+    '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008',
+    '\u2009', '\u200A', '\u2028', '\u2029', '\u202F', '\u205F', '\u3000',
+  ];
+
+  it('the transcribed spec 3.1 set has 25 members', () => {
+    expect(SPEC_WS.length).toBe(25);
+    expect(new Set(SPEC_WS).size).toBe(25);
+  });
+
+  it.each(SPEC_WS.map((ch) => [`U+${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`, ch]))(
+    'spec 3.1 member %s is stripped as a leading and as a trailing character',
+    async (_n, ch) => {
+      const { trimClueText } = await load();
+      expect(trimClueText(`${ch}abc`)).toBe('abc');
+      expect(trimClueText(`abc${ch}`)).toBe('abc');
+    }
+  );
+
   it.each([
     ['U+0085', '\u0085'],
     ['U+00A0', ' '],
@@ -203,6 +229,18 @@ describe('applyCommit', () => {
     expect(r.error).toBe(CLUE_TOO_LONG);
     expect(r.error).toBe('At most 200 characters.');
     expect(r.clues).toEqual(before);
+    expect(clues).toEqual(before);
+  });
+
+  it('a refused commit on a stale clue writes nothing and keeps the old answer', async () => {
+    const { applyCommit, CLUE_TOO_LONG } = await load();
+    const clues = { [KEY]: { text: 'Flower', answer: 'RODE' } };
+    const before = structuredClone(clues);
+    const r = applyCommit(clues, KEY, 'a'.repeat(201), 'ROSE');
+    expect(r.error).toBe(CLUE_TOO_LONG);
+    expect(r.changed).toBe(false);
+    expect(r.clues).toEqual(before);
+    expect(r.clues[KEY].answer).toBe('RODE');
     expect(clues).toEqual(before);
   });
 
