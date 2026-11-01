@@ -124,18 +124,21 @@ describe('a 400 applies nothing (spec 3.5; 6.2 Import "a 400 shows error.message
 });
 
 describe('an import over a document with clues, from a file with no `clues` key (spec 3.5; Task 8 interim rule, now permanent)', () => {
-  it('leaves no clues and makes no request', async () => {
+  it('leaves no clues, and the import makes no request', async () => {
     const { user, container } = await boot();
     await openClues(user);
     await writeClue(user, clueInputs()[0], 'Alpha');
     await openTool(user, 'Grid');
+    // Counted with the Clues panel closed: from Task 10 (spec 5.6) an open panel sends its own
+    // reconcile requests through the same method, so only the import's window is asserted.
+    const before = stub.fn.mock.calls.length;
     await importFile(user, fileOf(5), { ask: true });
     await user.click(REPLACE());
     await waitFor(() => expect(cells(container)).toHaveLength(25), { timeout: 3000 });
+    expect(stub.fn.mock.calls.length).toBe(before);
     await openClues(user);
     expect(clueInputs()).toHaveLength(10);
     expect(clueInputs().every((i) => i.value === '')).toBe(true);
-    expect(stub.fn).not.toHaveBeenCalled();
     await saveGrid(user);
     await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
     expect(savedDoc().clues).toStrictEqual({});
