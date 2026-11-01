@@ -34,12 +34,12 @@ async function loadPanel() {
 
 // 3x3 all white, numbered the usual way.
 const WHITE3_NUMBERS = { '(0,0)': 1, '(0,1)': 2, '(0,2)': 3, '(1,0)': 4, '(2,0)': 5 };
-const white3 = (rows = ['...', '...', '...']) => fromCliStrings(rows);
+const white3 = (rows = [['.', '.', '.'], ['.', '.', '.'], ['.', '.', '.']]) => fromCliStrings(rows);
 const white3Numbered = (rows) => applyNumbering(white3(rows), WHITE3_NUMBERS);
 
 // Black centre: across entries start (0,0) and (2,0); down entries start (0,0) and (0,2).
 const RING_NUMBERS = { '(0,0)': 1, '(0,2)': 2, '(2,0)': 3 };
-const ringRows = ['ABC', '.#.', 'DEF'];
+const ringRows = [['A', 'B', 'C'], ['.', '#', '.'], ['D', 'E', 'F']];
 const ring = () => applyNumbering(fromCliStrings(ringRows), RING_NUMBERS);
 
 // ---------- helpers ----------
@@ -152,7 +152,7 @@ describe('CluesPanel', () => {
 
     it('appends the stale and orphaned counts to the sub-line', async () => {
       const Panel = await loadPanel();
-      const grid = white3(['CAT', '...', '...']);
+      const grid = white3([['C', 'A', 'T'], ['.', '.', '.'], ['.', '.', '.']]);
       const clues = {
         '0,0,across': { text: 'Feline', answer: 'C?T' }, // stale
         '10,0,across': { text: 'Gone one', answer: 'AB' }, // orphaned
@@ -164,7 +164,7 @@ describe('CluesPanel', () => {
 
     it('counts stale and orphaned by the displayed status', async () => {
       const Panel = await loadPanel();
-      const grid = white3(['CAT', '...', '...']);
+      const grid = white3([['C', 'A', 'T'], ['.', '.', '.'], ['.', '.', '.']]);
       const clues = { '0,0,across': { text: 'Feline', answer: 'CAT' } }; // browser says ok
       render(
         <Panel {...plainProps(grid, clues, { displayStatuses: { '0,0,across': 'stale' } })} />
@@ -181,7 +181,7 @@ describe('CluesPanel', () => {
 
     it('shows the empty-group texts on an all-black grid', async () => {
       const Panel = await loadPanel();
-      render(<Panel {...plainProps(fromCliStrings(['###', '###', '###']))} />);
+      render(<Panel {...plainProps(fromCliStrings([['#', '#', '#'], ['#', '#', '#'], ['#', '#', '#']]))} />);
       expect(hasText('No across words yet.')).toBe(true);
       expect(hasText('No down words yet.')).toBe(true);
       expect(hasText(`Across ${DOT} 0`)).toBe(true);
@@ -229,7 +229,7 @@ describe('CluesPanel', () => {
     it('orders rows by row and then column when starts differ in both', async () => {
       const Panel = await loadPanel();
       // Across starts: (0,0) ...., (1,0) ...., (2,2) .. ; the (2,2) start is after (1,0).
-      const grid = fromCliStrings(['....', '....', '##..', '#...']);
+      const grid = fromCliStrings([['.', '.', '.', '.'], ['.', '.', '.', '.'], ['#', '#', '.', '.'], ['#', '.', '.', '.']]);
       const numbers = { '(0,0)': 1, '(1,0)': 5, '(2,2)': 9, '(3,1)': 10 };
       render(<Panel {...plainProps(applyNumbering(grid, numbers))} />);
       const rows = inputs().map(rowOf);
@@ -242,7 +242,7 @@ describe('CluesPanel', () => {
 
     it('shows one box per square, a letter or a dot for an empty one', async () => {
       const Panel = await loadPanel();
-      render(<Panel {...plainProps(white3(['A.C', '...', '...']))} />);
+      render(<Panel {...plainProps(white3([['A', '.', 'C'], ['.', '.', '.'], ['.', '.', '.']]))} />);
       const first = rowOf(inputs()[0]);
       expect(first.textContent).toContain(`A${DOT}C`);
       const emptyAcross = rowOf(inputs()[1]);
@@ -267,7 +267,7 @@ describe('CluesPanel', () => {
   // ---------------- stale rows and Keep ----------------
 
   describe('stale rows', () => {
-    const grid = () => white3(['CAT', '...', '...']);
+    const grid = () => white3([['C', 'A', 'T'], ['.', '.', '.'], ['.', '.', '.']]);
     const staleClues = { '0,0,across': { text: 'Feline', answer: 'C?T' } };
 
     it('shows Written for and a Keep button on a stale row', async () => {
@@ -409,7 +409,7 @@ describe('CluesPanel', () => {
       const Panel = await loadPanel();
       const clues = { '0,1,down': { text: 'Moving', answer: '???' } };
       const gridWithEntry = white3();
-      const gridWithoutEntry = white3(['.#.', '...', '...']);
+      const gridWithoutEntry = white3([['.', '#', '.'], ['.', '.', '.'], ['.', '.', '.']]);
       const mk = (grid) => <Panel {...plainProps(grid, clues)} />;
 
       const { rerender } = render(mk(gridWithEntry));
@@ -622,7 +622,7 @@ describe('CluesPanel', () => {
     it('disables inputs, Keep and Delete but still selects on a number click', async () => {
       const Panel = await loadPanel();
       const user = userEvent.setup();
-      const grid = white3Numbered(['CAT', '...', '...']);
+      const grid = white3Numbered([['C', 'A', 'T'], ['.', '.', '.'], ['.', '.', '.']]);
       const clues = {
         '0,0,across': { text: 'Feline', answer: 'C?T' }, // stale
         '10,0,across': { text: 'Gone', answer: 'AB' }, // orphaned
@@ -639,7 +639,7 @@ describe('CluesPanel', () => {
 
     it('leaves inputs, Keep and Delete enabled when not paused', async () => {
       const Panel = await loadPanel();
-      const grid = white3Numbered(['CAT', '...', '...']);
+      const grid = white3Numbered([['C', 'A', 'T'], ['.', '.', '.'], ['.', '.', '.']]);
       const clues = {
         '0,0,across': { text: 'Feline', answer: 'C?T' },
         '10,0,across': { text: 'Gone', answer: 'AB' },
