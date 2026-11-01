@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from backend.app import create_app
-from backend.core.cli_adapter import get_adapter
+from backend.core.cli_adapter import CLIAdapter, get_adapter
 from backend.tests.fixtures import (
     EMPTY_3X3_CLI,
     EMPTY_3X3_FRONTEND,
@@ -482,11 +482,14 @@ class TestCLIErrorHandling:
         """Test handling of malformed JSON from CLI."""
 
         # Mock _run_command to return invalid JSON
-        def mock_run_command(args, timeout=None, **kwargs):
+        def mock_run_command(self, args, timeout=None, **kwargs):
             # Return malformed JSON output
             return ("not valid json {{{", "", 0)
 
-        monkeypatch.setattr(cli_adapter, "_run_command", mock_run_command)
+        # Patch the class, not the singleton instance: undoing an instance
+        # setattr writes the bound method into its __dict__, which then
+        # shadows every later class-level patch in the process.
+        monkeypatch.setattr(CLIAdapter, "_run_command", mock_run_command)
 
         # This should raise ValueError due to JSON parse error
         with pytest.raises(ValueError, match="Failed to parse CLI output"):
