@@ -224,6 +224,18 @@ describe('a reply is applied only on an exact signature match (spec 5.6)', () =>
     expect(view.result.current).toStrictEqual({ [KEY]: 'ok' }); // the matching one applies
   });
 
+  it('a newer reply released before an older one is not overwritten by the older', async () => {
+    const view = mount();
+    change(view, { grid: CAR });
+    await advance(300);
+    expect(calls()).toBe(2); // request 0 for CAT, request 1 for CAR (the panel ends on CAR)
+    expect(clueStatuses(CAR, ONE)).toStrictEqual({ [KEY]: 'stale' });
+    await reply(1, { [KEY]: 'ok' });
+    expect(view.result.current).toStrictEqual({ [KEY]: 'ok' }); // differs from the browser's
+    await reply(0, { [KEY]: 'orphaned' }); // the stale older reply lands last
+    expect(view.result.current).toStrictEqual({ [KEY]: 'ok' });
+  });
+
   it('a key missing from the reply shows the browser\'s status; a reply key that is no current clue is dropped', async () => {
     const view = mount({ clues: TWO });
     expect(clueStatuses(CAT, TWO)).toStrictEqual({ [KEY]: 'ok', [KEY2]: 'stale' });
@@ -261,6 +273,22 @@ describe('a failed request (spec 5.6: "A failure shows nothing")', () => {
     change(view, { active: true }); // reopened, same signature: a new request
     expect(calls()).toBe(2);
     await fail(1);
+    expect(view.result.current).toStrictEqual({ [KEY]: 'ok' });
+  });
+
+  it('a failure after an applied reply, reached without leaving active, clears the applied reply', async () => {
+    const view = mount();
+    await reply(0, { [KEY]: 'stale' }); // applied at signature S (CAT)
+    expect(view.result.current).toStrictEqual({ [KEY]: 'stale' });
+    change(view, { grid: CAR }); // signature T
+    await advance(100);
+    change(view, { grid: CAT }); // back to S within 300 ms; active never toggles
+    await advance(300);
+    expect(calls()).toBe(2); // the request for S went out
+    // Control: the applied reply for S re-matches while request 1 is outstanding.
+    expect(view.result.current).toStrictEqual({ [KEY]: 'stale' });
+    await fail(1);
+    expect(view.result.current).toStrictEqual(clueStatuses(CAT, ONE));
     expect(view.result.current).toStrictEqual({ [KEY]: 'ok' });
   });
 });

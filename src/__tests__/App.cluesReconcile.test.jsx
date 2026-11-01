@@ -79,6 +79,14 @@ describe('App shows the reconciled status in the Clues panel (spec 5.6)', () => 
   });
 });
 
+describe('the tool gate (spec 5.6: the request is for the open Clues panel)', () => {
+  it('with the Clues panel closed and nothing committed, no request goes out', async () => {
+    await boot();
+    await sleep(600);
+    expect(stub.fn.mock.calls.length).toBe(0);
+  });
+});
+
 describe('gating at the site that computes active (spec 5.6: "while no autofill run is live")', () => {
   it('no request during a run and the browser status shows; ending the run sends exactly one', async () => {
     const { user } = await boot();
