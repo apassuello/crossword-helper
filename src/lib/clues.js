@@ -5,6 +5,17 @@
  * Delete transitions (3.3). The status computed here is for DISPLAY ONLY (R4): the CLI is the
  * validator and the authoritative status. No endpoint access lives here (check-guards Guard 2).
  *
+ * Implements Decision 2 (clue-authoring spec 0.1.4, section 1): a clue belongs to its entry's
+ * start cell and direction and records the letters it was written for, so changed letters make
+ * it stale and a destroyed entry makes it orphaned (`clueKey`, `clueStatus`).
+ *
+ * Implements Decision 4 (clue-authoring spec 0.1.4, section 1): the stale rule is any change of
+ * the entry's letters, including filling a blank (`clueStatus`'s pattern comparison).
+ *
+ * Implements Decision 6 (clue-authoring spec 0.1.4, section 1): the CLI owns the authoritative
+ * status and the browser shows a status reconciled from the server; the status here is for
+ * display only (R4).
+ *
  * A clue map is `{ [key]: { text, answer } }` with key `"<row>,<col>,<dir>"`. Every apply*
  * function returns a new map when something changes and never mutates its input.
  */
