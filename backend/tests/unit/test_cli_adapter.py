@@ -194,6 +194,117 @@ class TestNumber:
 
 
 # ===========================================================================
+# clues_check()
+# ===========================================================================
+
+
+class TestCluesCheck:
+    """Clue-authoring spec 0.1.4 section 3.6 (Adapter bullet)."""
+
+    GRID = {"size": 5, "grid": [["."] * 5 for _ in range(5)], "clues": {"0,0,across": {"text": "t", "answer": "?????"}}}
+    OK = {"success": True, "statuses": {"0,0,across": "ok"}}
+    REJECT = {"success": False, "code": "INVALID_CLUES", "error": "Invalid clues: must be an object."}
+
+    def _call(self, adapter, stdout, returncode=0, allow_nonstandard=False):
+        """Run clues_check with _run_command patched; return (result, mock, seen)."""
+        seen = {}
+
+        def fake(args, timeout=None, check_success=True):
+            path = Path(args[2])
+            seen["path"] = path
+            seen["existed"] = path.exists()
+            seen["content"] = json.loads(path.read_text()) if path.exists() else None
+            return stdout, "", returncode
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake) as mock:
+            result = adapter.clues_check(self.GRID, allow_nonstandard=allow_nonstandard)
+        return result, mock, seen
+
+    def test_argv_standard(self, adapter):
+        _, mock, seen = self._call(adapter, json.dumps(self.OK))
+        assert mock.call_args[0][0] == ["clues", "check", str(seen["path"]), "--json-output"]
+
+    def test_argv_allow_nonstandard_is_appended_last(self, adapter):
+        _, mock, seen = self._call(adapter, json.dumps(self.OK), allow_nonstandard=True)
+        assert mock.call_args[0][0] == ["clues", "check", str(seen["path"]), "--json-output", "--allow-nonstandard"]
+
+    def test_temp_file_held_the_grid_data_during_the_call(self, adapter):
+        _, _, seen = self._call(adapter, json.dumps(self.OK))
+        assert (seen["existed"], seen["path"].suffix, seen["content"]) == (True, ".json", self.GRID)
+
+    def test_run_command_called_with_check_success_false(self, adapter):
+        _, mock, _ = self._call(adapter, json.dumps(self.OK))
+        assert mock.call_args.kwargs["check_success"] is False
+
+    def test_exit_zero_returns_the_parsed_dict(self, adapter):
+        result, _, _ = self._call(adapter, json.dumps(self.OK), returncode=0)
+        assert result == self.OK
+
+    def test_exit_one_invalid_clues_returns_the_dict_without_raising(self, adapter):
+        result, _, _ = self._call(adapter, json.dumps(self.REJECT), returncode=1)
+        assert result == self.REJECT
+
+    def test_non_json_stdout_raises_a_non_value_error(self, adapter):
+        seen = {}
+
+        def fake(args, timeout=None, check_success=True):
+            seen["reached_cli"] = True
+            return "broken", "", 0
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake):
+            with pytest.raises(Exception) as ei:
+                adapter.clues_check(self.GRID)
+        assert (seen.get("reached_cli"), isinstance(ei.value, ValueError)) == (True, False)
+
+    def test_empty_stdout_with_exit_two_raises_a_non_value_error(self, adapter):
+        seen = {}
+
+        def fake(args, timeout=None, check_success=True):
+            seen["reached_cli"] = True
+            return "", "", 2
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake):
+            with pytest.raises(Exception) as ei:
+                adapter.clues_check(self.GRID)
+        assert (seen.get("reached_cli"), isinstance(ei.value, ValueError)) == (True, False)
+
+    def test_timeout_propagates_unchanged(self, adapter):
+        exc = subprocess.TimeoutExpired(cmd="crossword", timeout=1)
+        with patch.object(CLIAdapter, "_run_command", side_effect=exc):
+            with pytest.raises(subprocess.TimeoutExpired) as ei:
+                adapter.clues_check(self.GRID)
+        assert ei.value is exc
+
+    def test_temp_file_removed_after_success(self, adapter):
+        _, _, seen = self._call(adapter, json.dumps(self.OK))
+        assert seen["path"].exists() is False
+
+    def test_temp_file_removed_after_non_json(self, adapter):
+        seen = {}
+
+        def fake(args, timeout=None, check_success=True):
+            seen["path"] = Path(args[2])
+            return "broken", "", 0
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake):
+            with pytest.raises(Exception):
+                adapter.clues_check(self.GRID)
+        assert seen["path"].exists() is False
+
+    def test_temp_file_removed_after_timeout(self, adapter):
+        seen = {}
+
+        def fake(args, timeout=None, check_success=True):
+            seen["path"] = Path(args[2])
+            raise subprocess.TimeoutExpired(cmd="crossword", timeout=1)
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake):
+            with pytest.raises(subprocess.TimeoutExpired):
+                adapter.clues_check(self.GRID)
+        assert seen["path"].exists() is False
+
+
+# ===========================================================================
 # fill()
 # ===========================================================================
 
