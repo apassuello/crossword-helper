@@ -769,7 +769,11 @@ function App() {
 
     // Update grid size if different (skip the re-init effect so the
     // imported grid isn't overwritten by a fresh empty grid)
-    if (size !== gridSize) {
+    // Read through `gridSizeRef`, not the closed-over `gridSize`: the clue check made this call
+    // land after a wait (clue-authoring spec section 3.5, ruled 2026-11-01: an Open during the
+    // check does not drop the import), so the render that confirmed it can be stale. Same rule
+    // as `adoptSavedEntry` (novice-readiness spec 0.2.10 section 3.4, An Open that waits).
+    if (size !== gridSizeRef.current) {
       skipNextInitRef.current = true;
       setGridSize(size);
     }
@@ -803,7 +807,7 @@ function App() {
 
     // Switch to edit tool to show the imported grid
     setCurrentTool('edit');
-  }, [gridSize, autofill.discardRun, adoptSavedAt, clearHistory, replaceDocument]);
+  }, [autofill.discardRun, adoptSavedAt, clearHistory, replaceDocument]);
 
   // Theme is an OVERLAY special-case, not a currentTool — it opens ThemeWordsPanel
   // rather than swapping the inspector. Every other rail id maps 1:1 to an inspector.
