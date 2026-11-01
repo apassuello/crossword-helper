@@ -28,7 +28,8 @@ describe('contentSigOf', () => {
     const a = snapshotContent(undef, 1);
     const b = snapshotContent(grid({ isAutofilled: false }), 1);
     expect(contentSigOf(a.size, a.cells)).toBe(contentSigOf(b.size, b.cells));
-    expect(a.sig).toBe(contentSigOf(1, grid({ isAutofilled: false })));
+    const { docSigOf } = await import(/* @vite-ignore */ ['..', 'contentSig'].join('/'));
+    expect(a.sig).toBe(docSigOf(1, grid({ isAutofilled: false }), {}));
   });
 
   it('App, the history and the hook import it from lib/contentSig and define no copy', () => {
@@ -37,5 +38,129 @@ describe('contentSigOf', () => {
       expect(read(f), f).toMatch(/from '(\.\.\/|\.\/)(lib\/)?contentSig'/);
     }
     expect(read('App.jsx')).not.toMatch(/function contentSigOf/);
+  });
+});
+
+// ---- Task 6: the document signature and the status signature (clue-authoring spec 4.1) ----
+const loadSig = () => import(/* @vite-ignore */ ['..', 'contentSig'].join('/'));
+
+const grid2 = (over = {}) =>
+  [
+    [cell({ letter: 'R' }), cell({ letter: 'O' })],
+    [cell(), cell()],
+  ].map((row, r) => row.map((c, k) => ({ ...c, ...(over[`${r},${k}`] || {}) })));
+
+const SPEC_SIG =
+  '{"size":2,"cells":[[["R",false,false,false],["O",false,false,false]],' +
+  '[["",false,false,false],["",false,false,false]]],"clues":[["0,0,across","Flower","RO"]]}';
+const SPEC_CLUES = { '0,0,across': { text: 'Flower', answer: 'RO' } };
+
+// Three entries in key order: 0,0,across < 0,0,down < 1,0,across.
+const entry = (t, a) => ({ text: t, answer: a });
+const KEY_ORDER = ['0,0,across', '0,0,down', '1,0,across'];
+const mapOf = (keys) => Object.fromEntries(keys.map((k) => [k, entry(`t ${k}`, 'AB')]));
+
+describe('docSigOf', () => {
+  it('is byte-exact for the spec 4.1 example', async () => {
+    const { docSigOf } = await loadSig();
+    expect(docSigOf(2, grid2(), SPEC_CLUES)).toBe(SPEC_SIG);
+  });
+
+  it('gives the same signature with no clue map as with {}', async () => {
+    const { docSigOf } = await loadSig();
+    expect(docSigOf(2, grid2())).toBe(docSigOf(2, grid2(), {}));
+  });
+
+  it('changes when one clue text changes', async () => {
+    const { docSigOf } = await loadSig();
+    const other = { '0,0,across': { text: 'Bloom', answer: 'RO' } };
+    expect(docSigOf(2, grid2(), other)).not.toBe(docSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('changes when one clue answer changes', async () => {
+    const { docSigOf } = await loadSig();
+    const other = { '0,0,across': { text: 'Flower', answer: 'RA' } };
+    expect(docSigOf(2, grid2(), other)).not.toBe(docSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('changes on a grid edit of one letter', async () => {
+    const { docSigOf } = await loadSig();
+    const edited = grid2({ '1,1': { letter: 'X' } });
+    expect(docSigOf(2, edited, SPEC_CLUES)).not.toBe(docSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('is identical for the same entries inserted in another order (6.3)', async () => {
+    const { docSigOf } = await loadSig();
+    const a = mapOf(['0,0,down', '1,0,across', '0,0,across']);
+    const b = mapOf(['1,0,across', '0,0,across', '0,0,down']);
+    expect(Object.keys(a)).not.toEqual(KEY_ORDER);
+    expect(Object.keys(a)).not.toEqual([...KEY_ORDER].reverse());
+    expect(Object.keys(a)).not.toEqual(Object.keys(b));
+    expect(docSigOf(2, grid2(), a)).toBe(docSigOf(2, grid2(), b));
+  });
+
+  it('lists the triples in compareClueKeys order, not string order', async () => {
+    const { docSigOf } = await loadSig();
+    const clues = { '10,0,across': entry('ten', 'AB'), '2,0,down': entry('two', 'CD') };
+    expect(JSON.parse(docSigOf(2, grid2(), clues)).clues).toEqual([
+      ['2,0,down', 'two', 'CD'],
+      ['10,0,across', 'ten', 'AB'],
+    ]);
+  });
+
+  it('keeps the cells exactly as contentSigOf serializes them', async () => {
+    const { docSigOf, contentSigOf } = await loadSig();
+    const g = grid2();
+    expect(JSON.parse(docSigOf(2, g, SPEC_CLUES)).cells).toEqual(
+      JSON.parse(contentSigOf(2, g)).cells
+    );
+  });
+});
+
+describe('contentSigOf is unchanged by clues', () => {
+  it('has no clues key on the spec 4.1 grid', async () => {
+    const { contentSigOf } = await loadSig();
+    expect(contentSigOf(2, grid2())).toBe(
+      '{"size":2,"cells":[[["R",false,false,false],["O",false,false,false]],' +
+        '[["",false,false,false],["",false,false,false]]]}'
+    );
+  });
+});
+
+describe('statusSigOf', () => {
+  it('gives the same signature with no clue map as with {}', async () => {
+    const { statusSigOf } = await loadSig();
+    expect(statusSigOf(2, grid2())).toBe(statusSigOf(2, grid2(), {}));
+  });
+
+  it('is the same when only one clue text differs', async () => {
+    const { statusSigOf } = await loadSig();
+    const other = { '0,0,across': { text: 'Bloom', answer: 'RO' } };
+    expect(statusSigOf(2, grid2(), other)).toBe(statusSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('differs when one answer differs', async () => {
+    const { statusSigOf } = await loadSig();
+    const other = { '0,0,across': { text: 'Flower', answer: 'RA' } };
+    expect(statusSigOf(2, grid2(), other)).not.toBe(statusSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('differs when a key is added', async () => {
+    const { statusSigOf } = await loadSig();
+    const more = { ...SPEC_CLUES, '0,0,down': { text: 'x', answer: 'RA' } };
+    expect(statusSigOf(2, grid2(), more)).not.toBe(statusSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('differs on a grid edit', async () => {
+    const { statusSigOf } = await loadSig();
+    const edited = grid2({ '1,1': { letter: 'X' } });
+    expect(statusSigOf(2, edited, SPEC_CLUES)).not.toBe(statusSigOf(2, grid2(), SPEC_CLUES));
+  });
+
+  it('is the same for another insertion order', async () => {
+    const { statusSigOf } = await loadSig();
+    const a = mapOf(['0,0,down', '1,0,across', '0,0,across']);
+    const b = mapOf(['1,0,across', '0,0,across', '0,0,down']);
+    expect(statusSigOf(2, grid2(), a)).toBe(statusSigOf(2, grid2(), b));
   });
 });
