@@ -574,3 +574,30 @@ describe('gridHasContent', () => {
     expect(gridHasContent(mk(3, { '0,2': { isBlack: true } }))).toBe(true);
   });
 });
+
+// ---- Task 6: the replacement predicate (clue-authoring spec 4.3) ----
+describe('documentHasContent', () => {
+  const load = () => import(/* @vite-ignore */ ['..', 'gridEdits'].join('/'));
+
+  it('is true for a white grid with one clue', async () => {
+    const { documentHasContent } = await load();
+    expect(documentHasContent(mk(3), { '0,0,across': { text: 'a', answer: 'ABC' } })).toBe(true);
+  });
+
+  it('is false for a white grid with no clues', async () => {
+    const { documentHasContent } = await load();
+    expect(documentHasContent(mk(3), {})).toBe(false);
+  });
+
+  it('is true for a grid with one letter and no clues', async () => {
+    const { documentHasContent } = await load();
+    expect(documentHasContent(mk(3, { '2,0': { letter: 'A' } }), {})).toBe(true);
+  });
+
+  it('with no clue map equals gridHasContent', async () => {
+    const { documentHasContent } = await load();
+    expect(documentHasContent(mk(3))).toBe(gridHasContent(mk(3)));
+    const lettered = mk(3, { '2,0': { letter: 'A' } });
+    expect(documentHasContent(lettered)).toBe(gridHasContent(lettered));
+  });
+});

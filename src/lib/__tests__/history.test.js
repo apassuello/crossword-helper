@@ -120,3 +120,40 @@ describe('history stacks', () => {
     expect(JSON.stringify(h1)).toBe(frozen);
   });
 });
+
+// ---- Task 6: clue-carrying snapshots (clue-authoring spec 4.1) ----
+describe('snapshotContent with clues', () => {
+  const clues = {
+    '0,0,across': { text: 'Flower', answer: 'ABC' },
+    '1,0,down': { text: 'x', answer: 'DE' },
+  };
+  const loadSig = () => import(/* @vite-ignore */ ['..', 'contentSig'].join('/'));
+
+  it('stores a deep-equal copy that is not the input object', () => {
+    const s = snapshotContent(mk(3), 3, clues);
+    expect(s.clues).toEqual(clues);
+    expect(s.clues).not.toBe(clues);
+  });
+
+  it('is not changed by a key added to the input map afterwards', () => {
+    const input = { ...clues };
+    const s = snapshotContent(mk(3), 3, input);
+    input['2,0,across'] = { text: 'late', answer: 'ZZZ' };
+    expect(s.clues).toEqual(clues);
+  });
+
+  it('carries the document signature as its sig', async () => {
+    const { docSigOf } = await loadSig();
+    const g = mk(3, (r, c) => (r === 0 && c === 0 ? { letter: 'A' } : {}));
+    expect(snapshotContent(g, 3, clues).sig).toBe(docSigOf(3, g, clues));
+  });
+
+  it('with no clue map equals the snapshot taken with {}', async () => {
+    const { docSigOf } = await loadSig();
+    const g = mk(3);
+    const bare = snapshotContent(g, 3);
+    expect(bare.sig).toBe(docSigOf(3, g, {}));
+    expect(bare.clues).toEqual({});
+    expect(bare.sig).toBe(snapshotContent(g, 3, {}).sig);
+  });
+});
