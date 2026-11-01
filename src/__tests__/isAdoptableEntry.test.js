@@ -51,6 +51,15 @@ describe('isAdoptableEntry clues', () => {
     expect(isAdoptableEntry(withClues({ '0,0,across': good, '0,0,down': bad }))).toBe(false);
   });
 
+  it.each([
+    ['null', null],
+    ['text: 5', { text: 5, answer: 'ABC' }],
+  ])('rejects a map holding a bad value (%s) first and a good entry second', (_n, bad) => {
+    const clues = { '0,0,down': bad, '0,0,across': good };
+    expect(Object.keys(clues)[0]).toBe('0,0,down');
+    expect(isAdoptableEntry(withClues(clues))).toBe(false);
+  });
+
   it('does not check the key format, only the values', () => {
     expect(isAdoptableEntry(withClues({ 'not-a-key': good }))).toBe(true);
   });

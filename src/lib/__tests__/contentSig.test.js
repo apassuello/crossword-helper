@@ -115,6 +115,13 @@ describe('docSigOf', () => {
       JSON.parse(contentSigOf(2, g)).cells
     );
   });
+
+  it('serializes a null grid as cells: null, exactly as contentSigOf does', async () => {
+    const { docSigOf, contentSigOf } = await loadSig();
+    const cells = JSON.parse(docSigOf(2, null, {})).cells;
+    expect(cells).toBe(null);
+    expect(cells).toEqual(JSON.parse(contentSigOf(2, null)).cells);
+  });
 });
 
 describe('contentSigOf is unchanged by clues', () => {
