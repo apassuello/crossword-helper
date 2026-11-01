@@ -199,6 +199,25 @@ fields, trace `cli_adapter.py::analyze_constraints` into the CLI, or inspect a l
 
 ---
 
+## Clue Check
+
+**[SPEC]**
+`POST /clues/check` takes `{size, grid, clues}` and relays `crossword clues check` (the CLI is the
+only clue validator). `clues` is not inspected by the backend. Replies:
+
+| Condition | Status | Body |
+|---|---|---|
+| CLI reports success | 200 | the CLI's JSON: `{"success": true, "statuses": {"<row>,<col>,<dir>": "<status>"}}` |
+| CLI rejects the clues | 400 | `INVALID_CLUES`, with the CLI's message |
+| CLI rejects the grid, or request validation fails | 400 | `INVALID_GRID` |
+| CLI output is not JSON | 500 | `INTERNAL_ERROR`, `Clue check returned unreadable output` |
+| CLI times out | 504 | `TIMEOUT`, `Clue check timed out` |
+
+Content-type, JSON and empty-body failures reply as for `/number`. Errors use the nested
+`handle_error()` shape.
+
+---
+
 ## Example Workflows
 
 **[NOTE]**
