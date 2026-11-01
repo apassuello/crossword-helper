@@ -9,6 +9,7 @@ import { usePersistentState } from './hooks/usePersistentState';
 import { useSaveMachine } from './hooks/useSaveMachine';
 import { useAutofillMachine, LIVE_STATES } from './hooks/useAutofillMachine';
 import { useUndoHistory } from './hooks/useUndoHistory';
+import { useClueReconcile } from './hooks/useClueReconcile';
 import { useToasts } from './components/bench/Toast';
 import { allSlots, slotAt } from './hooks/useGridGeometry';
 import { useNumbering, localNumber } from './hooks/useNumbering';
@@ -47,7 +48,7 @@ import WordListPanel from './components/WordListPanel';
 import ThemeWordsPanel from './components/ThemeWordsPanel';
 import CluesPanel from './components/CluesPanel';
 import { contentSigOf, docSigOf } from './lib/contentSig';
-import { applyCommit, applyKeep, applyDelete, clueStatuses, parseClueKey } from './lib/clues';
+import { applyCommit, applyKeep, applyDelete, parseClueKey } from './lib/clues';
 import './styles/App.scss';
 
 // Which lists decide whether an entry is "valid". Verify paints cells red from
@@ -178,6 +179,13 @@ function App() {
     canRedo,
     batchOpen,
   } = useUndoHistory({ grid, gridSize, clues, setGrid, setClues, editingPausedRef });
+  // Decision 6 (clue-authoring spec 0.1.4, section 1), section 5.6: the CLI's statuses, when current.
+  const displayStatuses = useClueReconcile({
+    grid,
+    gridSize,
+    clues,
+    active: currentTool === 'clues' && !editingPaused,
+  });
   recordRunRef.current = recordStep;
 
   // Undo and redo keys (novice-readiness spec 0.2.18 §3.9 "Controls"). One document listener, so
@@ -979,13 +987,12 @@ function App() {
 
           {currentTool === 'clues' && grid && (
             <div className="xw-inspector">
-              {/* Decision 3 (clue-authoring spec 0.1.4, section 1): clues are written here only.
-                  Task 10 replaces the browser-computed statuses with reconciled ones. */}
+              {/* Decision 3 (clue-authoring spec 0.1.4, section 1): clues are written here only. */}
               <CluesPanel
                 key={docEpoch}
                 grid={grid}
                 clues={clues}
-                displayStatuses={clueStatuses(grid, clues)}
+                displayStatuses={displayStatuses}
                 selectedCell={selectedCell}
                 editingPaused={editingPaused}
                 onCommit={(key, draft) => commitClue(key, draft, docEpoch)}
