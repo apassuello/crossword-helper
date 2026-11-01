@@ -40,7 +40,7 @@ import {
   canUndo as historyCanUndo,
   canRedo as historyCanRedo,
 } from '../lib/history';
-import { contentSigOf } from '../lib/contentSig';
+import { docSigOf } from '../lib/contentSig';
 
 export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
   const [, setVersion] = useState(0);
@@ -88,7 +88,8 @@ export function useUndoHistory({ grid, gridSize, setGrid, editingPausedRef }) {
     const queue = pendingRef.current;
     if (queue.length === 0 || !grid) return;
     pendingRef.current = [];
-    const renderedSig = contentSigOf(gridSize, grid);
+    // Task 8 passes `clues` here in place of `{}`.
+    const renderedSig = docSigOf(gridSize, grid, {});
     let next = historyRef.current;
     queue.forEach((before, i) => {
       if (before.size !== gridSize) return;

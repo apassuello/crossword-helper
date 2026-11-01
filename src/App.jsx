@@ -62,11 +62,27 @@ const VALIDATION_WORDLISTS = ['comprehensive'];
  * `allSlots` (ragged rows) or `normalizeCell` (a null cell) after the adoption had started.
  * The spec (0.2.8 §3.4, G#77 App.jsx:264) requires the entry to be validated before adoption
  * but names no size rule; the size rule is the plan's, Task 6.20 (amended by Phase 6R I2).
+ *
+ * Implements Decision 5 (clue-authoring spec 0.1.4, section 1), section 3.5 "Saved document":
+ * `clues`, when present, must be a plain object whose every value is an object with a string
+ * `text` and a string `answer` (`null` and arrays are present and not adoptable). The key format
+ * is not checked.
  */
 export function isAdoptableEntry(entry) {
   if (!entry || !Number.isInteger(entry.size)) return false;
   if (entry.size < IMPORT_MIN_SIZE || entry.size > IMPORT_MAX_SIZE) return false;
-  const { grid, size } = entry;
+  const { grid, size, clues } = entry;
+  if (clues !== undefined) {
+    if (clues === null || typeof clues !== 'object' || Array.isArray(clues)) return false;
+    const wellFormed = Object.values(clues).every(
+      (v) =>
+        v !== null &&
+        typeof v === 'object' &&
+        typeof v.text === 'string' &&
+        typeof v.answer === 'string'
+    );
+    if (!wellFormed) return false;
+  }
   return (
     Array.isArray(grid) &&
     grid.length === size &&
