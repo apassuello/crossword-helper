@@ -139,6 +139,33 @@ describe('ImportPanel clue check (spec 3.5 browser import, 6.2 Import)', () => {
     expect(onImport).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a 400', { status: 400, code: 'INVALID_CLUES', message: 'Invalid clue "0,0,across".' }, 'Error: Invalid clue "0,0,across".'],
+    ['a network failure', { status: 0, code: 'NETWORK', message: 'Failed to fetch' }, 'Error: Could not check the clues: Failed to fetch.'],
+  ])('after %s the panel can retry: Import Grid is enabled and reads `Import Grid`', async (_n, init, text) => {
+    stub.fn.mockRejectedValue(new ApiError(init));
+    const { user } = await arrive(fileJson({ clues: MAP }));
+    await pressImport(user);
+    await vi.waitFor(() => expect(errorText()).toBe(text), { timeout: 3000 });
+    const button = screen.getByRole('button', { name: /import grid|importing/i });
+    expect(button).toBeEnabled();
+    expect(button).toHaveTextContent(/^Import Grid$/);
+  });
+
+  it('a retry after a failure clears the old message while the retry\'s check runs', async () => {
+    const held = deferred();
+    stub.fn.mockRejectedValueOnce(new ApiError({ status: 400, code: 'INVALID_CLUES', message: 'Bad clue.' }));
+    stub.fn.mockImplementationOnce(() => held.promise);
+    const { user } = await arrive(fileJson({ clues: MAP }));
+    await pressImport(user);
+    await vi.waitFor(() => expect(errorText()).toBe('Error: Bad clue.'), { timeout: 3000 });
+    await vi.waitFor(() => expect(screen.getByRole('button', IMPORT_BTN)).toBeEnabled());
+    await pressImport(user);
+    await vi.waitFor(() => expect(stub.fn).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(errorText()).toBeUndefined();
+    held.resolve({ success: true, statuses: {} });
+  });
+
   describe('token: the replacement count at the confirm (spec 3.5 ruling 2026-11-01)', () => {
     it("with a confirm, onImport's token is beginImport's value at Replace, not before and not after", async () => {
       const held = deferred();

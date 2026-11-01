@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { ToastProvider } from '../components/bench/Toast';
@@ -25,9 +25,11 @@ import {
   openTool,
   clueInputs,
   undoBtn,
+  entryOf,
 } from './appClues';
+import storage from '../lib/storage';
 import { fileOf, importFile, settle } from './appCluesImport';
-import { stubCheckClues, deferred } from './importExportHelpers';
+import { stubCheckClues, deferred, captureDownloads, readBlob } from './importExportHelpers';
 
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), loading: vi.fn() }),
@@ -136,5 +138,43 @@ describe('what does not cancel a waiting import (novice-readiness spec 3.4; clue
     expect(letters(container)).toEqual(['Q']);
     await openClues(user);
     expect(clueInputs()[0]).toHaveValue('Alpha');
+  });
+});
+
+describe('a waiting import applies against the size the document has when it lands (spec 3.5 ruling 2026-11-01: an Open does not drop it)', () => {
+  it('an Open of another size made while the check runs: the import still applies, and the size matches the grid', async () => {
+    const downloads = captureDownloads();
+    try {
+      const { user, container } = await boot();
+      // A 15x15 file into the 15x15 document: same size, so the size comparison is the one that matters.
+      await importFile(user, fileOf(15, { cells: { '0,0': 'Q' }, clues: {} }), { ask: false });
+      await waitFor(() => expect(stub.fn).toHaveBeenCalledTimes(1), { timeout: 3000 });
+      await openTool(user, 'Grid');
+      // A blank grid, so Open does not ask: it replaces the document at once with an 11x11.
+      storage.list.mockResolvedValue([entryOf('E', 'Eleven', 11)]);
+      await user.click(screen.getByRole('button', { name: 'Open saved' }));
+      await screen.findByText('Eleven');
+      await user.click(
+        within(screen.getByText('Eleven').closest('li')).getByRole('button', { name: 'Open' })
+      );
+      await waitFor(() => expect(cells(container)).toHaveLength(121));
+
+      releaseFirst();
+      await waitFor(() => expect(letters(container)).toEqual(['Q']), { timeout: 3000 });
+      await settle();
+
+      // The import applied (an Open does not move the replacement count), and the document is consistent.
+      expect(cells(container)).toHaveLength(225);
+      await openTool(user, 'Export');
+      const panel = document.querySelector('.export-panel');
+      await user.click(within(panel).getByRole('button', { name: /^export$/i }));
+      await waitFor(() => expect(downloads.blobs).toHaveLength(1), { timeout: 3000 });
+      const file = JSON.parse(await readBlob(downloads.blobs[0]));
+      expect(file.grid).toHaveLength(15);
+      expect(file.size).toBe(file.grid.length);
+      expect(file.size).toBe(15);
+    } finally {
+      downloads.restore();
+    }
   });
 });

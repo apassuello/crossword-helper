@@ -174,7 +174,7 @@ const importViaPaste = async (user, size, { ask }) => {
   }
 };
 
-describe('Import applies no clues until Task 9 (controller ruling 2026-11-01; spec 3.5: a file with no `clues` key applies {})', () => {
+describe('An import from a file with no `clues` key applies no clues (spec 3.5: a file with no `clues` key applies {})', () => {
   it('after writing a clue, an import leaves the document with no clues', async () => {
     const { user, container } = await boot();
     await withOneClue(user);
