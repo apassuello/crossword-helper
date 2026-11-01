@@ -250,6 +250,31 @@ describe('a draft is discarded when the document is replaced (spec 5.4; An Open 
   });
 });
 
+describe('a draft typed while an import is on its way is discarded with the document (spec 5.4; M5)', () => {
+  it('the Clues tool opened and a draft typed inside the import delay never reaches the imported document', async () => {
+    const { user, container } = await boot();
+    // a blank document: the import does not ask, and starts ImportPanel's 300 ms timer
+    await importViaPaste(user, 5, { ask: false });
+    // inside that delay: the Clues tool, and a draft that is not committed
+    fireEvent.click(screen.getByRole('button', { name: 'Clues' }));
+    const draftInput = clueInputs()[0];
+    expect(draftInput).toBeDefined();
+    fireEvent.change(draftInput, { target: { value: 'Leaked' } });
+    expect(draftInput).toHaveValue('Leaked');
+
+    // the timer fires: handleGridImport replaces the document and leaves the Clues tool
+    await waitFor(() => expect(cells(container)).toHaveLength(25), { timeout: 3000 });
+    await openClues(user);
+    expect(clueInputs()).toHaveLength(10);
+    expect(screen.queryByDisplayValue('Leaked')).toBeNull();
+    expect(screen.queryByText(DIRTY)).toBeNull();
+    expect(undoBtn()).toBeDisabled();
+    await saveGrid(user);
+    await waitFor(() => expect(storage.save).toHaveBeenCalledTimes(1));
+    expect(savedDoc().clues).toEqual({});
+  });
+});
+
 describe('the panel under a live run (spec 5.5, 4.4)', () => {
   it('control: with no run live the inputs, Keep and Delete are enabled', async () => {
     storage.load.mockResolvedValue(staleAndOrphanEntry());
