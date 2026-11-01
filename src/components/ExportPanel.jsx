@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import './ExportPanel.scss';
 import ProgressIndicator from './ProgressIndicator';
 
-function ExportPanel({ grid, gridSize, numbering }) {
+function ExportPanel({ grid, gridSize, numbering, clues }) {
   const [exportFormat, setExportFormat] = useState('json');
   const [preview, setPreview] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -18,7 +18,10 @@ function ExportPanel({ grid, gridSize, numbering }) {
       grid: grid.map(row => row.map(cell =>
         cell.isBlack ? '#' : (cell.letter || '.')
       )),
-      numbering: numbering
+      numbering: numbering,
+      // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.5 "browser export": the file
+      // always carries the clues, `{}` when there are none.
+      clues: clues || {}
     };
 
     // Add a small delay to show the progress indicator
@@ -127,7 +130,10 @@ function ExportPanel({ grid, gridSize, numbering }) {
       grid: grid.map(row => row.map(cell =>
         cell.isBlack ? '#' : (cell.letter || '.')
       )),
-      numbering: numbering
+      numbering: numbering,
+      // Decision 7 (clue-authoring spec 0.1.4, section 1), section 3.5 "browser export": the file
+      // always carries the clues, `{}` when there are none.
+      clues: clues || {}
     };
 
     if (exportFormat === 'json') {
