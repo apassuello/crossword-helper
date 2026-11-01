@@ -650,4 +650,119 @@ describe('CluesPanel', () => {
       expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
     });
   });
+
+  // ---------------- pins added after the Task 7 review ----------------
+
+  describe('review pins', () => {
+    it('Keep on the second stale row calls onKeep with the second key', async () => {
+      const Panel = await loadPanel();
+      const grid = white3([['C', 'A', 'T'], ['D', 'O', 'G'], ['.', '.', '.']]);
+      const clues = {
+        '0,0,across': { text: 'Feline', answer: 'C?T' },
+        '1,0,across': { text: 'Hound', answer: 'D?G' },
+      };
+      const props = plainProps(grid, clues);
+      render(<Panel {...props} />);
+      const keeps = screen.getAllByRole('button', { name: 'Keep' });
+      expect(keeps).toHaveLength(2);
+      await userEvent.setup().click(keeps[1]);
+      expect(props.onKeep).toHaveBeenCalledTimes(1);
+      expect(props.onKeep).toHaveBeenCalledWith('1,0,across');
+    });
+
+    it('Delete on the second orphan calls onDelete with the second key in key order', async () => {
+      const Panel = await loadPanel();
+      const clues = {
+        '10,0,across': { text: 'Alpha text', answer: 'AB' },
+        '2,0,down': { text: 'Beta text', answer: 'C?D' },
+      };
+      const props = plainProps(white3(), clues);
+      render(<Panel {...props} />);
+      const deletes = screen.getAllByRole('button', { name: 'Delete' });
+      expect(deletes).toHaveLength(2);
+      await userEvent.setup().click(deletes[1]);
+      expect(props.onDelete).toHaveBeenCalledTimes(1);
+      expect(props.onDelete).toHaveBeenCalledWith('10,0,across');
+    });
+
+    it('counts across and down separately in the header and the group headings', async () => {
+      const Panel = await loadPanel();
+      // Across starts (0,0), (1,0), (2,0); down starts (0,0), (0,1).
+      const grid = fromCliStrings([['.', '.', '#'], ['.', '.', '#'], ['.', '.', '#']]);
+      render(<Panel {...plainProps(grid)} />);
+      expect(hasText(`3 across ${DOT} 2 down`)).toBe(true);
+      expect(hasText(`Across ${DOT} 3`)).toBe(true);
+      expect(hasText(`Down ${DOT} 2`)).toBe(true);
+    });
+
+    it('shows the empty text only for the direction that has no entries', async () => {
+      const Panel = await loadPanel();
+      // One across entry, no down entry.
+      const acrossOnly = fromCliStrings([['.', '.', '.'], ['#', '#', '#'], ['#', '#', '#']]);
+      const first = render(<Panel {...plainProps(acrossOnly)} />);
+      expect(hasText(`1 across ${DOT} 0 down`)).toBe(true);
+      expect(hasText('No down words yet.')).toBe(true);
+      expect(screen.queryByText('No across words yet.')).toBeNull();
+      first.unmount();
+
+      // One down entry, no across entry.
+      const downOnly = fromCliStrings([['.', '#', '#'], ['.', '#', '#'], ['.', '#', '#']]);
+      render(<Panel {...plainProps(downOnly)} />);
+      expect(hasText(`0 across ${DOT} 1 down`)).toBe(true);
+      expect(hasText('No across words yet.')).toBe(true);
+      expect(screen.queryByText('No down words yet.')).toBeNull();
+    });
+
+    it('counts only the orphans in the Orphaned heading when an ok clue exists', async () => {
+      const Panel = await loadPanel();
+      const clues = {
+        '0,0,across': { text: 'Fine', answer: '???' }, // ok
+        '10,0,across': { text: 'Gone', answer: 'AB' }, // orphaned
+      };
+      render(<Panel {...plainProps(white3(), clues)} />);
+      expect(hasText(`Orphaned ${DOT} 1`)).toBe(true);
+      expect(screen.queryByText(`Orphaned ${DOT} 2`)).toBeNull();
+    });
+
+    it('drops the row of a clue whose entry goes, and brings it back', async () => {
+      const Panel = await loadPanel();
+      const clues = { '0,1,down': { text: 'Moving', answer: '???' } };
+      const gridWithEntry = white3();
+      const gridWithoutEntry = white3([['.', '#', '.'], ['.', '.', '.'], ['.', '.', '.']]);
+      const mk = (grid) => <Panel {...plainProps(grid, clues)} />;
+
+      const { rerender } = render(mk(gridWithEntry));
+      expect(screen.queryByDisplayValue('Moving')).not.toBeNull();
+
+      rerender(mk(gridWithoutEntry));
+      expect(screen.queryByDisplayValue('Moving')).toBeNull();
+      expect(orphanText('Moving')).not.toBeNull();
+
+      rerender(mk(gridWithEntry));
+      expect(screen.queryByDisplayValue('Moving')).not.toBeNull();
+    });
+
+    it('Escape clears the refusal message of a refused Enter', async () => {
+      const Panel = await loadPanel();
+      const user = userEvent.setup();
+      render(<Harness Panel={Panel} grid={white3()} />);
+      const input = inputs()[0];
+      await user.click(input);
+      fireEvent.change(input, { target: { value: 'x'.repeat(201) } });
+      await user.keyboard('{Enter}');
+      expect(screen.getByText(CLUE_TOO_LONG)).toBeInTheDocument();
+      await user.keyboard('{Escape}');
+      expect(screen.queryByText(CLUE_TOO_LONG)).toBeNull();
+      expect(input).toHaveValue('');
+    });
+
+    it('draws one box per square, each showing its letter or a dot', async () => {
+      const Panel = await loadPanel();
+      render(<Panel {...plainProps(white3([['A', '.', 'C'], ['.', '.', '.'], ['.', '.', '.']]))} />);
+      const boxes = (row) =>
+        Array.from(row.querySelectorAll('.xw-clue-pat-box')).map((b) => b.textContent);
+      expect(boxes(rowOf(inputs()[0]))).toEqual(['A', DOT, 'C']);
+      expect(boxes(rowOf(inputs()[1]))).toEqual([DOT, DOT, DOT]);
+    });
+  });
 });
