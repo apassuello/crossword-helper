@@ -151,6 +151,13 @@ describe('statusSigOf', () => {
     expect(statusSigOf(2, grid2(), more)).not.toBe(statusSigOf(2, grid2(), SPEC_CLUES));
   });
 
+  it('differs when the same answers sit under different keys', async () => {
+    const { statusSigOf } = await loadSig();
+    const across = { '0,0,across': { text: 'x', answer: 'RO' } };
+    const down = { '0,0,down': { text: 'x', answer: 'RO' } };
+    expect(statusSigOf(2, grid2(), across)).not.toBe(statusSigOf(2, grid2(), down));
+  });
+
   it('differs on a grid edit', async () => {
     const { statusSigOf } = await loadSig();
     const edited = grid2({ '1,1': { letter: 'X' } });

@@ -44,6 +44,17 @@ describe('isAdoptableEntry clues', () => {
     expect(isAdoptableEntry(withClues({ '0,0,across': v }))).toBe(false);
   });
 
+  it.each([
+    ['null', null],
+    ['text: 5', { text: 5, answer: 'ABC' }],
+  ])('rejects a map holding a good entry first and a bad value (%s) second', (_n, bad) => {
+    expect(isAdoptableEntry(withClues({ '0,0,across': good, '0,0,down': bad }))).toBe(false);
+  });
+
+  it('does not check the key format, only the values', () => {
+    expect(isAdoptableEntry(withClues({ 'not-a-key': good }))).toBe(true);
+  });
+
   it('still rejects valid clues on a size below the bound', () => {
     const e = { size: 2, grid: [[{}, {}], [{}, {}]], clues: { '0,0,across': good } };
     expect(isAdoptableEntry(e)).toBe(false);
