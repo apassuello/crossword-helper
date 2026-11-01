@@ -68,7 +68,7 @@ describe('clueStatuses', () => {
     };
     expect(clueStatuses(grid, clues)).toEqual({
       '0,0,across': 'ok',
-      '0,0,down': 'orphaned',
+      '0,0,down': 'stale',
       '0,2,across': 'orphaned',
     });
   });
