@@ -537,11 +537,16 @@ function App() {
   // `(gridRef.current, cluesRef.current)` as its "before", then advances `cluesRef`. Each re-checks
   // `editingPausedRef` at write time (D1). The pattern is the live grid's. `epoch` is the document
   // the panel was rendered for: a handler of a replaced document writes nothing (section 5.4).
+  // Section 3.3 (ruled 2026-11-02): commit and Keep write nothing for a key that is not an entry
+  // when they run -- no slot of two or more squares starts at its square in its direction -- so
+  // `patternOf` is null there, as `allSlots` enumerates entries (section 3.2).
   const patternOf = (key) => {
     const p = parseClueKey(key);
     const g = gridRef.current;
     if (!p || !g || !g[p.row] || !g[p.row][p.col] || g[p.row][p.col].isBlack) return null;
-    return slotAt(g, p.row, p.col, p.dir).pattern;
+    const slot = slotAt(g, p.row, p.col, p.dir);
+    if (slot.length < 2 || slot.cells[0][0] !== p.row || slot.cells[0][1] !== p.col) return null;
+    return slot.pattern;
   };
   const writeClues = (next) => {
     recordStep(gridRef.current, cluesRef.current);
