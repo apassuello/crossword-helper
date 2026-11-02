@@ -148,6 +148,10 @@ empty), clue key `"0,0,across"`; the `down` rows use the same grids transposed a
   stale.
 - **Keep:** `answer` becomes the entry's current pattern as the browser computes it; `text` is unchanged.
 - **Delete:** the entry is removed.
+- Commit and Keep write nothing for a key that is not an entry when they run: no slot of two or more squares
+  starts at its square in its direction (§3.2), so there is no current pattern to record. A row that disappears
+  with a draft open (a theme reply that adds a black square, landing while the Clues panel is open) loses
+  the draft, and a clue already committed at that key stays, orphaned, with Delete.
 - Keep is shown on rows whose displayed status (§5.6) is `stale`; Delete on items whose displayed status is
   `orphaned`.
 
@@ -584,3 +588,8 @@ form in a test, because it is the first code to read that `pattern`.
   is the review step; the shared fixture gains that row in each direction. What it beat: reading `?` in
   `answer` as a wildcard that takes the filled letters (no prompt after a fill, but a clue never checked against
   its letters would read `ok`, and it would need CLI and browser changes).
+- 0.1.4 ruled (2026-11-02, Greptile P1 on PR #116): §3.3's Commit and Keep write nothing for a key that is no
+  longer an entry. A theme reply landing after the user left the Theme tool could unmount a row with a draft
+  open, and its commit wrote a one-square pattern as `answer`, which the CLI rejects, so `clues check` and
+  re-import of an exported file failed. What it beat: saving the draft's text with the clue's previous
+  `answer` (keeps the typing, but writes text no entry carries, and changes §3.3 and §5.4).
