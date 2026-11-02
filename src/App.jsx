@@ -186,7 +186,11 @@ function App() {
     clues,
     active: currentTool === 'clues' && !editingPaused,
   });
-  recordRunRef.current = recordStep;
+  // Clue-authoring spec section 4.3: a step holds the clue map with the grid, as it is when the
+  // step is recorded. Run success records the Start snapshot while clue writers are disabled
+  // (section 4.4), so the live map is the pre-run map; keepFill records the grid as it is at the
+  // click, with the clues as they are then. `cluesRef` is defined below; it is read at call time.
+  recordRunRef.current = (before) => recordStep(before, cluesRef.current);
 
   // Undo and redo keys (novice-readiness spec 0.2.18 §3.9 "Controls"). One document listener, so
   // the key works with focus anywhere; it is ignored in a text-editing target, where the browser's
