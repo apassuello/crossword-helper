@@ -168,8 +168,8 @@ input data dict or the state metadata as `source`.
             "key": "0,0,across", "answer": "ROSE", "status": "ok"}]}
 ```
 
-It holds the seven §3.2 rows for `across` and the same seven transposed with key `"0,0,down"`: 14 cases,
-written out literally. `#` is black and `.` is empty. Rows are lists of one-character strings, the grid
+It holds the eight §3.2 rows for `across` and the same eight transposed with key `"0,0,down"`: 16 cases,
+written out literally (the eighth row, `????` on a filled entry, was added by the 2026-11-02 ruling in spec §10). `#` is black and `.` is empty. Rows are lists of one-character strings, the grid
 file's own row shape (`Grid.to_dict` builds each row cell by cell, and `Grid.from_dict` rejects a non-list row,
 `cli/src/core/grid.py:372-373`). Neither consumer converts: pytest loads a case with
 `Grid.from_dict({"size": 4, "grid": rows}, strict_size=False)` (4×4 is non-standard), and vitest passes the rows

@@ -118,7 +118,9 @@ through `import-nyt`.
   `allSlots`. `GridNumbering.get_clue_positions` is not used: it calls `get_word_slots()` at its default of
   `min_length=3`, which hides 2-letter entries.
 - `orphaned` when no entry starts at `(row, col)` in `dir`.
-- `stale` when the entry exists and its pattern differs from `answer`. A change of length is a difference.
+- `stale` when the entry exists and its pattern differs from `answer`. A change of length is a difference. A `?`
+  in `answer` is a character like any other: it matches only a `?` in the pattern, so a clue written on a blank
+  entry is `stale` once letters fill it.
 - `ok` otherwise.
 
 The shared fixture (§6.1) holds these rows literally. Grids are written as in the grid file (`#` black, `.`
@@ -129,6 +131,7 @@ empty), clue key `"0,0,across"`; the `down` rows use the same grids transposed a
 | `ROSE` `....` `....` `....` | `ROSE` | `ok` |
 | `RODE` `....` `....` `....` | `ROSE` | `stale` |
 | `RO.E` `....` `....` `....` | `ROSE` | `stale` |
+| `ROSE` `....` `....` `....` | `????` | `stale` (written on a blank entry, then filled) |
 | `RO#E` `....` `....` `....` | `ROSE` | `stale` (the entry is now `RO`) |
 | `RO#E` `....` `....` `....` | `RO` | `ok` (a 2-letter entry) |
 | `#OSE` `....` `....` `....` | `ROSE` | `orphaned` |
@@ -576,3 +579,8 @@ form in a test, because it is the first code to read that `pattern`.
   replacement count a waiting Open reads. What it beat: always applying (the import would land on top of a New
   grid made during the check). A confirmed Open does not move that count, so an Open that lands during the
   check does not drop the import; that follows the count as novice §3.4 defines it.
+- 0.1.4 ruled (2026-11-02, found in Task 12's CLU-8 run): §3.2 stated no rule for a letter in the pattern
+  against a `?` in `answer`. A clue written on a blank entry is `stale` once a fill supplies letters, and Keep
+  is the review step; the shared fixture gains that row in each direction. What it beat: reading `?` in
+  `answer` as a wildcard that takes the filled letters (no prompt after a fill, but a clue never checked against
+  its letters would read `ok`, and it would need CLI and browser changes).
