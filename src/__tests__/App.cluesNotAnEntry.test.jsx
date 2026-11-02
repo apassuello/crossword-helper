@@ -115,6 +115,17 @@ describe('Commit and Keep write nothing for a key that is no longer an entry (sp
     expect(probe.panel.clues).toEqual({ [K]: A });
   });
 
+  it('onCommit on a key whose square starts no entry (second square of an across entry) writes nothing', async () => {
+    const { user } = await boot();
+    await openClues(user);
+    await writeClue(user, clueInputs()[1], 'Alpha');
+    expect(probe.panel.clues).toEqual({ [K]: A });
+    act(() => {
+      probe.panel.onCommit('1,1,across', 'Text');
+    });
+    expect(probe.panel.clues).toEqual({ [K]: A });
+  });
+
   it('onKeep on a key that stopped being an entry writes nothing', async () => {
     const { user } = await boot();
     await openClues(user);
