@@ -45,6 +45,9 @@ Add capability CLI-first, then adapter, then route, then UI.
 - **Autofill**: CSP (`fill/autofill.py`), beam search (`fill/beam_search/`), iterative repair
   (`fill/iterative_repair.py`, the `--algorithm` default), and a `hybrid` of beam+repair.
 - **Pattern matching**: `fill/pattern_matcher.py` (regex) and `fill/trie_pattern_matcher.py` (trie).
+- **Grid JSON is a CLI↔web-app contract**: `Grid.from_dict` reads both. A new document field must be
+  carried by every CLI writer, or `fill` (which in human mode with no `-o` writes back to its input file) drops it in place.
+  `clues` is the worked case (clue-authoring spec §3.5).
 - **Pause/resume**: file-based IPC. CLI serializes solver state to gzipped JSON; resume applies user
   edits as locked cells and continues from that position.
 - **Seam tests**: the backend↔CLI boundary needs a contract test on argv acceptance plus one real
