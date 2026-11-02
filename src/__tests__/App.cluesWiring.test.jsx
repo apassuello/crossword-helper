@@ -152,7 +152,7 @@ describe('I2: every recordStep site passes the live clues, so undo of a grid cha
     await act(async () => {
       applied = onApplyPlacement(reply, { word: 'CAT' }, { sentGrid: grid, docId });
     });
-    expect(applied).toBe(true);
+    expect(applied).toMatchObject({ applied: true });
     expect(letters(container)).toEqual(['C', 'A', 'T']);
 
     await user.click(undoBtn()); // the theme word
