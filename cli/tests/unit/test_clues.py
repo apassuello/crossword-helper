@@ -307,11 +307,11 @@ class TestClueKeySort:
 
 
 class TestClueStatusFixture:
-    def test_fixture_holds_the_fourteen_cases(self):
+    def test_fixture_holds_the_sixteen_cases(self):
         cases = load_cases()
-        assert len(cases) == 14
-        assert [c["key"] for c in cases] == ["0,0,across"] * 7 + ["0,0,down"] * 7
-        assert [c["status"] for c in cases[:7]] == [c["status"] for c in cases[7:]]
+        assert len(cases) == 16
+        assert [c["key"] for c in cases] == ["0,0,across"] * 8 + ["0,0,down"] * 8
+        assert [c["status"] for c in cases[:8]] == [c["status"] for c in cases[8:]]
 
     @pytest.mark.parametrize(
         "case",

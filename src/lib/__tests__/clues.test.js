@@ -22,9 +22,9 @@ const ROSE = [
 const frozen = (o) => structuredClone(o);
 
 describe('clueStatus: shared fixture rows', () => {
-  it('the fixture holds 14 cases', async () => {
+  it('the fixture holds 16 cases', async () => {
     await load();
-    expect(cases.length).toBe(14);
+    expect(cases.length).toBe(16);
   });
 
   it.each(cases.map((c, i) => [i, c]))('row %i', async (_i, c) => {
