@@ -1798,6 +1798,7 @@ components:
     ClueCheckRequest:
       type: object
       required:
+        - size
         - grid
       properties:
         grid:
