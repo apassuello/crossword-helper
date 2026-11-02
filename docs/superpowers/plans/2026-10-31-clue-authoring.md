@@ -117,6 +117,38 @@ facts (the RED and GREEN commits, the review package path) go in the dispatch me
    task's production paths>` empty, after at least two full REVIEWs with free mutants, closes on a controller
    check that reproduces each of its kills at the target line. It beat a third full REVIEW (Task 3 fix 3,
    `5bf3346`); the whole-branch review before merge remains the second gate.
+5. **Brief rules learned in execution.** Each one was paid for on this plan; carry them into the next plan's
+   protocol.
+   - A brief names a hazard RED found, never the fix a RED spike used, and RED writes no implementation
+     spike. Task 8's GREEN copied a spike's render counter.
+   - A contract sentence "every X site does Y" becomes one RED row per site, by name. Task 8's RED pinned one
+     of three `recordStep` sites; the whole-branch review then found I-1 at a site reached through a ref.
+   - A RED brief that names a fixture helper states the helper's input shape or points at an existing call
+     site. Task 7's string rows into `fromCliStrings` were the second brief-caused RED fix.
+   - A GREEN brief asks for the §1 `Decision N` citation explicitly; asking for section numbers missed it
+     (Task 5).
+   - A task that changes a contract lists what it touches beyond its own module: every consumer that
+     *compares against* a changed output (Task 6 missed `useUndoHistory.js` reading `snapshot.sig`); every
+     test asserting a call count on a method it adds a caller to, with "never called" asserted around the
+     action, never globally (Task 10); every closure continuing after a wait it lengthens, re-audited for
+     reads taken at render time (Task 9's stale `gridSize`). A hook called unconditionally states its
+     no-grid behaviour (App's `grid` starts `null`). New parameters on a hook or component default (`{}`,
+     optional), so existing callers and tests run unchanged.
+   - A user-visible choice the spec leaves open is ruled before the briefs are written and recorded in the
+     spec as ruled, with what it beat. Otherwise the tests pin a guess.
+   - A brief edited after its producer ran is re-read against what the producer did. Task 8's review brief
+     still said RED changed only the Rail tests, which would have manufactured a finding.
+   - REVIEW's mutation table names each target test by name or `file:line`; rows naming a behaviour missed
+     their tests (Task 8). A mutation proof for a set lists the set in the test, transcribed from the spec;
+     importing it from the module under test kills nothing. A fix test for an exception asserts the
+     subclass (`CluesError`), or it passes on the broken code (Task 1). Free mutants found six gaps the named
+     table missed, all where an input value (absent, `null`, `{}`) meets a pause or resume path (Task 3).
+     Survivors are disposed of against the task's "do not pin" list. A Minor is held for the final review
+     unless a fix cycle is already running, in which case a cheap one folds in.
+   - The whole-branch review targets seams, cross-task state and the new base, not per-task diffs. It found
+     I-1, which every per-task review passed. Cross-task races stay hard even then: the PR bot, not the
+     whole-branch review, found a row's unmount commit racing an async writer that outlives its panel. After a rebase, `git range-diff <old-base>..<backup> <new-base>..<tip>`
+     marks with `!` the commits whose patch changed: the set where a semantic break can hide.
 
 Task 11 (documentation) has no tests. It runs as WRITE then REVIEW (two agents), with
 `scripts/docs-check.sh` as its gate. Task 12 is the browser acceptance gate.

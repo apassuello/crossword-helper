@@ -373,6 +373,9 @@ thing under test.
 - Commit: `type(scope): imperative description` — e.g. `fix(ci): widen CLI subprocess timeout`.
 - Types in use: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Before pushing: `pytest`, `npm run build`, and let pre-commit run (do not `--no-verify`).
+- CI runs only on pushes to `main`/`develop` and on pull requests (`.github/workflows/test.yml`'s
+  `on:` block). A push to a feature branch runs nothing remotely, so the pre-push hook is the only
+  whole-tree gate before a PR opens.
 - **Merge with a merge commit when anything outside the repo cites individual commits.** A squash
   replaces every commit on the branch with one new hash, so references to the originals stop
   resolving against `main`. PR #5 merged as `f727f1a` (two parents) and its commits are still

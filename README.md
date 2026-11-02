@@ -40,6 +40,10 @@ python3 run.py
 # Open http://localhost:5000
 ```
 
+`run.py` serves the frontend as last built into `frontend/dist`. After a `git pull`, run `npm run build`
+before restarting, or the browser shows the old UI. `npm run dev` (http://localhost:3000) builds from source
+instead.
+
 ## Using the app
 
 New to the app? Start with the [user guide](docs/user-guide/README.md): a macOS install walkthrough, a first-crossword
