@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.25** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.26** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -921,7 +921,7 @@ the old one:
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 | New: AF-REFILL | Run Repair, choose "Keep partial fill", type a letter, press Start again | The typed letter is intact; the run is not refused because of the autofilled letters; the lock list sent excludes them |
 | New: AF-LOCKED-CROSS | Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start | The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement |
-| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys), the Clues panel's inputs, Keep and Delete | None of them changes the grid; `Editing is paused while autofill runs.` shows |
+| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys), the Clues panel's inputs, Keep and Delete | None of them changes the grid or the clues; `Editing is paused while autofill runs.` shows |
 | New: AF-OFFLIST | Type a word not in the lists (case 2), Start | The run proceeds; those cells show red; the toast `Typed words not in the selected word lists: <WORD>` shows |
 | New: AF-NOLISTS | Untick every word list | Start is disabled with `Select at least one word list` (I5) |
 | New: AF-VERIFY-STALE | Press Verify (and, separately, Clean), type a letter while the request is in flight | The typed letter survives the response; an open Clean confirm is dismissed by the typing (S1) |
@@ -1224,3 +1224,7 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   replacement confirm, the waiting Open, the banner and the open grid's own entry; §3.9 counts a committed clue,
   Keep and an orphan's deletion as one undo step each and puts the clue map in what a step holds. Beat: leaving the
   novice spec unamended, so that its D1 list, its confirm and its undo rules would contradict a shipped panel.
+- 0.2.26 (2026-11-02): §6's AF-GATE expected result reads "None of them changes the grid or the clues", since
+  0.2.25 added the Clues panel's writers to its list (clue-authoring spec section 4.4 disables them during a run).
+  Owner ruling on Task 11's review. Beat: leaving the row as it was, literally true but never asking the tester
+  to check the clues.
