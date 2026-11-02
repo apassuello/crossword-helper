@@ -31,7 +31,7 @@ how-to guide linked at the end for when you want to go further.
 Look at the top bar. A status label reads `online`. The top bar also has the buttons `Undo`, `Redo`,
 `Verify words`, `Clean grid` and `Save grid`.
 
-On the left is the tool rail: Grid, Search, Autofill, Theme, Lists, Import and Export. This tutorial uses
+On the left is the tool rail: Grid, Search, Autofill, Clues, Theme, Lists, Import and Export. This tutorial uses
 Grid, Search, Autofill and Export.
 
 The app starts with an empty 15×15 grid.

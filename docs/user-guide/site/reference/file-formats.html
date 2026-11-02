@@ -32,6 +32,7 @@
       <li><a href="../how-to/use-your-own-word-lists.html">Use your own word lists</a></li>
       <li><a href="../how-to/add-theme-words.html">Add theme words</a></li>
       <li><a href="../how-to/autofill-a-grid.html">Autofill a grid</a></li>
+      <li><a href="../how-to/write-clues.html">Write clues</a></li>
       <li><a href="../how-to/check-and-clean-a-grid.html">Check and clean a grid</a></li>
       <li><a href="../how-to/import-and-export-grids.html">Import and export grids</a></li>
       <li><a href="../how-to/troubleshoot.html">Troubleshoot</a></li>
@@ -74,6 +75,11 @@
 <td>object</td>
 <td>Written by <code>Export</code>: clue numbers keyed by <code>"row,col"</code> (counted from 0). Optional on import</td>
 </tr>
+<tr>
+<td><code>clues</code></td>
+<td>object</td>
+<td>Written by <code>Export</code> (<code>{}</code> when there are none): the clues you wrote, described below. Optional on import, where the app checks it</td>
+</tr>
 </tbody>
 </table></div>
 <p>The importer rejects a missing <code>size</code> or <code>grid</code>, a size outside the range, a grid that is not <code>size</code> rows of
@@ -82,9 +88,20 @@ string is read as an empty square, the same as <code>.</code>. The Import tool a
 <pre><code class="language-json">{
   &quot;size&quot;: 3,
   &quot;grid&quot;: [[&quot;C&quot;, &quot;A&quot;, &quot;T&quot;], [&quot;#&quot;, &quot;.&quot;, &quot;.&quot;], [&quot;.&quot;, &quot;.&quot;, &quot;.&quot;]],
-  &quot;numbering&quot;: {}
+  &quot;numbering&quot;: {},
+  &quot;clues&quot;: {}
 }
 </code></pre>
+<h3 id="the-clues-object">The <code>clues</code> object</h3>
+<p>Each key is <code>"row,col,direction"</code>: the first square of an entry, counted from 0, and <code>across</code> or <code>down</code>, for
+example <code>"0,0,across"</code>. Each value has two strings: <code>text</code>, the clue (1 to 200 characters, with no spaces at
+either end), and <code>answer</code>, the entry's letters when the clue was committed, with <code>?</code> for an empty square (for
+example <code>"RO?E"</code>).</p>
+<pre><code class="language-json">&quot;clues&quot;: {&quot;0,0,across&quot;: {&quot;text&quot;: &quot;Garden bloom&quot;, &quot;answer&quot;: &quot;ROSE&quot;}}
+</code></pre>
+<p>Whether a clue is current is worked out from the grid, never stored: it is stale when its entry's letters
+differ from <code>answer</code>, and orphaned when no entry of two or more letters starts at the key's square. A clue that
+breaks these rules, or whose key lies outside the grid, stops the import. See <a href="../how-to/write-clues.html">Write clues</a>.</p>
 <h2 id="html-export">HTML export</h2>
 <p>Written by <code>Export</code> with <code>HTML (printable)</code> as <code>crossword.html</code>: a single web page headed <code>Crossword Puzzle</code>
 holding one table. Each white square is a cell showing its clue number (small, top left) and its letter;
@@ -205,7 +222,7 @@ lists are read-only.</p>
   </main>
   <aside class="g-toc" aria-label="On this page">
     <h2>On this page</h2>
-    <ul><li><a href="#grid-file-json">Grid file (JSON)</a></li><li><a href="#html-export">HTML export</a></li><li><a href="#text-export">Text export</a></li><li><a href="#theme-word-file">Theme word file</a></li><li><a href="#word-list-file">Word list file</a></li><li><a href="#saved-grids">Saved grids</a></li></ul>
+    <ul><li><a href="#grid-file-json">Grid file (JSON)</a><ul><li><a href="#the-clues-object">The clues object</a></li></ul></li><li><a href="#html-export">HTML export</a></li><li><a href="#text-export">Text export</a></li><li><a href="#theme-word-file">Theme word file</a></li><li><a href="#word-list-file">Word list file</a></li><li><a href="#saved-grids">Saved grids</a></li></ul>
   </aside>
 </div>
 <script src="../assets/guide.js"></script>

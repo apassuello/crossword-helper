@@ -64,10 +64,14 @@ nothing in CI or the documented setup installs it. Treat the root file as author
 - Pause/resume: solver state serialises to gzipped JSON; resume applies user edits
   as locked cells and continues from the saved position.
 - Export: **HTML only.** PDF, `.puz` and JSON export do not exist.
+- Clues: a grid file may carry a `clues` map, which `fill` and `resume` keep and the pause state carries.
+  `python -m cli.src.cli clues check GRID_FILE` validates it and prints each clue's status (`ok`, `stale` or
+  `orphaned`) as JSON (`core/clues.py`; rules in `docs/superpowers/specs/2026-10-31-clue-authoring-design.md`).
 
 **[NOTE]**
 An earlier version of this file described a Clue Manager (`src/clues/`), a `src/cli/`
-package, PDF/`.puz`/JSON export, and an `interactive` command. None were ever built.
+package, PDF/`.puz`/JSON export, and an `interactive` command. None were ever built. The clue
+support above is a separate, later addition: a clue map and its check, not a Clue Manager.
 The file was written at project scaffold time and never revised. See
 `docs/dev/FABRICATION-LOG.md` for the wider pattern.
 

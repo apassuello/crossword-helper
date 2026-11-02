@@ -32,6 +32,7 @@
       <li><a href="../how-to/use-your-own-word-lists.html">Use your own word lists</a></li>
       <li><a href="../how-to/add-theme-words.html">Add theme words</a></li>
       <li><a href="../how-to/autofill-a-grid.html">Autofill a grid</a></li>
+      <li><a href="../how-to/write-clues.html">Write clues</a></li>
       <li><a href="../how-to/check-and-clean-a-grid.html">Check and clean a grid</a></li>
       <li><a href="../how-to/import-and-export-grids.html">Import and export grids</a></li>
       <li><a href="../how-to/troubleshoot.html">Troubleshoot</a></li>
@@ -98,7 +99,7 @@
 </thead>
 <tbody>
 <tr>
-<td>Tools: <code>Grid</code>, <code>Search</code>, <code>Autofill</code>, <code>Theme</code>, <code>Lists</code>, <code>Import</code>, <code>Export</code></td>
+<td>Tools: <code>Grid</code>, <code>Search</code>, <code>Autofill</code>, <code>Clues</code>, <code>Theme</code>, <code>Lists</code>, <code>Import</code>, <code>Export</code></td>
 <td>Switch the right-hand panel</td>
 </tr>
 <tr>
@@ -130,7 +131,7 @@
 </tr>
 <tr>
 <td><code>New grid</code>: <code>11×11</code>, <code>15×15</code>, <code>21×21</code></td>
-<td>Starts an empty grid of that size. Asks <code>Replace the current grid? Unsaved changes are lost.</code> (<code>Replace</code>) if the grid has content</td>
+<td>Starts an empty grid of that size. Asks <code>Replace the current grid? Unsaved changes are lost.</code> (<code>Replace</code>) if the grid has letters, black squares or clues</td>
 </tr>
 <tr>
 <td><code>Saved grids</code> &gt; <code>Open saved</code></td>
@@ -232,6 +233,43 @@
 click <code>Reset</code> after a result), <code>Cancel</code> (during a run), <code>Keep fill</code>, <code>Keep partial fill (N/M slots)</code>, <code>Reset</code>
 (after a run). The heading shows the number of empty slots (slots with some letters but not all still count as
 empty) and of theme words. The outcome messages are tabulated in <a href="../how-to/autofill-a-grid.html">Autofill a grid</a>.</p>
+<h2 id="clues-tool">Clues tool</h2>
+<p>How to use it: <a href="../how-to/write-clues.html">Write clues</a>.</p>
+<div class="g-table"><table>
+<thead>
+<tr>
+<th>Control</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heading line</td>
+<td><code>Clues</code>, then <code>N across · N down</code> (the number of entries), with <code>· N stale</code> and <code>· N orphaned</code> added when those counts are not zero</td>
+</tr>
+<tr>
+<td><code>Across · N</code>, <code>Down · N</code></td>
+<td>One row per entry of two or more squares, in reading order of its first square. An empty group says <code>No across words yet.</code> or <code>No down words yet.</code></td>
+</tr>
+<tr>
+<td>Number button</td>
+<td>Selects the entry in the grid and focuses the row's field. Still works while autofill runs</td>
+</tr>
+<tr>
+<td>Field (<code>Write a clue…</code>)</td>
+<td>Commits on leaving the field, on <code>Enter</code> (which moves to the next row) and when you switch tool; <code>Escape</code> restores the committed text. Empty removes the clue; over 200 characters shows <code>At most 200 characters.</code> and commits nothing</td>
+</tr>
+<tr>
+<td><code>Written for …</code> and <code>Keep</code></td>
+<td>Shown on a stale clue: the letters it was written for (<code>·</code> is an empty square) and a button that records the entry's current letters</td>
+</tr>
+<tr>
+<td><code>Orphaned · N</code>, <code>Delete</code></td>
+<td>Clues whose entry no longer exists, with the line <code>These entries no longer exist. Copy a clue into an entry, or delete it.</code>; <code>Delete</code> removes one</td>
+</tr>
+</tbody>
+</table></div>
+<p>The fields, <code>Keep</code> and <code>Delete</code> are disabled while autofill runs.</p>
 <h2 id="theme-tool">Theme tool</h2>
 <div class="g-table"><table>
 <thead>
@@ -313,7 +351,7 @@ empty) and of theme words. The outcome messages are tabulated in <a href="../how
 </tr>
 <tr>
 <td><code>Import Grid</code>, <code>Clear</code></td>
-<td>Import it (after the replace confirm, if the grid has content) or discard the preview</td>
+<td>Import it (after the replace confirm, if the grid has letters, black squares or clues) or discard the preview. A file with a <code>clues</code> entry has its clues checked first; a clue that breaks the rules stops the import with a message</td>
 </tr>
 </tbody>
 </table></div>
@@ -328,7 +366,7 @@ empty) and of theme words. The outcome messages are tabulated in <a href="../how
 <tbody>
 <tr>
 <td><code>Export Format</code></td>
-<td><code>JSON (for reimport)</code>, <code>HTML (printable)</code>, <code>Text (simple)</code></td>
+<td><code>JSON (for reimport)</code> (carries your clues), <code>HTML (printable)</code>, <code>Text (simple)</code> (no clues)</td>
 </tr>
 <tr>
 <td><code>Preview</code></td>
@@ -400,7 +438,7 @@ empty) and of theme words. The outcome messages are tabulated in <a href="../how
 </tbody>
 </table></div>
 <h2 id="not-in-the-app">Not in the app</h2>
-<p>These are not shown in the interface, so you will not find them: a Clues tool, a Heatmap view toggle, a
+<p>These are not shown in the interface, so you will not find them: a Heatmap view toggle, a
 <code>Suggest Black Square</code> button, PDF and <code>.puz</code> export, and an <code>Include clues</code> option. There is no pause button
 for autofill; use <code>Cancel</code>, which stops the run (a <code>Keep partial fill</code> offer may follow).</p>
     </article>
@@ -409,7 +447,7 @@ for autofill; use <code>Cancel</code>, which stops the run (a <code>Keep partial
   </main>
   <aside class="g-toc" aria-label="On this page">
     <h2>On this page</h2>
-    <ul><li><a href="#top-bar">Top bar</a></li><li><a href="#left-rail">Left rail</a></li><li><a href="#grid-tool">Grid tool</a></li><li><a href="#search-tool">Search tool</a></li><li><a href="#autofill-tool">Autofill tool</a></li><li><a href="#theme-tool">Theme tool</a></li><li><a href="#lists-tool">Lists tool</a></li><li><a href="#import-tool">Import tool</a></li><li><a href="#export-tool">Export tool</a></li><li><a href="#keyboard-and-mouse">Keyboard and mouse</a></li><li><a href="#not-in-the-app">Not in the app</a></li></ul>
+    <ul><li><a href="#top-bar">Top bar</a></li><li><a href="#left-rail">Left rail</a></li><li><a href="#grid-tool">Grid tool</a></li><li><a href="#search-tool">Search tool</a></li><li><a href="#autofill-tool">Autofill tool</a></li><li><a href="#clues-tool">Clues tool</a></li><li><a href="#theme-tool">Theme tool</a></li><li><a href="#lists-tool">Lists tool</a></li><li><a href="#import-tool">Import tool</a></li><li><a href="#export-tool">Export tool</a></li><li><a href="#keyboard-and-mouse">Keyboard and mouse</a></li><li><a href="#not-in-the-app">Not in the app</a></li></ul>
   </aside>
 </div>
 <script src="../assets/guide.js"></script>

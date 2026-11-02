@@ -1,5 +1,5 @@
 # Novice Fresh-Install Readiness — Design
-**Version 0.2.24** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
+**Version 0.2.25** · Claude with Arthur Passuello · 2026-10-23 · status: 0.2.3 approved by owner 2026-10-23;
 rulings in §1 given by owner 2026-10-23, including the five review rulings; §7's defaults are ruled as written;
 §8 (planning defaults, added in 0.2.4) awaits owner review, and its defaults apply if unruled by 2026-10-30;
 PD-L7 ruled as written by owner 2026-10-25; undo/redo (§3.9) and the fundamentals acceptance rows (§6)
@@ -344,7 +344,8 @@ before relying on case 3 (b) outside repair and hybrid.
   `running`, the machine's `onGridUpdate` is the only writer of letters and black squares. Every other
   `setGrid` caller in `App.jsx`, and every control that leads to one (typing and Backspace in
   `CrosswordGrid`, the black-square and theme-lock toggles, Search placement, theme apply, import,
-  Verify and Clean, grid size, New grid §3.2, Open saved §3.4, Undo and Redo §3.9), is disabled. Each writer also returns
+  Verify and Clean, grid size, New grid §3.2, Open saved §3.4, Undo and Redo §3.9, and the Clues panel's commit, Keep and Delete (clue-authoring spec §4.4)), is
+  disabled. Each writer also returns
   early when the check fails at write time, not only at render, so an async handler (Verify, Clean)
   whose response lands after Start writes nothing. `useNumbering` is already gated on the same
   states. While gated, the grid shows `Editing is paused while autofill runs.`
@@ -473,10 +474,10 @@ uses. The comment above `AutofillPanel.jsx`'s defaults is updated to match.
 
 ### 3.1 Hidden controls
 
-**[SPEC]** Not rendered: the Clues tool in the tool rail (#53), the "Suggest Black Square" button (#54),
+**[SPEC]** Not rendered: the "Suggest Black Square" button (#54),
 the Heatmap toggle (#50), and in `ExportPanel.jsx` the disabled `PDF (coming soon)` and
 `.puz (coming soon)` format options, the disabled `Include clues (if available)` checkbox, and the
-`PDF` and `.puz` entries of its Format Information list (G10). The issues stay open. No test may depend
+`PDF` and `.puz` entries of its Format Information list (G10). The `Include clues (if available)` checkbox stays hidden until clue export (clue-authoring spec §0, sub-project 2). The issues stay open. No test may depend
 on them being present: the plan edits `ToolRail.test.jsx` (its `TOOL_LABELS` assertion for Clues and the
 separate Heatmap tests) and `AutofillPanel.test.jsx` (its "Suggest Black Square" assertion), and adds an assertion
 that none of the hidden labels renders.
@@ -488,14 +489,14 @@ that none of the hidden labels renders.
   `xw-inspector-empty` "Grid editor" placeholder, and this panel replaces it. It holds "New grid"
   (here), the "Black square" toggle (§3.3) and "Open saved" (§3.4).
 - The Grid panel has a "New grid" control offering `11×11`, `15×15`, `21×21`.
-- If the current grid has any letter or black square, an in-panel confirm (no browser dialog) asks
+- If the current grid has any letter, black square or clue, an in-panel confirm (no browser dialog) asks
   `Replace the current grid? Unsaved changes are lost.` with "Replace" and "Cancel".
 - The new grid is empty, numbered, with symmetry on. Red cells and autofill results are cleared.
 - Disabled while an autofill run is in progress.
 - **Ordering:** §2.3 says red cells clear on New grid, but the control lands here. This task owns the
   clearing: it resets `isBlocked`, `isError` and any retained snapshot or "Keep partial fill" offer when
   the new grid is created. If `isBlocked` does not exist yet, there is nothing to clear for it.
-- **Import (0.2.8, review F3, M3, Q2).** Importing over a grid that has any letter or black square asks
+- **Import (0.2.8, review F3, M3, Q2).** Importing over a grid that has any letter, black square or clue asks
   the same confirm, `Replace the current grid? Unsaved changes are lost.`, before anything is replaced.
   An imported grid is born numbered, as New grid is, whatever its black-square layout, and import clears
   a finished run's result and "Keep partial fill" offer as New grid and Open saved do.
@@ -562,18 +563,18 @@ scope here.
   fork is the same document under a new id, as autofill follows it: §2.3 M1, F2), and neither does an
   earlier Open's adoption: Opens adopt in the order confirmed, so the last one confirmed is the open
   document. Grid edits during the wait do not cancel it. When the grid had content, the §3.2 confirm
-  already said unsaved changes are lost; when it was empty, Open shows no confirm, so letters typed into
-  it during the wait are lost unannounced (accepted by default in 0.2.11; owner review 2026-11-08).
+  already said unsaved changes are lost; when it had no content (§3.2: no letters, black squares or clues), Open shows no confirm, so letters typed into
+  it during the wait are lost unannounced (accepted by default in 0.2.11; owner review 2026-11-08). Clues committed during the wait are lost on the same terms.
   Closing the panel does not cancel it either: the user asked to open it, and the request stands.
 - **Failed writes (G4):** a failed **explicit** Save shows `Could not save: browser storage is full.
   Delete a saved grid or export this one.` and is never swallowed. A failed **autosave** keeps today's
   behaviour, pinned by existing tests: the toast `Couldn’t save — will retry.` (U+2019), the
   `offline — will retry` status label, and the unbounded 30 s re-arm. **[?]** Whether autosave should
   also show the quota text is open (§7 P11).
-- **Banner.** It closes on its × or on any grid edit.
+- **Banner.** It closes on its × or on any edit, to the grid or to a clue.
 - **Deleting the open grid's own entry (0.2.8, review Q1).** When Delete removes the entry whose id is
   the current document's, the document becomes unsaved: the label shows the unsaved state, and the
-  delete itself arms no autosave. The next grid edit autosaves it as a new entry under the default name,
+  delete itself arms no autosave. The next edit, to the grid or to a clue, autosaves it as a new entry under the default name,
   keeping its document id. A save whose entry no longer exists writes that entry; it does not fork.
 - **Leaving the page (0.2.8, review Q3).** On `pagehide`, a document with unsaved changes is saved at
   once through the autosave path, so during a run it writes the Start snapshot (S2). A failure there
@@ -741,14 +742,13 @@ real reason (above) instead of a stale offer.
   of words it applies (its requests are sequential and async, so the step opens before the first request
   and closes when the loop ends by any path, including an early return; an edit the user makes while it
   runs belongs to its step, and Undo and Redo do nothing until it ends); an accepted Clean; and a
-  finished autofill run that changed the grid, including "Keep partial fill". A run whose outcome
+  finished autofill run that changed the grid, including "Keep partial fill"; committing a changed clue, Keep, and deleting an orphaned clue (one committed clue is one step; beat: a step per keystroke). A run whose outcome
   restores the Start snapshot (§2.3) changed nothing and adds no step. An action counts as a change only
   when the content signature (below) differs before and after: retyping the same letter over a typed
   letter adds no step, over an autofilled one it does (`isAutofilled` changes).
 - **Not steps.** Verify's red marks (`isError`), autofill's red cells (`isBlocked`), numbering, autofill's
   in-progress merges, and selection.
-- **What a step holds.** A snapshot of the grid's content before the action: exactly the fields
-  `contentSigOf` reads (size and each cell's `letter`, `isBlack`, `isThemeLocked`, `isAutofilled`). Undoing
+- **What a step holds.** A snapshot of the grid's content before the action: exactly the fields the document signature reads: size, each cell's `letter`, `isBlack`, `isThemeLocked` and `isAutofilled`, and the clue map (clue-authoring spec §4.1). Undoing
   back to the saved content therefore makes the document clean again: `isDirty` is false, the top bar
   shows the saved state rather than `unsaved changes`, and a pending autosave is cancelled, since there
   is nothing new to write. This holds for any return to the saved content, not only by undo, and `isAutofilled` provenance (§3.7)
@@ -765,7 +765,7 @@ real reason (above) instead of a stale offer.
 - **History ends with the document.** New grid, a grid-size change, Import and Open saved (including
   restore on load) clear both stacks (ruled; beat: undoing across a replacement, which would restore
   content under a different document identity, §3.4; a replacement of a grid with content already asks a
-  confirm, and an empty grid loses only its redo stack). Clearing also ends an open Apply All step
+  confirm, and a document with no content (§3.2) loses only its redo stack). Clearing also ends an open Apply All step
   without recording it. A save
   fork (§3.4 S4) is the same document continuing, so history survives it.
 - **Gating.** Undo and Redo are grid writers under D1 (§2.3): disabled while a run is live, and each
@@ -921,7 +921,7 @@ the old one:
 | New: AF-SUB2 | Open a second progress stream on a running task and close it | The panel still reaches its terminal state |
 | New: AF-REFILL | Run Repair, choose "Keep partial fill", type a letter, press Start again | The typed letter is intact; the run is not refused because of the autofilled letters; the lock list sent excludes them |
 | New: AF-LOCKED-CROSS | Under Repair, type an off-list word and a listed word below the score floor, each crossed by open slots; Start | The run fills the crossing slots or reports them in `"stuck_cells"`; it never rejects every placement |
-| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys) | None of them changes the grid; `Editing is paused while autofill runs.` shows |
+| New: AF-GATE | Start a run, then use every writer in §2.3's D1 list: typing, Backspace, black-square and theme-lock toggles, Search placement, theme apply, import, Verify, Clean, grid size, New grid, Open saved, Undo and Redo (buttons and keys), the Clues panel's inputs, Keep and Delete | None of them changes the grid; `Editing is paused while autofill runs.` shows |
 | New: AF-OFFLIST | Type a word not in the lists (case 2), Start | The run proceeds; those cells show red; the toast `Typed words not in the selected word lists: <WORD>` shows |
 | New: AF-NOLISTS | Untick every word list | Start is disabled with `Select at least one word list` (I5) |
 | New: AF-VERIFY-STALE | Press Verify (and, separately, Clean), type a letter while the request is in flight | The typed letter survives the response; an open Clean confirm is dismissed by the typing (S1) |
@@ -1218,3 +1218,9 @@ Finding ids cited in this spec (`D1`–`D3`, `B1`–`B4`, `C1`–`C13`, `G1`–`
   `onApplyPlacement`'s return becomes an object carrying that count. #106: the help text promised a hover
   preview that does not exist. Owner 2026-10-31: remove the promise and the dead handlers. Beat: building the
   preview (about a day, touching App, the grid and a new helper).
+- 0.2.25 (2026-11-02): clue authoring's amendments (clue-authoring spec 0.1.4, section 7). The Clues panel's commit,
+  Keep and Delete join §2.3 D1's writer list and §6's AF-GATE row; §3.1 no longer lists the Clues tool as hidden
+  and keeps the `Include clues` checkbox hidden until clue export; §3.2 and §3.4 count a clue as content for the
+  replacement confirm, the waiting Open, the banner and the open grid's own entry; §3.9 counts a committed clue,
+  Keep and an orphan's deletion as one undo step each and puts the clue map in what a step holds. Beat: leaving the
+  novice spec unamended, so that its D1 list, its confirm and its undo rules would contradict a shipped panel.

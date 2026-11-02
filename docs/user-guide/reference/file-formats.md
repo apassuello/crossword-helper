@@ -12,6 +12,7 @@ Written by `Export` with `JSON (for reimport)` as `crossword.json`; read by the 
 | `size` | number | Rows and columns of the square grid. The importer accepts 3 to 25 |
 | `grid` | list of `size` lists of `size` strings | One string per square: `#` black, `.` empty, or a letter A-Z |
 | `numbering` | object | Written by `Export`: clue numbers keyed by `"row,col"` (counted from 0). Optional on import |
+| `clues` | object | Written by `Export` (`{}` when there are none): the clues you wrote, described below. Optional on import, where the app checks it |
 
 The importer rejects a missing `size` or `grid`, a size outside the range, a grid that is not `size` rows of
 `size` cells, and any cell that is not a string equal to `#`, `.`, an empty string or one letter A-Z. An empty
@@ -21,9 +22,25 @@ string is read as an empty square, the same as `.`. The Import tool accepts a `.
 {
   "size": 3,
   "grid": [["C", "A", "T"], ["#", ".", "."], [".", ".", "."]],
-  "numbering": {}
+  "numbering": {},
+  "clues": {}
 }
 ```
+
+### The `clues` object
+
+Each key is `"row,col,direction"`: the first square of an entry, counted from 0, and `across` or `down`, for
+example `"0,0,across"`. Each value has two strings: `text`, the clue (1 to 200 characters, with no spaces at
+either end), and `answer`, the entry's letters when the clue was committed, with `?` for an empty square (for
+example `"RO?E"`).
+
+```json
+"clues": {"0,0,across": {"text": "Garden bloom", "answer": "ROSE"}}
+```
+
+Whether a clue is current is worked out from the grid, never stored: it is stale when its entry's letters
+differ from `answer`, and orphaned when no entry of two or more letters starts at the key's square. A clue that
+breaks these rules, or whose key lies outside the grid, stops the import. See [Write clues](../how-to/write-clues.md).
 
 ## HTML export
 

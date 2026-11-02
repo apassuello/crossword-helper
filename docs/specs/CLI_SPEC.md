@@ -77,6 +77,7 @@ top-level `CLAUDE.md`.
 | `fill` | Autofill a grid |
 | `pattern` | Search a wordlist for a pattern |
 | `number` | Auto-number a grid's cells |
+| `clues check` | Validate a grid file's clues and report each clue's status |
 | `normalize` | Normalize a clue entry (spaces, punctuation) |
 | `show` | Print a grid to the terminal |
 | `export` | Export a grid to HTML |
@@ -370,6 +371,32 @@ top-to-bottom, left-to-right.
                 "black_square_percentage": 0.0, "white_squares": "..."}
 }
 ```
+
+---
+
+### `clues check`
+
+**[SPEC]**
+```bash
+crossword clues check GRID_FILE [--json-output] [--allow-nonstandard]
+```
+
+Validates the `clues` map of a grid file (see [Grid File Format](#grid-file-format)) and reports each clue's
+status. With or without `--json-output` it prints the same single JSON object (one format; the flag is accepted
+for API compatibility).
+
+| Outcome | Exit | Output |
+|---|---|---|
+| Every clue valid | `0` | `{"success": true, "statuses": {"<key>": "ok" \| "stale" \| "orphaned", ...}}`, one entry per clue |
+| A clue rule fails | `1` | `{"success": false, "code": "INVALID_CLUES", "error": "<message>"}`; the first failure rejects the whole map |
+| The grid cannot be loaded | `1` | `{"success": false, "error": ...}` with no `code` |
+| No `clues` key in the file | `0` | `{"success": true, "statuses": {}}` |
+
+Status is derived, never stored: `orphaned` when no entry of 2 or more letters starts at the key's cell in its
+direction; `stale` when the entry exists and its current letters differ from the clue's recorded `answer`
+(a `?` in `answer` matches only a `?`, so a clue written on a blank entry is `stale` once letters fill it);
+`ok` otherwise. The rules, messages and status table are in the clue-authoring spec
+(`docs/superpowers/specs/2026-10-31-clue-authoring-design.md`, sections 3.2 and 3.4).
 
 ---
 
@@ -710,6 +737,12 @@ The `--json-output` object (printed indented) for the three lines `APPLE;50`, `g
 Cell values: `.` = empty, `#` = black square, `A`–`Z` = filled letter.
 Verified against a live `new` + `number` round trip.
 
+**[SPEC]** Optional key `"clues": {"<row>,<col>,<dir>": {"text": "...", "answer": "RO?E"}}`. The key is the
+zero-based start cell of an entry and `across` or `down`; `text` is 1 to 200 characters; `answer` is the entry's
+letters when the clue was written (`A`–`Z`, `?` for an empty square). `fill` carries the input file's `clues`
+unchanged into its output and into any pause state; `new` and `import-nyt` write none. `crossword clues check`
+validates the map and reports each clue's status. Rules: clue-authoring spec section 3.
+
 **[SPEC]** Optional key `"locked": [[row, col], ...]` (zero-based cells). On a
 fresh `fill` run the lock set is: with `--lock-filled` (the default) and a
 `"locked"` key, exactly the listed cells (`"locked": []` locks nothing); with
@@ -771,6 +804,11 @@ implements and has been removed rather than corrected.
 5. `crossword resume mytask` continues from the saved position, using the
    wordlists/algorithm recorded in the state unless overridden with
    `-w`/`-a`.
+
+**[SPEC]** If the grid file had a `clues` map, every pause state saved on the `fill` path stores it as
+`metadata["clues"]` (the solver never reads it), and `resume` and `fill --resume` write it into their output and
+into any pause state they save. With `--resume`, the saved state is authoritative: the `clues` of a grid file
+also given are not read. A state with no `clues` gives output with none.
 
 **[SPEC]** `fill` takes `--state-dir` and `--pause-flag-dir` options (verified
 in `python -m cli.src.cli fill --help` and `the `--state-dir` / `--pause-flag-dir` option declarations in `cli.py``), which override
