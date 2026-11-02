@@ -34,6 +34,7 @@ Pick the task you are doing.
 | Add words of my own to the word lists | [Use your own word lists](how-to/use-your-own-word-lists.md) |
 | Place and lock theme entries | [Add theme words](how-to/add-theme-words.md) |
 | Fill the empty squares automatically | [Autofill a grid](how-to/autofill-a-grid.md) |
+| Write clues and keep them matching the grid | [Write clues](how-to/write-clues.md) |
 | Find and remove entries that are not words | [Check and clean a grid](how-to/check-and-clean-a-grid.md) |
 | Load a grid from a file, or save one for printing | [Import and export grids](how-to/import-and-export-grids.md) |
 | Fix an error message | [Troubleshoot common problems](how-to/troubleshoot.md) |

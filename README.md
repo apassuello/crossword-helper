@@ -57,6 +57,8 @@ Open http://localhost:5000. The tool rail on the left switches between tools:
 - **Theme** -- load your theme words with `Choose File`, then `Apply All Best Placements` to put
   them in the grid.
 - **Autofill** -- choose an `Algorithm` and the word lists, then press `Start Autofill`.
+- **Clues** -- one row for each word in the grid; write a clue in its field, and `Keep` or `Delete` a clue
+  whose word has changed or gone.
 - **Import** and **Export** -- `Import Grid` reads a saved grid from `Upload File` or `Paste JSON`;
   `Export` saves the grid as JSON, HTML or text, and `Preview` shows it first.
 

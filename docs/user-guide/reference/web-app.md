@@ -23,7 +23,7 @@ What each control in the web app is called, what it does, and its default. For i
 
 | Control | What it does |
 |---|---|
-| Tools: `Grid`, `Search`, `Autofill`, `Theme`, `Lists`, `Import`, `Export` | Switch the right-hand panel |
+| Tools: `Grid`, `Search`, `Autofill`, `Clues`, `Theme`, `Lists`, `Import`, `Export` | Switch the right-hand panel |
 | VIEW > `Symmetry` | On by default. While on, turning a square black also turns black its 180° opposite |
 | GRID block | `Total` squares, `Black` (count and percentage), `Filled` (percentage), `Words` |
 | VIOLATIONS | Messages about the pattern: advice (a high black-square count, a low word count) and warnings about the grid itself (isolated white regions, a word under three letters, with positions counted from 0). Shown only when there are any; tagged `(unverified)` while a check is pending. Never blocks anything |
@@ -33,7 +33,7 @@ What each control in the web app is called, what it does, and its default. For i
 | Control | What it does |
 |---|---|
 | `Black square` | Toggles the selected square between black and white. Turning a square black erases its letter, and with Symmetry on the mirror square's letter too (`Undo` restores them). Disabled with no selection or when the square cannot be changed (theme-locked) |
-| `New grid`: `11×11`, `15×15`, `21×21` | Starts an empty grid of that size. Asks `Replace the current grid? Unsaved changes are lost.` (`Replace`) if the grid has content |
+| `New grid`: `11×11`, `15×15`, `21×21` | Starts an empty grid of that size. Asks `Replace the current grid? Unsaved changes are lost.` (`Replace`) if the grid has letters, black squares or clues |
 | `Saved grids` > `Open saved` | Lists your saved grids, each with size, save time, `Open` and `Delete` (`Delete "<name>"?` asks first) |
 
 The app opens with an empty 15×15 grid.
@@ -66,6 +66,21 @@ click `Reset` after a result), `Cancel` (during a run), `Keep fill`, `Keep parti
 (after a run). The heading shows the number of empty slots (slots with some letters but not all still count as
 empty) and of theme words. The outcome messages are tabulated in [Autofill a grid](../how-to/autofill-a-grid.md).
 
+## Clues tool
+
+How to use it: [Write clues](../how-to/write-clues.md).
+
+| Control | What it does |
+|---|---|
+| Heading line | `Clues`, then `N across · N down` (the number of entries), with ` · N stale` and ` · N orphaned` added when those counts are not zero |
+| `Across · N`, `Down · N` | One row per entry of two or more squares, in reading order of its first square. An empty group says `No across words yet.` or `No down words yet.` |
+| Number button | Selects the entry in the grid and focuses the row's field. Still works while autofill runs |
+| Field (`Write a clue…`) | Commits on leaving the field, on `Enter` (which moves to the next row) and when you switch tool; `Escape` restores the committed text. Empty removes the clue; over 200 characters shows `At most 200 characters.` and commits nothing |
+| `Written for …` and `Keep` | Shown on a stale clue: the letters it was written for (`·` is an empty square) and a button that records the entry's current letters |
+| `Orphaned · N`, `Delete` | Clues whose entry no longer exists, with the line `These entries no longer exist. Copy a clue into an entry, or delete it.`; `Delete` removes one |
+
+The fields, `Keep` and `Delete` are disabled while autofill runs.
+
 ## Theme tool
 
 | Control | What it does |
@@ -92,13 +107,13 @@ empty) and of theme words. The outcome messages are tabulated in [Autofill a gri
 | `Upload File` | Choose a `.json` file |
 | `Paste JSON` | `Paste JSON Data` field and `Validate JSON` |
 | `Preview` | Statistics for the grid about to be imported |
-| `Import Grid`, `Clear` | Import it (after the replace confirm, if the grid has content) or discard the preview |
+| `Import Grid`, `Clear` | Import it (after the replace confirm, if the grid has letters, black squares or clues) or discard the preview. A file with a `clues` entry has its clues checked first; a clue that breaks the rules stops the import with a message |
 
 ## Export tool
 
 | Control | What it does |
 |---|---|
-| `Export Format` | `JSON (for reimport)`, `HTML (printable)`, `Text (simple)` |
+| `Export Format` | `JSON (for reimport)` (carries your clues), `HTML (printable)`, `Text (simple)` (no clues) |
 | `Preview` | Shows the text or JSON in the panel (not available for HTML) |
 | `Export` | Downloads `crossword.json`, `crossword.html` or `crossword.txt` |
 
@@ -121,6 +136,6 @@ empty) and of theme words. The outcome messages are tabulated in [Autofill a gri
 
 ## Not in the app
 
-These are not shown in the interface, so you will not find them: a Clues tool, a Heatmap view toggle, a
+These are not shown in the interface, so you will not find them: a Heatmap view toggle, a
 `Suggest Black Square` button, PDF and `.puz` export, and an `Include clues` option. There is no pause button
 for autofill; use `Cancel`, which stops the run (a `Keep partial fill` offer may follow).

@@ -32,6 +32,7 @@
       <li><a href="use-your-own-word-lists.html">Use your own word lists</a></li>
       <li><a href="add-theme-words.html">Add theme words</a></li>
       <li><a href="autofill-a-grid.html">Autofill a grid</a></li>
+      <li><a href="write-clues.html">Write clues</a></li>
       <li><a href="check-and-clean-a-grid.html">Check and clean a grid</a></li>
       <li><a href="import-and-export-grids.html" aria-current="page">Import and export grids</a></li>
       <li><a href="troubleshoot.html">Troubleshoot</a></li>
@@ -59,7 +60,8 @@ puzzle outside the browser.</p>
 <h3 id="1-check-the-file">1. Check the file</h3>
 <p>The JSON must have a <code>size</code> (a number) and a <code>grid</code> (a list of rows, each a list of one-character strings).
 Each cell is <code>#</code> for a black square, <code>.</code> for an empty square, or a letter A-Z. The grid must be square,
-<code>size</code> rows of <code>size</code> cells, with <code>size</code> from 3 to 25. The Export tool's JSON has this shape; extra keys in a file are ignored.</p>
+<code>size</code> rows of <code>size</code> cells, with <code>size</code> from 3 to 25. The Export tool's JSON has this shape; extra keys in a file are ignored, except <code>clues</code>, which the app checks
+(see <a href="../reference/file-formats.html">File formats</a>).</p>
 <pre><code class="language-json">{&quot;size&quot;: 3, &quot;grid&quot;: [[&quot;C&quot;, &quot;A&quot;, &quot;T&quot;], [&quot;.&quot;, &quot;.&quot;, &quot;.&quot;], [&quot;.&quot;, &quot;.&quot;, &quot;.&quot;]]}
 </code></pre>
 <h3 id="2-load-it">2. Load it</h3>
@@ -74,16 +76,20 @@ Each cell is <code>#</code> for a black square, <code>.</code> for an empty squa
 '.', or A-Z.</code> (row and column numbers in these messages count from 0).</p>
 <figure class="g-figure is-narrow"><a href="../../images/import-preview.png"><img alt="The Import panel with pasted JSON and its Preview" src="../../images/import-preview.png" width="459" height="1286" loading="lazy"></a><figcaption>Paste JSON after Validate JSON: the Preview gives the grid's size, cell count and filled count before you import.</figcaption></figure>
 <h3 id="3-import-it">3. Import it</h3>
-<p>Click <code>Import Grid</code>. If the current grid has letters or black squares, the app first asks
+<p>Click <code>Import Grid</code>. If the current grid has letters, black squares or clues, the app first asks
 <code>Replace the current grid? Unsaved changes are lost.</code>; click <code>Replace</code> to continue. <code>Clear</code> throws the preview
 away instead. An import starts a new document: <code>Undo</code> cannot step back across it, so save the grid you were
 working on first (<a href="save-open-and-recover.html">Save, reopen and recover your work</a>).</p>
+<p>If the file has a <code>clues</code> entry, the app checks the clues before it imports anything. A clue that breaks the
+rules stops the import and the message appears in the panel, for example <code>Invalid clue "0,0,across": text must
+be 1 to 200 characters.</code>; nothing is imported. The imported clues are shown in the Clues tool
+(<a href="write-clues.html">Write clues</a>).</p>
 <h2 id="export-a-grid">Export a grid</h2>
 <ol>
 <li>Open the <strong>Export</strong> tool.</li>
 <li>Choose <code>Export Format</code>:
-   - <code>JSON (for reimport)</code> downloads <code>crossword.json</code>, the whole grid, which the Import tool is meant to read back
-     <span class="g-unverified" title="Not checked against the running app for this page">unverified</span> (the panel says so; a round trip was not run for this page).
+   - <code>JSON (for reimport)</code> downloads <code>crossword.json</code>: the grid, its numbers and your clues, which the Import
+     tool reads back.
    - <code>HTML (printable)</code> downloads <code>crossword.html</code>, a web page with the grid, its numbers and your letters.
    - <code>Text (simple)</code> downloads <code>crossword.txt</code>, a plain-text grid with <code>■</code> for black squares.</li>
 <li>Click <code>Preview</code> to look at the result in the panel (the HTML preview is not available; use <code>Export</code>), then
@@ -91,7 +97,8 @@ working on first (<a href="save-open-and-recover.html">Save, reopen and recover 
 </ol>
 <figure class="g-figure is-narrow"><a href="../../images/export-panel.png"><img alt="The Export panel with HTML (printable) chosen" src="../../images/export-panel.png" width="459" height="870" loading="lazy"></a></figure>
 <figure class="g-figure"><a href="../../images/export-html-page.png"><img alt="The exported crossword.html opened in Chrome" src="../../images/export-html-page.png" width="840" height="495" loading="lazy"></a><figcaption>crossword.html opened in a browser: the grid with its numbers and letters, and no clues.</figcaption></figure>
-<p>The files go wherever your browser saves downloads. The exports hold the grid only; they have no clues.</p>
+<p>The files go wherever your browser saves downloads. The JSON export carries your clues; the HTML and text
+exports hold the grid only and have no clues.</p>
 <p>A JSON export keeps letters and black squares but not which words are theme-locked. If you re-import it, the
 theme words can be overwritten; saving with <code>Save grid</code> keeps the locks (see "Known Limitations" in the
 <a href="https://github.com/apassuello/crossword-helper/blob/main/README.md">README</a>).</p>
@@ -100,6 +107,7 @@ theme words can be overwritten; saving with <code>Save grid</code> keeps the loc
 in your browser's downloads folder.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
+<li>Writing the clues that the JSON export carries: <a href="write-clues.html">Write clues</a>.</li>
 <li>File layouts: <a href="../reference/file-formats.html">File formats</a>.</li>
 <li>Every export and import control: <a href="../reference/web-app.html">Web app reference</a>.</li>
 </ul>

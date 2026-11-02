@@ -17,7 +17,8 @@ puzzle outside the browser.
 
 The JSON must have a `size` (a number) and a `grid` (a list of rows, each a list of one-character strings).
 Each cell is `#` for a black square, `.` for an empty square, or a letter A-Z. The grid must be square,
-`size` rows of `size` cells, with `size` from 3 to 25. The Export tool's JSON has this shape; extra keys in a file are ignored.
+`size` rows of `size` cells, with `size` from 3 to 25. The Export tool's JSON has this shape; extra keys in a file are ignored, except `clues`, which the app checks
+(see [File formats](../reference/file-formats.md)).
 
 ```json
 {"size": 3, "grid": [["C", "A", "T"], [".", ".", "."], [".", ".", "."]]}
@@ -41,17 +42,22 @@ The app checks the shape, shows a `Preview` with the grid's statistics, and repo
 
 ### 3. Import it
 
-Click `Import Grid`. If the current grid has letters or black squares, the app first asks
+Click `Import Grid`. If the current grid has letters, black squares or clues, the app first asks
 `Replace the current grid? Unsaved changes are lost.`; click `Replace` to continue. `Clear` throws the preview
 away instead. An import starts a new document: `Undo` cannot step back across it, so save the grid you were
 working on first ([Save, reopen and recover your work](save-open-and-recover.md)).
+
+If the file has a `clues` entry, the app checks the clues before it imports anything. A clue that breaks the
+rules stops the import and the message appears in the panel, for example `Invalid clue "0,0,across": text must
+be 1 to 200 characters.`; nothing is imported. The imported clues are shown in the Clues tool
+([Write clues](write-clues.md)).
 
 ## Export a grid
 
 1. Open the **Export** tool.
 2. Choose `Export Format`:
-   - `JSON (for reimport)` downloads `crossword.json`, the whole grid, which the Import tool is meant to read back
-     [?] (the panel says so; a round trip was not run for this page).
+   - `JSON (for reimport)` downloads `crossword.json`: the grid, its numbers and your clues, which the Import
+     tool reads back.
    - `HTML (printable)` downloads `crossword.html`, a web page with the grid, its numbers and your letters.
    - `Text (simple)` downloads `crossword.txt`, a plain-text grid with `■` for black squares.
 3. Click `Preview` to look at the result in the panel (the HTML preview is not available; use `Export`), then
@@ -63,7 +69,8 @@ working on first ([Save, reopen and recover your work](save-open-and-recover.md)
 
 *crossword.html opened in a browser: the grid with its numbers and letters, and no clues.*
 
-The files go wherever your browser saves downloads. The exports hold the grid only; they have no clues.
+The files go wherever your browser saves downloads. The JSON export carries your clues; the HTML and text
+exports hold the grid only and have no clues.
 
 A JSON export keeps letters and black squares but not which words are theme-locked. If you re-import it, the
 theme words can be overwritten; saving with `Save grid` keeps the locks (see "Known Limitations" in the
@@ -76,5 +83,6 @@ in your browser's downloads folder.
 
 ## Next Steps
 
+- Writing the clues that the JSON export carries: [Write clues](write-clues.md).
 - File layouts: [File formats](../reference/file-formats.md).
 - Every export and import control: [Web app reference](../reference/web-app.md).

@@ -60,6 +60,7 @@ NAV: list[tuple[str, list[tuple[str, str]]]] = [
             ("how-to/use-your-own-word-lists.md", "Use your own word lists"),
             ("how-to/add-theme-words.md", "Add theme words"),
             ("how-to/autofill-a-grid.md", "Autofill a grid"),
+            ("how-to/write-clues.md", "Write clues"),
             ("how-to/check-and-clean-a-grid.md", "Check and clean a grid"),
             ("how-to/import-and-export-grids.md", "Import and export grids"),
             ("how-to/troubleshoot.md", "Troubleshoot"),
