@@ -22,6 +22,14 @@
 # PRE_COMMIT_TO_REF. Unset means a push of a root commit or nothing to push;
 # both pass. `^{commit}` peels an annotated tag, so a tag at HEAD passes.
 #
+# Limit: pre-commit consumes git's pre-push stdin and exposes only that first
+# ref (`_pre_push_ns` in pre_commit/commands/hook_impl.py), so in a multi-branch
+# push the later branches reach neither this guard nor the suites. Push one
+# branch per command. Checking every ref needs a raw .git/hooks/pre-push, which
+# this config replaced on purpose (see its pre-push stage comment).
+#
+# fail_fast on this hook stops the stage at a refusal, before the suites run.
+#
 # Bypass for one push, deliberately: SKIP=push-head-guard git push ...
 
 set -euo pipefail

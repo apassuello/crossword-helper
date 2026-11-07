@@ -99,6 +99,7 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        fail_fast: true
         stages: [pre-push]
 
       - id: pytest-push
