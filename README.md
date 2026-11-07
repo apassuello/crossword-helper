@@ -121,7 +121,8 @@ The CLI is the source of truth for all puzzle logic. Activate the venv first.
 # Pattern search
 python -m cli.src.cli pattern "C?T" -w data/wordlists/comprehensive.txt --json-output
 
-# Fill an example grid (11x11, 15x15, and 21x21 templates included)
+# Fill an example grid. Not every file in data/grids/ passes `validate`;
+# check one with `python -m cli.src.cli validate <file>` before relying on it.
 python -m cli.src.cli fill data/grids/example_15x15.json \
   -w data/wordlists/comprehensive.txt \
   -t 180 --min-score 30 -o filled.json
