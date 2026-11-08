@@ -199,8 +199,9 @@ def test_other_oserror_propagates(clean_env):
 
 # --- #117: warn when the frontend build is older than its source -------------
 #
-# Contract rulings R1-R9 and cases N1-N9 / W1-W5 are in the task contract. The
-# message is transcribed here, not imported, so the tests pin its value.
+# test_n* call frontend_build_is_stale on a temp tree; test_w* run run.py as
+# __main__. The message is transcribed here, not imported, so the tests pin its
+# value.
 
 STALE_MESSAGE = "Frontend build is older than src/ -- run npm run build"
 
@@ -276,14 +277,14 @@ def test_n9_no_sources_at_all_is_not_stale(tmp_path):
     assert _is_stale(root) is False
 
 
-def test_message_constant_equals_the_contract_literal():
+def test_message_constant_equals_the_issue_literal():
     import run
 
     assert run.STALE_FRONTEND_MESSAGE == STALE_MESSAGE
 
 
-# W rows: the real run.py source is copied into a temp root so that its own
-# location (R2) is a tree the test controls; the real checkout is never read
+# test_w*: the real run.py source is copied into a temp root so that its own
+# location (run.py resolves the root from __file__) is a tree the test controls; the real checkout is never read
 # for staleness and never modified. `backend` still resolves via PYTHONPATH /
 # sys.path from the repo.
 

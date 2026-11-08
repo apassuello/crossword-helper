@@ -23,7 +23,7 @@ STALE_FRONTEND_MESSAGE = "Frontend build is older than src/ -- run npm run build
 def frontend_build_is_stale(root):
     """True if frontend/dist/index.html is older than the frontend sources.
 
-    Issue #117, contract R3-R6. Sources are every file under <root>/src/ plus
+    Issue #117. Sources are every file under <root>/src/ plus
     <root>/index.html and <root>/vite.config.js; a missing source is skipped.
     Stale means the build file exists and the newest source mtime is strictly
     greater than its mtime. No build file (dist/ missing or without index.html)
@@ -81,7 +81,9 @@ if __name__ == "__main__":
     # With FLASK_DEBUG=1 werkzeug's reloader re-executes this file in a child
     # while its parent holds the socket; only the parent probes.
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-        # Issue #117 R2, R7: root from __file__, warn before the port probe
+        # Issue #117: the root is this file's directory, not the cwd; warn before
+        # the port probe, so a port already in use does not hide the warning
+        # (the parent only, like the probe, so FLASK_DEBUG=1 prints it once)
         if frontend_build_is_stale(Path(__file__).resolve().parent):
             print(STALE_FRONTEND_MESSAGE)
         _check_port_free("localhost", port)
