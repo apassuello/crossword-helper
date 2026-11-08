@@ -17,6 +17,31 @@ logger = logging.getLogger(__name__)
 theme_api = Blueprint("theme", __name__)
 
 
+def _skipped_line_warning(line):
+    """Warning text for an upload line that is not purely alphabetic."""
+    reasons = []
+    if any(c.isspace() for c in line):
+        reasons.append("a space")
+    if "-" in line:
+        reasons.append("a hyphen")
+    has_digit = any(c.isdigit() for c in line)
+    if has_digit:
+        reasons.append("a digit")
+    if any(not (c.isalpha() or c.isspace() or c == "-" or c.isdigit()) for c in line):
+        reasons.append("other characters")
+
+    if len(reasons) == 1:
+        joined = reasons[0]
+    else:
+        joined = ", ".join(reasons[:-1]) + " and " + reasons[-1]
+
+    text = f"{line}: skipped (contains {joined}"
+    hint = "".join(c for c in line if c.isalpha())
+    if hint and not has_digit:
+        text += f"; write {hint}"
+    return text + ")"
+
+
 @theme_api.route("/theme/upload", methods=["POST"])
 def upload_theme_words():
     """
@@ -29,6 +54,10 @@ def upload_theme_words():
         "content": "WORD1\\nWORD2\\nWORD3",
         "grid_size": 15
     }
+
+    Lines that are not purely alphabetic are left out of "words" and reported
+    in "validation.warnings", e.g. "ICE CREAM: skipped (contains a space;
+    write ICECREAM)".
 
     Response:
     {
@@ -56,14 +85,20 @@ def upload_theme_words():
         # Remove duplicates while preserving order
         seen = set()
         unique_words = []
+        skipped = []
         for word in words:
-            if word not in seen and word.isalpha():
-                seen.add(word)
+            if word in seen:
+                continue
+            seen.add(word)
+            if word.isalpha():
                 unique_words.append(word)
+            else:
+                skipped.append(_skipped_line_warning(word))
 
         # Validate words
         placer = ThemePlacer(grid_size)
         validation = placer.validate_theme_words(unique_words)
+        validation["warnings"] = skipped + list(validation["warnings"])
 
         return (
             jsonify(
