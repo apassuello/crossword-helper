@@ -189,8 +189,9 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: |
-            Internal error, including unreadable CLI output. Code
-            `INTERNAL_ERROR`, message `Clue check returned unreadable output`.
+            Internal error. Code `INTERNAL_ERROR`. Message
+            `Clue check returned unreadable output` when the CLI output
+            cannot be read, otherwise `Clue check failed`.
           content:
             application/json:
               schema:
