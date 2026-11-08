@@ -3,7 +3,8 @@ Flask application launcher script.
 
 Starts the development server for the Crossword Construction Helper web
 application on localhost. The port is the PORT environment variable (default
-5000). Debug mode is off unless FLASK_DEBUG=1.
+5000). Debug mode is off unless FLASK_DEBUG=1. At startup it warns, without
+building, when frontend/dist is older than the frontend sources.
 
 novice-readiness spec 0.2.4 §5 (I6, SERVE-1)
 """
@@ -12,8 +13,30 @@ import errno
 import os
 import socket
 import sys
+from pathlib import Path
 
 from backend.app import app
+
+STALE_FRONTEND_MESSAGE = "Frontend build is older than src/ -- run npm run build"
+
+
+def frontend_build_is_stale(root):
+    """True if frontend/dist/index.html is older than the frontend sources.
+
+    Issue #117, contract R3-R6. Sources are every file under <root>/src/ plus
+    <root>/index.html and <root>/vite.config.js; a missing source is skipped.
+    Stale means the build file exists and the newest source mtime is strictly
+    greater than its mtime. No build file (dist/ missing or without index.html)
+    is not stale: backend/app.py index() already says the frontend is unbuilt.
+    """
+    root = Path(root)
+    build = root / "frontend" / "dist" / "index.html"
+    if not build.is_file():
+        return False
+    sources = [root / "index.html", root / "vite.config.js"]
+    sources.extend(p for p in (root / "src").rglob("*") if p.is_file())
+    newest = max((p.stat().st_mtime_ns for p in sources if p.is_file()), default=None)
+    return newest is not None and newest > build.stat().st_mtime_ns
 
 
 def _check_port_free(host, port):
@@ -57,5 +80,8 @@ if __name__ == "__main__":
     # With FLASK_DEBUG=1 werkzeug's reloader re-executes this file in a child
     # while its parent holds the socket; only the parent probes.
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        # Issue #117 R2, R7: root from __file__, warn before the port probe
+        if frontend_build_is_stale(Path(__file__).resolve().parent):
+            print(STALE_FRONTEND_MESSAGE)
         _check_port_free("localhost", port)
     app.run(host="localhost", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")
