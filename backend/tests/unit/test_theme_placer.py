@@ -497,6 +497,60 @@ class TestMaxThemeWords:
         assert any("Too many theme words" in e for e in body["validation"]["errors"])
 
 
+def _upload(client, content):
+    resp = client.post("/api/theme/upload", json={"content": content, "grid_size": 11})
+    assert resp.status_code == 200, resp.get_data(as_text=True)[:200]
+    return resp.get_json()
+
+
+class TestUploadReportsSkippedLines:
+    """A line that is not purely alphabetic is skipped with a warning, not silently (#103)."""
+
+    def test_space_and_hyphen_lines_are_skipped_with_a_hint(self, client):
+        body = _upload(client, "ICE CREAM\nJAZZ\nfoo-bar\nQUARTZ")
+        assert body["words"] == ["JAZZ", "QUARTZ"]
+        assert body["count"] == 2
+        assert body["validation"]["valid"] is True
+        # target assertion
+        assert body["validation"]["warnings"] == [
+            "ICE CREAM: skipped (contains a space; write ICECREAM)",
+            "FOO-BAR: skipped (contains a hyphen; write FOOBAR)",
+        ]
+
+    def test_reasons_are_listed_in_fixed_order_and_a_digit_withholds_the_hint(self, client):
+        body = _upload(client, "ROUTE66\nROUTE 66\nO'BRIEN\nA-1 B\nJAZZ")
+        assert body["words"] == ["JAZZ"]
+        # target assertion
+        assert body["validation"]["warnings"] == [
+            "ROUTE66: skipped (contains a digit)",
+            "ROUTE 66: skipped (contains a space and a digit)",
+            "O'BRIEN: skipped (contains other characters; write OBRIEN)",
+            "A-1 B: skipped (contains a space, a hyphen and a digit)",
+        ]
+
+    def test_a_line_repeated_in_another_case_is_reported_once(self, client):
+        body = _upload(client, "ice cream\nICE CREAM\nJAZZ")
+        assert body["words"] == ["JAZZ"]
+        # target assertion
+        assert body["validation"]["warnings"] == ["ICE CREAM: skipped (contains a space; write ICECREAM)"]
+
+    def test_skip_warnings_come_before_validation_warnings_and_do_not_change_valid(self, client):
+        body = _upload(client, "AB\nICE CREAM\nABCDEFGHIJ")
+        assert body["validation"]["valid"] is False
+        assert body["validation"]["errors"] == ["AB: Too short (minimum 3 letters)"]
+        # target assertion
+        assert body["validation"]["warnings"] == [
+            "ICE CREAM: skipped (contains a space; write ICECREAM)",
+            "ABCDEFGHIJ: Very long (10 letters), may be hard to place",
+        ]
+
+    def test_regression_pin_a_clean_file_and_a_duplicate_of_a_valid_word_stay_silent(self, client):
+        body = _upload(client, "JAZZ\nQUARTZ\njazz")
+        assert body["words"] == ["JAZZ", "QUARTZ"]
+        assert body["validation"]["warnings"] == []
+        assert body["validation"]["valid"] is True
+
+
 def test_suggestions_never_abut_an_existing_letter():
     """Regression: a letter next to a word was treated like a black square, so
     CAT was suggested at row 3 cols 0-2 against an S at col 3 (reads CATS...)."""
