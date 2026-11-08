@@ -14,6 +14,7 @@ import pytest
 from backend.core.cli_adapter import (
     CLI_STARTUP_BUDGET_SECONDS,
     CLIAdapter,
+    ClueCheckOutputError,
     cached_normalize,
     get_adapter,
 )
@@ -267,6 +268,23 @@ class TestCluesCheck:
             with pytest.raises(Exception) as ei:
                 adapter.clues_check(self.GRID)
         assert (seen.get("reached_cli"), isinstance(ei.value, ValueError)) == (True, False)
+
+    def test_non_json_error_message_is_fixed_and_carries_no_cli_output(self, adapter):
+        """#115: the message is a constant; the CLI's stdout (JSONDecodeError.doc) is not reachable from it."""
+        marker = "CLI-OUTPUT-MARKER-5d2b"
+
+        def fake(args, timeout=None, check_success=True):
+            return marker, "", 0
+
+        with patch.object(CLIAdapter, "_run_command", side_effect=fake):
+            with pytest.raises(ClueCheckOutputError) as ei:
+                adapter.clues_check(self.GRID)
+        exc = ei.value
+        assert str(exc) == "Clue check returned unreadable output"
+        assert marker not in str(exc)
+        assert marker not in repr(exc)
+        assert marker not in repr(exc.args)
+        assert exc.__suppress_context__ is True
 
     def test_timeout_propagates_unchanged(self, adapter):
         exc = subprocess.TimeoutExpired(cmd="crossword", timeout=1)
