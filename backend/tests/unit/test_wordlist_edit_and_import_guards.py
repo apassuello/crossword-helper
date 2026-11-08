@@ -286,3 +286,17 @@ def test_delete_evicts_list_re_cached_while_it_is_deleted(client, wl_dir, monkey
     assert "custom/mine" not in manager._cache
     r = client.get("/api/wordlists/custom/mine")
     assert r.status_code == 404, r.get_data(as_text=True)
+
+
+def test_delete_does_not_keep_cached_name_that_falls_back_to_sibling_file(client, wl_dir, monkeypatch):
+    """`custom/mine.txt` is cached from one file; after that file is deleted the name resolves to a sibling."""
+    manager = _seed(wl_dir, monkeypatch, {"custom/mine.txt": "CAT\nDOG\n", "custom/mine.txt.txt": "FOX\n"}, {})
+    r = client.get("/api/wordlists/custom/mine.txt")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["words"] == ["CAT", "DOG"]
+    assert "custom/mine.txt" in manager._cache
+    r = client.delete("/api/wordlists/custom/mine")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    r = client.get("/api/wordlists/custom/mine.txt")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["words"] == ["FOX"]
