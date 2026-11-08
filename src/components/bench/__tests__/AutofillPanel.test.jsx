@@ -576,3 +576,69 @@ describe('AutofillPanel Keep offer (spec 0.2.7 section 2.3 table)', () => {
     expect(machine.reset).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AutofillPanel word-list selection owned by the parent (#102)', () => {
+  it('starts with the passed selection and ticks it, not the default', async () => {
+    const machine = baseMachine();
+    const onWordlistsChange = vi.fn();
+    const { getByRole, getByLabelText } = render(
+      <AutofillPanel machine={machine} grid={themedGrid()} wordlists={['custom/my_theme']} onWordlistsChange={onWordlistsChange} />
+    );
+    await flush();
+
+    expect(getByLabelText(/My Theme List/)).toBeChecked();
+    expect(getByLabelText(/^Comprehensive/)).not.toBeChecked();
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    expect(machine.start).toHaveBeenCalledTimes(1);
+    expect(machine.start.mock.calls[0][0].wordlists).toEqual(['custom/my_theme']);
+  });
+
+  it('reports a tick through onWordlistsChange', async () => {
+    const onWordlistsChange = vi.fn();
+    const { getByLabelText } = render(
+      <AutofillPanel machine={baseMachine()} grid={themedGrid()} wordlists={['comprehensive']} onWordlistsChange={onWordlistsChange} />
+    );
+    await flush();
+
+    fireEvent.click(getByLabelText(/My Theme List/));
+    expect(onWordlistsChange).toHaveBeenCalledWith(['comprehensive', 'custom/my_theme']);
+  });
+
+  it('drops an id the loaded lists do not offer and reports the pruned selection', async () => {
+    const onWordlistsChange = vi.fn();
+    render(
+      <AutofillPanel machine={baseMachine()} grid={themedGrid()} wordlists={['comprehensive', 'custom/gone']} onWordlistsChange={onWordlistsChange} />
+    );
+    await flush();
+
+    expect(onWordlistsChange).toHaveBeenCalledWith(['comprehensive']);
+  });
+
+  it('regression pin (passes before the fix): a failed fetch prunes nothing', async () => {
+    api.getWordlists.mockRejectedValueOnce(new Error('offline'));
+    const onWordlistsChange = vi.fn();
+    const { queryByText } = render(
+      <AutofillPanel machine={baseMachine()} grid={themedGrid()} wordlists={['comprehensive', 'custom/gone']} onWordlistsChange={onWordlistsChange} />
+    );
+    await flush();
+    await flush();
+
+    // the fetch has settled: the panel left its loading state
+    expect(queryByText('Loading…')).toBeNull();
+    expect(onWordlistsChange).not.toHaveBeenCalled();
+  });
+
+  it('regression pin (passes before the fix): an empty list response prunes nothing', async () => {
+    api.getWordlists.mockResolvedValueOnce({ wordlists: [] });
+    const onWordlistsChange = vi.fn();
+    const { queryByText } = render(
+      <AutofillPanel machine={baseMachine()} grid={themedGrid()} wordlists={['comprehensive', 'custom/gone']} onWordlistsChange={onWordlistsChange} />
+    );
+    await flush();
+    await flush();
+
+    // the fetch has settled: the panel left its loading state
+    expect(queryByText('Loading…')).toBeNull();
+    expect(onWordlistsChange).not.toHaveBeenCalled();
+  });
+});
