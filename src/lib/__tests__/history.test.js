@@ -142,7 +142,7 @@ describe('snapshotContent with clues', () => {
     expect(s.clues).toEqual(clues);
   });
 
-  it('B5: copies each clue entry, so mutating the input entry afterwards leaves the snapshot alone (#115)', () => {
+  it('copies each clue entry, so mutating the input entry afterwards leaves the snapshot alone (#115)', () => {
     const input = { '0,0,across': { text: 'Flower', answer: 'ABC' } };
     const s = snapshotContent(mk(3), 3, input);
     input['0,0,across'].text = 'CHANGED';
