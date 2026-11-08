@@ -27,7 +27,8 @@ def frontend_build_is_stale(root):
     <root>/index.html and <root>/vite.config.js; a missing source is skipped.
     Stale means the build file exists and the newest source mtime is strictly
     greater than its mtime. No build file (dist/ missing or without index.html)
-    is not stale: backend/app.py index() already says the frontend is unbuilt.
+    is not stale; when dist/ is missing, backend/app.py index() says the
+    frontend is unbuilt.
     """
     root = Path(root)
     build = root / "frontend" / "dist" / "index.html"
