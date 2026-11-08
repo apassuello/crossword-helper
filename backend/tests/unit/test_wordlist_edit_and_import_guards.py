@@ -10,6 +10,7 @@ Every test repoints the manager at a tmp directory (never data/wordlists/).
 """
 
 import json
+import pathlib
 import shutil
 import tempfile
 from pathlib import Path
@@ -261,4 +262,27 @@ def test_delete_evicts_other_casing_from_cache(client, wl_dir, monkeypatch):
     r = client.delete("/api/wordlists/custom/F7")
     assert r.status_code == 200, r.get_data(as_text=True)
     r = client.get("/api/wordlists/custom/f7")
+    assert r.status_code == 404, r.get_data(as_text=True)
+
+
+def test_delete_evicts_list_re_cached_while_it_is_deleted(client, wl_dir, monkeypatch):
+    """A GET that lands between the delete's start and the unlink caches the list again."""
+    manager = _seed(wl_dir, monkeypatch, {"custom/mine.txt": "CAT\nDOG\n"}, {})
+    target = (wl_dir / "custom/mine.txt").resolve()
+    real_unlink = pathlib.Path.unlink
+    fired = []
+
+    def racing_unlink(self, *args, **kwargs):
+        if self.resolve() == target:
+            fired.append(self)
+            wordlist_routes.wordlist_manager.load("custom/mine")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "unlink", racing_unlink)
+    r = client.delete("/api/wordlists/custom/mine")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert len(fired) == 1
+    assert not (wl_dir / "custom/mine.txt").exists()
+    assert "custom/mine" not in manager._cache
+    r = client.get("/api/wordlists/custom/mine")
     assert r.status_code == 404, r.get_data(as_text=True)
