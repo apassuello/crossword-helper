@@ -99,6 +99,37 @@ describe('list / load', () => {
     expect((await list()).map((e) => e.id)).toEqual(['b', 'a']);
     expect((await load()).id).toBe('b');
   });
+
+  describe('load(pred) falls back past entries the predicate refuses (#84)', () => {
+    const bad = { id: 'bad', name: 'Broken', grid: null, size: 15, savedAt: T(2) };
+    const good = { id: 'good', name: 'Older', grid: g, size: 5, savedAt: T(1) };
+    const seedBadGood = () => store.set(SAVE_KEY, JSON.stringify([bad, good]));
+
+    it('resolves the first entry, newest first, the predicate accepts', async () => {
+      seedBadGood();
+      await expect(load((e) => e.id === 'good')).resolves.toMatchObject({ id: 'good' });
+    });
+
+    it('resolves null when the predicate accepts none', async () => {
+      store.set(SAVE_KEY, JSON.stringify([bad]));
+      await expect(load(() => false)).resolves.toBeNull();
+    });
+
+    it('regression pin (passes before the fix): with no predicate the newest entry is returned unchanged', async () => {
+      seedBadGood();
+      await expect(load()).resolves.toMatchObject({ id: 'bad' });
+    });
+
+    it('an entry for which the predicate throws counts as not matching; the search continues', async () => {
+      seedBadGood();
+      await expect(
+        load((e) => {
+          if (e.id === 'bad') throw new Error('x');
+          return true;
+        })
+      ).resolves.toMatchObject({ id: 'good' });
+    });
+  });
 });
 
 describe('save', () => {
