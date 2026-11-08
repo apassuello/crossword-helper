@@ -183,3 +183,57 @@ describe('WordListPanel upload', () => {
     expect(screen.queryByText(/too short/)).not.toBeInTheDocument();
   });
 });
+
+describe('WordListPanel delete notifies the parent', () => {
+  const KEY = 'custom/demo_words';
+  beforeEach(() => {
+    vi.spyOn(api, 'getWordlists').mockResolvedValue({
+      wordlists: [{ key: KEY, name: 'Demo Words', category: 'custom' }],
+      categories: {},
+      tags: {},
+    });
+    vi.spyOn(api, 'getWordlist').mockResolvedValue({
+      metadata: { name: 'Demo Words', category: 'custom', description: '' },
+      words: ['CAT'],
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  async function selectAndDelete(onWordlistDeleted) {
+    render(<WordListPanel onWordlistDeleted={onWordlistDeleted} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Demo Words'));
+    await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+  }
+
+  it('calls onWordlistDeleted once with the list key after the delete succeeds', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const del = vi.spyOn(api, 'deleteWordlist').mockResolvedValue({});
+    const spy = vi.fn();
+    await selectAndDelete(spy);
+    await waitFor(() => expect(del).toHaveBeenCalledWith(KEY));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    expect(spy).toHaveBeenCalledWith(KEY);
+  });
+
+  it('regression pin (passes before the fix): a failed delete does not notify the parent', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const del = vi.spyOn(api, 'deleteWordlist').mockRejectedValue(new Error('boom'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.fn();
+    await selectAndDelete(spy);
+    await waitFor(() => expect(del).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('regression pin (passes before the fix): cancelling the confirm deletes nothing and does not notify the parent', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const del = vi.spyOn(api, 'deleteWordlist').mockResolvedValue({});
+    const spy = vi.fn();
+    await selectAndDelete(spy);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(del).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
