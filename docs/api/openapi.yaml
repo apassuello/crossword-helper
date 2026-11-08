@@ -174,8 +174,8 @@ paths:
         '400':
           description: |
             Bad request. Code `INVALID_CLUES` when the CLI rejects the clues,
-            `INVALID_GRID` when it rejects the grid or request validation fails,
-            plus the usual content-type and JSON codes.
+            with the CLI's message; `INVALID_GRID` when it rejects the grid or
+            request validation fails; plus the usual content-type and JSON codes.
           content:
             application/json:
               schema:
