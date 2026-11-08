@@ -235,4 +235,23 @@ describe('a word-list change cancels what an earlier Verify or Clean would have 
     // Control: the fixture does blank, so this confirm is the proof that the "no confirm" rows are not vacuous.
     expect(await screen.findByText(/Clean will remove 3 letters/)).toBeInTheDocument();
   });
+
+  // A stale Clean with nothing to blank opens no confirm for the dismissal to catch: it would clear every
+  // flag and report the grid clean against lists no longer selected. Only the response guard stops that.
+  it('a Clean response with nothing to blank that lands after the lists changed keeps the flags and reports nothing', async () => {
+    const { user, container } = await boot();
+    await openTool(user, 'Autofill');
+    verifySpy.mockResolvedValueOnce(flaggingResponse);
+    await verify(user);
+    await waitFor(() => expect(flaggedLetters(container)).toHaveLength(3));
+    const d = deferred();
+    cleanSpy.mockReturnValueOnce(d.promise);
+    await clean(user);
+    await waitFor(() => expect(cleanSpy).toHaveBeenCalledTimes(1));
+    await tick(user, 'Demo Words');
+    d.resolve({ grid: cleanSpy.mock.calls[0][0].grid, removed_count: 0, message: 'Nothing to clean' });
+    await settle();
+    expect(flaggedLetters(container)).toHaveLength(3);
+    expect(screen.queryByText(/Grid is clean/)).toBeNull();
+  });
 });
