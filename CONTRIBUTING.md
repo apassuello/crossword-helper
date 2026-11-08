@@ -392,6 +392,9 @@ thing under test.
   (`.gitignore:67`, `!src/lib/`), and `src/lib/storage.js` and its test are tracked because of it.
   The trap is disarmed, not latent — do not remove the negation, or those files silently stop
   being committable.
+- **In an `openapi.yaml` `|` block, keep a backticked message on one line.** A literal block keeps
+  every newline, so a wrap inside the backticks lands in the parsed description as `\n` and the
+  exact string the route returns no longer greps (caught before `0d4ea47` landed).
 
 ---
 
@@ -405,6 +408,12 @@ thing under test.
 - CI runs only on pushes to `main`/`develop` and on pull requests (`.github/workflows/test.yml`'s
   `on:` block). A push to a feature branch runs nothing remotely, so the pre-push hook is the only
   whole-tree gate before a PR opens.
+- A red matrix run may be one failure and some cancellations: `test.yml` sets no `fail-fast`, so
+  the default cancels the sibling jobs. Read each job's `conclusion` (`failure` vs `cancelled`).
+  `gh run view --log-failed` refuses while any job is still running;
+  `gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs` does not. For a setup-python download
+  error, fetch the asset by its download URL and by its API asset id: that splits "file gone" from
+  "delivery broken" (#123's red run, 2026-11-08, was a GitHub 504 on the download URL only).
 - Pushing over SSH holds the connection idle while the pre-push suites run, and GitHub can drop it
   after they pass ("Connection to github.com closed by remote host"). `ServerAliveInterval 30` under
   `Host github.com` in `~/.ssh/config` held for a full-suite push (2026-11-07); the fallback is an
