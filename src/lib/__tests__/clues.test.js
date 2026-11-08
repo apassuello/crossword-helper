@@ -216,6 +216,11 @@ describe('trimClueText', () => {
     expect(trimClueText('\u3000 \t\u0085')).toBe('');
     expect(trimClueText('')).toBe('');
   });
+
+  it('coerces a non-string argument with String() (#115, contract B-R2)', async () => {
+    const { trimClueText } = await load();
+    expect(trimClueText(null)).toBe('null');
+  });
 });
 
 describe('constants', () => {

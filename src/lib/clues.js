@@ -70,7 +70,7 @@ export function compareClueKeys(a, b) {
  *
  * The trailing end is a backward scan over UTF-16 code units (every member of the set is one), not
  * a `$`-anchored regex: that form retries from each position of an interior whitespace run
- * followed by a non-whitespace character, which is quadratic (100k spaces took ~3.8 s).
+ * followed by a non-whitespace character, which is quadratic.
  */
 export function trimClueText(s) {
   const lead = String(s).replace(LEADING_WS, '');
