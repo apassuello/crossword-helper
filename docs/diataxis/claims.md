@@ -187,11 +187,11 @@ typed.
 | A-19 | autofill-a-grid | Autofill does not change typed letters or locked theme words | typed `ZIP` survived CLI fill; JAZZ survived UI fill; `--lock-filled` default True | verified | runs |
 | A-20 | autofill-a-grid | Results differ from run to run | two UI runs, different flagged words | verified | tut2.js |
 | C-01 | check-and-clean-a-grid | Verify and Clean are disabled when the backend is offline | `disabled={offline \|\| editingPaused}` TopBar.jsx (Verify and Clean buttons) | verified (code) | not run offline |
-| C-02 | check-and-clean-a-grid | Verify checks slots against the `comprehensive` list only | `VALIDATION_WORDLISTS = ['comprehensive']` App.jsx:55, used App.jsx:539,592 | verified | read |
+| C-02 | check-and-clean-a-grid | Verify and Clean check slots against the lists ticked in Autofill's Word Lists (`comprehensive` by default and when none is ticked) | `autofillWordlists` state and `validationWordlists` in `src/App.jsx`, used by `handleVerifyWords` and `handleCleanGrid`; pinned by `src/__tests__/App.validationWordlists.test.jsx` | verified | read |
 | C-03 | check-and-clean-a-grid | Full slot not in list = invalid; partial slot no word fits = unfillable; empty skipped | `verify_words` docstring routes.py:759-766; App.jsx toast builds `invalid`/`unfillable` | verified (code) | invalid case observed; unfillable not observed |
 | C-04 | check-and-clean-a-grid | Messages `All N words valid!` and `K of N words flagged — …` with `_` for blanks | App.jsx:557, 563-575 | verified | tut2.js shows both |
 | C-05 | check-and-clean-a-grid | Letters of flagged words turn red | CrosswordGrid.jsx `cell.isError ? 'var(--danger)'`; `applyVerifyErrors` | verified (code) | not viewed |
-| C-06 | check-and-clean-a-grid | A word only in your own list is flagged invalid | follows from C-02 (own list is not in the verify list) | verified (code) | not run |
+| C-06 | check-and-clean-a-grid | A word only in your own list is flagged invalid unless that list is ticked in Autofill | follows from C-02 (only ticked lists are in the verify list) | verified (code) | not run |
 | C-07 | check-and-clean-a-grid | Clean clears exactly the red cells, except theme-locked; asks `Clean will remove N letters` with `Clean`/`Cancel` | `clean_grid` docstring routes.py:943-955; App.jsx:806-810, `planClean` | verified (code) | not run |
 | C-08 | check-and-clean-a-grid | Undo reverses a clean in one step | `acceptClean` calls `recordStep` App.jsx; README.md:60-63 | verified (code) | not run |
 | C-09 | check-and-clean-a-grid | No-op messages `Grid is clean — all words are valid!` / `Nothing removed: theme-locked letters are kept.` | App.jsx:618-622 | verified (code) | not run |

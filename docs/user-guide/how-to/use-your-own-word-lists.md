@@ -52,9 +52,9 @@ for this page.*
 
 - **Autofill:** tick it under **Custom** in the Word Lists section. A ticked custom list shows a
   `Priority theme list` choice; select it and the fill prefers words from that list
-  ([Autofill a grid](autofill-a-grid.md)). Note that `Verify words` and `Clean grid` check only the shipped
-  `Comprehensive Dictionary`, so words that exist only in your list are flagged as invalid
-  ([Check and clean a grid](check-and-clean-a-grid.md)).
+  ([Autofill a grid](autofill-a-grid.md)). Note that `Verify words` and `Clean grid` use the lists ticked here
+  (the `Comprehensive Dictionary` by default, and when none is ticked), so ticking your list makes its words count as
+  valid ([Check and clean a grid](check-and-clean-a-grid.md)).
 
 ### 4. Change or remove a custom list
 

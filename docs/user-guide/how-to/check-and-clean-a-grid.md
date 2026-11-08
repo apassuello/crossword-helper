@@ -14,7 +14,7 @@ losing the good words around them. Use this after an autofill, or any time you h
 
 ### 1. Verify the words
 
-Click `Verify words` in the top bar. The app checks every slot against the shipped `Comprehensive Dictionary` word list:
+Click `Verify words` in the top bar. The app checks every slot against the word lists ticked in Autofill's Word Lists section:
 
 - A completely filled slot is **invalid** if that exact word is not in the list.
 - A partly filled slot is **unfillable** if no word in the list fits the letters you have.
@@ -26,8 +26,8 @@ each blank. The letters of flagged words turn red on the grid.
 
 ![A filled grid after Verify words: flagged letters in red and the list of invalid words](../images/verify-flagged.png)
 
-Verify checks against the shipped `Comprehensive Dictionary` only, not against word lists you uploaded. A word that
-exists only in your own list is flagged as invalid.
+Verify and Clean use the lists ticked in Autofill's Word Lists: the shipped `Comprehensive Dictionary` by default, and
+also when none is ticked. To have a word that exists only in your own list count as valid, tick that list there first.
 
 ### 2. Clean the grid
 
