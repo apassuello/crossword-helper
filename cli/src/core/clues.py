@@ -18,10 +18,34 @@ from .grid import Grid
 # Spec 3.1: the Unicode White_Space set, written out. str.strip() is not used:
 # it also strips U+001C-U+001F, which this set excludes.
 _WHITESPACE = frozenset(
-    [chr(c) for c in range(0x09, 0x0E)]
-    + [" ", "\u0085", " ", " "]
-    + [chr(c) for c in range(0x2000, 0x200B)]
-    + [" ", " ", " ", " ", "　"]
+    [
+        # C0 controls, then the rest in code point order.
+        "\u0009",
+        "\u000a",
+        "\u000b",
+        "\u000c",
+        "\u000d",
+        "\u0020",
+        "\u0085",
+        "\u00a0",
+        "\u1680",
+        "\u2000",
+        "\u2001",
+        "\u2002",
+        "\u2003",
+        "\u2004",
+        "\u2005",
+        "\u2006",
+        "\u2007",
+        "\u2008",
+        "\u2009",
+        "\u200a",
+        "\u2028",
+        "\u2029",
+        "\u202f",
+        "\u205f",
+        "\u3000",
+    ]
 )
 
 # [0-9], not \d: \d matches other Unicode digits. fullmatch, not `$`: `$`
