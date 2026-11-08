@@ -55,8 +55,11 @@ import './styles/App.scss';
 // this, and Clean clears exactly those cells — so both calls MUST pass the same
 // selection. They used to disagree (verify sent this list, clean sent nothing
 // and got every installed list merged), which left red cells sitting on the
-// grid after a clean reported success.
-const VALIDATION_WORDLISTS = ['comprehensive'];
+// grid after a clean reported success. (#102) The selection is the one ticked
+// in Autofill's Word Lists, held here so it outlives the panel; nothing ticked
+// falls back to the shipped list, never to [] (which would let the server choose).
+const DEFAULT_WORDLISTS = ['comprehensive'];
+const validationWordlists = (selected) => (selected.length > 0 ? selected : DEFAULT_WORDLISTS);
 
 /**
  * A stored entry becomes the live document only if `size` is an integer the importer accepts
@@ -111,6 +114,7 @@ function App() {
   const [docEpoch, setDocEpoch] = useState(0);
   const docEpochRef = useRef(0);
   const [selectedCell, setSelectedCell] = useState(null);
+  const [autofillWordlists, setAutofillWordlists] = useState(DEFAULT_WORDLISTS);
   const [currentTool, setCurrentTool] = useState('edit'); // edit, search, autofill, clues, lists, import, export
   const [showThemePanel, setShowThemePanel] = useState(false);
   // Black-square symmetry toggle, persisted (JSON boolean). usePersistentState
@@ -647,7 +651,7 @@ function App() {
           isBlack: cell.isBlack || false
         }))),
         size: gridSize,
-        wordlists: VALIDATION_WORDLISTS
+        wordlists: validationWordlists(autofillWordlists)
       });
 
       // D1: a response that lands after Start writes nothing (no grid, no toast).
@@ -685,7 +689,7 @@ function App() {
       console.error('Verify words failed:', error);
       pushToast({ kind: 'error', message: 'Failed to verify words: ' + (error.message || error.code) });
     }
-  }, [grid, gridSize, pushToast]);
+  }, [grid, gridSize, pushToast, autofillWordlists]);
 
   const handleCleanGrid = useCallback(async () => {
     if (editingPausedRef.current) return;
@@ -700,7 +704,7 @@ function App() {
       const { grid: cleanedGrid, removed_count, message } = await api.cleanGrid({
         grid: sent,
         size: gridSize,
-        wordlists: VALIDATION_WORDLISTS
+        wordlists: validationWordlists(autofillWordlists)
       });
 
       // D1: a response that lands after Start writes nothing (no grid, no toast).
@@ -738,7 +742,7 @@ function App() {
       console.error('Clean grid failed:', error);
       pushToast({ kind: 'error', message: 'Failed to clean grid: ' + (error.message || error.code) });
     }
-  }, [grid, gridSize, pushToast]);
+  }, [grid, gridSize, pushToast, autofillWordlists]);
 
   const acceptClean = useCallback(() => {
     if (editingPausedRef.current || !pendingClean) return;
@@ -992,7 +996,13 @@ function App() {
 
           {currentTool === 'autofill' && (
             <div className="xw-inspector">
-              <AutofillPanel machine={autofill} grid={grid} docId={docId} />
+              <AutofillPanel
+                machine={autofill}
+                grid={grid}
+                docId={docId}
+                wordlists={autofillWordlists}
+                onWordlistsChange={setAutofillWordlists}
+              />
             </div>
           )}
 

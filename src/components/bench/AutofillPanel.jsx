@@ -40,7 +40,7 @@
 // ported behavior from the old panel: deselecting the designated wordlist
 // clears the designation too.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { allSlots } from '../../hooks/useGridGeometry';
 
@@ -92,8 +92,17 @@ export function getThemeEntries(grid) {
   return entries;
 }
 
-export function AutofillPanel({ machine, grid, docId }) {
-  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+// `wordlists` / `onWordlistsChange` (#102) lift the word-list selection into the caller so
+// Verify and Clean can use it and it survives the panel closing. Without `wordlists` the
+// panel keeps its own selection, as before.
+export function AutofillPanel({ machine, grid, docId, wordlists, onWordlistsChange }) {
+  const [ownOptions, setOptions] = useState(DEFAULT_OPTIONS);
+  const controlled = wordlists !== undefined;
+  const options = controlled ? { ...ownOptions, wordlists } : ownOptions;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const onChangeRef = useRef(onWordlistsChange);
+  onChangeRef.current = onWordlistsChange;
   const [availableWordlists, setAvailableWordlists] = useState({ built_in: [], custom: [] });
   const [wordlistsLoading, setWordlistsLoading] = useState(true);
 
@@ -107,6 +116,25 @@ export function AutofillPanel({ machine, grid, docId }) {
           built_in: lists.filter((wl) => wl.category !== 'custom'),
           custom: lists.filter((wl) => wl.category === 'custom'),
         });
+        // A selection can outlive a list deleted elsewhere; drop ids the server no longer
+        // lists so they cannot fail every request. Nothing is pruned on an empty response.
+        if (lists.length > 0) {
+          const known = new Set(lists.map((wl) => wl.key || wl.name));
+          const current = optionsRef.current.wordlists;
+          const kept = current.filter((id) => known.has(id));
+          if (kept.length !== current.length) {
+            if (controlled) {
+              if (onChangeRef.current) onChangeRef.current(kept);
+              setOptions((prev) => (prev.themeList && !known.has(prev.themeList) ? { ...prev, themeList: null } : prev));
+            } else {
+              setOptions((prev) => ({
+                ...prev,
+                wordlists: prev.wordlists.filter((id) => known.has(id)),
+                themeList: prev.themeList && !known.has(prev.themeList) ? null : prev.themeList,
+              }));
+            }
+          }
+        }
         setWordlistsLoading(false);
       },
       () => {
@@ -122,6 +150,13 @@ export function AutofillPanel({ machine, grid, docId }) {
   const handleOptionChange = (key, value) => setOptions((prev) => ({ ...prev, [key]: value }));
 
   const toggleWordlist = (id, checked) => {
+    if (controlled) {
+      const next = checked ? [...wordlists, id] : wordlists.filter((l) => l !== id);
+      if (onWordlistsChange) onWordlistsChange(next);
+      // Same rule as below: unticking the theme list clears the designation.
+      if (!checked) setOptions((prev) => (prev.themeList === id ? { ...prev, themeList: null } : prev));
+      return;
+    }
     setOptions((prev) => {
       const wordlists = checked ? [...prev.wordlists, id] : prev.wordlists.filter((l) => l !== id);
       // Mirrors the old panel: deselecting the wordlist currently designated
