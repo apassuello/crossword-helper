@@ -65,7 +65,7 @@ typed.
 | S-08 | save-open-and-recover | `Open saved` lists size, time, `Open`, `Delete` | SavedGridsList.jsx | verified (code) | list not opened in a run |
 | S-09 | save-open-and-recover | Opening over a non-empty grid asks the replace confirm | GridPanel.jsx `onOpen` branch (`gridHasContent`) | verified (code) | not run |
 | S-10 | save-open-and-recover | `Delete` asks `Delete "<name>"?` | GridPanel.jsx `pending.kind === 'delete'` message | verified (code) | not run |
-| S-11 | save-open-and-recover | On reload the newest save is restored with banner `Restored "<name>" (saved <time>)`, `Start blank`, `×` | RestoreBanner.jsx; README.md:179-182 (only newest save restored) | verified (code) | reload not run |
+| S-11 | save-open-and-recover | On reload the newest readable save is restored (a damaged newest falls back to an older one) with banner `Restored "<name>" (saved <time>)`, `Start blank`, `×` | RestoreBanner.jsx; `load(pred)` src/lib/storage.js, called with `isAdoptableEntry` in src/App.jsx (#84) | verified (code) | reload not run |
 | S-12 | save-open-and-recover | Undo/redo keys and top-bar buttons | TopBar.jsx Undo/Redo; App.jsx undo listener | verified (code) | not run |
 | S-13 | save-open-and-recover | One letter is one undo step; placed word, Apply All, clean, finished autofill each one step; undo stops at new grid/import/open | README.md:60-64 | unverified | README wording only; spec 0.2.18 §3.9 not re-derived |
 | S-14 | save-open-and-recover | Full storage shows `Could not save: browser storage is full. Delete a saved grid or export this one.` | `QUOTA_MESSAGE` useSaveMachine.js:61-62 | verified (code) | not triggered |

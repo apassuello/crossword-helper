@@ -60,7 +60,8 @@ with `Replace`.
 
 *After a reload: the banner above the grid names the save it restored.*
 
-Only the newest save is restored automatically. Older saves are still in `Open saved`.
+Only one save is restored automatically: the newest one the app can read. If the newest is damaged, the next
+older one is restored instead. All your saves are still in `Open saved`.
 
 ### 5. Step back from a mistake
 

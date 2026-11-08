@@ -365,7 +365,9 @@ function App() {
     initializeGrid(gridSize);
   }, [gridSize]);
 
-  // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): restore the newest save on load. The
+  // novice-readiness spec 0.2.7 §3.4 (S3, M1, PD-6-G4): restore the newest save on load —
+  // the newest one `isAdoptableEntry` accepts, so a damaged newest save falls back to an older
+  // one (#84). The
   // [gridSize] effect above has already initialised a blank grid by the time `load()`
   // resolves (it is promise-based, and takes the Web Lock when a legacy migration is
   // pending), so the restore simply lands after it. Across sizes the
