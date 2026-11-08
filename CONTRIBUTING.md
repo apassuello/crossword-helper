@@ -405,6 +405,15 @@ thing under test.
 - CI runs only on pushes to `main`/`develop` and on pull requests (`.github/workflows/test.yml`'s
   `on:` block). A push to a feature branch runs nothing remotely, so the pre-push hook is the only
   whole-tree gate before a PR opens.
+- Pushing over SSH holds the connection idle while the pre-push suites run, and GitHub can drop it
+  after they pass ("Connection to github.com closed by remote host"). `ServerAliveInterval 30` under
+  `Host github.com` in `~/.ssh/config` held for a full-suite push (2026-11-07); the fallback is an
+  HTTPS remote with `gh auth setup-git`.
+- PRs here are rebase-merged, which rewrites every commit. Classify a branch as merged with
+  `git cherry origin/main <branch>` (no `+` lines), not `git branch --merged`: on 2026-11-07
+  `--no-merged` listed 26 remote branches, of which all 19 non-audit ones were fully contained. A
+  pre-merge rebase's old→new SHA map goes stale at the merge too (the 2026-11-02 map's `558c281` and
+  `3fee2eb` are `886bb5d` and `7a879eb` on `main`): re-find a commit by subject and compare diff bodies.
 - **Merge with a merge commit when anything outside the repo cites individual commits.** A squash
   replaces every commit on the branch with one new hash, so references to the originals stop
   resolving against `main`. PR #5 merged as `f727f1a` (two parents) and its commits are still
