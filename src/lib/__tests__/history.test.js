@@ -142,6 +142,14 @@ describe('snapshotContent with clues', () => {
     expect(s.clues).toEqual(clues);
   });
 
+  it('B5: copies each clue entry, so mutating the input entry afterwards leaves the snapshot alone (#115)', () => {
+    const input = { '0,0,across': { text: 'Flower', answer: 'ABC' } };
+    const s = snapshotContent(mk(3), 3, input);
+    input['0,0,across'].text = 'CHANGED';
+    expect(s.clues['0,0,across'].text).toBe('Flower');
+    expect(s.clues['0,0,across']).not.toBe(input['0,0,across']);
+  });
+
   it('carries the document signature as its sig', async () => {
     const { docSigOf } = await loadSig();
     const g = mk(3, (r, c) => (r === 0 && c === 0 ? { letter: 'A' } : {}));

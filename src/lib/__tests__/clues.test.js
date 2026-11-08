@@ -94,6 +94,14 @@ describe('keys', () => {
     const { parseClueKey } = await load();
     expect(parseClueKey('10,2,down')).toStrictEqual({ row: 10, col: 2, dir: 'down' });
   });
+
+  it.each([['01,0,across'], ['0,01,down'], ['00,0,across']])(
+    'parseClueKey rejects the leading-zero key %s (#115)',
+    async (key) => {
+      const { parseClueKey } = await load();
+      expect(parseClueKey(key)).toBeNull();
+    }
+  );
 });
 
 describe('compareClueKeys', () => {
@@ -168,6 +176,45 @@ describe('trimClueText', () => {
   it('keeps interior whitespace unchanged', async () => {
     const { trimClueText } = await load();
     expect(trimClueText('a  b')).toBe('a  b');
+  });
+
+  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals, not micro-benchmarks.
+  it('B1: trims an interior ASCII-space run in linear time', async () => {
+    const { trimClueText } = await load();
+    const input = 'a' + ' '.repeat(100000) + 'b';
+    const t0 = performance.now();
+    const out = trimClueText(input);
+    const ms = performance.now() - t0;
+    expect(out).toBe(input);
+    expect(ms).toBeLessThan(250);
+  }, 30000);
+
+  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
+  it('B2: trims an interior U+3000 run in linear time', async () => {
+    const { trimClueText } = await load();
+    const input = 'a' + '\u3000'.repeat(100000) + 'b';
+    const t0 = performance.now();
+    const out = trimClueText(input);
+    const ms = performance.now() - t0;
+    expect(out).toBe(input);
+    expect(ms).toBeLessThan(250);
+  }, 30000);
+
+  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
+  it('B3: keeps a long interior run and strips the trailing set in linear time', async () => {
+    const { trimClueText } = await load();
+    const input = 'a' + ' '.repeat(100000) + 'b' + ' \u3000\t\u0085';
+    const t0 = performance.now();
+    const out = trimClueText(input);
+    const ms = performance.now() - t0;
+    expect(out).toBe('a' + ' '.repeat(100000) + 'b');
+    expect(ms).toBeLessThan(250);
+  }, 30000);
+
+  it('B3a: an all-whitespace string and the empty string both trim to empty', async () => {
+    const { trimClueText } = await load();
+    expect(trimClueText('\u3000 \t\u0085')).toBe('');
+    expect(trimClueText('')).toBe('');
   });
 });
 
