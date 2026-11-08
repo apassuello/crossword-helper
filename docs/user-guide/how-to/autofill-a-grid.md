@@ -89,9 +89,9 @@ Autofill does not change letters you typed or theme words you locked.
 ### 4. Check what you kept
 
 Click `Verify words` in the top bar. Entries that are not in the word list are flagged and listed in a
-message; see [Check and clean a grid](check-and-clean-a-grid.md). `Verify words` checks only the shipped
-`Comprehensive Dictionary`, so words that come only from a custom list you ticked are flagged too, and `Clean
-grid` would blank them. To run again, click `Reset`, clear some squares if the grid is full, and click
+message; see [Check and clean a grid](check-and-clean-a-grid.md). `Verify words` and `Clean grid` use the
+lists ticked in Word Lists (the `Comprehensive Dictionary` by default, and when none is ticked), so words that
+come only from a list you left unticked are flagged and `Clean grid` would blank them. To run again, click `Reset`, clear some squares if the grid is full, and click
 `Start Autofill`; results differ from run to run.
 
 ## Final Result
