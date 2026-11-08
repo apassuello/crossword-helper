@@ -27,14 +27,6 @@ export function useClueReconcile({ grid, gridSize, clues, active }) {
   const latest = useRef({});
   latest.current = { grid, gridSize, clues, sig, active };
   const wasActive = useRef(false);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     const opening = active && !wasActive.current;
@@ -49,8 +41,7 @@ export function useClueReconcile({ grid, gridSize, clues, active }) {
       const cur = latest.current;
       if (!cur.grid) return;
       const requestSig = cur.sig;
-      const stillCurrent = () =>
-        mounted.current && latest.current.active && latest.current.sig === requestSig;
+      const stillCurrent = () => latest.current.active && latest.current.sig === requestSig;
       api
         .checkClues({ size: cur.gridSize, grid: toCliStrings(cur.grid), clues: cur.clues })
         .then(
