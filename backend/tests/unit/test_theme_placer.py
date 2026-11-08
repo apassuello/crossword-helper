@@ -544,6 +544,10 @@ class TestUploadReportsSkippedLines:
             "ABCDEFGHIJ: Very long (10 letters), may be hard to place",
         ]
 
+    def test_a_line_with_no_letters_gets_no_hint(self, client):
+        body = _upload(client, "---\nJAZZ")
+        assert body["validation"]["warnings"] == ["---: skipped (contains a hyphen)"]
+
     def test_regression_pin_a_clean_file_and_a_duplicate_of_a_valid_word_stay_silent(self, client):
         body = _upload(client, "JAZZ\nQUARTZ\njazz")
         assert body["words"] == ["JAZZ", "QUARTZ"]
