@@ -195,3 +195,167 @@ def test_other_oserror_propagates(clean_env):
     with pytest.raises(OSError) as exc:
         _run_run_py()
     assert exc.value.errno == 13
+
+
+# --- #117: warn when the frontend build is older than its source -------------
+#
+# Contract rulings R1-R9 and cases N1-N9 / W1-W5 are in the task contract. The
+# message is transcribed here, not imported, so the tests pin its value.
+
+STALE_MESSAGE = "Frontend build is older than src/ -- run npm run build"
+
+OLD = 500_000
+BUILD = 1_000_000
+NEW = 2_000_000
+
+
+def _touch(path, mtime, text="x"):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def _tree(root, *, build=BUILD, src=OLD, index=OLD, vite=OLD, nested=OLD):
+    """Build a fake checkout; a None mtime leaves that file out."""
+    if build is not None:
+        _touch(root / "frontend" / "dist" / "index.html", build)
+    if src is not None:
+        _touch(root / "src" / "a.js", src)
+    if nested is not None:
+        _touch(root / "src" / "components" / "x" / "y.jsx", nested)
+    if index is not None:
+        _touch(root / "index.html", index)
+    if vite is not None:
+        _touch(root / "vite.config.js", vite)
+    return root
+
+
+def _is_stale(root):
+    import run
+
+    return run.frontend_build_is_stale(root)
+
+
+def test_n1_src_newer_than_build_is_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, src=NEW)) is True
+
+
+def test_n2_build_newer_than_every_source_is_fresh(tmp_path):
+    assert _is_stale(_tree(tmp_path)) is False
+
+
+def test_n3_no_dist_is_not_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, build=None, src=NEW)) is False
+
+
+def test_n4_dist_without_index_html_is_not_stale(tmp_path):
+    _tree(tmp_path, build=None, src=NEW)
+    (tmp_path / "frontend" / "dist").mkdir(parents=True)
+    assert _is_stale(tmp_path) is False
+
+
+def test_n5_root_index_html_newer_is_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, index=NEW)) is True
+
+
+def test_n6_vite_config_newer_is_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, vite=NEW)) is True
+
+
+def test_n7_nested_source_newer_is_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, nested=NEW)) is True
+
+
+def test_n8_equal_mtimes_are_not_stale(tmp_path):
+    assert _is_stale(_tree(tmp_path, src=BUILD, index=BUILD, vite=BUILD, nested=BUILD)) is False
+
+
+def test_n9_no_sources_at_all_is_not_stale(tmp_path):
+    root = _tree(tmp_path, src=None, nested=None, index=None, vite=None)
+    assert _is_stale(root) is False
+
+
+def test_message_constant_equals_the_contract_literal():
+    import run
+
+    assert run.STALE_FRONTEND_MESSAGE == STALE_MESSAGE
+
+
+# W rows: the real run.py source is copied into a temp root so that its own
+# location (R2) is a tree the test controls; the real checkout is never read
+# for staleness and never modified. `backend` still resolves via PYTHONPATH /
+# sys.path from the repo.
+
+
+def _stale_root(tmp_path, *, stale=True):
+    root = tmp_path / "checkout"
+    _tree(root, src=NEW if stale else OLD)
+    (root / "run.py").write_text(RUN_PY.read_text())
+    return root
+
+
+def _empty_cwd(tmp_path):
+    cwd = tmp_path / "empty-cwd"
+    cwd.mkdir()
+    return cwd
+
+
+def _run_copy_in_process(root, cwd, monkeypatch):
+    monkeypatch.chdir(cwd)
+    with mock.patch.object(flask_app, "run"):
+        runpy.run_path(str(root / "run.py"), run_name="__main__")
+
+
+def test_w1_stale_root_prints_the_message_once(clean_env, tmp_path, capsys):
+    root = _stale_root(tmp_path)
+    _run_copy_in_process(root, _empty_cwd(tmp_path), clean_env)
+    assert capsys.readouterr().out.count(STALE_MESSAGE) == 1
+
+
+def test_w2_fresh_root_prints_no_message(clean_env, tmp_path, capsys):
+    root = _stale_root(tmp_path, stale=False)
+    _run_copy_in_process(root, _empty_cwd(tmp_path), clean_env)
+    assert STALE_MESSAGE not in capsys.readouterr().out
+
+
+def test_w3_reloader_child_does_not_print_the_message(clean_env, tmp_path, capsys):
+    clean_env.setenv("WERKZEUG_RUN_MAIN", "true")
+    root = _stale_root(tmp_path)
+    _run_copy_in_process(root, _empty_cwd(tmp_path), clean_env)
+    assert STALE_MESSAGE not in capsys.readouterr().out
+
+
+def _run_copy_with_held_port(root, cwd):
+    held, port = _held_socket()
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(root / "run.py")],
+            cwd=str(cwd),
+            env=_env(PORT=str(port), PYTHONPATH=str(ROOT)),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    finally:
+        held.close()
+    return proc, port
+
+
+def test_w4_stale_root_with_held_port_warns_then_reports_the_port(tmp_path):
+    root = _stale_root(tmp_path)
+    proc, port = _run_copy_with_held_port(root, _empty_cwd(tmp_path))
+    assert STALE_MESSAGE in proc.stdout
+    port_msg = f"Port {port} is in use. Start with PORT=<other> python3 run.py"
+    assert port_msg in proc.stdout
+    assert proc.stdout.index(STALE_MESSAGE) < proc.stdout.index(port_msg)
+    assert "Traceback" not in proc.stdout + proc.stderr
+    assert proc.returncode == 1
+
+
+def test_w5_root_comes_from_run_py_location_not_cwd(tmp_path):
+    root = _stale_root(tmp_path)
+    cwd = _empty_cwd(tmp_path)
+    assert list(cwd.iterdir()) == []
+    proc, _ = _run_copy_with_held_port(root, cwd)
+    assert STALE_MESSAGE in proc.stdout
