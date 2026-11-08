@@ -94,6 +94,46 @@ def test_timeout_replies_504(client):
     assert _error(resp) == ("TIMEOUT", "Clue check timed out")
 
 
+@pytest.mark.parametrize(
+    "stdout",
+    ["[]", "null", json.dumps("ok"), "42"],
+    ids=["array", "null", "string", "number"],
+)
+def test_non_object_json_replies_500_unreadable_output(client, stdout):
+    """#115: valid JSON that is not an object hits the isinstance guard, not the catch-all."""
+    with _patched(stdout, 0):
+        resp = _post(client, BODY)
+    assert resp.status_code == 500
+    assert _error(resp) == ("INTERNAL_ERROR", "Clue check returned unreadable output")
+
+
+def test_unexpected_exception_replies_500_fixed_message_and_no_leak(client):
+    """#115: the catch-all answers a fixed message; the exception text never reaches the body."""
+    secret = "SECRET-9c41e"
+    with patch.object(CLIAdapter, "clues_check", side_effect=RuntimeError(secret)):
+        resp = _post(client, BODY)
+    assert resp.status_code == 500
+    assert _error(resp) == ("INTERNAL_ERROR", "Clue check failed")
+    assert (secret in resp.get_data(as_text=True)) is False
+
+
+def test_cli_failure_with_unknown_code_replies_400_invalid_grid_with_cli_message(client):
+    """#115: a CLI code other than INVALID_CLUES maps to INVALID_GRID."""
+    out = {"success": False, "code": "X", "error": "boom"}
+    with _patched(json.dumps(out), 1):
+        resp = _post(client, BODY)
+    assert resp.status_code == 400
+    assert _error(resp) == ("INVALID_GRID", "boom")
+
+
+def test_string_true_success_is_not_success_replies_400_invalid_grid(client):
+    """#115 A7 (controller ruling): only the JSON boolean true is success."""
+    with _patched('{"success": "true", "statuses": {}}', 0):
+        resp = _post(client, BODY)
+    assert resp.status_code == 400
+    assert resp.get_json()["error"]["code"] == "INVALID_GRID"
+
+
 # Same replies as /api/number gives (routes.py number_grid, lines 124-135): read, not guessed.
 
 
