@@ -39,8 +39,19 @@ def _get_category(name: str) -> str:
 
 
 def _is_builtin(name: str) -> bool:
-    """True when the wordlist is a shipped/built-in list (not user-editable)."""
-    return _get_category(name) not in EDITABLE_CATEGORIES
+    """True when the wordlist is a shipped/built-in list (not user-editable).
+
+    Decided from the name alone: the first path segment is the directory the
+    file lives in, and only ``custom/`` and ``imports/`` are editable. A name
+    with no ``/`` is a root-level shipped list. Metadata is deliberately not
+    consulted: it is writable through a metadata-only PUT, so trusting its
+    ``category`` let a caller reclassify a shipped list as editable and then
+    overwrite or delete it (#65). ``_get_category`` still reads metadata, for
+    display only.
+    """
+    if "/" not in name:
+        return True
+    return name.split("/")[0] not in EDITABLE_CATEGORIES
 
 
 def _bad_path(error: str):
