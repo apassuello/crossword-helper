@@ -82,7 +82,9 @@ fix the file and load it again. A file over 1 MB is refused with `File too large
 
 ### A theme word is missing from `Loaded Words`
 
-A line that contains a space, hyphen or digit is dropped without a message. Write `ICECREAM`, not `ICE CREAM`.
+A line that contains a space, hyphen or digit is skipped, and a ⚠️ warning toast names the line and, where it
+can, what to write instead, for example `ICE CREAM: skipped (contains a space; write ICECREAM)`. Fix the line in
+the file and load it again. If the file also has an error, only the error shows until you fix it.
 
 ### An import is rejected
 

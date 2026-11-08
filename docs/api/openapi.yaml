@@ -563,7 +563,10 @@ paths:
       summary: Upload and validate theme words
       description: |
         Parse and validate theme words from file content.
-        Checks word length, character validity, and duplicates.
+        Checks word length and duplicates.
+        A line that is not purely alphabetic is left out of `words` and reported
+        in `validation.warnings` (for example
+        `ICE CREAM: skipped (contains a space; write ICECREAM)`).
         More than 50 words is reported as a validation error.
       operationId: uploadThemeWords
       requestBody:

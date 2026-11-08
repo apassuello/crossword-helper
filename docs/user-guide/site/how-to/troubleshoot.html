@@ -98,7 +98,9 @@ letters) or longer than the grid, or a list of more than 50 words. Any one probl
 fix the file and load it again. A file over 1 MB is refused with <code>File too large (max 1MB)</code>. See
 <a href="add-theme-words.html">Add theme words</a>.</p>
 <h3 id="a-theme-word-is-missing-from-loaded-words">A theme word is missing from <code>Loaded Words</code></h3>
-<p>A line that contains a space, hyphen or digit is dropped without a message. Write <code>ICECREAM</code>, not <code>ICE CREAM</code>.</p>
+<p>A line that contains a space, hyphen or digit is skipped, and a ⚠️ warning toast names the line and, where it
+can, what to write instead, for example <code>ICE CREAM: skipped (contains a space; write ICECREAM)</code>. Fix the line in
+the file and load it again. If the file also has an error, only the error shows until you fix it.</p>
 <h3 id="an-import-is-rejected">An import is rejected</h3>
 <p>The message says which part of the file is wrong, for example <code>Invalid file type. Please select a .json file.</code>
 or <code>Grid row 2 has 14 cells, expected 15</code>. See <a href="import-and-export-grids.html">Import and export grids</a> for the

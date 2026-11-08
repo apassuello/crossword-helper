@@ -16,7 +16,7 @@ has set entries (a theme, names, a date) that must survive the fill.
 ### 1. Prepare the theme file
 
 One word per line, letters only (the full rules are in [File formats](../reference/file-formats.md#theme-word-file)).
-A line that contains a space, hyphen or digit is dropped without a message, so write `ICECREAM`, not
+A line that contains a space, hyphen or digit is skipped and reported with a warning, so write `ICECREAM`, not
 `ICE CREAM`. A list of more than 50 words (the limit `MAX_THEME_WORDS` in `backend/core/theme_placer.py`), a
 word shorter than 3 letters or a word longer than the grid is wide is an error, and any one error rejects the
 whole list: fix the file and load it again.
@@ -26,8 +26,10 @@ whole list: fix the file and load it again.
 Open the **Theme** tool in the left rail. In `Upload Theme Words`, click `Choose File` and pick your file.
 
 The app validates the list. If something is wrong, it shows an error toast starting `Invalid theme words:` and
-lists each problem. If the list is valid, it reports `Loaded N theme words` and immediately works out where
-each word could go. The words appear under `Loaded Words`.
+lists each problem. If the list is valid, it shows a ⚠️ toast for each skipped line, for example
+`ICE CREAM: skipped (contains a space; write ICECREAM)`, then reports `Loaded N theme words` and immediately
+works out where each word could go. The words appear under `Loaded Words`. If the file has an error as well as
+skipped lines, only the error shows; the skipped-line warnings appear once the error is fixed.
 
 ### 3. Place the words
 
