@@ -40,7 +40,7 @@ report it.
   attribution trailers. Never chain a test run and a commit in one shell command.
 - Spec §7's document amendments are applied in Task 11, not before.
 
-## Verified facts this plan relies on (checked 2026-10-31 at `17f058f`)
+## Verified facts this plan relies on (checked 2026-10-31 at `17f058f`, pre-rebase; on `main` as `7a879eb`)
 
 - `_load_grid_or_exit(grid_file, allow_nonstandard, json_output)` returns `(data, grid)`. `data` is the raw
   JSON dict, so `clues` is read from `data`. `Grid.to_dict()` knows nothing of `clues`, so every write that
@@ -116,7 +116,7 @@ facts (the RED and GREEN commits, the review package path) go in the dispatch me
    Exception (owner ruling, 2026-11-01): a tests-only fix, with `git diff <last reviewed head>..HEAD -- <the
    task's production paths>` empty, after at least two full REVIEWs with free mutants, closes on a controller
    check that reproduces each of its kills at the target line. It beat a third full REVIEW (Task 3 fix 3,
-   `5bf3346`); the whole-branch review before merge remains the second gate.
+   `886bb5d`); the whole-branch review before merge remains the second gate.
 5. **Brief rules learned in execution.** Each one was paid for on this plan; carry them into the next plan's
    protocol.
    - A brief names a hazard RED found, never the fix a RED spike used, and RED writes no implementation
@@ -616,7 +616,7 @@ found by review and not listed in §7:
   documented.
 
 **Criteria:**
-- Apply §7's edits verbatim. Review found every quoted target present at `17f058f`, some wrapped across lines.
+- Apply §7's edits verbatim. Review found every quoted target present at `17f058f` (pre-rebase; `7a879eb` on `main`), some wrapped across lines.
   The novice spec is amended **at its current version on this branch's base**: 0.2.23 here, and 0.2.24 if PR
   #112 has merged first. Bump it and add an amendment record line.
 - If `docs/user-guide-html` has landed on main, its regen check covers `docs/user-guide/*.md`, so rebuild the
