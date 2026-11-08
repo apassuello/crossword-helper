@@ -13,6 +13,7 @@
  * already share) so slot/empty-count semantics match production exactly.
  */
 
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import { readFileSync } from 'fs';
@@ -602,6 +603,24 @@ describe('AutofillPanel word-list selection owned by the parent (#102)', () => {
 
     fireEvent.click(getByLabelText(/My Theme List/));
     expect(onWordlistsChange).toHaveBeenCalledWith(['comprehensive', 'custom/my_theme']);
+  });
+
+  it('with the selection held by the parent, deselecting the designated wordlist still clears themeList', async () => {
+    const machine = baseMachine();
+    function Parent() {
+      const [wordlists, setWordlists] = useState(['comprehensive']);
+      return <AutofillPanel machine={machine} grid={themedGrid()} wordlists={wordlists} onWordlistsChange={setWordlists} />;
+    }
+    const { getByRole, getByLabelText } = render(<Parent />);
+    await flush();
+
+    fireEvent.click(getByLabelText(/My Theme List/i));
+    fireEvent.click(getByLabelText(/Priority theme list/i));
+    fireEvent.click(getByLabelText(/My Theme List/i));
+
+    fireEvent.click(getByRole('button', { name: /start autofill/i }));
+    expect(machine.start.mock.calls[0][0].wordlists).toEqual(['comprehensive']);
+    expect(machine.start.mock.calls[0][0].themeList).toBeNull();
   });
 
   it('drops an id the loaded lists do not offer and reports the pruned selection', async () => {
