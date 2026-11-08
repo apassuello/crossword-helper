@@ -153,8 +153,8 @@ describe('trimClueText', () => {
 
   it.each([
     ['U+0085', '\u0085'],
-    ['U+00A0', ' '],
-    ['U+3000', '　'],
+    ['U+00A0', '\u00A0'],
+    ['U+3000', '\u3000'],
     ['ASCII space', ' '],
     ['tab', '\t'],
     ['newline', '\n'],
@@ -165,7 +165,7 @@ describe('trimClueText', () => {
 
   it('keeps a leading U+FEFF (JS trim would strip it)', async () => {
     const { trimClueText } = await load();
-    expect(trimClueText('﻿abc')).toBe('﻿abc');
+    expect(trimClueText('\uFEFFabc')).toBe('\uFEFFabc');
   });
 
   it('keeps a leading U+001C (Python strip would strip it)', async () => {
@@ -258,7 +258,7 @@ describe('applyCommit', () => {
 
   it.each([
     ['empty', ''],
-    ['whitespace-only (incl. U+3000)', ' 　 '],
+    ['whitespace-only (incl. U+3000)', ' \u3000 '],
   ])('a committed clue with a %s draft is removed', async (_n, draft) => {
     const { applyCommit } = await load();
     const clues = { [KEY]: { text: 'Flower', answer: 'ROSE' }, '1,0,down': { text: 'k', answer: 'AB' } };
