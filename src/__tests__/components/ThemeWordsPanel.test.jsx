@@ -293,6 +293,21 @@ describe('ThemeWordsPanel Component', () => {
     expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/\.txt/));
     await waitFor(() => expect(screen.getByText('BIRTHDAY')).toBeInTheDocument());
   });
+
+  it('regression pin: a warning in the upload reply is toasted verbatim', async () => {
+    const user = userEvent.setup();
+    const warning = 'ICE CREAM: skipped (contains a space; write ICECREAM)';
+    mockApiEndpoint('post', '/theme/upload', {
+      words: ['JAZZ'],
+      count: 1,
+      validation: { valid: true, errors: [], warnings: [warning] },
+    });
+    mockApiEndpoint('post', '/theme/suggest-placements', { suggestions: [] });
+    render(<ThemeWordsPanel {...defaultProps} />);
+    await user.upload(document.querySelector('input[type="file"]'), new File(['JAZZ'], 'theme.txt'));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(toast.mock.calls[0][0]).toBe(warning);
+  });
 });
 
 describe('ThemeWordsPanel while editingPaused (Task 4.4, D1)', () => {
