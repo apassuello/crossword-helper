@@ -63,7 +63,7 @@ A plain text file read by the Theme tool.
 | Entries | One word per line |
 | Case | Converted to capitals |
 | Duplicates | Dropped, keeping the first |
-| Lines with a space, hyphen or digit | Dropped without a message |
+| Lines with a space, hyphen or digit | Skipped, with a warning naming the line |
 | Length | At least 3 letters and no more than the grid size, else reported as an error |
 | List size | More than 50 words (`MAX_THEME_WORDS`) is refused. Any one error rejects the whole list |
 | File size | Under 1 MB |

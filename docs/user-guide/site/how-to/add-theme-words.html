@@ -59,15 +59,17 @@ has set entries (a theme, names, a date) that must survive the fill.</p>
 <h2 id="steps">Steps</h2>
 <h3 id="1-prepare-the-theme-file">1. Prepare the theme file</h3>
 <p>One word per line, letters only (the full rules are in <a href="../reference/file-formats.html#theme-word-file">File formats</a>).
-A line that contains a space, hyphen or digit is dropped without a message, so write <code>ICECREAM</code>, not
+A line that contains a space, hyphen or digit is skipped and reported with a warning, so write <code>ICECREAM</code>, not
 <code>ICE CREAM</code>. A list of more than 50 words (the limit <code>MAX_THEME_WORDS</code> in <code>backend/core/theme_placer.py</code>), a
 word shorter than 3 letters or a word longer than the grid is wide is an error, and any one error rejects the
 whole list: fix the file and load it again.</p>
 <h3 id="2-load-the-words">2. Load the words</h3>
 <p>Open the <strong>Theme</strong> tool in the left rail. In <code>Upload Theme Words</code>, click <code>Choose File</code> and pick your file.</p>
 <p>The app validates the list. If something is wrong, it shows an error toast starting <code>Invalid theme words:</code> and
-lists each problem. If the list is valid, it reports <code>Loaded N theme words</code> and immediately works out where
-each word could go. The words appear under <code>Loaded Words</code>.</p>
+lists each problem. If the list is valid, it shows a ⚠️ toast for each skipped line, for example
+<code>ICE CREAM: skipped (contains a space; write ICECREAM)</code>, then reports <code>Loaded N theme words</code> and immediately
+works out where each word could go. The words appear under <code>Loaded Words</code>. If the file has an error as well as
+skipped lines, only the error shows; the skipped-line warnings appear once the error is fixed.</p>
 <h3 id="3-place-the-words">3. Place the words</h3>
 <p>The <code>Placement Suggestions</code> section lists each word with its candidate positions. Each suggestion shows
 <code>Row r, Col c (direction)</code> (counted from 1, like the labels on the grid), a score out of 100 and a short reason.
