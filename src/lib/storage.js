@@ -161,10 +161,28 @@ export function list({ ordered = false } = {}) {
 
 /**
  * The newest saved grid, or `null` if there is none. Never rejects.
+ *
+ * With a function `pred`, the newest entry for which `pred(entry)` is truthy
+ * instead, else `null` (#84: restore falls back past an entry it cannot adopt
+ * to an older one). An entry for which `pred` throws counts as not matching and
+ * the search continues, so one bad entry cannot hide older good ones. Without
+ * `pred` the newest entry is returned as before.
+ * @param {(entry: object) => boolean} [pred]
  * @returns {Promise<object|null>}
  */
-export function load() {
-  return list().then((entries) => entries[0] ?? null);
+export function load(pred) {
+  return list().then((entries) => {
+    if (typeof pred !== 'function') return entries[0] ?? null;
+    return (
+      entries.find((entry) => {
+        try {
+          return Boolean(pred(entry));
+        } catch {
+          return false;
+        }
+      }) ?? null
+    );
+  });
 }
 
 /**

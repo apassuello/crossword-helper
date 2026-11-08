@@ -417,7 +417,7 @@ function App() {
   );
   useEffect(() => {
     let cancelled = false;
-    storage.load().then((entry) => {
+    storage.load(isAdoptableEntry).then((entry) => {
       if (cancelled || !entry) return;
       adoptSavedEntry(entry, { banner: true });
     });
