@@ -171,8 +171,8 @@ describe('trimClueText', () => {
     expect(trimClueText('a  b')).toBe('a  b');
   });
 
-  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals, not micro-benchmarks.
-  it('B1: trims an interior ASCII-space run in linear time', () => {
+  // #115: wall-clock row. n and the 250 ms bound leave a wide margin both ways; not a micro-benchmark.
+  it('trims an interior ASCII-space run in linear time', () => {
     const input = 'a' + ' '.repeat(100000) + 'b';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -181,8 +181,8 @@ describe('trimClueText', () => {
     expect(ms).toBeLessThan(250);
   }, 30000);
 
-  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
-  it('B2: trims an interior U+3000 run in linear time', () => {
+  // #115: wall-clock row, same margin as the row above.
+  it('trims an interior U+3000 run in linear time', () => {
     const input = 'a' + '\u3000'.repeat(100000) + 'b';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -191,8 +191,8 @@ describe('trimClueText', () => {
     expect(ms).toBeLessThan(250);
   }, 30000);
 
-  // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
-  it('B3: keeps a long interior run and strips the trailing set in linear time', () => {
+  // #115: wall-clock row, same margin as the row above.
+  it('keeps a long interior run and strips the trailing set in linear time', () => {
     const input = 'a' + ' '.repeat(100000) + 'b' + ' \u3000\t\u0085';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -201,12 +201,12 @@ describe('trimClueText', () => {
     expect(ms).toBeLessThan(250);
   }, 30000);
 
-  it('B3a: an all-whitespace string and the empty string both trim to empty', () => {
+  it('an all-whitespace string and the empty string both trim to empty', () => {
     expect(trimClueText('\u3000 \t\u0085')).toBe('');
     expect(trimClueText('')).toBe('');
   });
 
-  it('coerces a non-string argument with String() (#115, contract B-R2)', () => {
+  it('coerces a non-string argument with String() (#115)', () => {
     expect(trimClueText(null)).toBe('null');
   });
 });
