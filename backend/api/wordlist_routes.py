@@ -303,6 +303,31 @@ def update_wordlist(name):
         return jsonify({"error": str(e)}), 500
 
 
+def _evict_cached_aliases(target):
+    """Drop every cache key whose file is the same file as ``target``.
+
+    Exact-key eviction was not enough (#98): ``WordListManager.load`` caches
+    under the spelling it was asked for, so one file can sit under several
+    keys ("custom/mine" and "custom/mine.txt" on any filesystem, another
+    casing on a case-insensitive one). Each key is resolved to its file the
+    way ``load`` does and compared with ``os.path.samefile``, so the
+    filesystem, not the key text, decides what is an alias. Call before the
+    unlink: ``samefile`` needs both files to exist.
+    """
+    wordlist_dir = wordlist_manager.wordlist_dir
+    for key in list(wordlist_manager._cache):
+        candidate = wordlist_dir / key
+        if not candidate.suffix:
+            candidate = candidate.with_suffix(".txt")
+        if not candidate.exists():
+            candidate = wordlist_dir / f"{key}.txt"
+        try:
+            if candidate.exists() and os.path.samefile(candidate, target):
+                del wordlist_manager._cache[key]
+        except OSError:
+            continue
+
+
 @wordlist_api.route("/wordlists/<path:name>", methods=["DELETE"])
 def delete_wordlist(name):
     """
@@ -322,12 +347,12 @@ def delete_wordlist(name):
         if _is_builtin(name):
             return _builtin_refusal(name, "deleted")
 
+        # Evict every cached spelling of this file, before it is unlinked
+        _evict_cached_aliases(filepath)
+        wordlist_manager._cache.pop(name, None)
+
         # Delete file
         filepath.unlink()
-
-        # Remove from cache
-        if name in wordlist_manager._cache:
-            del wordlist_manager._cache[name]
 
         # Remove from metadata
         if name in wordlist_manager._metadata["wordlists"]:
