@@ -10,6 +10,9 @@ Every test repoints the manager at a tmp directory (never data/wordlists/).
 """
 
 import json
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -220,3 +223,42 @@ def test_custom_dir_list_is_deletable_whatever_metadata_says(client, wl_dir, mon
     r = client.delete("/api/wordlists/custom/mine")
     assert r.status_code == 200, r.get_data(as_text=True)
     assert not (wl_dir / "custom/mine.txt").exists()
+
+
+# --- #98: delete evicts every cached spelling --------------------------------
+
+
+def _fs_is_case_insensitive():
+    probe_dir = Path(tempfile.mkdtemp())
+    try:
+        (probe_dir / "probe.txt").write_text("x")
+        return (probe_dir / "PROBE.TXT").exists()
+    finally:
+        shutil.rmtree(probe_dir, ignore_errors=True)
+
+
+def test_delete_evicts_explicit_suffix_spelling_from_cache(client, wl_dir, monkeypatch):
+    manager = _seed(wl_dir, monkeypatch, {"custom/mine.txt": "A\nB\n"}, {})
+    r = client.get("/api/wordlists/custom/mine.txt")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert "custom/mine.txt" in manager._cache
+    r = client.delete("/api/wordlists/custom/mine")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert not (wl_dir / "custom/mine.txt").exists()
+    r = client.get("/api/wordlists/custom/mine.txt")
+    assert r.status_code == 404, r.get_data(as_text=True)
+
+
+@pytest.mark.skipif(
+    not _fs_is_case_insensitive(),
+    reason="needs a case-insensitive filesystem (default macOS APFS); skipped on Linux CI",
+)
+def test_delete_evicts_other_casing_from_cache(client, wl_dir, monkeypatch):
+    manager = _seed(wl_dir, monkeypatch, {"custom/F7.txt": "A\nB\n"}, {})
+    r = client.get("/api/wordlists/custom/f7")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert "custom/f7" in manager._cache
+    r = client.delete("/api/wordlists/custom/F7")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    r = client.get("/api/wordlists/custom/f7")
+    assert r.status_code == 404, r.get_data(as_text=True)
