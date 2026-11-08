@@ -303,42 +303,6 @@ def update_wordlist(name):
         return jsonify({"error": str(e)}), 500
 
 
-def _evict_missing_cache_entries():
-    """Drop every cache key whose file no longer exists.
-
-    Run this after the unlink, never before (#98). ``WordListManager.load``
-    caches under the spelling it was asked for, so one file can sit under
-    several keys ("custom/mine" and "custom/mine.txt" on any filesystem,
-    another casing on a case-insensitive one). Evicting before the unlink
-    leaves a window in which a concurrent GET re-caches the still-present
-    file and nothing removes it afterwards (Greptile on #126). After the
-    unlink, every key that resolved to the deleted file fails to resolve, so
-    existence alone identifies the aliases, and lists deleted out of band
-    are swept too.
-
-    Existence rather than ``os.path.samefile``: ``samefile`` needs both files
-    to exist, so it cannot run after the unlink. It would also evict a key
-    whose own file survives, which this does not: "custom/A" stays cached
-    when "custom/a" is deleted on a case-sensitive filesystem, and a
-    still-readable hardlink stays cached.
-
-    Each key is resolved to its file exactly as ``load`` does. An OSError on
-    one key skips that key; it must not turn a completed delete into a 500.
-    """
-    wordlist_dir = wordlist_manager.wordlist_dir
-    for key in list(wordlist_manager._cache):
-        try:
-            candidate = wordlist_dir / key
-            if not candidate.suffix:
-                candidate = candidate.with_suffix(".txt")
-            if not candidate.exists():
-                candidate = wordlist_dir / f"{key}.txt"
-            if not candidate.exists():
-                wordlist_manager._cache.pop(key, None)
-        except OSError:
-            continue
-
-
 @wordlist_api.route("/wordlists/<path:name>", methods=["DELETE"])
 def delete_wordlist(name):
     """
@@ -361,8 +325,11 @@ def delete_wordlist(name):
         # Delete file
         filepath.unlink()
 
-        # Evict every cached spelling of it, after the unlink (see the helper)
-        _evict_missing_cache_entries()
+        # Clear, not evict per key: a per-key rule must reproduce load()'s
+        # direct-path-then-.txt resolution, and a key whose file is gone can
+        # resolve to a sibling (custom/mine.txt -> custom/mine.txt.txt). After
+        # the unlink, so a concurrent GET cannot re-cache the present file (#98).
+        wordlist_manager._cache.clear()
 
         # Remove from metadata
         if name in wordlist_manager._metadata["wordlists"]:
