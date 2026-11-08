@@ -6,8 +6,19 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fromCliStrings } from '../../api/gridCodec';
-
-const load = () => import(/* @vite-ignore */ ['..', 'clues'].join('/'));
+import {
+  CLUE_MAX_LENGTH,
+  CLUE_TOO_LONG,
+  applyCommit,
+  applyDelete,
+  applyKeep,
+  clueKey,
+  clueStatus,
+  clueStatuses,
+  compareClueKeys,
+  parseClueKey,
+  trimClueText,
+} from '../clues';
 
 const FIXTURE = path.resolve(__dirname, '../../..', 'tests/fixtures/clue_status_cases.json');
 const cases = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).cases;
@@ -22,13 +33,11 @@ const ROSE = [
 const frozen = (o) => structuredClone(o);
 
 describe('clueStatus: shared fixture rows', () => {
-  it('the fixture holds 16 cases', async () => {
-    await load();
+  it('the fixture holds 16 cases', () => {
     expect(cases.length).toBe(16);
   });
 
-  it.each(cases.map((c, i) => [i, c]))('row %i', async (_i, c) => {
-    const { clueStatus } = await load();
+  it.each(cases.map((c, i) => [i, c]))('row %i', (_i, c) => {
     const grid = fromCliStrings(c.grid);
     expect(
       clueStatus(grid, c.key, { text: 'x', answer: c.answer }),
@@ -38,13 +47,11 @@ describe('clueStatus: shared fixture rows', () => {
 });
 
 describe('clueStatus: entry lookup', () => {
-  it('a key naming a cell inside an entry but not its start is orphaned', async () => {
-    const { clueStatus } = await load();
+  it('a key naming a cell inside an entry but not its start is orphaned', () => {
     expect(clueStatus(fromCliStrings(ROSE), '0,2,across', { text: 'x', answer: 'ROSE' })).toBe('orphaned');
   });
 
-  it('a 2-letter down entry is found and compared', async () => {
-    const { clueStatus } = await load();
+  it('a 2-letter down entry is found and compared', () => {
     const grid = fromCliStrings([
       ['.', '.', 'A', '.'],
       ['.', '.', 'B', '.'],
@@ -56,15 +63,13 @@ describe('clueStatus: entry lookup', () => {
     expect(clueStatus(grid, '0,2,across', { text: 'x', answer: 'AB' })).toBe('orphaned');
   });
 
-  it('an entry that grew from its answer is stale (RO vs ROSE)', async () => {
-    const { clueStatus } = await load();
+  it('an entry that grew from its answer is stale (RO vs ROSE)', () => {
     expect(clueStatus(fromCliStrings(ROSE), '0,0,across', { text: 'x', answer: 'RO' })).toBe('stale');
   });
 });
 
 describe('clueStatuses', () => {
-  it('returns one status per key of clues and nothing else', async () => {
-    const { clueStatuses } = await load();
+  it('returns one status per key of clues and nothing else', () => {
     const grid = fromCliStrings(ROSE);
     const clues = {
       '0,0,across': { text: 'a', answer: 'ROSE' },
@@ -78,35 +83,30 @@ describe('clueStatuses', () => {
     });
   });
 
-  it('gives {} for {}', async () => {
-    const { clueStatuses } = await load();
+  it('gives {} for {}', () => {
     expect(clueStatuses(fromCliStrings(ROSE), {})).toEqual({});
   });
 });
 
 describe('keys', () => {
-  it('clueKey joins row, col and dir', async () => {
-    const { clueKey } = await load();
+  it('clueKey joins row, col and dir', () => {
     expect(clueKey(10, 0, 'across')).toBe('10,0,across');
   });
 
-  it('parseClueKey returns numbers', async () => {
-    const { parseClueKey } = await load();
+  it('parseClueKey returns numbers', () => {
     expect(parseClueKey('10,2,down')).toStrictEqual({ row: 10, col: 2, dir: 'down' });
   });
 
   it.each([['01,0,across'], ['0,01,down'], ['00,0,across']])(
     'parseClueKey rejects the leading-zero key %s (#115)',
-    async (key) => {
-      const { parseClueKey } = await load();
+    (key) => {
       expect(parseClueKey(key)).toBeNull();
     }
   );
 });
 
 describe('compareClueKeys', () => {
-  it('sorts by row, then column numerically, then across before down', async () => {
-    const { compareClueKeys } = await load();
+  it('sorts by row, then column numerically, then across before down', () => {
     const keys = ['10,0,across', '2,0,down', '2,0,across', '0,10,down', '0,2,across'];
     expect([...keys].sort(compareClueKeys)).toEqual([
       '0,2,across',
@@ -117,14 +117,12 @@ describe('compareClueKeys', () => {
     ]);
   });
 
-  it('"2,0,down" sorts before "10,0,across"', async () => {
-    const { compareClueKeys } = await load();
+  it('"2,0,down" sorts before "10,0,across"', () => {
     expect(compareClueKeys('2,0,down', '10,0,across') < 0).toBe(true);
     expect(compareClueKeys('10,0,across', '2,0,down') > 0).toBe(true);
   });
 
-  it('a key compares equal to itself', async () => {
-    const { compareClueKeys } = await load();
+  it('a key compares equal to itself', () => {
     expect(compareClueKeys('3,4,down', '3,4,down')).toBe(0);
   });
 });
@@ -144,8 +142,7 @@ describe('trimClueText', () => {
 
   it.each(SPEC_WS.map((ch) => [`U+${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`, ch]))(
     'spec 3.1 member %s is stripped as a leading and as a trailing character',
-    async (_n, ch) => {
-      const { trimClueText } = await load();
+    (_n, ch) => {
       expect(trimClueText(`${ch}abc`)).toBe('abc');
       expect(trimClueText(`abc${ch}`)).toBe('abc');
     }
@@ -158,29 +155,24 @@ describe('trimClueText', () => {
     ['ASCII space', ' '],
     ['tab', '\t'],
     ['newline', '\n'],
-  ])('strips leading and trailing %s', async (_n, ch) => {
-    const { trimClueText } = await load();
+  ])('strips leading and trailing %s', (_n, ch) => {
     expect(trimClueText(`${ch}abc${ch}`)).toBe('abc');
   });
 
-  it('keeps a leading U+FEFF (JS trim would strip it)', async () => {
-    const { trimClueText } = await load();
+  it('keeps a leading U+FEFF (JS trim would strip it)', () => {
     expect(trimClueText('\uFEFFabc')).toBe('\uFEFFabc');
   });
 
-  it('keeps a leading U+001C (Python strip would strip it)', async () => {
-    const { trimClueText } = await load();
+  it('keeps a leading U+001C (Python strip would strip it)', () => {
     expect(trimClueText('\u001Cabc')).toBe('\u001Cabc');
   });
 
-  it('keeps interior whitespace unchanged', async () => {
-    const { trimClueText } = await load();
+  it('keeps interior whitespace unchanged', () => {
     expect(trimClueText('a  b')).toBe('a  b');
   });
 
   // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals, not micro-benchmarks.
-  it('B1: trims an interior ASCII-space run in linear time', async () => {
-    const { trimClueText } = await load();
+  it('B1: trims an interior ASCII-space run in linear time', () => {
     const input = 'a' + ' '.repeat(100000) + 'b';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -190,8 +182,7 @@ describe('trimClueText', () => {
   }, 30000);
 
   // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
-  it('B2: trims an interior U+3000 run in linear time', async () => {
-    const { trimClueText } = await load();
+  it('B2: trims an interior U+3000 run in linear time', () => {
     const input = 'a' + '\u3000'.repeat(100000) + 'b';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -201,8 +192,7 @@ describe('trimClueText', () => {
   }, 30000);
 
   // #115, contract B-R4: n = 100000 and the 250 ms bound are wall-clock literals.
-  it('B3: keeps a long interior run and strips the trailing set in linear time', async () => {
-    const { trimClueText } = await load();
+  it('B3: keeps a long interior run and strips the trailing set in linear time', () => {
     const input = 'a' + ' '.repeat(100000) + 'b' + ' \u3000\t\u0085';
     const t0 = performance.now();
     const out = trimClueText(input);
@@ -211,21 +201,18 @@ describe('trimClueText', () => {
     expect(ms).toBeLessThan(250);
   }, 30000);
 
-  it('B3a: an all-whitespace string and the empty string both trim to empty', async () => {
-    const { trimClueText } = await load();
+  it('B3a: an all-whitespace string and the empty string both trim to empty', () => {
     expect(trimClueText('\u3000 \t\u0085')).toBe('');
     expect(trimClueText('')).toBe('');
   });
 
-  it('coerces a non-string argument with String() (#115, contract B-R2)', async () => {
-    const { trimClueText } = await load();
+  it('coerces a non-string argument with String() (#115, contract B-R2)', () => {
     expect(trimClueText(null)).toBe('null');
   });
 });
 
 describe('constants', () => {
-  it('CLUE_MAX_LENGTH is 200 and CLUE_TOO_LONG is the message', async () => {
-    const { CLUE_MAX_LENGTH, CLUE_TOO_LONG } = await load();
+  it('CLUE_MAX_LENGTH is 200 and CLUE_TOO_LONG is the message', () => {
     expect(CLUE_MAX_LENGTH).toBe(200);
     expect(CLUE_TOO_LONG).toBe('At most 200 characters.');
   });
@@ -234,8 +221,7 @@ describe('constants', () => {
 describe('applyCommit', () => {
   const KEY = '0,0,across';
 
-  it('unchanged trimmed text keeps the same map and a stale answer', async () => {
-    const { applyCommit } = await load();
+  it('unchanged trimmed text keeps the same map and a stale answer', () => {
     const clues = { [KEY]: { text: 'Flower', answer: 'RODE' } };
     const r = applyCommit(clues, KEY, '  Flower ', 'ROSE');
     expect(r.changed).toBe(false);
@@ -247,8 +233,7 @@ describe('applyCommit', () => {
   it.each([
     ['whitespace-only', '   '],
     ['empty', ''],
-  ])('no clue and a %s draft is a no-op on the same map', async (_n, draft) => {
-    const { applyCommit } = await load();
+  ])('no clue and a %s draft is a no-op on the same map', (_n, draft) => {
     const clues = { '1,0,down': { text: 'k', answer: 'AB' } };
     const r = applyCommit(clues, KEY, draft, 'ROSE');
     expect(r.changed).toBe(false);
@@ -259,8 +244,7 @@ describe('applyCommit', () => {
   it.each([
     ['empty', ''],
     ['whitespace-only (incl. U+3000)', ' \u3000 '],
-  ])('a committed clue with a %s draft is removed', async (_n, draft) => {
-    const { applyCommit } = await load();
+  ])('a committed clue with a %s draft is removed', (_n, draft) => {
     const clues = { [KEY]: { text: 'Flower', answer: 'ROSE' }, '1,0,down': { text: 'k', answer: 'AB' } };
     const before = frozen(clues);
     const r = applyCommit(clues, KEY, draft, 'ROSE');
@@ -272,8 +256,7 @@ describe('applyCommit', () => {
     expect(clues).toEqual(before);
   });
 
-  it('201 code points is refused with CLUE_TOO_LONG and the map unchanged', async () => {
-    const { applyCommit, CLUE_TOO_LONG } = await load();
+  it('201 code points is refused with CLUE_TOO_LONG and the map unchanged', () => {
     const clues = { [KEY]: { text: 'Flower', answer: 'ROSE' } };
     const before = frozen(clues);
     const r = applyCommit(clues, KEY, 'a'.repeat(201), 'ROSE');
@@ -284,8 +267,7 @@ describe('applyCommit', () => {
     expect(clues).toEqual(before);
   });
 
-  it('a refused commit on a stale clue writes nothing and keeps the old answer', async () => {
-    const { applyCommit, CLUE_TOO_LONG } = await load();
+  it('a refused commit on a stale clue writes nothing and keeps the old answer', () => {
     const clues = { [KEY]: { text: 'Flower', answer: 'RODE' } };
     const before = structuredClone(clues);
     const r = applyCommit(clues, KEY, 'a'.repeat(201), 'ROSE');
@@ -296,8 +278,7 @@ describe('applyCommit', () => {
     expect(clues).toEqual(before);
   });
 
-  it('200 emoji (400 UTF-16 units) is accepted', async () => {
-    const { applyCommit } = await load();
+  it('200 emoji (400 UTF-16 units) is accepted', () => {
     const draft = '😀'.repeat(200);
     const r = applyCommit({}, KEY, draft, 'ROSE');
     expect(r.changed).toBe(true);
@@ -305,8 +286,7 @@ describe('applyCommit', () => {
     expect(r.clues[KEY].text).toBe(draft);
   });
 
-  it('200 code points with surrounding spaces is accepted, trimmed', async () => {
-    const { applyCommit } = await load();
+  it('200 code points with surrounding spaces is accepted, trimmed', () => {
     const body = 'b'.repeat(200);
     const r = applyCommit({}, KEY, `  ${body} `, 'ROSE');
     expect(r.changed).toBe(true);
@@ -314,8 +294,7 @@ describe('applyCommit', () => {
     expect(r.clues[KEY].text).toBe(body);
   });
 
-  it('a new clue is exactly {text: trimmed, answer: currentPattern}', async () => {
-    const { applyCommit } = await load();
+  it('a new clue is exactly {text: trimmed, answer: currentPattern}', () => {
     const clues = {};
     const r = applyCommit(clues, KEY, ' Rose ', 'RO?E');
     expect(r.changed).toBe(true);
@@ -325,8 +304,7 @@ describe('applyCommit', () => {
     expect(clues).toEqual({});
   });
 
-  it('a different draft on a stale clue clears stale (answer becomes currentPattern)', async () => {
-    const { applyCommit } = await load();
+  it('a different draft on a stale clue clears stale (answer becomes currentPattern)', () => {
     const clues = { [KEY]: { text: 'Flower', answer: 'RODE' }, '1,0,down': { text: 'k', answer: 'AB' } };
     const before = frozen(clues);
     const r = applyCommit(clues, KEY, 'Bloom', 'ROSE');
@@ -340,8 +318,7 @@ describe('applyCommit', () => {
 });
 
 describe('applyKeep', () => {
-  it('sets answer to currentPattern, keeps text and other keys, and does not mutate', async () => {
-    const { applyKeep } = await load();
+  it('sets answer to currentPattern, keeps text and other keys, and does not mutate', () => {
     const clues = { '0,0,across': { text: 'Flower', answer: 'RODE' }, '1,0,down': { text: 'k', answer: 'AB' } };
     const before = frozen(clues);
     const r = applyKeep(clues, '0,0,across', 'ROSE');
@@ -352,8 +329,7 @@ describe('applyKeep', () => {
 });
 
 describe('applyDelete', () => {
-  it('removes the key, keeps others, and does not mutate', async () => {
-    const { applyDelete } = await load();
+  it('removes the key, keeps others, and does not mutate', () => {
     const clues = { '0,0,across': { text: 'Flower', answer: 'RODE' }, '1,0,down': { text: 'k', answer: 'AB' } };
     const before = frozen(clues);
     const r = applyDelete(clues, '0,0,across');
