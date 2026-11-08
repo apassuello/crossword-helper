@@ -29,7 +29,7 @@ export const CLUE_TOO_LONG = 'At most 200 characters.';
 const WS =
   '[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]';
 const LEADING_WS = new RegExp(`^${WS}+`);
-const TRAILING_WS = new RegExp(`${WS}+$`);
+const ONE_WS = new RegExp(`^${WS}$`);
 
 const KEY_RE = /^(0|[1-9][0-9]*),(0|[1-9][0-9]*),(across|down)$/;
 
@@ -65,9 +65,18 @@ export function compareClueKeys(a, b) {
   return pa.dir === 'across' ? -1 : 1;
 }
 
-/** Strip the spec 3.1 whitespace set at both ends. */
+/**
+ * Strip the spec 3.1 whitespace set at both ends, in time linear in the input length (#115).
+ *
+ * The trailing end is a backward scan over UTF-16 code units (every member of the set is one), not
+ * a `$`-anchored regex: that form retries from each position of an interior whitespace run
+ * followed by a non-whitespace character, which is quadratic (100k spaces took ~3.8 s).
+ */
 export function trimClueText(s) {
-  return String(s).replace(LEADING_WS, '').replace(TRAILING_WS, '');
+  const lead = String(s).replace(LEADING_WS, '');
+  let end = lead.length;
+  while (end > 0 && ONE_WS.test(lead[end - 1])) end -= 1;
+  return end === lead.length ? lead : lead.slice(0, end);
 }
 
 function statusFrom(slots, key, clue) {
