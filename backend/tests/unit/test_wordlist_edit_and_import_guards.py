@@ -164,3 +164,59 @@ def test_import_non_string_content_is_400(client, wl_dir, content):
     assert r.status_code == 400
     assert "error" in r.get_json()
     assert _everything(wl_dir) == ["metadata.json"]
+
+
+# --- #65: built-in status comes from the directory ---------------------------
+
+
+def _seed(wl_dir, monkeypatch, files, metadata):
+    """Write list files plus metadata.json, then point the routes at a fresh manager."""
+    for rel, text in files.items():
+        path = wl_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    (wl_dir / "metadata.json").write_text(json.dumps({"wordlists": metadata, "categories": {}, "tags": {}}, indent=2))
+    manager = WordListManager(wordlist_dir=str(wl_dir))
+    monkeypatch.setattr(wordlist_routes, "wordlist_manager", manager)
+    return manager
+
+
+def _poison_category(client, name, category):
+    """Metadata-only PUT that rewrites the stored category; checks the rewrite stuck."""
+    r = client.put(f"/api/wordlists/{name}", json={"metadata": {"category": category}})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    stored = wordlist_routes.wordlist_manager._metadata["wordlists"][name]["category"]
+    assert stored == category
+
+
+def test_root_list_stays_undeletable_after_metadata_says_custom(client, wl_dir, monkeypatch):
+    _seed(wl_dir, monkeypatch, {"shipped.txt": "A\nB\n"}, {"shipped": {"category": "core"}})
+    _poison_category(client, "shipped", "custom")
+    r = client.delete("/api/wordlists/shipped")
+    assert r.status_code == 403, r.get_data(as_text=True)
+    assert r.get_json()["builtin"] is True
+    assert (wl_dir / "shipped.txt").exists()
+
+
+@pytest.mark.parametrize("category", ["custom", "imports"])
+def test_root_list_words_stay_protected_after_metadata_says_editable(client, wl_dir, monkeypatch, category):
+    _seed(wl_dir, monkeypatch, {"shipped.txt": "A\nB\n"}, {"shipped": {"category": "core"}})
+    _poison_category(client, "shipped", category)
+    r = client.put("/api/wordlists/shipped", json={"words": ["NEW"]})
+    assert r.status_code == 403, r.get_data(as_text=True)
+    assert _lines(wl_dir, "shipped.txt") == ["A", "B"]
+
+
+def test_core_list_stays_undeletable_after_metadata_says_custom(client, wl_dir, monkeypatch):
+    _seed(wl_dir, monkeypatch, {"core/shipped.txt": "A\nB\n"}, {"core/shipped": {"category": "core"}})
+    _poison_category(client, "core/shipped", "custom")
+    r = client.delete("/api/wordlists/core/shipped")
+    assert r.status_code == 403, r.get_data(as_text=True)
+    assert (wl_dir / "core/shipped.txt").exists()
+
+
+def test_custom_dir_list_is_deletable_whatever_metadata_says(client, wl_dir, monkeypatch):
+    _seed(wl_dir, monkeypatch, {"custom/mine.txt": "A\nB\n"}, {"custom/mine": {"category": "core"}})
+    r = client.delete("/api/wordlists/custom/mine")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert not (wl_dir / "custom/mine.txt").exists()
