@@ -60,6 +60,9 @@ import './styles/App.scss';
 // falls back to the shipped list, never to [] (which would let the server choose).
 const DEFAULT_WORDLISTS = ['comprehensive'];
 const validationWordlists = (selected) => (selected.length > 0 ? selected : DEFAULT_WORDLISTS);
+// Value-stable key of the lists Verify and Clean send (ticks append, so equal selections have
+// equal order); a string, so effects and guards compare by value, never by array identity.
+const listsKey = (selected) => validationWordlists(selected).join('\n');
 
 /**
  * A stored entry becomes the live document only if `size` is an integer the importer accepts
@@ -273,13 +276,20 @@ function App() {
   docIdRef.current = docId;
   const liveSigRef = useRef(liveSig);
   liveSigRef.current = liveSig;
+  // #102 (PR #129 review): the ticked lists as they are NOW, for the same post-await guards.
+  const listsKeyNow = listsKey(autofillWordlists);
+  const listsKeyRef = useRef(listsKeyNow);
+  listsKeyRef.current = listsKeyNow;
   // novice-readiness spec 0.2.7 §3.5 (G5): Clean's pending confirm, { blanks, cleaned, message, sig }.
   const [pendingClean, setPendingClean] = useState(null);
   // Dismissed, applying nothing, when the live signature leaves the one recorded at open (an
   // isError-only change is not a signature change, PD-6-G11) or a run starts (editingPaused).
   useEffect(() => {
-    if (pendingClean && (editingPaused || liveSig !== pendingClean.sig)) setPendingClean(null);
-  }, [pendingClean, liveSig, editingPaused]);
+    // #102: also dismissed when the ticked lists differ from the ones the removals were planned with.
+    if (pendingClean && (editingPaused || liveSig !== pendingClean.sig || listsKeyNow !== pendingClean.listsKey)) {
+      setPendingClean(null);
+    }
+  }, [pendingClean, liveSig, editingPaused, listsKeyNow]);
   const contentSig = useMemo(
     () => (savedGrid === grid ? liveDocSig : docSigOf(gridSize, savedGrid, clues)),
     [gridSize, savedGrid, grid, clues, liveDocSig]
@@ -643,6 +653,7 @@ function App() {
     if (editingPausedRef.current) return;
     if (!grid) return;
     const requestDocId = docIdRef.current;
+    const requestLists = listsKeyRef.current;
 
     try {
       const { invalid_words, invalid_count, total_checked, wordlist_size } = await api.verifyWords({
@@ -658,6 +669,8 @@ function App() {
       if (editingPausedRef.current) return;
       // novice-readiness spec 0.2.7 §2.3 (PD-6-G12): a response for another document writes nothing.
       if (docIdRef.current !== requestDocId) return;
+      // #102: a response checked against lists that are no longer the ticked ones writes nothing.
+      if (listsKeyRef.current !== requestLists) return;
 
       // Build set of cells that belong to invalid words
       const errorCells = new Set();
@@ -695,6 +708,7 @@ function App() {
     if (editingPausedRef.current) return;
     if (!grid) return;
     const requestDocId = docIdRef.current;
+    const requestLists = listsKeyRef.current;
     const sent = grid.map(row => row.map(cell => ({
       letter: cell.letter || '',
       isBlack: cell.isBlack || false
@@ -711,6 +725,8 @@ function App() {
       if (editingPausedRef.current) return;
       // novice-readiness spec 0.2.7 §2.3 (PD-6-G12): a response for another document writes nothing.
       if (docIdRef.current !== requestDocId) return;
+      // #102: a response checked against lists that are no longer the ticked ones writes nothing.
+      if (listsKeyRef.current !== requestLists) return;
 
       // The server echoes the cell shape it was sent ({ letter, isBlack }); a string cell
       // ('#', '.', a letter) is normalised once here so nothing below branches on shape.
@@ -726,7 +742,7 @@ function App() {
 
       if (blanks.length > 0) {
         // novice-readiness spec 0.2.7 §3.5 (G5 step 2, PD-6-G10): ask first; nothing is written yet.
-        setPendingClean({ blanks, cleaned, message, sig: liveSigRef.current });
+        setPendingClean({ blanks, cleaned, message, sig: liveSigRef.current, listsKey: requestLists });
         return;
       }
 
@@ -1026,7 +1042,9 @@ function App() {
 
           {currentTool === 'lists' && (
             <div className="xw-inspector">
-              <WordListPanel />
+              <WordListPanel
+                onWordlistDeleted={(key) => setAutofillWordlists((prev) => prev.filter((k) => k !== key))}
+              />
             </div>
           )}
 
