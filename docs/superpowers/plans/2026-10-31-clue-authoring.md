@@ -149,9 +149,20 @@ facts (the RED and GREEN commits, the review package path) go in the dispatch me
      I-1, which every per-task review passed. Cross-task races stay hard even then: the PR bot, not the
      whole-branch review, found a row's unmount commit racing an async writer that outlives its panel. After a rebase, `git range-diff <old-base>..<backup> <new-base>..<tip>`
      marks with `!` the commits whose patch changed: the set where a semantic break can hide.
+   - A brief tells implementers to cite the issue number in tracked code and to state the rule inline, never
+     the SDD contract's IDs (`R7`, `B-R4`, row labels): the workspace is gitignored, so on `main` they resolve
+     to nothing. The 2026-11-08 session's own constraints file asked for `#117 R7`, and the #117 and #115 PRs
+     each needed a commit removing what it produced.
+   - A wall-clock RED row sets an explicit per-test timeout. The #115 trim rows (100k input, 250 ms bound)
+     measured 3.8 s in node and 4.9–6.0 s under vitest, past its 5 s default, so without one they fail on
+     the harness, not on the assertion.
 
 Task 11 (documentation) has no tests. It runs as WRITE then REVIEW (two agents), with
-`scripts/docs-check.sh` as its gate. Task 12 is the browser acceptance gate.
+`scripts/docs-check.sh` as its gate. Task 12 is the browser acceptance gate. Two more shapes, from #115
+(2026-11-08): a task whose tests are all pins of existing behaviour runs WRITE then REVIEW, each pin carrying
+a mutation proof (the clue route and adapter pins); a behaviour-preserving refactor, where no RED can exist,
+runs IMPLEMENT then REVIEW with a per-item equivalence check in place of a failing test, such as old and new
+values compared equal or identical test-name lists before and after (the escapes and static-import sweep).
 
 ## File map
 
