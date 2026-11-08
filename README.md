@@ -186,8 +186,6 @@ data/wordlists/    Word lists (comprehensive.txt + specialty lists)
   ([#82](https://github.com/apassuello/crossword-helper/issues/82)).
 - **Save toasts:** `Couldn’t save — will retry.` can appear for a grid you have already left; nothing
   retries it ([#83](https://github.com/apassuello/crossword-helper/issues/83)).
-- **Restore on reload** tries only your newest save. If that one can't be read, nothing is restored;
-  older saves still open from `Open saved` ([#84](https://github.com/apassuello/crossword-helper/issues/84)).
 
 ## Tech Stack
 
