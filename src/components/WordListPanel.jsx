@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import './WordListPanel.scss';
 
-const WordListPanel = () => {
+// `onWordlistDeleted(key)` (optional) tells the owner of a list selection that `key` is gone, so
+// it can stop sending it (#102, PR #129 review).
+const WordListPanel = ({ onWordlistDeleted }) => {
   const [wordlists, setWordlists] = useState([]);
   const [categories, setCategories] = useState({});
   const [tags, setTags] = useState({});
@@ -104,6 +106,7 @@ const WordListPanel = () => {
       setError(null);
       setOperationStatus('Deleting wordlist...');
       await api.deleteWordlist(key);
+      if (onWordlistDeleted) onWordlistDeleted(key);
       await loadWordlists();
       if (selectedWordlist === key) {
         setSelectedWordlist(null);
